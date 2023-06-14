@@ -87,12 +87,22 @@ private:
     Status _rewrite_dict_column_predicates();
     void _init_read_chunk();
 
+<<<<<<< HEAD
     Status _read(const std::vector<int>& read_columns, size_t* row_count, vectorized::ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const vectorized::ChunkPtr& chunk, size_t chunk_size);
     void _dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* filter_ptr);
     Status _dict_decode(vectorized::ChunkPtr* chunk);
     void _collect_field_io_range(const ParquetField& field, std::vector<SharedBufferedInputStream::IORange>* ranges,
                                  int64_t* end_offset);
+=======
+    Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
+    Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                 const TIcebergSchemaField* iceberg_schema_field,
+                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+>>>>>>> c366c3b3e ([Enhancement] only collect io of selected subfield of complex type (#24894))
 
     // row group meta
     std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
