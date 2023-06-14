@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
@@ -24,6 +25,7 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -87,6 +89,15 @@ public class WarehouseManager implements Writable {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return fullNameToWh.containsKey(warehouseName);
         }
+    }
+
+
+    public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        Warehouse warehouse = getDefaultWarehouse();
+        warehouse.getAnyAvailableCluster().getComputeNodeIds().forEach(
+                nodeId -> builder.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId)));
+        return builder.build();
     }
 
     // warehouse meta persistence api
