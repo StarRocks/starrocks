@@ -26,8 +26,8 @@
 #include "formats/orc/orc_mapping.h"
 #include "formats/orc/utils.h"
 #include "gen_cpp/orc_proto.pb.h"
-#include "runtime/types.h"
 #include "runtime/primitive_type.h"
+#include "runtime/types.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 

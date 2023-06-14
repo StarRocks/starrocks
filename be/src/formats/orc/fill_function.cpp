@@ -55,13 +55,12 @@ const std::unordered_map<orc::TypeKind, PrimitiveType> g_orc_starrocks_primitive
 
 // NOLINTNEXTLINE
 const std::set<PrimitiveType> g_starrocks_int_type = {TYPE_BOOLEAN, TYPE_TINYINT,  TYPE_SMALLINT, TYPE_INT,
-                                                             TYPE_BIGINT,  TYPE_LARGEINT, TYPE_FLOAT,    TYPE_DOUBLE};
+                                                      TYPE_BIGINT,  TYPE_LARGEINT, TYPE_FLOAT,    TYPE_DOUBLE};
 
 const std::set<orc::TypeKind> g_orc_decimal_type = {orc::DECIMAL};
 
 const std::set<PrimitiveType> g_starrocks_decimal_type = {TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
-                                                                 TYPE_DECIMALV2, TYPE_DECIMAL};
-
+                                                          TYPE_DECIMALV2, TYPE_DECIMAL};
 
 static void fill_boolean_column(orc::ColumnVectorBatch* cvb, starrocks::vectorized::ColumnPtr& col, size_t from,
                                 size_t size, const starrocks::TypeDescriptor& type_desc,

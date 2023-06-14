@@ -2,6 +2,8 @@
 
 #pragma once
 #include "formats/parquet/column_converter.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "io/shared_buffered_input_stream.h"
 
 namespace starrocks {
 class RandomAccessFile;
@@ -26,7 +28,6 @@ struct ColumnReaderOptions {
     int chunk_size = 0;
     vectorized::HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
-    SharedBufferedInputStream* sb_stream = nullptr;
     tparquet::RowGroup* row_group_meta = nullptr;
     ColumnReaderContext* context = nullptr;
 };
