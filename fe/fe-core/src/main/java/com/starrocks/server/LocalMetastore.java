@@ -2042,7 +2042,8 @@ public class LocalMetastore implements ConnectorMetadata {
         Preconditions.checkArgument(table.isCloudNativeTableOrMaterializedView());
 
         DistributionInfo.DistributionInfoType distributionInfoType = distributionInfo.getType();
-        if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH) {
+        if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH
+                && distributionInfoType != DistributionInfo.DistributionInfoType.RANDOM) {
             throw new DdlException("Unknown distribution type: " + distributionInfoType);
         }
 
