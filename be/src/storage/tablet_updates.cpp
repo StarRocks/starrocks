@@ -1945,7 +1945,7 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         // only keep at most one version which is before expire_time
         // also to prevent excessive memory usage of editversion array, limit edit version count to be less than
         // config::tablet_max_versions
-        size_t keep_index_min = _apply_version_idx;
+        size_t keep_index_min = _apply_version_idx - 1;
         while (keep_index_min > 0) {
             if (_edit_version_infos[keep_index_min]->creation_time <= expire_time ||
                 keep_index_min + config::tablet_max_versions < _edit_version_infos.size()) {
