@@ -30,6 +30,10 @@ public:
     using InputColumnType = RunTimeColumnType<LT>;
     using InputCppType = RunTimeCppType<LT>;
 
+    size_t serialize_size(const AggDataPtr __restrict ptr) const override {
+        return this->data(ptr).serialize_size();
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* col = down_cast<const InputColumnType*>(columns[0]);
         auto value = col->get_data()[row_num];

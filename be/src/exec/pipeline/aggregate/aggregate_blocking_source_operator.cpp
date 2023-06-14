@@ -43,11 +43,15 @@ StatusOr<ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(RuntimeState* sta
     const auto chunk_size = state->chunk_size();
     ChunkPtr chunk = std::make_shared<Chunk>();
 
+    LOG(ERROR) << "SEND_QUEUE_5: " << CurrentThread::mem_tracker()->consumption() << ":"
+               << CurrentThread::mem_tracker()->peak_consumption();
     if (_aggregator->is_none_group_by_exprs()) {
         RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(&chunk));
     } else {
         RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(chunk_size, &chunk));
     }
+    LOG(ERROR) << "SEND_QUEUE_6: " << CurrentThread::mem_tracker()->consumption() << ":"
+               << CurrentThread::mem_tracker()->peak_consumption();
 
     const int64_t old_size = chunk->num_rows();
     eval_runtime_bloom_filters(chunk.get());

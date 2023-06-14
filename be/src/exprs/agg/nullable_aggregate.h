@@ -74,6 +74,14 @@ public:
 
     std::string get_name() const override { return "nullable " + nested_function->get_name(); }
 
+    size_t serialize_size(const AggDataPtr __restrict ptr) const override {
+        if (this->data(ptr).is_null) {
+            return 0;
+        } else {
+            return nested_function->serialize_size(this->data(ptr).mutable_nest_state());
+        }
+    }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).is_null = true;
         if constexpr (IsWindowFunc) {

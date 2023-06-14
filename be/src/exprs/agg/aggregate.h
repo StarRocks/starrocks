@@ -104,6 +104,13 @@ public:
 
     // State management methods:
     virtual size_t size() const = 0;
+    virtual size_t serialize_size(const AggDataPtr __restrict ptr) const {
+        return 0;
+    }
+    virtual size_t batch_serialize_size(size_t chunk_size, const Buffer<AggDataPtr>& agg_stats,
+                                        size_t state_offsets) const {
+        return 0;
+    }
     virtual size_t alignof_size() const = 0;
     virtual bool is_pod_state() const { return false; }
     virtual void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
@@ -402,6 +409,15 @@ public:
         for (size_t i = 0; i < chunk_size; i++) {
             static_cast<const Derived*>(this)->serialize_to_column(ctx, agg_states[i] + state_offset, to);
         }
+    }
+
+    size_t batch_serialize_size(size_t chunk_size, const Buffer<AggDataPtr>& agg_stats,
+                                size_t state_offsets) const override {
+        size_t size = 0;
+        for (size_t i = 0; i < chunk_size; i++) {
+            size += static_cast<const Derived*>(this)->serialize_size(agg_stats[i] + state_offsets);
+        }
+        return size;
     }
 
     void batch_finalize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,

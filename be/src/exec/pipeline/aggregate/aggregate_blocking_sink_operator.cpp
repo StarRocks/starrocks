@@ -109,6 +109,8 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
 
     _aggregator->update_num_input_rows(chunk_size);
     RETURN_IF_ERROR(_aggregator->check_has_error());
+    LOG(ERROR) << "SEND_QUEUE_4: " << CurrentThread::mem_tracker()->consumption() << ":"
+               << CurrentThread::mem_tracker()->peak_consumption();
 
     return Status::OK();
 }

@@ -695,6 +695,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
 
         auto& chunk_queues = _buffered_chunk_queues[be_number];
 
+        LOG(ERROR) << "SEND_QUEUE: " << CurrentThread::mem_tracker()->consumption() << ":"
+                   << CurrentThread::mem_tracker()->peak_consumption() << ":"
+                   << total_chunk_bytes << ":" << _recvr->exceeds_limit(total_chunk_bytes);
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             chunks.back().closure = *done;
             chunks.back().queue_enter_time = MonotonicNanos();
@@ -758,6 +761,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             iter++;
         }
 
+        LOG(ERROR) << "SEND_QUEUE_2: " << CurrentThread::mem_tracker()->consumption() << ":"
+                   << CurrentThread::mem_tracker()->peak_consumption() << ":"
+                   << total_chunk_bytes << ":" << _recvr->exceeds_limit(total_chunk_bytes);
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             chunks.back().closure = *done;
             chunks.back().queue_enter_time = MonotonicNanos();

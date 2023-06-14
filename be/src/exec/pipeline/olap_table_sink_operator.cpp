@@ -182,6 +182,8 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     }
 
     // send_chunk() will return EAGAIN to avoid block
+    LOG(ERROR) << "SEND_QUEUE_7: " << CurrentThread::mem_tracker()->consumption() << ":"
+               << CurrentThread::mem_tracker()->peak_consumption();
     auto st = _sink->send_chunk(state, chunk.get());
     if (st.is_eagain()) {
         // temporarily save the chunk, wait for the partition to be created and send again

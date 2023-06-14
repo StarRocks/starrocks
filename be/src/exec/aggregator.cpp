@@ -1267,25 +1267,35 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         auto end = _state_allocator.end();
 
         const auto hash_map_size = _hash_map_variant.size();
+
+        int32_t read_index = 0;
+        {
+            SCOPED_TIMER(_agg_stat->iter_timer);
+
+            hash_map_with_key.results.resize(chunk_size);
+            // get key/value from hashtable
+            size_t total_size = 0;
+            while ((it != end) & (read_index < chunk_size) & (total_size < 1024 * 1024)) {
+                auto* value = it.value();
+                hash_map_with_key.results[read_index] = *reinterpret_cast<typename HashMapWithKey::KeyType*>(value);
+                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                    total_size += _agg_functions[i]->serialize_size(value + _agg_states_offsets[i]);
+                }
+                _tmp_agg_states[read_index] = value;
+                ++read_index;
+                it.next();
+            }
+            LOG(ERROR) << "TOTAL:" << total_size << ":" << read_index << ":" << _agg_functions[0]->get_name() << ":"
+                       << _agg_fn_ctxs.size() << std::endl;
+            hash_map_with_key.results.resize(read_index);
+            chunk_size = read_index;
+        }
+
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
         auto use_intermediate =
                 use_intermediate_as_output != nullptr ? *use_intermediate_as_output : _use_intermediate_as_output();
         Columns group_by_columns = _create_group_by_columns(num_rows);
         Columns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
-
-        int32_t read_index = 0;
-        {
-            SCOPED_TIMER(_agg_stat->iter_timer);
-            hash_map_with_key.results.resize(chunk_size);
-            // get key/value from hashtable
-            while ((it != end) & (read_index < chunk_size)) {
-                auto* value = it.value();
-                hash_map_with_key.results[read_index] = *reinterpret_cast<typename HashMapWithKey::KeyType*>(value);
-                _tmp_agg_states[read_index] = value;
-                ++read_index;
-                it.next();
-            }
-        }
 
         {
             SCOPED_TIMER(_agg_stat->group_by_append_timer);
@@ -1315,7 +1325,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         if constexpr (HashMapWithKey::has_single_null_key) {
             if (_is_ht_eos && hash_map_with_key.null_key_data != nullptr) {
                 // The output chunk size couldn't larger than _state->chunk_size()
-                if (read_index < _state->chunk_size()) {
+                if (read_index < chunk_size) {
                     // For multi group by key, we don't need to special handle null key
                     DCHECK(group_by_columns.size() == 1);
                     DCHECK(group_by_columns[0]->is_nullable());
