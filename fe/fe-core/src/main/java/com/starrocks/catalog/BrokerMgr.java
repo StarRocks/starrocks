@@ -370,7 +370,9 @@ public class BrokerMgr {
     }
 
     public static class ModifyBrokerInfo implements Writable {
+        @SerializedName("bn")
         public String brokerName;
+        @SerializedName("ba")
         public List<FsBroker> brokerAddresses;
 
         public ModifyBrokerInfo() {

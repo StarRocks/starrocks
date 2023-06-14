@@ -641,8 +641,8 @@ public class GlobalStateMgr {
         this.stat = new TabletSchedulerStat();
         this.nodeMgr = new NodeMgr(isCkptGlobalState, this);
         this.globalFunctionMgr = new GlobalFunctionMgr();
-        this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
-        this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
+        this.tabletScheduler = new TabletScheduler(stat);
+        this.tabletChecker = new TabletChecker(tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
                 new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
@@ -1346,7 +1346,8 @@ public class GlobalStateMgr {
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
             // ** NOTICE **: always add new code at the end
-            checksum = loadHeader(dis, checksum);
+            checksum = loadVersion(dis, checksum);
+            checksum = loadHeaderV1(dis, checksum);
             checksum = nodeMgr.loadLeaderInfo(dis, checksum);
             checksum = nodeMgr.loadFrontends(dis, checksum);
             checksum = nodeMgr.loadBackends(dis, checksum);
@@ -1512,48 +1513,12 @@ public class GlobalStateMgr {
         return checksum;
     }
 
-    public long loadHeader(DataInputStream dis, long checksum) throws IOException {
-        // for community, version schema is [int], and the int value must be positive
-        // for starrocks, version schema is [-1, int, int]
-        // so we can check the first int to determine the version schema
-        int flag = dis.readInt();
-        long newChecksum = checksum ^ flag;
-        if (flag < 0) {
-            int communityMetaVersion = dis.readInt();
-            if (communityMetaVersion > FeConstants.META_VERSION) {
-                LOG.error("invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                + "please update FeConstants.meta_version bigger or equal to {} and restart.",
-                        communityMetaVersion);
-                System.exit(-1);
-            }
-            newChecksum ^= communityMetaVersion;
-            MetaContext.get().setMetaVersion(communityMetaVersion);
-            int starrocksMetaVersion = dis.readInt();
-            if (starrocksMetaVersion > FeConstants.STARROCKS_META_VERSION) {
-                LOG.error("invalid meta data version found, cat not bigger than FeConstants.starrocks_meta_version."
-                                + "please update FeConstants.starrocks_meta_version bigger or equal to {} and restart.",
-                        starrocksMetaVersion);
-                System.exit(-1);
-            }
-            newChecksum ^= starrocksMetaVersion;
-            MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
-        } else {
-            // when flag is positive, this is community image structure
-            int metaVersion = flag;
-            if (metaVersion > FeConstants.META_VERSION) {
-                LOG.error("invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                + "please update FeConstants.meta_version bigger or equal to {} and restart.",
-                        metaVersion);
-                System.exit(-1);
-            }
-            MetaContext.get().setMetaVersion(metaVersion);
-        }
-
+    public long loadHeaderV1(DataInputStream dis, long checksum) throws IOException {
         long replayedJournalId = dis.readLong();
-        newChecksum ^= replayedJournalId;
+        checksum ^= replayedJournalId;
 
         long catalogId = dis.readLong();
-        newChecksum ^= catalogId;
+        checksum ^= catalogId;
         idGenerator.setId(catalogId);
 
         if (MetaContext.get().getMetaVersion() >= FeMetaVersion.VERSION_32) {
@@ -1561,7 +1526,7 @@ public class GlobalStateMgr {
         }
 
         LOG.info("finished replay header from image");
-        return newChecksum;
+        return checksum;
     }
 
     public long loadHeaderV2(DataInputStream dis, long checksum) throws IOException {
