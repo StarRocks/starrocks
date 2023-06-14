@@ -1266,26 +1266,46 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         auto it = std::any_cast<RawHashTableIterator>(_it_hash);
         auto end = _state_allocator.end();
 
+        int32_t read_index = 0;
+        {
+            SCOPED_TIMER(_agg_stat->iter_timer);
+            if (_output_chunk_size != 0) {
+                chunk_size = _output_chunk_size;
+                hash_map_with_key.results.resize(chunk_size);
+                // get key/value from hashtable
+                while ((it != end) & (read_index < chunk_size)) {
+                    auto* value = it.value();
+                    hash_map_with_key.results[read_index] = *reinterpret_cast<typename HashMapWithKey::KeyType*>(value);
+                    _tmp_agg_states[read_index] = value;
+                    ++read_index;
+                    it.next();
+                }
+            } else {
+                hash_map_with_key.results.resize(chunk_size);
+                // get key/value from hashtable
+                size_t total_size = 0;
+                while ((it != end) & (read_index < chunk_size) & (total_size < config::max_chunk_mem_size)) {
+                    auto* value = it.value();
+                    hash_map_with_key.results[read_index] = *reinterpret_cast<typename HashMapWithKey::KeyType*>(value);
+                    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                        total_size += _agg_functions[i]->serialize_size(value + _agg_states_offsets[i]);
+                    }
+                    _tmp_agg_states[read_index] = value;
+                    ++read_index;
+                    it.next();
+                }
+                hash_map_with_key.results.resize(read_index);
+                chunk_size = read_index;
+                _output_chunk_size = std::max(config::min_chunk_size, chunk_size);
+            }
+        }
+
         const auto hash_map_size = _hash_map_variant.size();
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
         auto use_intermediate =
                 use_intermediate_as_output != nullptr ? *use_intermediate_as_output : _use_intermediate_as_output();
         Columns group_by_columns = _create_group_by_columns(num_rows);
         Columns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
-
-        int32_t read_index = 0;
-        {
-            SCOPED_TIMER(_agg_stat->iter_timer);
-            hash_map_with_key.results.resize(chunk_size);
-            // get key/value from hashtable
-            while ((it != end) & (read_index < chunk_size)) {
-                auto* value = it.value();
-                hash_map_with_key.results[read_index] = *reinterpret_cast<typename HashMapWithKey::KeyType*>(value);
-                _tmp_agg_states[read_index] = value;
-                ++read_index;
-                it.next();
-            }
-        }
 
         {
             SCOPED_TIMER(_agg_stat->group_by_append_timer);

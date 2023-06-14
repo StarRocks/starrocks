@@ -448,7 +448,8 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         req->add_tablet_ids(tablet_ids[indexes[from + i]]);
     }
 
-    if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
+    if (_cur_chunk->num_rows() < _runtime_state->chunk_size() &&
+        _cur_chunk->memory_usage() < config::max_chunk_mem_size) {
         // 2. chunk not full
         if (_request_queue.empty()) {
             return Status::OK();

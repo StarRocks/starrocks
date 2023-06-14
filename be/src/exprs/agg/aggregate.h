@@ -80,6 +80,8 @@ public:
     // @param[out] to: maybe nullable
     virtual void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const = 0;
 
+    virtual size_t serialize_size(const AggDataPtr __restrict ptr) const { return 0; }
+
     // batch serialize aggregate state to reduce virtual function call
     virtual void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                                  size_t state_offsets, Column* to) const = 0;
