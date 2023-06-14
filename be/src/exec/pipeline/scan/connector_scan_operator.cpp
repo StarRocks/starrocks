@@ -511,6 +511,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
         // Improve for select * from table limit x, x is small
         if (_limit != -1 && _rows_read >= _limit) {
+            _reach_limit.store(true);
             return Status::EndOfFile("limit reach");
         }
 
