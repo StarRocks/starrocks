@@ -264,6 +264,7 @@ public class StreamLoadPlanner {
 
         if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             queryOptions.setEnable_profile(true);
+            queryOptions.setLoad_profile_collect_second(Config.stream_load_profile_collect_second);
         }
 
         params.setQuery_options(queryOptions);
