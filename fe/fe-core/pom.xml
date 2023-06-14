@@ -100,6 +100,11 @@ under the License.
             <artifactId>spark-dpp</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>shade-trino-parser</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/commons-cli/commons-cli -->
         <dependency>
             <groupId>commons-cli</groupId>
@@ -625,7 +630,7 @@ under the License.
         <dependency>
             <groupId>org.antlr</groupId>
             <artifactId>antlr4</artifactId>
-            <version>4.13.0</version>
+            <version>4.9.3</version>
             <exclusions>
                 <exclusion>
                     <groupId>commons-lang</groupId>
@@ -778,12 +783,6 @@ under the License.
             <groupId>org.apache.groovy</groupId>
             <artifactId>groovy-groovysh</artifactId>
         </dependency>
-
-        <dependency>
-            <groupId>io.trino</groupId>
-            <artifactId>trino-parser</artifactId>
-            <version>419</version>
-        </dependency>
     </dependencies>
 
     <build>
@@ -861,7 +860,7 @@ under the License.
             <plugin>
                 <groupId>org.antlr</groupId>
                 <artifactId>antlr4-maven-plugin</artifactId>
-                <version>4.13.0</version>
+                <version>4.9.3</version>
                 <executions>
                     <execution>
                         <id>antlr</id>

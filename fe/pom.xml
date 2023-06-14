@@ -31,6 +31,7 @@ under the License.
     <modules>
         <module>fe-common</module>
         <module>spark-dpp</module>
+        <module>shade-trino-parser</module>
         <module>fe-core</module>
     </modules>
 
@@ -162,6 +163,13 @@ under the License.
                 <artifactId>spark-dpp</artifactId>
                 <version>1.0.0</version>
             </dependency>
+
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>shade-trino-parser</artifactId>
+                <version>1.0.0</version>
+            </dependency>
+
 
             <!-- https://mvnrepository.com/artifact/commons-cli/commons-cli -->
             <dependency>
