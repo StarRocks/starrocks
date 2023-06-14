@@ -167,6 +167,8 @@ SELECT select_expr[, select_expr ...]
   - BITMAP
   - HLL
   - PERCENTILE
+  - MAP
+  - STRUCT
 
 > **NOTE**
 >
