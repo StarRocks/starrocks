@@ -47,7 +47,7 @@ select regexp_replace('abc中文def', '[\\p{Han}]+', 'xx');
 -- result:
 abcxxdef
 -- !result
-SELECT regexp_replace('a b c', " ", "-");
+select regexp_replace('a b c', " ", "-");
 -- result:
 a-b-c
 -- !result
