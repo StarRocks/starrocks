@@ -747,6 +747,7 @@ StatusOr<ColumnPtr> MathFunctions::rand_seed(FunctionContext* context, const Col
     return rand(context, columns);
 }
 
+template <LogicalType TYPE, bool isNorm>
 StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
@@ -775,6 +776,10 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     size_t target_flat_size = target_flat->size();
     const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().get_data().data();
 
+    if (base_flat_size != target_flat_size) {
+        return Status::InvalidArgument("cosine_similarity requires equal length arrays");
+    }
+
     if (base_flat->has_null() || target_flat->has_null()) {
         return Status::InvalidArgument("cosine_similarity does not support null values");
     }
@@ -785,13 +790,16 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         target_flat = down_cast<const NullableColumn*>(target_flat)->data_column().get();
     }
 
-    const float* base_data_head = down_cast<const FloatColumn*>(base_flat)->get_data().data();
-    const float* target_data_head = down_cast<const FloatColumn*>(target_flat)->get_data().data();
+    using CppType = RunTimeCppType<TYPE>;
+    using ColumnType = RunTimeColumnType<TYPE>;
+
+    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->get_data().data();
+    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->get_data().data();
 
     // prepare result with nullable value.
-    ColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE_FLOAT}, false, false, target_size);
-    FloatColumn* data_result = down_cast<FloatColumn*>(result.get());
-    float* result_data = data_result->get_data().data();
+    ColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
+    ColumnType* data_result = down_cast<ColumnType*>(result.get());
+    CppType* result_data = data_result->get_data().data();
 
     for (size_t i = 0; i < target_size; i++) {
         size_t t_dim_size = target_offset[i + 1] - target_offset[i];
@@ -801,19 +809,25 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         }
     }
 
-    const float* target_data = target_data_head;
-    const float* base_data = base_data_head;
+    const CppType* target_data = target_data_head;
+    const CppType* base_data = base_data_head;
     for (size_t i = 0; i < target_size; i++) {
-        float sum = 0;
-        float base_sum = 0;
-        float target_sum = 0;
+        CppType sum = 0;
+        CppType base_sum = 0;
+        CppType target_sum = 0;
+        if constexpr (isNorm) {
+            base_sum = 1;
+            target_sum = 1;
+        }
         size_t dim_size = target_offset[i + 1] - target_offset[i];
-        float result_value = 0;
+        CppType result_value = 0;
         if (dim_size != 0) {
             for (size_t j = 0; j < dim_size; j++) {
                 sum += base_data[j] * target_data[j];
-                base_sum += base_data[j] * base_data[j];
-                target_sum += target_data[j] * target_data[j];
+                if constexpr (!isNorm) {
+                    base_sum += base_data[j] * base_data[j];
+                    target_sum += target_data[j] * target_data[j];
+                }
             }
             result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
         }
@@ -822,5 +836,11 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     }
     return result;
 }
+
+// explicitly instaniate template function.
+template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, true>(FunctionContext* context,
+                                                                                const Columns& columns);
+template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, false>(FunctionContext* context,
+                                                                                 const Columns& columns);
 
 } // namespace starrocks
