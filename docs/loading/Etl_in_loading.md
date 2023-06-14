@@ -58,7 +58,7 @@ If you choose [Routine Load](./RoutineLoad.md), make sure that topics are create
 
     > **NOTICE**
     >
-    > Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created or a partition is added. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
    b. Create a table named `table2`, which consists of four columns: `date`, `year`, `month`, and `day`.
 

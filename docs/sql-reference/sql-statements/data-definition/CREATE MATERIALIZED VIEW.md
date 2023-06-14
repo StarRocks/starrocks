@@ -63,7 +63,7 @@ The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY 
 
 > **NOTICE**
 >
-> Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created or a partition is added. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../Data_distribution.md#determine-the-number-of-buckets).
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../Data_distribution.md#determine-the-number-of-buckets).
 
 **refresh_moment** (optional)
 
