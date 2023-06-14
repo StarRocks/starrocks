@@ -159,12 +159,16 @@ under the License.
             <artifactId>jackson-core</artifactId>
         </dependency>
 
+<<<<<<< HEAD
         <!-- https://mvnrepository.com/artifact/org.codehaus.jackson/jackson-mapper-asl -->
         <dependency>
             <groupId>org.codehaus.jackson</groupId>
             <artifactId>jackson-mapper-asl</artifactId>
         </dependency>
 
+=======
+        <!-- https://mvnrepository.com/artifact/com.starrocks/starrocks-bdb-je -->
+>>>>>>> aaf836cc3 ([Enhancement] Remove unused jackson-mapper-asl due to CVE-2019-10202 (#25281))
         <dependency>
             <groupId>com.sleepycat</groupId>
             <artifactId>je</artifactId>

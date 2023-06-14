@@ -266,6 +266,7 @@ under the License.
                 <version>${jackson.version}</version>
             </dependency>
 
+<<<<<<< HEAD
             <!-- https://mvnrepository.com/artifact/org.codehaus.jackson/jackson-mapper-asl -->
             <dependency>
                 <groupId>org.codehaus.jackson</groupId>
@@ -273,6 +274,8 @@ under the License.
                 <version>1.9.13-cloudera.2</version>
             </dependency>
 
+=======
+>>>>>>> aaf836cc3 ([Enhancement] Remove unused jackson-mapper-asl due to CVE-2019-10202 (#25281))
             <!-- https://mvnrepository.com/artifact/net.sourceforge.czt.dev/java-cup -->
             <dependency>
                 <groupId>net.sourceforge.czt.dev</groupId>
