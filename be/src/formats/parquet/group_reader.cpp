@@ -30,7 +30,7 @@ namespace starrocks::parquet {
 constexpr static const LogicalType kDictCodePrimitiveType = TYPE_INT;
 constexpr static const LogicalType kDictCodeFieldType = TYPE_INT;
 
-GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const std::set<std::int64_t>* need_skip_rowids,
+GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
                          int64_t row_group_first_row)
         : _row_group_first_row(row_group_first_row), _need_skip_rowids(need_skip_rowids), _param(param) {
     _row_group_metadata =
@@ -91,7 +91,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
     // row id filter
     if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
-        std::int64_t current_chunk_base_row = _row_group_first_row + _raw_rows_read - count;
+        int64_t current_chunk_base_row = _row_group_first_row + _raw_rows_read - count;
         auto start_iter = lower_bound(_need_skip_rowids->begin(), _need_skip_rowids->end(), current_chunk_base_row);
         auto end_iter =
                 upper_bound(_need_skip_rowids->begin(), _need_skip_rowids->end(), current_chunk_base_row + count);
