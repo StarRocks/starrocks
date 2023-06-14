@@ -201,7 +201,7 @@ Buckets reflect how data files are organized in StarRocks.
 
   - Method 2: manually set the number of buckets
 
-    You can also manually specify the bucket count when adding a new partition. To calculate the number of buckets for a new partition, you can refer to the approach used for manually setting the number of buckets when you create a table, as mentioned above.
+    You can also manually specify the bucket count when adding a new partition. To calculate the number of buckets for a new partition, you can refer to the approach used when manually setting the number of buckets at table creation, as mentioned above.
 
     ```sql
     -- Manually create partitions
