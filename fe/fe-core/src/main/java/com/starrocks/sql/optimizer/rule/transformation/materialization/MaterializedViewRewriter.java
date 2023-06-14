@@ -186,7 +186,7 @@ public class MaterializedViewRewriter {
     boolean computeCompatibility(OptExpression queryExpr, OptExpression mvExpr) {
         LogicalOperator queryOp = (LogicalOperator) queryExpr.getOp();
         LogicalOperator mvOp = (LogicalOperator) mvExpr.getOp();
-        if (!queryOp.getClass().equals(mvOp.getClass())) {
+        if (!queryOp.getOpType().equals(mvOp.getOpType())) {
             return false;
         }
         if (queryOp instanceof LogicalJoinOperator) {
@@ -205,7 +205,7 @@ public class MaterializedViewRewriter {
                 return true;
             }
 
-            if (!queryJoin.getOnPredicate().equals(mvJoin.getOnPredicate())) {
+            if (!MvUtils.isEqual(queryJoin.getOnPredicate(), mvJoin.getOnPredicate())) {
                 return false;
             }
             if (!JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
@@ -370,7 +370,7 @@ public class MaterializedViewRewriter {
     }
 
     private boolean isUniqueColumns(Table table, List<String> columnNames) {
-        if (table.isOlapTable()) {
+        if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS || olapTable.getKeysType() == KeysType.UNIQUE_KEYS) {
                 List<String> keyColumnNames =
@@ -2042,15 +2042,19 @@ public class MaterializedViewRewriter {
             ColumnRewriter columnRewriter,
             RewriteContext rewriteContext,
             Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
-        final List<ScalarOperator> queryJoinOnPredicates = mvRewriteContext.getQueryJoinOnPredicates();
-        final List<ScalarOperator> mvJoinOnPredicates = mvRewriteContext.getMvJoinOnPredicates();
-        final ScalarOperator queryJoinOnPredicateCompensations =
-                rewriteJoinOnPredicates(columnRewriter, compensationJoinColumns,
-                        queryJoinOnPredicates, mvJoinOnPredicates, true);
-        if (queryJoinOnPredicateCompensations == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite query to view failed: on-predicates cannot be compensated and " +
-                    "should be totally the same");
-            return null;
+        if (mvRewriteContext.getJoinDeriveContexts().isEmpty()) {
+            // decide whether Join onPredicate if it is not join derivability rewrite
+            // because for join derivability rewrite, onPredicate must be the same
+            final List<ScalarOperator> queryJoinOnPredicates = mvRewriteContext.getQueryJoinOnPredicates();
+            final List<ScalarOperator> mvJoinOnPredicates = mvRewriteContext.getMvJoinOnPredicates();
+            final ScalarOperator queryJoinOnPredicateCompensations =
+                    rewriteJoinOnPredicates(columnRewriter, compensationJoinColumns,
+                            queryJoinOnPredicates, mvJoinOnPredicates, true);
+            if (queryJoinOnPredicateCompensations == null) {
+                logMVRewrite(mvRewriteContext, "Rewrite query to view failed: on-predicates cannot be compensated and " +
+                        "should be totally the same");
+                return null;
+            }
         }
 
         return getCompensationPredicates(columnRewriter,

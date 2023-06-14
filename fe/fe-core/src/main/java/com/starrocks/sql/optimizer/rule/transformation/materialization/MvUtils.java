@@ -60,6 +60,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -408,11 +409,8 @@ public class MvUtils {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
             JoinOperator joinOperatorType = joinOperator.getJoinType();
             // Collect all join on predicates which join type are not inner/cross join.
-            if (joinOperatorType == JoinOperator.INNER_JOIN
-                    || joinOperatorType == JoinOperator.CROSS_JOIN) {
-                List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOnPredicate());
-                collectValidPredicates(conjuncts, predicates);
-            } else if (joinOperator.getOnPredicate() != null) {
+            if ((joinOperatorType != JoinOperator.INNER_JOIN
+                    && joinOperatorType != JoinOperator.CROSS_JOIN) && joinOperator.getOnPredicate() != null) {
                 // Now join's on-predicates may be pushed down below join, so use original on-predicates
                 // instead of new on-predicates.
                 List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOriginalOnPredicate());
@@ -888,5 +886,31 @@ public class MvUtils {
             return "";
         }
         return o.toString();
+    }
+
+    // whether ScalarOperator are equals without id
+    public static boolean isEqual(ScalarOperator left, ScalarOperator right) {
+        if (!left.getOpType().equals(right.getOpType())) {
+            return false;
+        }
+        if (left.getOpType().equals(OperatorType.VARIABLE)) {
+            ColumnRefOperator leftColumn = (ColumnRefOperator) left;
+            ColumnRefOperator rightColumn = (ColumnRefOperator) right;
+            return leftColumn.getName().equals(rightColumn.getName())
+                    && leftColumn.getType().equals(rightColumn.getType())
+                    && leftColumn.isNullable() == rightColumn.isNullable();
+        } else {
+            boolean ret = left.equals(right);
+            if (!ret) {
+                return false;
+            }
+            Preconditions.checkState(left.getChildren().size() == right.getChildren().size());
+            for (int i = 0; i < left.getChildren().size(); i++) {
+                if (!isEqual(left.getChild(i), right.getChild(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 }
