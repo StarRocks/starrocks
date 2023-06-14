@@ -86,7 +86,6 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -438,18 +437,9 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    private ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
-        Map<Long, ComputeNode> computeNodes = new HashMap<>();
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-        for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-            computeNodes.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId));
-        }
-        return ImmutableMap.copyOf(computeNodes);
-    }
-
     private ImmutableMap<Long, ComputeNode> buildComputeNodeInfo() {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            return getComputeNodesFromWarehouse();
+            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode
