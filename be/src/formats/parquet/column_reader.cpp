@@ -484,7 +484,7 @@ private:
 };
 
 void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                     bool case_sensitive, std::vector<int32>& pos) {
+                                                     bool case_sensitive, std::vector<int32_t>& pos) {
     DCHECK(field.type.type == LogicalType::TYPE_STRUCT);
 
     // build tmp mapping for ParquetField
@@ -512,7 +512,7 @@ void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, 
 void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                      bool case_sensitive,
                                                      const TIcebergSchemaField* iceberg_schema_field,
-                                                     std::vector<int32>& pos,
+                                                     std::vector<int32_t>& pos,
                                                      std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield) {
     // For Struct type with schema change, we need consider subfield not existed suitition.
     // When Iceberg add a new struct subfield, the original parquet file do not contains newly added subfield,
@@ -585,12 +585,13 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
-        std::vector<int32> subfield_pos(col_type.children.size());
+        std::vector<int32_t> subfield_pos(col_type.children.size());
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
 
         std::vector<std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
             if (subfield_pos[i] == -1) {
+                // -1 means subfield not existed, we need to emplace_back nullptr
                 children_readers.emplace_back(nullptr);
                 continue;
             }
@@ -646,7 +647,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
-        std::vector<int32> subfield_pos(col_type.children.size());
+        std::vector<int32_t> subfield_pos(col_type.children.size());
         std::vector<const TIcebergSchemaField*> iceberg_schema_subfield(col_type.children.size());
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, iceberg_schema_field, subfield_pos,
                                           iceberg_schema_subfield);
@@ -654,6 +655,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         std::vector<std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
             if (subfield_pos[i] == -1) {
+                // -1 means subfield not existed, we need to emplace_back nullptr
                 children_readers.emplace_back(nullptr);
                 continue;
             }

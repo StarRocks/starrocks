@@ -54,12 +54,12 @@ public:
 
     // for struct type without schema change
     static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                  bool case_sensitive, std::vector<int32>& pos);
+                                                  bool case_sensitive, std::vector<int32_t>& pos);
 
     // for schema changed
     static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                   bool case_sensitive, const TIcebergSchemaField* iceberg_schema_field,
-                                                  std::vector<int32>& pos,
+                                                  std::vector<int32_t>& pos,
                                                   std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield);
 
     virtual ~ColumnReader() = default;
