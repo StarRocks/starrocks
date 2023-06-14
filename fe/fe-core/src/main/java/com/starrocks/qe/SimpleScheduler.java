@@ -41,7 +41,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -78,23 +77,16 @@ public class SimpleScheduler {
     @Nullable
     public static TNetworkAddress getHost(long nodeId,
                                           List<TScanRangeLocation> locations,
-                                          ImmutableMap<Long, Backend> backends,
                                           ImmutableMap<Long, ComputeNode> computeNodes,
                                           Reference<Long> backendIdRef) {
 
-        if ((RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING)
-                && (locations == null || backends == null)) {
+        if (locations == null || computeNodes == null) {
             return null;
         }
-        LOG.debug("getHost backendID={}, backendSize={}", nodeId, backends.size());
+        LOG.debug("getHost nodeID={}, nodeSize={}", nodeId, computeNodes.size());
 
         // TODO: need to refactor after be split into cn + dn
-        ComputeNode node = null;
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            node = computeNodes.get(nodeId);
-        } else {
-            node = backends.get(nodeId);
-        }
+        ComputeNode node = computeNodes.get(nodeId);
 
         lock.lock();
         try {
@@ -107,10 +99,7 @@ public class SimpleScheduler {
                         continue;
                     }
                     // choose the first alive backend(in analysis stage, the locations are random)
-                    ComputeNode candidateBackend = backends.get(location.backend_id);
-                    if (candidateBackend == null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                        candidateBackend = computeNodes.get(location.backend_id);
-                    }
+                    ComputeNode candidateBackend = computeNodes.get(location.backend_id);
                     if (candidateBackend != null && candidateBackend.isAlive()
                             && !blacklistBackends.containsKey(location.backend_id)) {
                         backendIdRef.setRef(location.backend_id);
@@ -120,8 +109,7 @@ public class SimpleScheduler {
 
                 // In shared data mode, we can select any alive node to replace the original dead node for query
                 if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                    List<ComputeNode> allNodes = new ArrayList<>(backends.size() + computeNodes.size());
-                    allNodes.addAll(backends.values());
+                    List<ComputeNode> allNodes = new ArrayList<>(computeNodes.size());
                     allNodes.addAll(computeNodes.values());
                     List<ComputeNode> candidateNodes = allNodes.stream()
                             .filter(x -> x.getId() != nodeId && x.isAlive() &&
@@ -153,9 +141,9 @@ public class SimpleScheduler {
     }
 
     @Nullable
-    public static TNetworkAddress getBackendHost(ImmutableMap<Long, Backend> backendMap,
+    public static TNetworkAddress getBackendHost(ImmutableMap<Long, ComputeNode> backendMap,
                                                  Reference<Long> backendIdRef) {
-        Backend node = getBackend(backendMap);
+        ComputeNode node = getBackend(backendMap);
         if (node != null) {
             backendIdRef.setRef(node.getId());
             return new TNetworkAddress(node.getHost(), node.getBePort());
@@ -164,7 +152,7 @@ public class SimpleScheduler {
     }
 
     @Nullable
-    public static Backend getBackend(ImmutableMap<Long, Backend> nodeMap) {
+    public static ComputeNode getBackend(ImmutableMap<Long, ComputeNode> nodeMap) {
         if (nodeMap == null || nodeMap.isEmpty()) {
             return null;
         }
