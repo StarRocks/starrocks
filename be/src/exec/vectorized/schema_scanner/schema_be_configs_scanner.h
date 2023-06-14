@@ -26,8 +26,15 @@ public:
     SchemaBeConfigsScanner();
     ~SchemaBeConfigsScanner() override;
 
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_configs_scanner.h
     Status start(RuntimeState* state) override;
     Status get_next(vectorized::ChunkPtr* chunk, bool* eos) override;
+=======
+    recorder.update_interval();
+    int cpu_used_permille = recorder.cpu_used_permille();
+    ASSERT_GE(cpu_used_permille, 0);
+}
+>>>>>>> 2d8daa75a ([BugFix] Fix CpuUsageRecorderTest failure (#25289)):be/test/util/cpu_usage_info_test.cpp
 
 private:
     Status fill_chunk(vectorized::ChunkPtr* chunk);
