@@ -21,6 +21,8 @@
 
 namespace starrocks {
 
+using roaring_statistics_t = roaring::api::roaring_statistics_t;
+
 DelVector::DelVector() = default;
 
 DelVector::~DelVector() = default;

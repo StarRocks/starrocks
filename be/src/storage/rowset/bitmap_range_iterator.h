@@ -38,6 +38,8 @@
 
 namespace starrocks {
 
+using roaring::api::roaring_uint32_iterator_t;
+using roaring::api::roaring_read_uint32_iterator;
 // A fast range iterator for roaring bitmap. Output ranges use closed-open form, like [from, to).
 // Example:
 //   input bitmap:  [0 1 4 5 6 7 10 15 16 17 18 19]

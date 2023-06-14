@@ -46,8 +46,12 @@
 #include "roaring/roaring.h"
 #include "roaring/roaring_array.h"
 
+#define SERIALIZATION_ARRAY_UINT32 1
+#define SERIALIZATION_CONTAINER 2
+
 namespace starrocks {
 
+using Roaring = roaring::Roaring;
 // serialized bitmap := TypeCode(1), Payload
 // The format of payload depends on value of TypeCode which is defined below
 struct BitmapTypeCode {

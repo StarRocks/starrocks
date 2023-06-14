@@ -42,6 +42,7 @@ if (NOT ${MAKE_TEST} STREQUAL "ON")
     # This permits libraries loaded by dlopen to link to the symbols in the program.
     # set_target_properties(starrocks_be PROPERTIES LINK_FLAGS -pthread)
 
+    message(STATUS "starrocks_link_libs=${STARROCKS_LINK_LIBS}")
     target_link_libraries(starrocks_be
         ${STARROCKS_LINK_LIBS}
         )
