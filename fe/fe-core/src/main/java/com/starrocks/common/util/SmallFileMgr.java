@@ -541,17 +541,7 @@ public class SmallFileMgr implements Writable {
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
             SmallFile smallFile = SmallFile.read(in);
-            idToFiles.put(smallFile.id, smallFile);
-            SmallFiles smallFiles = files.get(smallFile.dbId, smallFile.catalog);
-            if (smallFiles == null) {
-                smallFiles = new SmallFiles();
-                files.put(smallFile.dbId, smallFile.catalog, smallFiles);
-            }
-            try {
-                smallFiles.addFile(smallFile.name, smallFile);
-            } catch (DdlException e) {
-                LOG.warn(e);
-            }
+            putToFiles(smallFile);
         }
     }
 
@@ -564,8 +554,22 @@ public class SmallFileMgr implements Writable {
     public void loadSmallFilesV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
         int size = reader.readInt();
         while (size-- > 0) {
-            SmallFile file = reader.readJson(SmallFile.class);
-            idToFiles.put(file.id, file);
+            SmallFile smallFile = reader.readJson(SmallFile.class);
+            putToFiles(smallFile);
+        }
+    }
+
+    private void putToFiles(SmallFile smallFile) {
+        idToFiles.put(smallFile.id, smallFile);
+        SmallFiles smallFiles = files.get(smallFile.dbId, smallFile.catalog);
+        if (smallFiles == null) {
+            smallFiles = new SmallFiles();
+            files.put(smallFile.dbId, smallFile.catalog, smallFiles);
+        }
+        try {
+            smallFiles.addFile(smallFile.name, smallFile);
+        } catch (DdlException e) {
+            LOG.warn("add file: {} failed", smallFile.name, e);
         }
     }
 
