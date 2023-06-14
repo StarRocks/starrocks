@@ -202,6 +202,10 @@ PROPERTIES (
 );
 ```
 
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created or a partition is added. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
 In addition to the regular table PROPERTIES, you need to specify the following PROPERTIES when creating a table for shared-data StarRocks cluster:
 
 | **Property**            | **Description**                                              |

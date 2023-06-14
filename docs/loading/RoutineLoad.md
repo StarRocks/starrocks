@@ -218,6 +218,10 @@ AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`)
 DISTRIBUTED BY HASH(`commodity_id`); 
 ```
 
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created or a partition is added. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
 #### Submit a Routine Load job
 
 Execute the following statement to submit a Routine Load job named `example_tbl2_ordertest2` to consume the messages in the topic `ordertest2` and load the data into the table `example_tbl2`. The load task consumes the messages from the initial offset in the specified partitions of the topic.
@@ -318,6 +322,10 @@ ENGINE=OLAP
 DUPLICATE KEY (id) 
 DISTRIBUTED BY HASH(`id`); 
 ```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created or a partition is added. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 #### Submit a Routine Load job
 

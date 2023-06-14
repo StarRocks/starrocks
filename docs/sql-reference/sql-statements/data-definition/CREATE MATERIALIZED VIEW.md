@@ -61,6 +61,10 @@ The name of the materialized view. The naming requirements are as follows:
 
 The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS <bucket_number>]`.
 
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created or a partition is added. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../Data_distribution.md#determine-the-number-of-buckets).
+
 **refresh_moment** (optional)
 
 The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid values:
