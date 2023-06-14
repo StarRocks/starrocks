@@ -15,7 +15,7 @@ class ScanNode;
 
 namespace pipeline {
 
-class ConnectorScanOperatorIOTasksMemLimiter;
+struct ConnectorScanOperatorIOTasksMemLimiter;
 
 class ConnectorScanOperatorFactory final : public ScanOperatorFactory {
 public:
@@ -48,9 +48,14 @@ public:
     ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter;
 };
 
+<<<<<<< HEAD
 class ConnectorScanOperatorAdaptiveProcessor;
 
 class ConnectorScanOperator final : public ScanOperator {
+=======
+struct ConnectorScanOperatorAdaptiveProcessor;
+class ConnectorScanOperator : public ScanOperator {
+>>>>>>> 561a64573 ([BugFix] Fix down_cast<ConnectorScanOperator*> failed in ~ConnectorChunkSource() (#25230))
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                           ScanNode* scan_node);
@@ -117,7 +122,6 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
-    ConnectorScanOperator* _op = nullptr;
 };
 
 } // namespace pipeline
