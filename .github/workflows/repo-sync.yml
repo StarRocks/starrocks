@@ -74,7 +74,7 @@ jobs:
           title=`echo ${info} | jq .title | sed 's/.\(.*\)/\1/' | sed 's/\(.*\)./\1/'`
           echo "assignees=${assignees}" >> $GITHUB_OUTPUT
           echo "body=${body//\`/\\\`}" >> $GITHUB_OUTPUT
-          echo "title=${title}" >> $GITHUB_OUTPUT
+          echo "title=${title//\`/\\\`}" >> $GITHUB_OUTPUT
 
   repo-sync:
     name: Repo Sync
