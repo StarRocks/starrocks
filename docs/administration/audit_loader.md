@@ -36,7 +36,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `stmtId`         INT                    COMMENT "Incremental SQL statement ID",
   `isQuery`        TINYINT                COMMENT "If the SQL is a query (0 and 1)",
   `feIp`           VARCHAR(32)            COMMENT "IP address of FE that executes the SQL",
-  `stmt`           STRING                 COMMENT "SQL statement",
+  `stmt`           VARCHAR(1048576)       COMMENT "SQL statement",
   `digest`         VARCHAR(32)            COMMENT "SQL fingerprint",
   `planCpuCosts`   DOUBLE                 COMMENT "CPU resources consumption time for planning in nanoseconds",
   `planMemCosts`   DOUBLE                 COMMENT "Memory cost for planning in bytes"
@@ -78,7 +78,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `stmtId`         INT                    COMMENT "Incremental SQL statement ID",
   `isQuery`        TINYINT                COMMENT "If the SQL is a query (0 and 1)",
   `feIp`           VARCHAR(32)            COMMENT "IP address of FE that executes the SQL",
-  `stmt`           STRING                 COMMENT "SQL statement",
+  `stmt`           VARCHAR(1048576)       COMMENT "SQL statement",
   `digest`         VARCHAR(32)            COMMENT "SQL fingerprint",
   `planCpuCosts`   DOUBLE                 COMMENT "CPU resources consumption time for planning in nanoseconds",
   `planMemCosts`   DOUBLE                 COMMENT "Memory cost for planning in bytes"
@@ -119,7 +119,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
     stmt_id          INT                    COMMENT "Incremental SQL statement ID",
     is_query         TINYINT                COMMENT "If the SQL is a query (0 and 1)",
     frontend_ip      VARCHAR(32)            COMMENT "IP address of FE that executes the SQL",
-    stmt             STRING                 COMMENT "SQL statement",
+    stmt             VARCHAR(1048576)       COMMENT "SQL statement",
     digest           VARCHAR(32)            COMMENT "SQL fingerprint"
 ) engine=OLAP
 duplicate key(query_id, time, client_ip)
@@ -155,7 +155,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
     stmt_id         INT                   COMMENT "Incremental SQL statement ID",
     is_query        TINYINT               COMMENT "If the SQL is a query (0 and 1)",
     frontend_ip     VARCHAR(32)           COMMENT "IP address of FE that executes the SQL",
-    stmt            STRING                COMMENT "SQL statement",
+    stmt            VARCHAR(1048576)      COMMENT "SQL statement",
     digest          VARCHAR(32)           COMMENT "SQL fingerprint"
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
