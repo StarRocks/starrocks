@@ -61,7 +61,7 @@ if __name__ == "__main__":
     record = False
     dirname = None
     concurrency = 8
-    timeout = 600
+    timeout = 1200
     file_filter = ".*"
     case_filter = ".*"
     collect = False
