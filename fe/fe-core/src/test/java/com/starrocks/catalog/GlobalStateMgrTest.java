@@ -90,15 +90,14 @@ public class GlobalStateMgrTest {
 
         DataInputStream dis = image1.getDataInputStream();
         long checksum2 = globalStateMgr.loadVersion(dis, 0);
-        checksum2 = globalStateMgr.loadHeader(dis, checksum2);
+        checksum2 = globalStateMgr.loadHeaderV1(dis, checksum2);
         Assert.assertEquals(checksum1, checksum2);
 
         // test json-format header
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
         globalStateMgr.saveHeaderV2(image2.getDataOutputStream());
         MetaContext.get().setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_4);
-        checksum2 = globalStateMgr.loadHeader(image2.getDataInputStream(), 0);
-        Assert.assertEquals(0, checksum2);
+        globalStateMgr.loadHeaderV2(image2.getDataInputStream());
     }
 
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
