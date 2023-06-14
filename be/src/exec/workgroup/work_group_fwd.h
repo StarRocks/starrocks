@@ -34,6 +34,7 @@ using WorkGroupScanSchedEntity = WorkGroupSchedEntity<ScanTaskQueue>;
 
 class WorkGroupManager;
 class ScanExecutor;
+class TaskToken;
 
 struct RunningQueryToken;
 using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;

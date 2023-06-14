@@ -26,6 +26,7 @@ class ScanExecutor;
 class WorkGroupManager;
 struct ScanTask;
 class ScanTaskQueue;
+class TaskToken;
 
 class ScanExecutor : public bthread::Executor {
 public:
@@ -37,9 +38,9 @@ public:
 
     bool submit(ScanTask task);
     int submit(void* (*fn)(void*), void* args) override;
-    Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+    // Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
-    std::unique_ptr<ThreadPoolToken> new_token(ThreadPool::ExecutionMode mode);
+    std::unique_ptr<TaskToken> new_token();
 
 private:
     void worker_thread();
@@ -49,6 +50,89 @@ private:
     // _thread_pool must be placed after _task_queue, because worker threads in _thread_pool use _task_queue.
     std::unique_ptr<ThreadPool> _thread_pool;
     std::atomic<int> _next_id = 0;
+};
+
+// Execute group of tasks
+class TaskToken {
+public:
+    using TaskT = std::shared_ptr<Runnable>;
+
+    virtual ~TaskToken() = default;
+
+    virtual Status submit(TaskT task) = 0;
+    virtual Status submit(std::function<void(void)> task) = 0;
+    virtual void close() = 0;
+    virtual void wait() = 0;
+};
+
+// ExecutorToken is used to execute a group of tasks
+// NOTE: it's a vanilla implementation, without concurrent execution, without priority control
+class ExecutorToken final : public TaskToken {
+public:
+    ExecutorToken(ScanExecutor* executor) : _executor(executor) {}
+    ~ExecutorToken() override;
+
+    // Submit a new task
+    Status submit(TaskT task) override;
+    Status submit(std::function<void(void)> task) override;
+
+    // Destroy not-running tasks, and wait for running tasks
+    void close() override;
+
+    // Wait all submitted tasks
+    void wait() override;
+
+    int64_t executed_tasks() const { return _executed_tasks; }
+    int64_t executed_time_ns() const { return _executed_time_ns; }
+    int64_t executed_time_ms() const { return _executed_time_ns / 1'000'000; }
+    int64_t executed_workers() const { return _executed_workers; }
+
+private:
+    enum State {
+        IDLE,
+        RUNNING,
+    };
+
+    class FunctionRunnable final : public Runnable {
+    public:
+        FunctionRunnable(std::function<void(void)> fun) : _fun(std::move(fun)) {}
+
+        static TaskT make_task(std::function<void(void)> fun) {
+            return std::make_shared<FunctionRunnable>(std::move(fun));
+        }
+
+        void run() override { _fun(); }
+
+    private:
+        std::function<void(void)> _fun;
+    };
+
+    TaskT _take_task();
+    static void* _worker(void*);
+
+    mutable std::mutex _mutex;
+    std::condition_variable _cond;
+    std::deque<TaskT> _tasks;
+    ScanExecutor* _executor;
+    State _state = IDLE;
+    std::atomic_int64_t _executed_tasks = 0;
+    std::atomic_int64_t _executed_time_ns = 0;
+    std::atomic_int64_t _executed_workers = 0;
+};
+
+// Wrap the bthread::ThreadPoolToken, implementjthe TaskToken interface
+class ThreadPoolTaskToken final : public TaskToken {
+public:
+    ThreadPoolTaskToken(std::unique_ptr<ThreadPoolToken> pool_token);
+    ~ThreadPoolTaskToken() override = default;
+
+    Status submit(TaskT task) override;
+    Status submit(std::function<void()> task) override;
+    void close() override;
+    void wait() override;
+
+private:
+    std::unique_ptr<ThreadPoolToken> _pool_token;
 };
 
 } // namespace starrocks::workgroup

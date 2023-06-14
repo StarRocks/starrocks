@@ -42,6 +42,8 @@
 #include <vector>
 
 #include "common/status.h"
+#include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "storage/memtable.h"
 #include "storage/olap_define.h"
 #include "util/bthreads/executor.h"
@@ -76,7 +78,7 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat);
 //    because the entire job will definitely fail;
 class FlushToken {
 public:
-    explicit FlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token)
+    explicit FlushToken(std::unique_ptr<workgroup::TaskToken> flush_pool_token)
             : _flush_token(std::move(flush_pool_token)), _status() {}
 
     Status submit(std::unique_ptr<MemTable> mem_table, bool eos = false,
@@ -110,7 +112,7 @@ private:
 
     void _flush_memtable(MemTable* memtable, SegmentPB* segment);
 
-    std::unique_ptr<ThreadPoolToken> _flush_token;
+    std::unique_ptr<workgroup::TaskToken> _flush_token;
 
     mutable SpinLock _status_lock;
     // Records the current flush status of the tablet.

@@ -19,8 +19,10 @@
 #include <thread>
 
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "testutil/parallel_test.h"
+#include "util/time.h"
 
 namespace starrocks::workgroup {
 
@@ -118,6 +120,65 @@ PARALLEL_TEST(MultiLevelFeedScanTaskQueueTest, test_take_close) {
     queue.close();
 
     consumer_thread.join();
+}
+
+PARALLEL_TEST(ScanExecutorTest, test_executor_token) {
+    std::unique_ptr<ThreadPool> thread_pool;
+    ThreadPoolBuilder("pool").set_min_threads(1).set_max_threads(10).build(&thread_pool);
+    auto scan_task_queue = create_scan_task_queue();
+    ScanExecutor scan_executor(std::move(thread_pool), std::move(scan_task_queue));
+    scan_executor.initialize(4);
+
+    ExecutorToken token(&scan_executor);
+
+    // Test wait: wait for all submitted tasks
+    int submitted_tasks = 0;
+    for (int k = 0; k < 3; k++) {
+        int64_t start = MonotonicMillis();
+        for (int i = 0; i < 4; i++) {
+            token.submit([]() { sleep(1); });
+            submitted_tasks++;
+        }
+        token.wait();
+        int64_t duration = MonotonicMillis() - start;
+        ASSERT_NEAR(duration, 4'000, 1000);
+        ASSERT_EQ(token.executed_tasks(), submitted_tasks);
+
+        usleep(100);
+    }
+
+    // Test close: destroy submitted tasks
+    for (int k = 0; k < 3; k++) {
+        int64_t start = MonotonicMillis();
+        std::atomic_bool running = false;
+        for (int i = 0; i < 4; i++) {
+            token.submit([&]() {
+                running = true;
+                sleep(1);
+            });
+        }
+        while (!running)
+            ;
+        token.close();
+        int64_t duration = MonotonicMillis() - start;
+        ASSERT_NEAR(duration, 1000, 100);
+
+        usleep(100);
+    }
+
+    // Test worker and statistic
+    for (int k = 0; k < 3; k++) {
+        int64_t executed_tasks = token.executed_tasks();
+        int64_t executed_ns = token.executed_time_ns();
+        int64_t executed_workers = token.executed_workers();
+        for (int i = 0; i < 10; i++) {
+            token.submit([]() { usleep(1000); });
+        }
+        token.wait();
+        ASSERT_EQ(executed_workers + 1, token.executed_workers());
+        ASSERT_EQ(executed_tasks + 10, token.executed_tasks());
+        ASSERT_NEAR(executed_ns + 10 * 1'000'000, token.executed_time_ns(), 1'000'000);
+    }
 }
 
 } // namespace starrocks::workgroup

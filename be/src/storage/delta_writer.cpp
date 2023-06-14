@@ -273,9 +273,9 @@ Status DeltaWriter::_init() {
     ThreadPool::ExecutionMode mode = ThreadPool::ExecutionMode::SERIAL;
     if (_opt.enable_resource_group) {
         // _flush_queue->init(ExecEnv::GetInstance()->scan_executor());
-        _flush_token = std::make_unique<FlushToken>(ExecEnv::GetInstance()->scan_executor()->new_token(mode));
+        _flush_token = std::make_unique<FlushToken>(ExecEnv::GetInstance()->scan_executor()->new_token());
     } else {
-        _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
+        _flush_token = std::move(_storage_engine->memtable_flush_executor()->create_flush_token());
         // _flush_queue->init(_storage_engine->memtable_flush_executor()->get_executor());
     }
     if (_replica_state == Primary && _opt.replicas.size() > 1) {

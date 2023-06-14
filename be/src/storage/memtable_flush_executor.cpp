@@ -107,7 +107,8 @@ Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
 }
 
 void FlushToken::shutdown() {
-    _flush_token->shutdown(false);
+    // _flush_token->shutdown(false);
+    _flush_token->close();
 }
 
 void FlushToken::cancel(const Status& st) {
@@ -119,7 +120,8 @@ void FlushToken::cancel(const Status& st) {
 }
 
 Status FlushToken::wait() {
-    _flush_token->wait(false);
+    // _flush_token->wait(false);
+    _flush_token->wait();
     std::lock_guard l(_status_lock);
     return _status;
 }
@@ -254,7 +256,8 @@ Status MemTableFlushExecutor::update_max_threads(int max_threads) {
 }
 
 std::unique_ptr<FlushToken> MemTableFlushExecutor::create_flush_token(ThreadPool::ExecutionMode execution_mode) {
-    return std::make_unique<FlushToken>(_flush_pool->new_token(execution_mode));
+    return std::make_unique<FlushToken>(
+            std::make_unique<workgroup::ThreadPoolTaskToken>(_flush_pool->new_token(execution_mode)));
 }
 
 } // namespace starrocks

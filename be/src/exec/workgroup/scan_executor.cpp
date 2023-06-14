@@ -89,15 +89,115 @@ int ScanExecutor::submit(void* (*fn)(void*), void* args) {
     return _task_queue->try_offer(std::move(task)) ? 0 : 1;
 }
 
-Status ScanExecutor::submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri) {
-    auto wg = WorkGroupManager::instance()->get_default_mv_workgroup();
-    ScanTask task(wg.get(), [=]() { r->run(); });
-    return _task_queue->try_offer(std::move(task)) ? Status::OK() : Status::ResourceBusy("enqueue failed");
+// Status ScanExecutor::submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri) {
+//     auto wg = WorkGroupManager::instance()->get_default_mv_workgroup();
+//     ScanTask task(wg.get(), [=]() { r->run(); });
+//     return _task_queue->try_offer(std::move(task)) ? Status::OK() : Status::ResourceBusy("enqueue failed");
+// }
+
+std::unique_ptr<TaskToken> ScanExecutor::new_token() {
+    return std::make_unique<ExecutorToken>(this);
 }
 
-std::unique_ptr<ThreadPoolToken> ScanExecutor::new_token(ThreadPool::ExecutionMode mode) {
-    // TODO: should not bypass the task queue
-    return _thread_pool->new_token(mode);
+ExecutorToken::~ExecutorToken() {
+    close();
+}
+
+void* ExecutorToken::_worker(void* args) {
+    // A worker could only run for at most 100ms, to avoid occupy too much resource
+    constexpr int64_t kWorkerTimeSliceNs = 100'000'000;
+    auto* token = static_cast<ExecutorToken*>(args);
+    token->_executed_workers++;
+
+    int64_t total_task_ns = 0;
+    while (total_task_ns < kWorkerTimeSliceNs) {
+        TaskT task;
+        {
+            std::unique_lock<std::mutex> lock(token->_mutex);
+            DCHECK_EQ(token->_state, RUNNING);
+            task = token->_take_task();
+            if (task == nullptr) {
+                token->_state = IDLE;
+                token->_cond.notify_one();
+                VLOG(10) << "no more tasks, ExecutorToken worker quit";
+                return nullptr;
+            }
+        }
+        int64_t task_ns = 0;
+        {
+            DCHECK(!!task);
+            SCOPED_RAW_TIMER(&task_ns);
+            task->run();
+        }
+        total_task_ns += task_ns;
+
+        token->_executed_tasks++;
+        token->_executed_time_ns += task_ns;
+    }
+    VLOG(10) << "ExecutorToken run " << total_task_ns << "ns, need to quit ";
+
+    // Submit a new worker
+    std::unique_lock<std::mutex> lock(token->_mutex);
+    token->_executor->submit(_worker, token);
+    return nullptr;
+}
+
+Status ExecutorToken::submit(TaskT task) {
+    std::unique_lock<std::mutex> lock(_mutex);
+    _tasks.push_back(task);
+    if (_state == IDLE) {
+        _state = RUNNING;
+        _executor->submit(_worker, this);
+    }
+
+    return {};
+}
+
+Status ExecutorToken::submit(std::function<void(void)> fun) {
+    return submit(FunctionRunnable::make_task(std::move(fun)));
+}
+
+ExecutorToken::TaskT ExecutorToken::_take_task() {
+    if (!_tasks.empty()) {
+        TaskT res = std::move(_tasks.front());
+        _tasks.pop_front();
+        return res;
+    }
+    return nullptr;
+}
+
+void ExecutorToken::close() {
+    {
+        std::unique_lock<std::mutex> lock(_mutex);
+        VLOG(10) << "destroy queuing tasks: " << _tasks.size();
+        _tasks.clear();
+    }
+
+    wait();
+}
+
+void ExecutorToken::wait() {
+    std::unique_lock<std::mutex> lock(_mutex);
+    _cond.wait(lock, [&]() { return _state == IDLE; });
+}
+
+ThreadPoolTaskToken::ThreadPoolTaskToken(std::unique_ptr<ThreadPoolToken> pool_token)
+        : _pool_token(std::move(pool_token)) {}
+
+Status ThreadPoolTaskToken::submit(TaskT task) {
+    return _pool_token->submit(task);
+}
+
+Status ThreadPoolTaskToken::submit(std::function<void()> task) {
+    return _pool_token->submit_func(task);
+}
+
+void ThreadPoolTaskToken::close() {
+    _pool_token->shutdown();
+}
+
+void ThreadPoolTaskToken::wait() {
+    _pool_token->wait();
 }
 
 } // namespace starrocks::workgroup
