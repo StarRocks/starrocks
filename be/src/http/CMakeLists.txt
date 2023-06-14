@@ -39,6 +39,7 @@ add_library(Webserver STATIC
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
   action/pprof_actions.cpp
+  action/memory_metrics_action.cpp
   action/metrics_action.cpp
   action/stream_load.cpp
   action/transaction_stream_load.cpp

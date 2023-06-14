@@ -342,6 +342,10 @@ public:
 
     Type type() const { return _type; }
 
+    std::list<MemTracker*> _child_trackers;
+
+    std::list<MemTracker*> getChild() { return _child_trackers; }
+
 private:
     // Walks the MemTracker hierarchy and populates _all_trackers and _limit_trackers
     void Init();
@@ -385,7 +389,6 @@ private:
     // All the child trackers of this tracker. Used for error reporting only.
     // i.e., Updating a parent tracker does not update the children.
     mutable std::mutex _child_trackers_lock;
-    std::list<MemTracker*> _child_trackers;
     // Iterator into _parent->_child_trackers for this object. Stored to have O(1)
     // remove.
     std::list<MemTracker*>::iterator _child_tracker_it;
