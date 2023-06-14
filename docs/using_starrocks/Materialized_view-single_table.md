@@ -4,7 +4,7 @@ This topic describes how to create, use, and manage a **synchronous materialized
 
 For a synchronous materialized view, all changes in the base table are simultaneously updated to the corresponding synchronous materialized views. The refresh of a synchronous materialized view is triggered automatically. Synchronous materialized views are significantly inexpensive to maintain and update, making them suitable for transparent acceleration of real-time, single-table aggregate queries.
 
-Synchronous materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). They are essentially a special index for query acceleration. You cannot query synchronous materialized views directly.
+Synchronous materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). They are essentially a special index for query acceleration rather than a physical table like asynchronous materialized views.
 
 From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](../using_starrocks/Materialized_view.md).
 
@@ -14,7 +14,7 @@ The following table compares the asynchronous materialized views (ASYNC MVs) in 
 | --------------------- | ---------------------------- | -------------------- | ----------------- | -------------------- | -------------- |
 | **ASYNC MVs in v2.5** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs</li><li>Existing materialized views</li></ul> |
 | **ASYNC MVs in v2.4** | Yes | Yes | No | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from the default catalog |
-| **SYNC MV (Rollup)**  | Limited choices of operators | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
+| **SYNC MV (Rollup)**  | Limited choices of [aggregate functions](#correspondence-of-aggregate-operators) | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
 
 ## Basic concepts
 
@@ -177,6 +177,29 @@ RollupIndexName: store_amt
 ```
 
 The `RollupIndexName` section indicates the name of the synchronous materialized view, and `State` section indicates if the building is completed.
+
+## Query a synchronous materialized view
+
+Because a synchronous materialized view is essentially an index of the base table rather than a physical table, you can only query a synchronous materialized view using the hint `[_SYNC_MV_]`:
+
+```SQL
+-- Do not omit the brackets [] in the hint.
+MySQL > SELECT * FROM store_amt [_SYNC_MV_];
++----------+----------+
+| store_id | sale_amt |
++----------+----------+
+|        2 |     6948 |
+|        3 |     8734 |
+|        1 |     4319 |
+|        2 |     9515 |
+|        3 |     4212 |
+|        1 |     8573 |
++----------+----------+
+```
+
+> **CAUTION**
+>
+> Currently, StarRocks automatically generates names for columns in a synchronous materialized view even if you have specified aliases for them.
 
 ## Query with the synchronous materialized view
 
