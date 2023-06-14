@@ -26,11 +26,19 @@ public class RuntimeTypeAdapterFactoryTest {
         GsonBuilder builder = new GsonBuilder();
         builder.registerTypeAdapterFactory(RuntimeTypeAdapterFactory
                 .of(A.class, "clazz")
-                .registerSubtype(B.class, B.class.getSimpleName()));
+                .registerSubtype(B.class, "B")
+                .registerSubtype(A.class, "A"));
         Gson gson = builder.create();
         B b = gson.fromJson("{\"a\":1,\"b\":2}", B.class);
         Assert.assertEquals(1, b.getA());
         Assert.assertEquals(2, b.getB());
+
+        A a = new A();
+        a.a = 10;
+        String jsonStr = gson.toJson(a);
+        System.out.println(jsonStr);
+        A a2 = gson.fromJson(jsonStr, A.class);
+        System.out.println(a2.a);
     }
 
     public static class A {

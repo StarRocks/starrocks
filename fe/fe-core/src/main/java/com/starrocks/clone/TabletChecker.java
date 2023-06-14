@@ -59,7 +59,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -78,8 +77,6 @@ import java.util.stream.Collectors;
 public class TabletChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
 
-    private final GlobalStateMgr globalStateMgr;
-    private final SystemInfoService infoService;
     private final TabletScheduler tabletScheduler;
     private final TabletSchedulerStat stat;
 
@@ -129,11 +126,8 @@ public class TabletChecker extends FrontendDaemon {
         }
     }
 
-    public TabletChecker(GlobalStateMgr globalStateMgr, SystemInfoService infoService, TabletScheduler tabletScheduler,
-                         TabletSchedulerStat stat) {
+    public TabletChecker(TabletScheduler tabletScheduler, TabletSchedulerStat stat) {
         super("tablet checker", Config.tablet_sched_checker_interval_seconds * 1000L);
-        this.globalStateMgr = globalStateMgr;
-        this.infoService = infoService;
         this.tabletScheduler = tabletScheduler;
         this.stat = stat;
     }
@@ -265,10 +259,10 @@ public class TabletChecker extends FrontendDaemon {
 
         long lockTotalTime = 0;
         long lockStart;
-        List<Long> dbIds = globalStateMgr.getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
         DATABASE:
         for (Long dbId : dbIds) {
-            Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
@@ -283,9 +277,9 @@ public class TabletChecker extends FrontendDaemon {
             db.readLock();
             lockStart = System.nanoTime();
             try {
-                List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
+                List<Long> aliveBeIdsInCluster = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
                 TABLE:
-                for (Table table : globalStateMgr.getTablesIncludeRecycleBin(db)) {
+                for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
                     if (!table.needSchedule(false)) {
                         continue;
                     }
@@ -299,7 +293,7 @@ public class TabletChecker extends FrontendDaemon {
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
-                    for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                    for (Partition partition : GlobalStateMgr.getCurrentState().getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
 
                         boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), partition.getId());
@@ -316,13 +310,14 @@ public class TabletChecker extends FrontendDaemon {
                             db.readLock();
                             LOG.debug("checker get lock again");
                             lockStart = System.nanoTime();
-                            if (globalStateMgr.getDbIncludeRecycleBin(dbId) == null) {
+                            if (GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId) == null) {
                                 continue DATABASE;
                             }
-                            if (globalStateMgr.getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
+                            if (GlobalStateMgr.getCurrentState().getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
                                 continue TABLE;
                             }
-                            if (globalStateMgr.getPartitionIncludeRecycleBin(olapTbl, partition.getId()) == null) {
+                            if (GlobalStateMgr.getCurrentState()
+                                    .getPartitionIncludeRecycleBin(olapTbl, partition.getId()) == null) {
                                 continue;
                             }
                         }
@@ -333,8 +328,8 @@ public class TabletChecker extends FrontendDaemon {
                             continue;
                         }
 
-                        short replicaNum = globalStateMgr.getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
-                                partition.getId());
+                        short replicaNum = GlobalStateMgr.getCurrentState()
+                                .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
                         if (replicaNum == (short) -1) {
                             continue;
                         }
@@ -354,7 +349,7 @@ public class TabletChecker extends FrontendDaemon {
 
                                 Pair<TabletStatus, TabletSchedCtx.Priority> statusWithPrio =
                                         localTablet.getHealthStatusWithPriority(
-                                                infoService,
+                                                GlobalStateMgr.getCurrentSystemInfo(),
                                                 partition.getVisibleVersion(),
                                                 replicaNum,
                                                 aliveBeIdsInCluster);

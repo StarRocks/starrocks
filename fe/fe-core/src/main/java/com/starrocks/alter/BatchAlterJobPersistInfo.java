@@ -16,6 +16,7 @@
 // under the License.
 package com.starrocks.alter;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
@@ -29,6 +30,7 @@ import java.util.List;
  */
 public class BatchAlterJobPersistInfo implements Writable {
 
+    @SerializedName("jobs")
     private List<AlterJobV2> alterJobV2List;
 
     public BatchAlterJobPersistInfo(List<AlterJobV2> alterJobV2List) {

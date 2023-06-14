@@ -17,6 +17,7 @@
 
 package com.starrocks.persist;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
@@ -26,13 +27,20 @@ import java.io.IOException;
 
 public class TableInfo implements Writable {
 
+    @SerializedName("db")
     private long dbId;
+    @SerializedName("tb")
     private long tableId;
+    @SerializedName("idx")
     private long indexId;
+    @SerializedName("pt")
     private long partitionId;
 
+    @SerializedName("nt")
     private String newTableName;
+    @SerializedName("nr")
     private String newRollupName;
+    @SerializedName("np")
     private String newPartitionName;
 
     public TableInfo() {

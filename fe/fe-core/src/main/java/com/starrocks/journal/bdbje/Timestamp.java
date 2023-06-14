@@ -17,6 +17,7 @@
 
 package com.starrocks.journal.bdbje;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
@@ -25,6 +26,7 @@ import java.io.IOException;
 
 // Write this class to bdb periodically
 public class Timestamp implements Writable {
+    @SerializedName("ts")
     private long timestamp;
 
     public Timestamp() {

@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.common.io.Writable;
 
@@ -43,8 +44,11 @@ import java.io.IOException;
 
 // Used to search a function
 public class FunctionSearchDesc implements Writable {
+    @SerializedName("fn")
     private FunctionName name;
+    @SerializedName("arg")
     private Type[] argTypes;
+    @SerializedName("iv")
     private boolean isVariadic;
 
     private FunctionSearchDesc() {

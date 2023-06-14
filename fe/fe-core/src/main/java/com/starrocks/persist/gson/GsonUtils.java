@@ -286,7 +286,8 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<SnapshotInfo> SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(SnapshotInfo.class, "clazz")
-            .registerSubtype(LakeTableSnapshotInfo.class, "LakeTableSnapshotInfo");
+            .registerSubtype(LakeTableSnapshotInfo.class, "LakeTableSnapshotInfo")
+            .registerSubtype(SnapshotInfo.class, "SnapshotInfo");
 
     private static final RuntimeTypeAdapterFactory<PEntryObject> P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(PEntryObject.class, "clazz")

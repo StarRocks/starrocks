@@ -23,6 +23,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -72,7 +74,7 @@ import java.util.stream.Collectors;
  * 1. Event driven: job state machine and execution is separated, and the state machine is driven by events
  * 2. Execution: the job is executed in JobExecutor, at most one thread could execute the job
  */
-public class MVMaintenanceJob implements Writable {
+public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MVMaintenanceJob.class);
     private static final int MV_QUERY_TIMEOUT = 120;
 
@@ -513,6 +515,18 @@ public class MVMaintenanceJob implements Writable {
     public void write(DataOutput out) throws IOException {
         serializedState = state.get();
         Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        state = new AtomicReference<>();
+        inSchedule = new AtomicBoolean();
+        state.set(serializedState);
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        serializedState = state.get();
     }
 
     /*

@@ -53,20 +53,32 @@ public class TabletSchedulerTest {
     @Mocked
     GlobalStateMgr globalStateMgr;
 
+    SystemInfoService systemInfoService;
+    TabletInvertedIndex tabletInvertedIndex;
+    TabletSchedulerStat tabletSchedulerStat;
     @Before
     public void setup() throws Exception {
+        systemInfoService = new SystemInfoService();
+        tabletInvertedIndex = new TabletInvertedIndex();
+        tabletSchedulerStat = new TabletSchedulerStat();
+
         new Expectations() {
             {
-                globalStateMgr.getColocateTableIndex();
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
                 minTimes = 0;
-                result = new ColocateTableIndex();
+
+                GlobalStateMgr.getCurrentSystemInfo();
+                result = systemInfoService;
+                minTimes = 0;
+
+                GlobalStateMgr.getCurrentInvertedIndex();
+                result = tabletInvertedIndex;
+                minTimes = 0;
             }
         };
     }
 
-    SystemInfoService systemInfoService = new SystemInfoService();
-    TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
-    TabletSchedulerStat tabletSchedulerStat = new TabletSchedulerStat();
     @Test
     public void testSubmitBatchTaskIfNotExpired() {
         Database badDb = new Database(1, "mal");
@@ -102,8 +114,7 @@ public class TabletSchedulerTest {
                     systemInfoService));
         }
 
-        TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr,
-                systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
+        TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
 
         long almostExpireTime = now + (Config.catalog_trash_expire_second - 1) * 1000L;
         for (int i = 0; i != allCtxs.size(); ++ i) {
@@ -166,8 +177,7 @@ public class TabletSchedulerTest {
         be2.setIsAlive(new AtomicBoolean(true));
         systemInfoService.addBackend(be2);
 
-        TabletScheduler tabletScheduler =
-                new TabletScheduler(globalStateMgr, systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
+        TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
         Method m = TabletScheduler.class.getDeclaredMethod("updateWorkingSlots", null);
         m.setAccessible(true);
         m.invoke(tabletScheduler, null);
@@ -219,8 +229,7 @@ public class TabletSchedulerTest {
 
     @Test
     public void testGetTabletsNumInScheduleForEachCG() {
-        TabletScheduler tabletScheduler =
-                new TabletScheduler(globalStateMgr, systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
+        TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
         Map<Long, ColocateTableIndex.GroupId> tabletIdToCGIdForPending = Maps.newHashMap();
         tabletIdToCGIdForPending.put(101L, new ColocateTableIndex.GroupId(200L, 300L));
         tabletIdToCGIdForPending.put(102L, new ColocateTableIndex.GroupId(200L, 300L));
