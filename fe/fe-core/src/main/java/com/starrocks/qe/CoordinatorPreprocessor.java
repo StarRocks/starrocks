@@ -1073,14 +1073,6 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    public ImmutableMap<Long, ComputeNode> getAllComputeNodes() {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            return ImmutableMap.copyOf(idToComputeNode);
-        } else {
-            return ImmutableMap.copyOf(idToBackend);
-        }
-    }
-
     public FragmentScanRangeAssignment getFragmentScanRangeAssignment(PlanFragmentId fragmentId) {
         return fragmentExecParamsMap.get(fragmentId).scanRangeAssignment;
     }
@@ -1369,19 +1361,6 @@ public class CoordinatorPreprocessor {
 
     private int getFragmentBucketNum(PlanFragmentId fragmentId) {
         return fragmentIdToBucketNumMap.get(fragmentId);
-    }
-
-    public TNetworkAddress toRpcHost(TNetworkAddress host) throws Exception {
-        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
-                host.getHostname(), host.getPort());
-        if (computeNode == null) {
-            computeNode =
-                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
-            if (computeNode == null) {
-                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
-            }
-        }
-        return new TNetworkAddress(computeNode.getHost(), computeNode.getBeRpcPort());
     }
 
     private String backendInfosString(boolean chooseComputeNode) {
