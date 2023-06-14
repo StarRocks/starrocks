@@ -403,8 +403,6 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         db.setExist(true);
         db.writeUnlock();
-        final Cluster cluster = defaultCluster;
-        cluster.addDb(db.getFullName(), db.getId());
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
     }
 
@@ -473,8 +471,6 @@ public class LocalMetastore implements ConnectorMetadata {
             // 3. remove db from globalStateMgr
             idToDb.remove(db.getId());
             fullNameToDb.remove(db.getFullName());
-            final Cluster cluster = defaultCluster;
-            cluster.removeDb(dbName, db.getId());
 
             // 4. drop mv task
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -528,8 +524,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.remove(dbName);
             idToDb.remove(db.getId());
-            final Cluster cluster = defaultCluster;
-            cluster.removeDb(dbName, db.getId());
 
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
@@ -565,8 +559,6 @@ public class LocalMetastore implements ConnectorMetadata {
             db.writeLock();
             db.setExist(true);
             db.writeUnlock();
-            final Cluster cluster = defaultCluster;
-            cluster.addDb(db.getFullName(), db.getId());
 
             List<MaterializedView> materializedViews = db.getMaterializedViews();
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -696,15 +688,10 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         Database db;
-        Cluster cluster;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            cluster = defaultCluster;
-            if (cluster == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_EXISTS, SystemInfoService.DEFAULT_CLUSTER);
-            }
             // check if db exists
             db = fullNameToDb.get(fullDbName);
             if (db == null) {
@@ -715,8 +702,6 @@ public class LocalMetastore implements ConnectorMetadata {
             if (fullNameToDb.get(newFullDbName) != null) {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
-            cluster.removeDb(db.getFullName(), db.getId());
-            cluster.addDb(newFullDbName, db.getId());
             // 1. rename db
             db.setNameWithLock(newFullDbName);
 
@@ -738,10 +723,7 @@ public class LocalMetastore implements ConnectorMetadata {
         tryLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
-            Cluster cluster = defaultCluster;
-            cluster.removeDb(db.getFullName(), db.getId());
             db.setName(newDbName);
-            cluster.addDb(newDbName, db.getId());
             fullNameToDb.remove(dbName);
             fullNameToDb.put(newDbName, db);
 
@@ -3858,7 +3840,6 @@ public class LocalMetastore implements ConnectorMetadata {
         // This is only used for initDefaultCluster and in that case the backendIdList is empty.
         // So ASSERT the cluster's backend list size.
         Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default cluster");
-        Preconditions.checkState(cluster.isEmpty(), "Cluster backendIdList must be 0");
 
         defaultCluster = cluster;
 
@@ -3884,12 +3865,6 @@ public class LocalMetastore implements ConnectorMetadata {
             checksum ^= cluster.getId();
 
             Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default_cluster");
-            List<Long> latestBackendIds = stateMgr.getClusterInfo().getBackendIds();
-
-            // The number of BE in cluster is not same as in SystemInfoService, when perform 'ALTER
-            // SYSTEM ADD BACKEND TO ...' or 'ALTER SYSTEM ADD BACKEND ...', because both of them are
-            // for adding BE to some Cluster, but loadCluster is after loadBackend.
-            cluster.setBackendIdList(latestBackendIds);
 
             String dbName = InfoSchemaDb.DATABASE_NAME;
             InfoSchemaDb db;
@@ -3908,7 +3883,6 @@ public class LocalMetastore implements ConnectorMetadata {
             Preconditions.checkState(db.getId() < NEXT_ID_INIT_VALUE, errMsg);
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
-            cluster.addDb(dbName, db.getId());
 
             if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
                 LOG.warn("Since the the database of mysql already exists, " +
@@ -3918,7 +3892,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 Preconditions.checkState(starRocksDb.getId() < NEXT_ID_INIT_VALUE, errMsg);
                 idToDb.put(starRocksDb.getId(), starRocksDb);
                 fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
-                cluster.addDb(StarRocksDb.DATABASE_NAME, starRocksDb.getId());
             }
             defaultCluster = cluster;
         }
@@ -3951,11 +3924,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // we create default_cluster to meet the need for ease of use, because
         // most users hava no multi tenant needs.
-        cluster.setBackendIdList(backendList);
         unprotectCreateCluster(cluster);
-        for (Database db : idToDb.values()) {
-            cluster.addDb(db.getFullName(), db.getId());
-        }
 
         // no matter default_cluster is created or not,
         // mark isDefaultClusterCreated as true
@@ -3980,8 +3949,6 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
             final Backend backend = stateMgr.getClusterInfo().getBackend(id);
-            final Cluster cluster = defaultCluster;
-            cluster.removeBackend(id);
             backend.setDecommissioned(false);
             backend.clearClusterName();
             backend.setBackendState(Backend.BackendState.free);

@@ -24,6 +24,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+@Deprecated
 public class LinkDbInfo implements Writable {
     private String cluster;
     private String name;
@@ -32,12 +33,6 @@ public class LinkDbInfo implements Writable {
     public LinkDbInfo() {
         this.cluster = "";
         this.name = "";
-    }
-
-    public LinkDbInfo(String name, long id) {
-        this.name = name;
-        this.id = id;
-        this.cluster = "";
     }
 
     public String getName() {
