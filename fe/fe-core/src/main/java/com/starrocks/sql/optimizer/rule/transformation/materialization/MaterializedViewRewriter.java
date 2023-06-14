@@ -1236,29 +1236,30 @@ public class MaterializedViewRewriter {
                 relationColumns.add(materializationContext.getQueryRefFactory().getColumnRef(entry.getKey()));
             }
         }
-        Map<ColumnRefOperator, ColumnRefOperator> compensatedTableColumnsInMv = Maps.newHashMap();
+        Map<ColumnRefOperator, ColumnRefOperator> compensatedColumnsInMv = Maps.newHashMap();
         for (ColumnRefOperator relationColumnRef : relationColumns) {
             ScalarOperator rewrittenColumnRef = rewriteMVCompensationExpression(rewriteContext, rewriter,
                     mvColumnRefToScalarOp, relationColumnRef, false, false);
             if (rewrittenColumnRef != null) {
-                compensatedTableColumnsInMv.put(relationColumnRef, (ColumnRefOperator) rewrittenColumnRef);
+                compensatedColumnsInMv.put(relationColumnRef, (ColumnRefOperator) rewrittenColumnRef);
             }
         }
-        if (compensatedTableColumnsInMv.isEmpty()) {
+        if (compensatedColumnsInMv.isEmpty()) {
             // there is no output of compensation table
             return Optional.empty();
         }
 
+        Collection<ColumnRefOperator> relatedColumns = compensatedColumnsInMv.values();
         List<ScalarOperator> relatedPredicates = compensationPredicates.stream().filter(
-                predicate -> predicate.getUsedColumns().containsAny(compensatedTableColumnsInMv.values())).collect(Collectors.toList());
+                predicate -> predicate.getUsedColumns().containsAny(relatedColumns)).collect(Collectors.toList());
         if (relatedPredicates.isEmpty() || relatedPredicates.stream().allMatch(
-                relatedPredicate -> !Utils.canEliminateNull(Sets.newHashSet(compensatedTableColumnsInMv.values()), relatedPredicate))) {
+                relatedPredicate -> !Utils.canEliminateNull(Sets.newHashSet(relatedColumns), relatedPredicate))) {
             final List<ColumnRefOperator> candidateColumns = Lists.newArrayList();
             if (onlyJoinColumns) {
-                compensatedTableColumnsInMv.keySet().stream().filter(key -> joinColumns.contains(key))
-                        .forEach(key -> candidateColumns.add(compensatedTableColumnsInMv.get(key)));
+                compensatedColumnsInMv.keySet().stream().filter(key -> joinColumns.contains(key))
+                        .forEach(key -> candidateColumns.add(compensatedColumnsInMv.get(key)));
             } else {
-                candidateColumns.addAll(compensatedTableColumnsInMv.values());
+                candidateColumns.addAll(compensatedColumnsInMv.values());
             }
             for (ColumnRefOperator candidate : candidateColumns) {
                 IsNullPredicateOperator columnIsNotNull = new IsNullPredicateOperator(isNotNull, candidate);
