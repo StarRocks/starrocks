@@ -1030,7 +1030,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     }
 
     int64_t t_apply = MonotonicMillis();
-    std::int32_t conditional_column = -1;
+    int32_t conditional_column = -1;
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
     if (txn_meta.has_merge_condition()) {
         for (int i = 0; i < _tablet.tablet_schema().columns().size(); ++i) {
@@ -1395,9 +1395,9 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
     return Status::OK();
 }
 
-Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, std::int32_t condition_column,
-                                 int64_t read_version, const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
-                                 int64_t tablet_id, DeletesMap* new_deletes) {
+Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
+                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
+                                 DeletesMap* new_deletes) {
     if (condition_column >= 0) {
         auto tablet_column = _tablet.tablet_schema().column(condition_column);
         std::vector<uint32_t> read_column_ids;

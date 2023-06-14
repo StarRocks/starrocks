@@ -370,9 +370,9 @@ private:
 
     void _calc_compaction_score(RowsetStats* stats);
 
-    Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, std::int32_t condition_column,
-                      int64_t read_version, const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
-                      int64_t tablet_id, DeletesMap* new_deletes);
+    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
+                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
+                      DeletesMap* new_deletes);
 
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);
