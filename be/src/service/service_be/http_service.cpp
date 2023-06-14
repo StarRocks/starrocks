@@ -42,6 +42,7 @@
 #include "http/action/greplog_action.h"
 #include "http/action/health_action.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
+#include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
 #include "http/action/metrics_action.h"
 #include "http/action/pipeline_blocking_drivers_action.h"
@@ -176,6 +177,10 @@ Status HttpServiceBE::start() {
         auto action = new MetricsAction(StarRocksMetrics::instance()->metrics());
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics", action);
         _http_handlers.emplace_back(action);
+
+        auto memory_metric_action = new MemoryMetricsAction();
+        _ev_http_server->register_handler(HttpMethod::GET, "/metrics/memory", memory_metric_action);
+        _http_handlers.emplace_back(memory_metric_action);
     }
 
     auto* meta_action = new MetaAction(HEADER);
