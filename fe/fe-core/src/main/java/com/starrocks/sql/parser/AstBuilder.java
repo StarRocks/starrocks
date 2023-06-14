@@ -145,6 +145,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -2635,6 +2636,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new CancelLoadStmt(db, labelExpr, createPos(context));
     }
+
+    // ------------------------------------------- Compaction Statement ------------------------------------------------------
+
+    @Override
+    public ParseNode visitCancelCompactionStatement(StarRocksParser.CancelCompactionStatementContext context) {
+        Expr txnIdExpr = null;
+        if (context.expression() != null) {
+            txnIdExpr = (Expr) visit(context.expression());
+        }
+        return new CancelCompactionStmt(txnIdExpr, createPos(context));
+    }
+
 
     // ------------------------------------------- Show Statement ------------------------------------------------------
 

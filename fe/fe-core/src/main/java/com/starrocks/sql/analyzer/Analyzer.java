@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -657,6 +658,12 @@ public class Analyzer {
         @Override
         public Void visitCancelLoadStatement(CancelLoadStmt statement, ConnectContext context) {
             CancelLoadStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelCompactionStatement(CancelCompactionStmt statement, ConnectContext context) {
+            CancelCompactionStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
