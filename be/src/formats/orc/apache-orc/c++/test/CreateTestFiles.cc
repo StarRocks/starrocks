@@ -46,8 +46,8 @@
  * that users would want to do.
  */
 void writeCustomOrcFile(const std::string& filename, const orc::proto::Metadata& metadata,
-                        const orc::proto::Footer& footer, const std::vector<std::uint32_t>& version,
-                        std::uint32_t writerVersion) {
+                        const orc::proto::Footer& footer, const std::vector<uint32_t>& version,
+                        uint32_t writerVersion) {
     std::fstream output(filename.c_str(), std::ios::out | std::ios::trunc | std::ios::binary);
     output << "ORC";
     if (!metadata.SerializeToOstream(&output)) {
@@ -89,7 +89,7 @@ void writeVersion1999() {
     orc::proto::ColumnStatistics* stats = footer.add_statistics();
     stats->set_numberofvalues(0);
     stats->set_hasnull(false);
-    std::vector<std::uint32_t> version;
+    std::vector<uint32_t> version;
     version.push_back(19);
     version.push_back(99);
     writeCustomOrcFile("version1999.orc", meta, footer, version, 1);

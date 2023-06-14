@@ -932,6 +932,24 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     }
 }
 
+// check if delta column generated from begin version to now.
+bool TabletUpdates::check_delta_column_generate_from_version(EditVersion begin_version) {
+    // check edit version info from latest to begin_version
+    std::lock_guard rl(_lock);
+    for (auto i = _edit_version_infos.rbegin(); i != _edit_version_infos.rend() && begin_version < (*i)->version; i++) {
+        if ((*i)->deltas.size() != 0) {
+            uint32_t rowset_id = (*i)->deltas[0];
+            RowsetSharedPtr rowset = _get_rowset(rowset_id);
+            if (rowset->is_column_mode_partial_update()) {
+                LOG(INFO) << "delta column group is generated in tablet_id: " << _tablet.tablet_id()
+                          << " version: " << (*i)->version;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset) {
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
@@ -1012,7 +1030,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     }
 
     int64_t t_apply = MonotonicMillis();
-    std::int32_t conditional_column = -1;
+    int32_t conditional_column = -1;
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
     if (txn_meta.has_merge_condition()) {
         for (int i = 0; i < _tablet.tablet_schema().columns().size(); ++i) {
@@ -1052,7 +1070,8 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                     _set_error(msg);
                     return;
                 }
-                st = _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
+                st = _do_update(rowset_id, i, conditional_column, latest_applied_version.major(), upserts, index,
+                                tablet_id, &new_deletes);
                 if (!st.ok()) {
                     manager->update_state_cache().remove(state_entry);
                     std::string msg =
@@ -1111,8 +1130,8 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                         _set_error(msg);
                         return;
                     }
-                    st = _do_update(rowset_id, loaded_upsert, conditional_column, upserts, index, tablet_id,
-                                    &new_deletes);
+                    st = _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major(),
+                                    upserts, index, tablet_id, &new_deletes);
                     if (!st.ok()) {
                         manager->update_state_cache().remove(state_entry);
                         std::string msg = strings::Substitute(
@@ -1376,9 +1395,9 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
     return Status::OK();
 }
 
-Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, std::int32_t condition_column,
-                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
-                                 std::int64_t tablet_id, DeletesMap* new_deletes) {
+Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
+                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
+                                 DeletesMap* new_deletes) {
     if (condition_column >= 0) {
         auto tablet_column = _tablet.tablet_schema().column(condition_column);
         std::vector<uint32_t> read_column_ids;
@@ -1396,8 +1415,8 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             auto old_unordered_column =
                     ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_columns[0] = old_unordered_column->clone_empty();
-            RETURN_IF_ERROR(
-                    get_column_values(read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns, nullptr));
+            RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, num_default > 0, old_rowids_by_rssid,
+                                              &old_columns, nullptr));
             auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
@@ -1410,7 +1429,8 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             std::vector<std::unique_ptr<Column>> new_columns(1);
             auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             new_columns[0] = new_column->clone_empty();
-            RETURN_IF_ERROR(get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns, nullptr));
+            RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, false, new_rowids_by_rssid, &new_columns,
+                                              nullptr));
 
             int idx_begin = 0;
             int upsert_idx_step = 0;
@@ -3896,9 +3916,62 @@ void TabletUpdates::_update_total_stats(const std::vector<uint32_t>& rowsets, si
     }
 }
 
-Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids, bool with_default,
-                                        std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+Status GetDeltaColumnContext::prepareGetDeltaColumnContext(std::shared_ptr<Segment> seg, KVStore* kvstore,
+                                                           const TabletSegmentId& tsid, int64_t read_version) {
+    segment = std::move(seg);
+    auto dcg_loader = std::make_unique<LocalDeltaColumnGroupLoader>(kvstore);
+    RETURN_IF_ERROR(dcg_loader->load(tsid, read_version, &dcgs));
+    return Status::OK();
+}
+
+static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext& ctx, uint32_t ucid,
+                                                          int32_t* col_index) {
+    // iterate dcg from new ver to old ver
+    for (const auto& dcg : ctx.dcgs) {
+        int32_t idx = dcg->get_column_idx(ucid);
+        if (idx >= 0) {
+            std::string column_file = dcg->column_file(parent_name(ctx.segment->file_name()));
+            if (ctx.dcg_segments.count(column_file) == 0) {
+                ASSIGN_OR_RETURN(auto dcg_segment, ctx.segment->new_dcg_segment(*dcg));
+                ctx.dcg_segments[column_file] = dcg_segment;
+            }
+            if (col_index != nullptr) {
+                *col_index = idx;
+            }
+            return ctx.dcg_segments[column_file];
+        }
+    }
+    // the column not exist in delta column group
+    return nullptr;
+}
+
+static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDeltaColumnContext& ctx,
+                                                                         std::shared_ptr<FileSystem> fs,
+                                                                         ColumnIteratorOptions& iter_opts,
+                                                                         uint32_t ucid) {
+    // build column iter from delta column group
+    int32_t col_index = 0;
+    ASSIGN_OR_RETURN(auto dcg_segment, get_dcg_segment(ctx, ucid, &col_index));
+    if (dcg_segment != nullptr) {
+        if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
+            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(dcg_segment->file_name()));
+            ctx.dcg_read_files[dcg_segment->file_name()] = std::move(read_file);
+        }
+        iter_opts.read_file = ctx.dcg_read_files[dcg_segment->file_name()].get();
+        return dcg_segment->new_column_iterator(col_index);
+    }
+    return nullptr;
+}
+
+Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version,
+                                        bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns, void* state) {
+    std::vector<uint32_t> unique_column_ids;
+    for (auto i = 0; i < column_ids.size(); ++i) {
+        const TabletColumn& tablet_column = _tablet.tablet_schema().column(column_ids[i]);
+        unique_column_ids.push_back(tablet_column.unique_id());
+    }
+
     std::map<uint32_t, RowsetSharedPtr> rssid_to_rowsets;
     {
         std::lock_guard<std::mutex> l(_rowsets_lock);
@@ -3957,13 +4030,21 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         if ((*segment)->num_rows() == 0) {
             continue;
         }
+        GetDeltaColumnContext ctx;
+        RETURN_IF_ERROR(ctx.prepareGetDeltaColumnContext((*segment), _tablet.data_dir()->get_meta(),
+                                                         TabletSegmentId(_tablet.tablet_id(), rssid), read_version));
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_name()));
-        iter_opts.read_file = read_file.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
-            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator(column_ids[i]));
+            // try to build iterator from delta column file first
+            ASSIGN_OR_RETURN(auto col_iter, new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i]));
+            if (col_iter == nullptr) {
+                // not found in delta column file, build iterator from main segment
+                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(column_ids[i]));
+                iter_opts.read_file = read_file.get();
+            }
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
         }
@@ -3974,6 +4055,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         uint32_t id = auto_increment_state->id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
         uint32_t segment_id = auto_increment_state->segment_id;
+        uint32_t rssid = rowset->rowset_meta()->get_rowset_seg_id() + segment_id;
 
         std::string seg_path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), segment_id);
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(seg_path));
@@ -3985,13 +4067,21 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         if ((*segment)->num_rows() == 0) {
             return Status::OK();
         }
+        GetDeltaColumnContext ctx;
+        RETURN_IF_ERROR(ctx.prepareGetDeltaColumnContext((*segment), _tablet.data_dir()->get_meta(),
+                                                         TabletSegmentId(_tablet.tablet_id(), rssid), read_version));
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_name()));
-        iter_opts.read_file = read_file.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
-            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator(id));
+            // try to build iterator from delta column file first
+            ASSIGN_OR_RETURN(auto col_iter, new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i]));
+            if (col_iter == nullptr) {
+                // not found in delta column file, build iterator from main segment
+                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(id));
+                iter_opts.read_file = read_file.get();
+            }
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
         }
