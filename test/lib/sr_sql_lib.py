@@ -50,6 +50,7 @@ common_sql_path = os.path.join(root_path, "common/sql")
 common_data_path = os.path.join(root_path, "common/data")
 common_result_path = os.path.join(root_path, "common/result")
 
+
 LOG_DIR = os.path.join(root_path, "log")
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
@@ -91,7 +92,11 @@ class StarrocksSQLApiLib(object):
         self.log = []
         self.res_log = []
 
-        self.read_conf()
+        config_path = os.environ.get("config_path")
+        if config_path is None or config_path == "":
+            self.read_conf("conf/sr.conf")
+        else:
+            self.read_conf(config_path)
 
     def __del__(self):
         pass
@@ -108,10 +113,10 @@ class StarrocksSQLApiLib(object):
     def setUpClass(cls) -> None:
         pass
 
-    def read_conf(self):
+    def read_conf(self, path):
         """read conf"""
         config_parser = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
-        config_parser.read("%s/conf/sr.conf" % root_path)
+        config_parser.read("%s/%s" % (root_path, path))
         self.mysql_host = config_parser.get("mysql-client", "host")
         self.mysql_port = config_parser.get("mysql-client", "port")
         self.mysql_user = config_parser.get("mysql-client", "user")
