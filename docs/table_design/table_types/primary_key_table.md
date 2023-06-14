@@ -66,7 +66,7 @@ PARTITION BY RANGE(`dt`) (
     ...
     PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),
     PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))
-) DISTRIBUTED BY HASH(order_id) BUCKETS 4
+) DISTRIBUTED BY HASH(order_id)
 PROPERTIES("replication_num" = "3",
 "enable_persistent_index" = "true");
 ```
