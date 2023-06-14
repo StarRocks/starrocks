@@ -9,7 +9,7 @@ StarRocks FE 节点分为 Follower 节点和 Observer 节点。Follower 节点�
 > 注意：
 >
 > * 所有 FE 节点的 `http_port` 必须相同。
-> * Follower FE 节点（包括 Leader 节点）的数量必须为奇数。建议部署 3 个 Follower 节点，以组成高可用部署（HA）模式。
+> * Follower FE 节点（包括 Leader 节点）的数量推荐为奇数。建议部署 3 个 Follower 节点，以组成高可用部署（HA）模式。
 > * 当 FE 集群已经为高可用部署模式时（即包含 1 个 Leader 节点，2 个 Follower 节点），建议您通过增加 Observer 节点来扩展 FE 的读服务能力。
 > * 正常情况下，一个 FE 节点可以应对 10 至 20 台 BE 节点。建议您将 FE 集群节点数量控制在 10 个以下。通常 3 个 FE 节点即可满足绝大部分需求。
 
