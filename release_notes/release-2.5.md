@@ -1,5 +1,40 @@
 # StarRocks version 2.5
 
+## 2.5.7
+
+发布日期：2023 年 6 月 14 日
+
+### 新增特性
+
+- 失效物化视图支持通过 `ALTER MATERIALIZED VIEW <mv_name> ACTIVE` 手动激活，可用于激活因基表 (base table) 被删除而失效的物化视图。更多信息，参见 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md)。[#24001](https://github.com/StarRocks/starrocks/pull/24001)
+
+- 支持在建表和新增分区时自动设置适当的分桶数量。更多信息，参见[确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
+
+### 功能优化
+
+- 优化外表 Scan 节点的 I/O 并发数量，减少内存使用，并限制内存使用比例，提升外表导入稳定性。[#23617](https://github.com/StarRocks/starrocks/pull/23617) [#23624](https://github.com/StarRocks/starrocks/pull/23624) [#23626](https://github.com/StarRocks/starrocks/pull/23626)
+- 优化 Broker Load 的报错信息，增加出错文件的名称提示以及重试信息。[#18038](https://github.com/StarRocks/starrocks/pull/18038) [#21982](https://github.com/StarRocks/starrocks/pull/21982)
+- 优化 CREATE TABLE 的超时报错信息，增加参数调整建议。[#24510](https://github.com/StarRocks/starrocks/pull/24510)
+- 优化因表状态为非 Normal 导致 ALTER TABLE 失败场景下的报错信息。[#24381](https://github.com/StarRocks/starrocks/pull/24381)
+- 建表时忽略中文空格。[#23885](https://github.com/StarRocks/starrocks/pull/23885)
+- 优化 Broker 访问超时时间从而降低 Broker Load 导入失败率。[#22699](https://github.com/StarRocks/starrocks/pull/22699)
+- 主键模型 SHOW TABLET 返回的 `VersionCount` 字段包含 Pending 状态的 Rowsets。[#23847](https://github.com/StarRocks/starrocks/pull/23847)
+- 优化 Persistent Index 策略。[#22140](https://github.com/StarRocks/starrocks/pull/22140)
+
+### 问题修复
+
+修复了如下问题：
+
+- 向 StarRocks 导入 Parquet 格式数据时，因日期类型转换溢出而产生数据错误。 [#22356](https://github.com/StarRocks/starrocks/pull/22356)
+- 禁用动态分区后，分桶信息丢失。[#22595](https://github.com/StarRocks/starrocks/pull/22595)
+- 创建分区表时指定不支持的 Properties 会导致空指针。[#21374](https://github.com/StarRocks/starrocks/issues/21374)
+- Information Schema 中的表权限过滤失效。[#23804](https://github.com/StarRocks/starrocks/pull/23804)
+- SHOW TABLE STATUS 结果展示不全。[#24279](https://github.com/StarRocks/starrocks/issues/24279)
+- 主键模型表在数据导入过程中同时进行 Schema Change，会导致 Schema Change 卡住。[#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- 因为等待 RocksDB WAL flush 导致 brpc worker 同步等待，从而无法切换处理其他 bthread，导致主键模型高频导入出现断点。[#22489](https://github.com/StarRocks/starrocks/pull/22489)
+- 建表时可以成功创建非法数据类型 TIME 列。 [#23474](https://github.com/StarRocks/starrocks/pull/23474)
+- 物化视图 Union 查询改写失败。[#22922](https://github.com/StarRocks/starrocks/pull/22922)
+
 ## 2.5.6
 
 发布日期：2023 年 5 月 19 日
@@ -196,7 +231,6 @@
   - 异步物化视图支持 SPJG 类型的物化视图查询的自动透明改写。相关文档，请参见[物化视图](../using_starrocks/Materialized_view.md#使用多表物化视图查询改写)。[#13193](https://github.com/StarRocks/starrocks/issues/13193)
   - 异步物化视图支持多种异步刷新机制。相关文档，请参见[物化视图](../using_starrocks/Materialized_view.md#关于多表异步物化视图刷新策略)。[#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
   - 优化了物化视图的刷新效率。[#13167](https://github.com/StarRocks/starrocks/issues/13167)
-- 支持在建表时自动设置适当的分桶数。相关文档，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
 - 导入优化
   - 优化多副本导入性能，支持 single leader replication 模式，导入性能提升 1 倍。关于该模式的详细信息，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 的 `replicated_storage` 参数。[#10138](https://github.com/StarRocks/starrocks/pull/10138)
   - 在单 HDFS 集群或单 Kerberos 用户下无需部署 broker 即可通过 Broker Load 或 Spark Load 进行数据导入。如果您配置了多个 HDFS 集群或者多个 Kerberos 用户，需要继续通过 Broker 进程执行导入。相关文档，请参见[从 HDFS 或外部云存储系统导入数据](../loading/BrokerLoad.md)和[使用 Apache Spark™ 批量导入](../loading/SparkLoad.md)。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
