@@ -807,6 +807,9 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         if (t_dim_size != b_dim_size) {
             return Status::InvalidArgument("cosine_similarity requires equal length arrays in each row");
         }
+        if (t_dim_size == 0) {
+            return Status::InvalidArgument("cosine_similarity requires non-empty arrays in each row");
+        }
     }
 
     const CppType* target_data = target_data_head;
@@ -815,20 +818,16 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         CppType sum = 0;
         CppType base_sum = 0;
         CppType target_sum = 0;
-        if constexpr (isNorm) {
-            base_sum = 1;
-            target_sum = 1;
-        }
         size_t dim_size = target_offset[i + 1] - target_offset[i];
         CppType result_value = 0;
-        if (dim_size != 0) {
-            for (size_t j = 0; j < dim_size; j++) {
-                sum += base_data[j] * target_data[j];
-                if constexpr (!isNorm) {
-                    base_sum += base_data[j] * base_data[j];
-                    target_sum += target_data[j] * target_data[j];
-                }
+        for (size_t j = 0; j < dim_size; j++) {
+            sum += base_data[j] * target_data[j];
+            if constexpr (!isNorm) {
+                base_sum += base_data[j] * base_data[j];
+                target_sum += target_data[j] * target_data[j];
             }
+        }
+        if constexpr (!isNorm) {
             result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
         }
         result_data[i] = result_value;
