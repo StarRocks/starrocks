@@ -16,7 +16,7 @@ StarRocks supports asynchronous materialized views from v2.4. The major differen
 | --------------------- | ---------------------------- | -------------------- | ----------------- | -------------------- | -------------- |
 | **ASYNC MVs in v2.5** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs</li><li>Existing materialized views</li></ul> |
 | **ASYNC MVs in v2.4** | Yes | Yes | No | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from the default catalog |
-| **SYNC MV (Rollup)**  | Limited choices of operators | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
+| **SYNC MV (Rollup)**  | Limited choices of aggregate functions | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
 
 ## Synchronous materialized view
 
@@ -85,7 +85,7 @@ SELECT select_expr[, select_expr ...]
 
 ### Query a synchronous materialized view
 
-Because a synchronous materialized view is essentially an index of the base table rather than a physic table, you can only query a synchronous materialized view using the hint `[_SYNC_MV_]`:
+Because a synchronous materialized view is essentially an index of the base table rather than a physical table, you can only query a synchronous materialized view using the hint `[_SYNC_MV_]`:
 
 ```SQL
 -- Do not omit the brackets [] in the hint.
@@ -215,7 +215,7 @@ The query statement to create the asynchronous materialized view.
 
 ### Query a synchronous materialized view
 
-An asynchronous materialized view is a physic table. You can operate it as any regular table **except that you cannot directly load data into an asynchronous materialized view**.
+An asynchronous materialized view is a physical table. You can operate it as any regular table **except that you cannot directly load data into an asynchronous materialized view**.
 
 ### Automatic query rewrite with asynchronous materialized view
 
