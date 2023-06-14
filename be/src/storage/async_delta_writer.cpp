@@ -104,7 +104,12 @@ Status AsyncDeltaWriter::_init(const DeltaWriterOptions& opt) {
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
     if (replica_state() == Secondary) {
-        _segment_flush_executor = StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer);
+        if (opt.enable_resource_group) {
+            auto task_token = ExecEnv::GetInstance()->scan_executor()->new_token("seg_flush_token");
+            _segment_flush_executor = std::make_unique<SegmentFlushToken>(std::move(task_token), _writer);
+        } else {
+            _segment_flush_executor = StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer);
+        }
         if (_segment_flush_executor == nullptr) {
             return Status::InternalError("SegmentFlushExecutor init failed");
         }

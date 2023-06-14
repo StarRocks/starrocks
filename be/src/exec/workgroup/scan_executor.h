@@ -39,8 +39,13 @@ public:
     void change_num_threads(int32_t num_threads);
 
     bool submit(ScanTask task);
+
+    // NOTE: can only used for low-priority tasks, like materialized view
     int submit(void* (*fn)(void*), void* args) override;
-    // Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+    int submit(std::function<void()> fun);
+
+    // submit urgent task to break the deadlock
+    void submit_urgent(void* (*fn)(void*), void* args);
 
     std::unique_ptr<TaskToken> new_token(const std::string& name);
 
@@ -63,7 +68,9 @@ public:
 
     virtual Status submit(TaskT task) = 0;
     virtual Status submit(std::function<void(void)> task) = 0;
+    Status submit_func(std::function<void()> task) { return submit(std::move(task)); }
     virtual void close() = 0;
+    void shutdown() { close(); }
     virtual void wait() = 0;
 };
 
@@ -71,6 +78,12 @@ public:
 // NOTE: it's a vanilla implementation, without concurrent execution, without priority control
 class ExecutorToken final : public TaskToken {
 public:
+    enum State {
+        IDLE,    // No worker
+        STAGING, // Worker task has been submitted, but not running
+        RUNNING, // Worker is running in the threadpool
+    };
+
     ExecutorToken(std::string name, ScanExecutor* executor) : _name(std::move(name)), _executor(executor) {}
     ~ExecutorToken() override;
 
@@ -84,17 +97,17 @@ public:
     // Wait all submitted tasks
     void wait() override;
 
+    State get_state() const {
+        std::unique_lock<std::mutex> lock(_mutex);
+        return _state;
+    }
+
     int64_t executed_tasks() const { return _executed_tasks; }
     int64_t executed_time_ns() const { return _executed_time_ns; }
     int64_t executed_time_ms() const { return _executed_time_ns / 1'000'000; }
     int64_t executed_workers() const { return _executed_workers; }
 
 private:
-    enum State {
-        IDLE,
-        RUNNING,
-    };
-
     class FunctionRunnable final : public Runnable {
     public:
         FunctionRunnable(std::function<void(void)> fun) : _fun(std::move(fun)) {}
@@ -118,6 +131,9 @@ private:
     std::deque<TaskT> _tasks;
     ScanExecutor* _executor;
     State _state = IDLE;
+    int _num_waiters = 0;
+
+    // statistics
     std::atomic_int64_t _executed_tasks = 0;
     std::atomic_int64_t _executed_time_ns = 0;
     std::atomic_int64_t _executed_workers = 0;

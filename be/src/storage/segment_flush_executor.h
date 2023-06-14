@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "exec/workgroup/scan_executor.h"
 #include "storage/olap_define.h"
 #include "util/threadpool.h"
 
@@ -42,7 +43,7 @@ class DeltaWriter;
 
 class SegmentFlushToken {
 public:
-    SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token,
+    SegmentFlushToken(std::unique_ptr<workgroup::TaskToken> flush_pool_token,
                       std::shared_ptr<starrocks::DeltaWriter> delta_writer);
 
     Status submit(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -53,7 +54,7 @@ public:
     void wait();
 
 private:
-    std::unique_ptr<ThreadPoolToken> _flush_token;
+    std::unique_ptr<workgroup::TaskToken> _flush_token;
     std::shared_ptr<DeltaWriter> _writer;
 };
 

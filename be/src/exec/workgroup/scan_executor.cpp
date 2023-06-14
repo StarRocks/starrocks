@@ -89,11 +89,16 @@ int ScanExecutor::submit(void* (*fn)(void*), void* args) {
     return _task_queue->try_offer(std::move(task)) ? 0 : 1;
 }
 
-// Status ScanExecutor::submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri) {
-//     auto wg = WorkGroupManager::instance()->get_default_mv_workgroup();
-//     ScanTask task(wg.get(), [=]() { r->run(); });
-//     return _task_queue->try_offer(std::move(task)) ? Status::OK() : Status::ResourceBusy("enqueue failed");
-// }
+int ScanExecutor::submit(std::function<void()> fun) {
+    // TODO: specify the workgroup through parameter
+    auto wg = WorkGroupManager::instance()->get_default_mv_workgroup();
+    ScanTask task(wg.get(), std::move(fun));
+    return _task_queue->try_offer(std::move(task)) ? 0 : 1;
+}
+
+void ScanExecutor::submit_urgent(void* (*fn)(void*), void* args) {
+    _thread_pool->submit_func([=]() { fn(args); }, ThreadPool::Priority::HIGH_PRIORITY);
+}
 
 std::unique_ptr<TaskToken> ScanExecutor::new_token(const std::string& name) {
     return std::make_unique<ExecutorToken>(name, this);
@@ -107,8 +112,19 @@ void* ExecutorToken::_worker(void* args) {
     // A worker could only run for at most 100ms, to avoid occupy too much resource
     constexpr int64_t kWorkerTimeSliceNs = 100'000'000;
 
-    // set name of this thread
     auto* token = static_cast<ExecutorToken*>(args);
+
+    // If there's already a worker, we should quit
+    {
+        std::unique_lock<std::mutex> lock(token->_mutex);
+        if (token->_state == RUNNING) {
+            return nullptr;
+        } else {
+            token->_state = RUNNING;
+        }
+    }
+
+    // set name of this thread
     Thread* current = Thread::current_thread();
     std::string prev_name = current->name();
     DeferOp defer([&]() { Thread::set_thread_name(current->pthread_id(), prev_name); });
@@ -116,7 +132,7 @@ void* ExecutorToken::_worker(void* args) {
     token->_executed_workers++;
 
     int64_t total_task_ns = 0;
-    while (total_task_ns < kWorkerTimeSliceNs) {
+    while (true) {
         TaskT task;
         {
             std::unique_lock<std::mutex> lock(token->_mutex);
@@ -124,7 +140,7 @@ void* ExecutorToken::_worker(void* args) {
             task = token->_take_task();
             if (task == nullptr) {
                 token->_state = IDLE;
-                token->_cond.notify_one();
+                token->_cond.notify_all();
                 VLOG(10) << "no more tasks, ExecutorToken worker quit";
                 return nullptr;
             }
@@ -139,12 +155,19 @@ void* ExecutorToken::_worker(void* args) {
 
         token->_executed_tasks++;
         token->_executed_time_ns += task_ns;
+
+        // Only if no one is waiting, and use too much time slice, the worker could exit
+        std::unique_lock<std::mutex> lock(token->_mutex);
+        if (token->_num_waiters == 0 && total_task_ns > kWorkerTimeSliceNs) {
+            break;
+        }
     }
     VLOG(10) << "ExecutorToken run " << total_task_ns << "ns, need to quit ";
 
-    // Submit a new worker
+    // Submit a new worker, and change my state = STAGING
     std::unique_lock<std::mutex> lock(token->_mutex);
     token->_executor->submit(_worker, token);
+    token->_state = STAGING;
     return nullptr;
 }
 
@@ -152,7 +175,7 @@ Status ExecutorToken::submit(TaskT task) {
     std::unique_lock<std::mutex> lock(_mutex);
     _tasks.push_back(task);
     if (_state == IDLE) {
-        _state = RUNNING;
+        _state = STAGING;
         _executor->submit(_worker, this);
     }
 
@@ -182,9 +205,33 @@ void ExecutorToken::close() {
     wait();
 }
 
+// If there's already a worker running in the threadpool, just waiting for its finishing
+// If not, the waiting may introduce deadlock, because maybe no worker will be able to drain tasks
+// So we need to check whether there' a worker running:
+// 1. Change the state to WATIING, to let the worker know someone is waiting for it,
+//    and the worker should not yield voluntarily
+// 2. If some worker is running, the waiter just need to wait the condition
+// 3. If no worker, the waiter need to submit an urgent worker, to break the deadlock
 void ExecutorToken::wait() {
     std::unique_lock<std::mutex> lock(_mutex);
-    _cond.wait(lock, [&]() { return _state == IDLE; });
+    _num_waiters++;
+    switch (_state) {
+    case IDLE:
+        break;
+    case STAGING: {
+        VLOG(10) << "no worker is running, submit urgent worker";
+        _executor->submit_urgent(_worker, this);
+        _cond.wait(lock, [&]() { return _state == IDLE; });
+        break;
+    }
+    case RUNNING: {
+        _cond.wait(lock, [&]() { return _state == IDLE; });
+        break;
+    }
+    default:
+        CHECK(false);
+    }
+    _num_waiters--;
 }
 
 ThreadPoolTaskToken::ThreadPoolTaskToken(std::unique_ptr<ThreadPoolToken> pool_token)

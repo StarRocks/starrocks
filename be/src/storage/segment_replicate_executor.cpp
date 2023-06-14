@@ -206,7 +206,8 @@ void ReplicateChannel::cancel() {
     _closure->cancel();
 }
 
-ReplicateToken::ReplicateToken(std::unique_ptr<ThreadPoolToken> replicate_pool_token, const DeltaWriterOptions* opt)
+ReplicateToken::ReplicateToken(std::unique_ptr<workgroup::TaskToken> replicate_pool_token,
+                               const DeltaWriterOptions* opt)
         : _replicate_token(std::move(replicate_pool_token)), _status(), _opt(opt), _fs(new_fs_posix()) {
     // first replica is primary replica, skip it
     for (size_t i = 1; i < opt->replicas.size(); ++i) {
@@ -356,7 +357,9 @@ Status SegmentReplicateExecutor::update_max_threads(int max_threads) {
 
 std::unique_ptr<ReplicateToken> SegmentReplicateExecutor::create_replicate_token(
         const DeltaWriterOptions* opt, ThreadPool::ExecutionMode execution_mode) {
-    return std::make_unique<ReplicateToken>(_replicate_pool->new_token(execution_mode), opt);
+    auto pool_token = _replicate_pool->new_token(execution_mode);
+    auto task_token = std::make_unique<workgroup::ThreadPoolTaskToken>(std::move(pool_token));
+    return std::make_unique<ReplicateToken>(std::move(task_token), opt);
 }
 
 } // namespace starrocks

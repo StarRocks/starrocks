@@ -122,14 +122,14 @@ PARALLEL_TEST(MultiLevelFeedScanTaskQueueTest, test_take_close) {
     consumer_thread.join();
 }
 
-PARALLEL_TEST(ScanExecutorTest, test_executor_token) {
+TEST(ScanExecutorTest, test_executor_token) {
     std::unique_ptr<ThreadPool> thread_pool;
     ThreadPoolBuilder("pool").set_min_threads(1).set_max_threads(10).build(&thread_pool);
     auto scan_task_queue = create_scan_task_queue();
     ScanExecutor scan_executor(std::move(thread_pool), std::move(scan_task_queue));
     scan_executor.initialize(4);
 
-    ExecutorToken token(&scan_executor);
+    ExecutorToken token("test", &scan_executor);
 
     // Test wait: wait for all submitted tasks
     int submitted_tasks = 0;
@@ -179,6 +179,36 @@ PARALLEL_TEST(ScanExecutorTest, test_executor_token) {
         ASSERT_EQ(executed_tasks + 10, token.executed_tasks());
         ASSERT_NEAR(executed_ns + 10 * 1'000'000, token.executed_time_ns(), 1'000'000);
     }
+}
+
+TEST(ScanExecutorTest, test_executor_token_livelock) {
+    std::unique_ptr<ThreadPool> thread_pool;
+    ThreadPoolBuilder("pool").set_min_threads(1).set_max_threads(10).build(&thread_pool);
+    ScanExecutor scan_executor(std::move(thread_pool), create_scan_task_queue());
+    scan_executor.initialize(5);
+
+    // Test urgent wait
+    ExecutorToken token1("token1", &scan_executor);
+
+    // occupy the task queue
+    std::atomic_bool keep_running = true;
+    for (int i = 0; i < 5; i++) {
+        scan_executor.submit([&]() {
+            while (keep_running) sleep(1);
+        });
+    }
+
+    token1.submit([]() { sleep(1); });
+
+    // The task would never be executed
+    for (int i = 0; i < 10; i++) {
+        ASSERT_EQ(token1.executed_workers(), 0);
+        ASSERT_EQ(token1.get_state(), ExecutorToken::State::STAGING);
+        usleep(10);
+    }
+    // trigger the urgent worker
+    token1.wait();
+    keep_running = false;
 }
 
 } // namespace starrocks::workgroup

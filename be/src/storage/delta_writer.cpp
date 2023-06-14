@@ -270,17 +270,20 @@ Status DeltaWriter::_init() {
     }
     _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_rowset_writer.get());
     _tablet_schema = writer_context.tablet_schema;
-    ThreadPool::ExecutionMode mode = ThreadPool::ExecutionMode::SERIAL;
     if (_opt.enable_resource_group) {
-        // _flush_queue->init(ExecEnv::GetInstance()->scan_executor());
         _flush_token =
                 std::make_unique<FlushToken>(ExecEnv::GetInstance()->scan_executor()->new_token("delta_writer_token"));
     } else {
-        _flush_token = std::move(_storage_engine->memtable_flush_executor()->create_flush_token());
-        // _flush_queue->init(_storage_engine->memtable_flush_executor()->get_executor());
+        ThreadPool::ExecutionMode mode = ThreadPool::ExecutionMode::SERIAL;
+        _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token(mode);
     }
     if (_replica_state == Primary && _opt.replicas.size() > 1) {
-        _replicate_token = _storage_engine->segment_replicate_executor()->create_replicate_token(&_opt);
+        if (_opt.enable_resource_group) {
+            auto task_token = ExecEnv::GetInstance()->scan_executor()->new_token("delta_writer_token");
+            _replicate_token = std::make_unique<ReplicateToken>(std::move(task_token), &_opt);
+        } else {
+            _replicate_token = _storage_engine->segment_replicate_executor()->create_replicate_token(&_opt);
+        }
     }
     _set_state(kWriting, Status::OK());
 
