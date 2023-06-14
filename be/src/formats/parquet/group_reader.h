@@ -133,8 +133,11 @@ private:
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-    void _collect_field_io_range(const ParquetField& field, std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                 int64_t* end_offset);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                 const TIcebergSchemaField* iceberg_schema_field,
+                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
 
     // row group meta
     std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
