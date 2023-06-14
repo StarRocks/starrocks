@@ -178,7 +178,7 @@ Buckets reflect how data files are organized in StarRocks.
 
   - Method 2: manually set the number of buckets
 
-    StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contains about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimatethe the amount of data in each partition of a table and then decide the number of tablets. To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
+    StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimatethe the amount of data in each partition of a table and then decide the number of tablets. To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
 
     ```sql
     CREATE TABLE site_access (
@@ -187,7 +187,7 @@ Buckets reflect how data files are organized in StarRocks.
         user_name VARCHAR(32) DEFAULT '',
         pv BIGINT SUM DEFAULT '0')
     AGGREGATE KEY(site_id, city_code, user_name)
-    DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30; -- Suppose the amount of raw data that you want to load into a partition is 300 GB. Because we recommend that each tablet contains 10 GB of raw data, the number of buckets can be set to 30.
+    DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30; -- Suppose the amount of raw data that you want to load into a partition is 300 GB. Because we recommend that each tablet contain 10 GB of raw data, the number of buckets can be set to 30.
     ```
 
 - How to set the number of buckets when adding a partition
