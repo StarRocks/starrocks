@@ -1198,7 +1198,7 @@ public class MaterializedViewRewriter {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
                         rewriter, mvColumnRefToScalarOp, rightJoinColumns, predicates, true, false);
-                if (derivedPredicateOpt == null || !derivedPredicateOpt.isPresent()) {
+                if (!derivedPredicateOpt.isPresent()) {
                     // can not get derived predicates
                     return null;
                 }
@@ -1210,7 +1210,7 @@ public class MaterializedViewRewriter {
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
                         rewriter, mvColumnRefToScalarOp, leftJoinColumns, predicates, true, false);
             }
-            if (derivedPredicateOpt == null || !derivedPredicateOpt.isPresent()) {
+            if (!derivedPredicateOpt.isPresent()) {
                 // can not get derived predicates
                 return null;
             }
@@ -1232,7 +1232,7 @@ public class MaterializedViewRewriter {
         List<ColumnRefOperator> relationColumns = Lists.newArrayList();
         Map<Integer, Integer> columnToRelationId = materializationContext.getQueryRefFactory().getColumnToRelationIds();
         for (Map.Entry<Integer, Integer> entry : columnToRelationId.entrySet()) {
-            if (entry.getValue() == relationId) {
+            if (entry.getValue().equals(relationId)) {
                 relationColumns.add(materializationContext.getQueryRefFactory().getColumnRef(entry.getKey()));
             }
         }
@@ -1261,11 +1261,11 @@ public class MaterializedViewRewriter {
             } else {
                 candidateColumns.addAll(compensatedColumnsInMv.values());
             }
-            for (ColumnRefOperator candidate : candidateColumns) {
-                IsNullPredicateOperator columnIsNotNull = new IsNullPredicateOperator(isNotNull, candidate);
-                return Optional.of(columnIsNotNull);
+            if (candidateColumns.isEmpty()) {
+                return Optional.empty();
             }
-            return Optional.empty();
+            IsNullPredicateOperator columnIsNotNull = new IsNullPredicateOperator(isNotNull, candidateColumns.get(0));
+            return Optional.of(columnIsNotNull);
         }
         // there is null-rejecting predicate for compensated table, do not add any more predicate
         return Optional.of(ConstantOperator.TRUE);
