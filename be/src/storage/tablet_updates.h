@@ -49,6 +49,20 @@ class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
 
+// save the context when reading from delta column files
+struct GetDeltaColumnContext {
+    DeltaColumnGroupList dcgs;
+    // from delta column filename to segment
+    std::unordered_map<std::string, std::shared_ptr<Segment>> dcg_segments;
+    // from delta column filename to read file
+    std::unordered_map<std::string, std::unique_ptr<RandomAccessFile>> dcg_read_files;
+    // main segment
+    std::shared_ptr<Segment> segment;
+
+    Status prepareGetDeltaColumnContext(std::shared_ptr<Segment> segment, KVStore* kvstore, const TabletSegmentId& tsid,
+                                        int64_t read_version);
+};
+
 struct CompactionInfo {
     EditVersion start_version;
     std::vector<uint32_t> inputs;
@@ -265,7 +279,7 @@ public:
     //          column 2 value@rssid:6 rowid:4,
     //   ]
     // ]
-    Status get_column_values(const std::vector<uint32_t>& column_ids, bool with_default,
+    Status get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns, void* state);
 
@@ -296,6 +310,8 @@ public:
 
     Status get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
                                          std::vector<uint32_t>* rowset_ids);
+
+    bool check_delta_column_generate_from_version(EditVersion begin_version);
 
 private:
     friend class Tablet;
@@ -354,8 +370,8 @@ private:
 
     void _calc_compaction_score(RowsetStats* stats);
 
-    Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, std::int32_t condition_column,
-                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, std::int64_t tablet_id,
+    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
+                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                       DeletesMap* new_deletes);
 
     // This method will acquire |_lock|.

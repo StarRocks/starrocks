@@ -52,7 +52,7 @@ private:
     std::shared_ptr<OrcRowReaderFilter> _orc_row_reader_filter;
     Filter _dict_filter;
     Filter _chunk_filter;
-    std::set<std::int64_t> _need_skip_rowids;
+    std::set<int64_t> _need_skip_rowids;
 };
 
 } // namespace starrocks

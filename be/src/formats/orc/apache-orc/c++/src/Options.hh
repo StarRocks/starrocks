@@ -219,7 +219,7 @@ RowReaderOptions& RowReaderOptions::includeLazyLoadColumnNames(const std::list<s
     return *this;
 }
 
-RowReaderOptions& RowReaderOptions::includeLazyLoadColumnIndexes(const std::list<std::uint64_t>& include) {
+RowReaderOptions& RowReaderOptions::includeLazyLoadColumnIndexes(const std::list<uint64_t>& include) {
     privateBits->lazyLoadColumnIndexes.assign(include.begin(), include.end());
     privateBits->lazyLoadColumnNames.clear();
     return *this;

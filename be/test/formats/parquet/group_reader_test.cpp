@@ -365,7 +365,7 @@ TEST_F(GroupReaderTest, TestInit) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    std::set<std::int64_t> need_skip_rowids;
+    std::set<int64_t> need_skip_rowids;
     auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
 
     // init row group reader
@@ -400,7 +400,7 @@ TEST_F(GroupReaderTest, TestGetNext) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    std::set<std::int64_t> need_skip_rowids;
+    std::set<int64_t> need_skip_rowids;
     auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
 
     // init row group reader
