@@ -95,9 +95,6 @@ Status HiveDataSource::open(RuntimeState* state) {
 
 void HiveDataSource::_update_has_any_predicate() {
     auto f = [&]() {
-        if (_conjunct_ctxs.size() > 0) return true;
-        if (_min_max_conjunct_ctxs.size() > 0) return true;
-        if (_partition_conjunct_ctxs.size() > 0) return true;
         if (_runtime_filters != nullptr && _runtime_filters->size() > 0) return true;
         return false;
     };

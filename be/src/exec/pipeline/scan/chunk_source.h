@@ -53,6 +53,8 @@ public:
     void pin_chunk_token(ChunkBufferTokenPtr chunk_token);
     void unpin_chunk_token();
 
+    virtual bool reach_limit() { return false; }
+
 protected:
     // MUST be implemented by different ChunkSource
     virtual Status _read_chunk(RuntimeState* state, vectorized::ChunkPtr* chunk) = 0;
@@ -80,6 +82,7 @@ protected:
     BalancedChunkBuffer& _chunk_buffer;
     Status _status = Status::OK();
     ChunkBufferTokenPtr _chunk_token;
+    std::atomic<bool> _reach_limit = false;
 
 private:
     // _scan_timer = _io_task_wait_timer + _io_task_exec_timer
