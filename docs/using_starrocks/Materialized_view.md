@@ -24,7 +24,7 @@ The following table compares the asynchronous materialized views (ASYNC MVs) in 
 | --------------------- | ---------------------------- | -------------------- | ----------------- | -------------------- | -------------- |
 | **ASYNC MVs in v2.5** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs</li><li>Existing materialized views</li></ul> |
 | **ASYNC MVs in v2.4** | Yes | Yes | No | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from the default catalog |
-| **SYNC MV (Rollup)**  | Limited choices of operators | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
+| **SYNC MV (Rollup)**  | Limited choices of aggregate functions | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
 
 ### Basic concepts
 
@@ -60,11 +60,19 @@ You can create an asynchronous materialized view if you have the following deman
 
 - **Data warehouse layering**
 
-  Suppose that your data warehouse contains a mass of raw data, and queries in it require a complex set of ETL operations. You can build multiple layers of asynchronous materialized views to stratify the data in your data warehouse, and thus decompose the query into a series of simple sub-queries. It can significantly reduce repetitive computation, and, more importantly, help your DBA identify the problem with ease and efficiency. Beyond that, data warehouse layering helps decouple the raw data and statistical data, protecting the security of sensitive raw data.
+  Suppose that your data warehouse contains a mass of raw data, and queries in it require a complex set of ETL operations. You can build multiple layers of asynchronous materialized views to stratify the data in your data warehouse, and thus decompose the query into a series of simple sub-queries. It can significantly reduce repetitive computation, and, more importantly, help your DBA identify the problem with ease and efficiency. Beyond that, data warehouse layering helps decouple raw data and statistical data, protecting the security of sensitive raw data.
+  
+- **Accelerating queries in data lakes**
+
+  Querying a data lake can be slow due to network latency and object storage throughput. However, you can enhance the query performance by building an asynchronous materialized view on top of the data lake to filter the raw data. StarRocks automatically refreshes the materialized view whenever the data from the external source changes, ensuring data consistency. Moreover, the SQL optimizer of StarRocks can intelligently rewrite queries to use the existing materialized views, saving you the trouble of modifying your queries manually.
 
 ## Create an asynchronous materialized view
 
-StarRocks supports creating asynchronous materialized views on one or more base tables from the default catalog and external catalogs. Base tables support all StarRocks table types. You can also build an asynchronous materialized view on existing materialized views.
+StarRocks' asynchronous materialized views can be created on the following base tables:
+
+- StarRocks' native tables of all StarRocks table types
+- Tables in Hive catalog, Hudi catalog, and Iceberg catalog
+- Existing asynchronous materialized views
 
 ### Before you begin
 
@@ -145,6 +153,7 @@ GROUP BY order_id;
 > - Asynchronous materialized views support a dynamic partitioning strategy in a longer span. For example, if the base table is partitioned at an interval of one day, you can set the materialized view to be partitioned at an interval of one month.
 > - The query statement that is used to create an asynchronous materialized view must include the partition keys and bucket keys of the materialized views.
 > - The query statement used to create a materialized view does not support random functions, including rand(), random(), uuid(), and sleep().
+> - Asynchronous materialized views support a variety of data types. For more information, see [CREATE MATERIALIZED VIEW - Supported data types](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md#supported-data-types).
 
 - **About refresh mechanisms of asynchronous materialized views**
 
@@ -164,7 +173,7 @@ GROUP BY order_id;
 
 - **About external catalog materialized views**
 
-  StarRocks v2.5 supports creating asynchronous materialized views based on Hive catalog, Hudi catalog and Iceberg catalog. An external catalog materialized view is created in the same way as a general asynchronous materialized view is created, with the following usage restrictions:
+  StarRocks v2.5 supports creating asynchronous materialized views based on Hive catalog, Hudi catalog, and Iceberg catalog. An external catalog materialized view is created in the same way as a general asynchronous materialized view is created, with the following usage restrictions:
 
   - Strict consistency is not guaranteed between the materialized view and the base tables in the external catalog.
   - Currently, building asynchronous materialized views based on external resources is not supported.
@@ -211,7 +220,7 @@ MySQL > SELECT * FROM order_mv;
 
 StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views refer to materialized views whose plan only includes Scan, Filter, Project, and Aggregate types of operators. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views.
 
-Currently, StarRocks supports rewriting queries on asynchronous materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog. When querying data in the default catalog, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view expires, the materialized view will not be used as a candidate materialized view. When querying data in external catalogs, StarRocks does not ensure strong consistency of the results because StarRocks cannot perceive the data changes in external catalogs.
+Currently, StarRocks supports rewriting queries on asynchronous materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog. When querying data in the default catalog, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view expires, the materialized view will not be used as a candidate materialized view. When querying data in external catalogs, StarRocks does not ensure a strong consistency of the results because StarRocks cannot perceive the data changes in external catalogs.
 
 ### Enable query rewrite
 
@@ -241,6 +250,54 @@ Currently, StarRocks supports rewriting queries on asynchronous materialized vie
   from `hive_catalog`.`emp_db`.`emps_par_tbl`
   where empid < 5;
   ```
+
+### Rewrite queries with Aggregate Rollup
+
+StarRocks supports rewriting queries with Aggregate Rollup, that is, StarRocks can rewrite aggregate queries with a `GROUP BY a` clause using an asynchronous materialized view created with a `GROUP BY a,b` clause.
+
+In the following example, StarRocks can rewrite Query 1 and 2 with the materialized view `order_agg_mv`.
+
+```SQL
+CREATE MATERIALIZED VIEW order_agg_mv
+DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
+REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+AS
+SELECT
+    order_id,
+    order_date,
+    bitmap_union(to_bitmap(client_id))  -- uv
+FROM order_list 
+GROUP BY order_id, order_date;
+
+-- Query 1
+SELECT
+    order_date,
+    bitmap_union(to_bitmap(client_id))  -- uv
+FROM order_list 
+GROUP BY order_date;
+
+-- Query 2
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list 
+GROUP BY order_date;
+```
+
+Only certain aggregate functions support query rewrite with Aggregate Rollup. In the preceding example, if the materialized view `order_agg_mv` uses `count(distinct client_id)` instead of `bitmap_union(to_bitmap(client_id))`, StarRocks cannot rewrite the queries with Aggregate Rollup.
+
+The following table shows the correspondence between the aggregate functions in the original query and the aggregate function used to build the materialized view. You can select the corresponding aggregate functions to build a materialized view according to your business scenario.
+
+| **Aggregate function suppprted in original queries**   | **Function supported Aggregate Rollup in materialized view** |
+| ------------------------------------------------------ | ------------------------------------------------------------ |
+| sum                                                    | sum                                                          |
+| count                                                  | count                                                        |
+| min                                                    | min                                                          |
+| max                                                    | max                                                          |
+| avg                                                    | sum / count                                                  |
+| bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                                 |
+| hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                                    |
+| percentile_approx, percentile_union                    | percentile_union                                             |
 
 ### Rewrite queries in View Delta Join scenarios
 
