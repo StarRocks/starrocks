@@ -111,7 +111,18 @@ void CompactionUtils::split_column_into_groups(size_t num_columns, const std::ve
 CompactionAlgorithm CompactionUtils::choose_compaction_algorithm(size_t num_columns, int64_t max_columns_per_group,
                                                                  size_t source_num) {
     // if the number of columns in the schema is less than or equal to max_columns_per_group, use HORIZONTAL_COMPACTION.
-    return HORIZONTAL_COMPACTION;
+    if (num_columns <= max_columns_per_group) {
+        return HORIZONTAL_COMPACTION;
+    }
+
+    // if source_num is less than or equal to 1, heap merge iterator is not used in compaction,
+    // and row source mask is not created.
+    // if source_num is more than MAX_SOURCES, mask in RowSourceMask may overflow.
+    if (source_num <= 1 || source_num > RowSourceMask::MAX_SOURCES) {
+        return HORIZONTAL_COMPACTION;
+    }
+
+    return VERTICAL_COMPACTION;
 }
 
 } // namespace starrocks
