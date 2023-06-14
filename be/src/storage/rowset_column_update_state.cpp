@@ -340,7 +340,8 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     WritableFileOptions opts{.sync_on_close = true};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
-    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), rssid, tschema.get(), writer_options);
+    auto segment_writer =
+            std::make_unique<SegmentWriter>(std::move(wfile), rowsetid_segid.segment_id, tschema.get(), writer_options);
     RETURN_IF_ERROR(segment_writer->init(false));
     return std::move(segment_writer);
 }
@@ -532,7 +533,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
                                     rss_rowid_to_update_rowid.size(), _partial_update_states.size(),
                                     update_column_ids.size(), update_rows);
 
-    LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << " finalize cost:" << cost_str.str();
+    LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
+              << ", finalize cost:" << cost_str.str();
     _finalize_finished = true;
     return Status::OK();
 }

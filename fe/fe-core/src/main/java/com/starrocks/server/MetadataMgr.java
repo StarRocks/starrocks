@@ -21,7 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -217,11 +217,9 @@ public class MetadataMgr {
         return connectorTable;
     }
 
-    public Pair<Table, MaterializedIndex> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        Pair<Table, MaterializedIndex> materializedIndex =
-                connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
-        return materializedIndex;
+        return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
@@ -232,6 +230,32 @@ public class MetadataMgr {
                 connectorMetadata.get().listPartitionNames(dbName, tableName).forEach(partitionNames::add);
             } catch (Exception e) {
                 LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
+                throw e;
+            }
+        }
+        return ImmutableList.copyOf(partitionNames.build());
+    }
+
+    /**
+     * List partition names by partition values, The partition values are in the same order as the partition columns,
+     * it used for get partial partition names from hms/glue
+     * <p>
+     * For example:
+     * SQL ： select dt,hh,mm from tbl where hh = '12' and mm = '30';
+     * the partition columns are [dt,hh,mm]
+     * the partition values should be [empty,'12','30']
+     *
+     */
+    public List<String> listPartitionNamesByValue(String catalogName, String dbName, String tableName,
+                                                  List<Optional<String>> partitionValues) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
+        if (connectorMetadata.isPresent()) {
+            try {
+                connectorMetadata.get().listPartitionNamesByValue(dbName, tableName, partitionValues).
+                        forEach(partitionNames::add);
+            } catch (Exception e) {
+                LOG.error("Failed to listPartitionNamesByValue on [{}.{}]", catalogName, dbName, e);
                 throw e;
             }
         }

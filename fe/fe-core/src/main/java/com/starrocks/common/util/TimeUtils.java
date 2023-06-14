@@ -47,12 +47,14 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.text.ParseException;
 import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
 import java.time.DateTimeException;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.Date;
 import java.util.SimpleTimeZone;
 import java.util.TimeZone;
@@ -334,5 +336,24 @@ public class TimeUtils {
         long difference = targetTimeSecond - startTimeSecond;
         long step = difference / intervalSecond + 1;
         return startTimeSecond + step * intervalSecond;
+    }
+
+    public static PeriodDuration parseHumanReadablePeriodOrDuration(String text) {
+        try {
+            return PeriodDuration.of(PeriodStyle.LONG.parse(text));
+        } catch (DateTimeParseException ignored) {
+            return PeriodDuration.of(DurationStyle.LONG.parse(text));
+        }
+    }
+
+    public static String toHumanReadableString(PeriodDuration periodDuration) {
+        if (periodDuration.getPeriod().isZero()) {
+            return DurationStyle.LONG.toString(periodDuration.getDuration());
+        } else if (periodDuration.getDuration().isZero()) {
+            return PeriodStyle.LONG.toString(periodDuration.getPeriod());
+        } else {
+            return PeriodStyle.LONG.toString(periodDuration.getPeriod()) + " "
+                    + DurationStyle.LONG.toString(periodDuration.getDuration());
+        }
     }
 }

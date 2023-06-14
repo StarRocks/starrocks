@@ -64,6 +64,7 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
@@ -71,6 +72,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
@@ -99,6 +101,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -205,6 +208,9 @@ public class OlapTable extends Table {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
+    @SerializedName(value = "storageVolumeId")
+    protected String storageVolumeId = "";
+
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -284,8 +290,7 @@ public class OlapTable extends Table {
 
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
-    public OlapTable copyOnlyForQuery() {
-        OlapTable olapTable = new OlapTable();
+    public void copyOnlyForQuery(OlapTable olapTable) {
         olapTable.id = this.id;
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
@@ -315,7 +320,6 @@ public class OlapTable extends Table {
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
         }
-        return olapTable;
     }
 
     public BinlogConfig getCurBinlogConfig() {
@@ -382,6 +386,14 @@ public class OlapTable extends Table {
 
     public OlapTableState getState() {
         return state;
+    }
+
+    public void setStorageVolumeId(String storageVolumeId) {
+        this.storageVolumeId = storageVolumeId;
+    }
+
+    public String getStorageVolumeId() {
+        return storageVolumeId;
     }
 
     public List<Index> getIndexes() {
@@ -548,33 +560,26 @@ public class OlapTable extends Table {
         return null;
     }
 
-    public Map<Long, MaterializedIndexMeta> getVisibleIndexIdToMeta() {
-        Map<Long, MaterializedIndexMeta> visibleMVs = Maps.newHashMap();
+    public List<MaterializedIndexMeta> getVisibleIndexMetas() {
+        List<MaterializedIndexMeta> visibleMVs = Lists.newArrayList();
         List<MaterializedIndex> mvs = getVisibleIndex();
         for (MaterializedIndex mv : mvs) {
-            visibleMVs.put(mv.getId(), indexIdToMeta.get(mv.getId()));
+            if (!indexIdToMeta.containsKey(mv.getId())) {
+                continue;
+            }
+            visibleMVs.add(indexIdToMeta.get(mv.getId()));
         }
         return visibleMVs;
     }
 
-    public List<MaterializedIndex> getVisibleIndex() {
+    // Fetch the 1th partition's MaterializedViewIndex which should be not used directly.
+    private List<MaterializedIndex> getVisibleIndex() {
         Optional<Partition> firstPartition = idToPartition.values().stream().findFirst();
         if (firstPartition.isPresent()) {
             Partition partition = firstPartition.get();
             return partition.getMaterializedIndices(IndexExtState.VISIBLE);
         }
         return Lists.newArrayList();
-    }
-
-    public Column getVisibleColumn(String columnName) {
-        for (MaterializedIndexMeta meta : getVisibleIndexIdToMeta().values()) {
-            for (Column column : meta.getSchema()) {
-                if (column.getName().equalsIgnoreCase(columnName)) {
-                    return column;
-                }
-            }
-        }
-        return null;
     }
 
     // this is only for schema change.
@@ -608,6 +613,7 @@ public class OlapTable extends Table {
                 baseIndexId = newIdxId;
             }
             indexIdToMeta.put(newIdxId, indexIdToMeta.remove(entry.getKey()));
+            indexIdToMeta.get(newIdxId).setIndexIdForRestore(newIdxId);
             indexNameToId.put(entry.getValue(), newIdxId);
         }
 
@@ -1543,7 +1549,6 @@ public class OlapTable extends Table {
 
         baseIndexId = in.readLong();
 
-
         // read indexes
         if (in.readBoolean()) {
             this.indexes = TableIndexes.read(in);
@@ -1713,8 +1718,7 @@ public class OlapTable extends Table {
 
     public void checkStableAndNormal() throws DdlException {
         if (state != OlapTableState.NORMAL) {
-            throw new DdlException("Table[" + name + "]'s state is " + state.toString() + " not NORMAL."
-                    + "Do not allow create materialized view");
+            throw InvalidOlapTableStateException.of(state, getName());
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
         long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
@@ -1882,7 +1886,7 @@ public class OlapTable extends Table {
 
     // Determine which situation supports importing and automatically creating partitions
     public Boolean supportedAutomaticPartition() {
-        return partitionInfo.getType() == PartitionType.EXPR_RANGE;
+        return partitionInfo.isAutomaticPartition();
     }
 
     public Boolean isBinlogEnabled() {
@@ -1968,6 +1972,15 @@ public class OlapTable extends Table {
             return;
         }
         tableProperty.setHasDelete(true);
+    }
+
+    public void setDataCachePartitionDuration(PeriodDuration duration) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION,
+                TimeUtils.toHumanReadableString(duration));
+        tableProperty.buildDataCachePartitionDuration();
     }
 
     public boolean hasForbitGlobalDict() {
@@ -2395,9 +2408,15 @@ public class OlapTable extends Table {
         properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
 
         Map<String, String> tableProperty = getTableProperty().getProperties();
-        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        if (tableProperty != null) {
+            if (tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                        tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+            }
+            if (tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
+                        tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME));
+            }
         }
         return properties;
     }

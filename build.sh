@@ -157,7 +157,7 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is now always compiled in.
+# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is controlled by "USE_STAROS".
 # This option will soon be deprecated.
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     # force turn off cachelib on arm platform
@@ -308,7 +308,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     mkdir -p ${CMAKE_BUILD_DIR}
 
     source ${STARROCKS_HOME}/bin/common.sh
-    update_submodules
 
     cd ${CMAKE_BUILD_DIR}
     if [ "${USE_STAROS}" == "ON"  ]; then
@@ -329,8 +328,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_STAROS=${USE_STAROS} \
                     -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_CACHELIB=${WITH_CACHELIB} \
-                    -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
-                    -DSTARCACHE_SKIP_INSTALL=ON \
+                    -DWITH_STARCACHE=${USE_STAROS} \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
                     -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
@@ -356,8 +354,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_COMPRESS=${WITH_COMPRESS} \
                     -DWITH_CACHELIB=${WITH_CACHELIB} \
-                    -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
-                    -DSTARCACHE_SKIP_INSTALL=ON \
+                    -DWITH_STARCACHE=${USE_STAROS} \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
     time ${BUILD_SYSTEM} -j${PARALLEL}
@@ -473,6 +470,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/java-extensions/hudi-reader/target/hudi-reader-lib ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/java-extensions/hudi-reader/target/starrocks-hudi-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/hudi-reader/target/starrocks-hudi-reader.jar ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib
+    cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/paimon-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+    cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
@@ -497,6 +497,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/
     MSG="${MSG} √ ${MSG_BE}"
 fi
 

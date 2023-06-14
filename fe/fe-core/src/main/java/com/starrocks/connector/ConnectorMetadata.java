@@ -18,7 +18,7 @@ package com.starrocks.connector;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -55,6 +55,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 public interface ConnectorMetadata {
     /**
@@ -87,6 +88,18 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Return partial partition names of the table using partitionValues to filter.
+     * @param databaseName the name of the database
+     * @param tableName the name of the table
+     * @param partitionValues the partition value to filter
+     * @return a list of partition names
+     */
+    default List<String> listPartitionNamesByValue(String databaseName, String tableName,
+                                                   List<Optional<String>> partitionValues) {
+        return Lists.newArrayList();
+    }
+
+    /**
      * Get Table descriptor for the table specific by `dbName`.`tblName`
      *
      * @param dbName  - the string represents the database name
@@ -104,7 +117,7 @@ public interface ConnectorMetadata {
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
-    default Pair<Table, MaterializedIndex> getMaterializedViewIndex(String dbName, String tblName) {
+    default Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
         return null;
     }
 

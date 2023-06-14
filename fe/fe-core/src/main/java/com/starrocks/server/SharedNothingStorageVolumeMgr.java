@@ -31,10 +31,10 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     private Map<String, StorageVolume> idToSV = new HashMap<>();
 
     @Override
-    public StorageVolume getStorageVolumeByName(String svKey) {
+    public StorageVolume getStorageVolumeByName(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             for (StorageVolume sv : idToSV.values()) {
-                if (sv.getName().equals(svKey)) {
+                if (sv.getName().equals(svName)) {
                     return sv;
                 }
             }
@@ -43,7 +43,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException {
+    public StorageVolume getStorageVolume(String storageVolumeId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return idToSV.get(storageVolumeId);
         }

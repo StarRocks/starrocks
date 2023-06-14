@@ -30,6 +30,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/gc.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
@@ -125,14 +126,12 @@ std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
     return fmt::format("TL{}", tablet_id);
 }
 
-bool TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int size) {
+void TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int size) {
     Cache::Handle* handle = _metacache->insert(CacheKey(key), ptr, size, cache_value_deleter);
     if (handle == nullptr) {
         delete ptr;
-        return false;
     } else {
         _metacache->release(handle);
-        return true;
     }
 }
 
@@ -200,7 +199,7 @@ SegmentPtr TabletManager::lookup_segment(std::string_view key) {
 void TabletManager::cache_segment(std::string_view key, SegmentPtr segment) {
     auto mem_cost = segment->mem_usage();
     auto value = std::make_unique<CacheValue>(std::move(segment));
-    (void)fill_metacache(key, value.release(), (int)mem_cost);
+    fill_metacache(key, value.release(), (int)mem_cost);
 }
 
 DelVectorPtr TabletManager::lookup_delvec(std::string_view key) {
@@ -217,7 +216,7 @@ DelVectorPtr TabletManager::lookup_delvec(std::string_view key) {
 void TabletManager::cache_delvec(std::string_view key, DelVectorPtr delvec) {
     auto mem_cost = delvec->memory_usage();
     auto value = std::make_unique<CacheValue>(std::move(delvec));
-    (void)fill_metacache(key, value.release(), (int)mem_cost);
+    fill_metacache(key, value.release(), (int)mem_cost);
 }
 
 void TabletManager::erase_metacache(std::string_view key) {
@@ -330,8 +329,7 @@ Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     // put into metacache
     auto metadata_location = tablet_metadata_location(metadata->id(), metadata->version());
     auto value_ptr = std::make_unique<CacheValue>(metadata);
-    bool inserted = fill_metacache(metadata_location, value_ptr.release(), static_cast<int>(metadata->SpaceUsedLong()));
-    LOG_IF(WARNING, !inserted) << "Failed to put into meta cache " << metadata_location;
+    fill_metacache(metadata_location, value_ptr.release(), static_cast<int>(metadata->SpaceUsedLong()));
     cache_tablet_latest_metadata(metadata);
     return Status::OK();
 }
@@ -362,8 +360,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
-        bool inserted = fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
-        LOG_IF(WARNING, !inserted) << "Failed to put tablet metadata into cache " << path;
+        fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
     }
     return ptr;
 }
@@ -421,8 +418,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
     ASSIGN_OR_RETURN(auto ptr, load_txn_log(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
-        bool inserted = fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
-        LOG_IF(WARNING, !inserted) << "Failed to cache " << path;
+        fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
     }
     return ptr;
 }
@@ -451,8 +447,7 @@ Status TabletManager::put_txn_log(TxnLogPtr log) {
 
     // put txnlog into cache
     auto value_ptr = std::make_unique<CacheValue>(log);
-    bool inserted = fill_metacache(txn_log_path, value_ptr.release(), static_cast<int>(log->SpaceUsedLong()));
-    LOG_IF(WARNING, !inserted) << "Failed to put txnlog into cache " << txn_log_path;
+    fill_metacache(txn_log_path, value_ptr.release(), static_cast<int>(log->SpaceUsedLong()));
     return Status::OK();
 }
 
@@ -525,7 +520,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
                     schema = std::move(schema_or).value();
                     // Save the schema into the in-memory cache, use the schema id as the cache key
                     auto cache_value = std::make_unique<CacheValue>(schema);
-                    (void)fill_metacache(cache_key, cache_value.release(), 0);
+                    fill_metacache(cache_key, cache_value.release(), 0);
                     return std::move(schema);
                 } else if (schema_or.status().is_not_found()) {
                     // version 3.0 will not generate the tablet schema file, ignore the not found error and
@@ -575,7 +570,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     // Save the schema into the in-memory cache
     auto cache_value = std::make_unique<CacheValue>(schema);
     auto cache_size = inserted ? (int)schema->mem_usage() : 0;
-    (void)fill_metacache(cache_key, cache_value.release(), cache_size);
+    fill_metacache(cache_key, cache_value.release(), cache_size);
     return schema;
 }
 
@@ -611,8 +606,12 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
         new_metadata->mutable_compaction_inputs()->Clear();
     }
 
-    if (base_metadata->compaction_inputs_size() > 0) {
-        new_metadata->set_prev_compaction_version(base_metadata->version());
+    if (new_metadata->orphan_files_size() > 0) {
+        new_metadata->mutable_orphan_files()->Clear();
+    }
+
+    if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0) {
+        new_metadata->set_prev_garbage_version(base_metadata->version());
     }
 
     auto init_st = log_applier->init();
@@ -707,6 +706,23 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
             LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << st;
         }
     }
+
+    if (config::lake_enable_aggressive_gc && DeltaWriter::io_threads() != nullptr) {
+        auto tablet_mgr = tablet->tablet_mgr();
+        auto tablet_id = new_metadata->id();
+        auto old_version = new_version - config::lake_gc_metadata_max_versions;
+        auto priority = config::lake_aggressive_gc_high_priority ? ThreadPool::HIGH_PRIORITY : ThreadPool::LOW_PRIORITY;
+        auto may_has_garbage_file = old_version <= new_metadata->prev_garbage_version();
+        (void)DeltaWriter::io_threads()->submit_func(
+                [=]() {
+                    if (may_has_garbage_file) {
+                        (void)delete_garbage_files(tablet_mgr, tablet_id, old_version);
+                    }
+                    (void)tablet_mgr->delete_tablet_metadata(tablet_id, old_version);
+                },
+                priority);
+    }
+
     return compaction_score(*new_metadata);
 }
 
@@ -833,7 +849,7 @@ Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB
         }
         auto cache_value = std::make_unique<CacheValue>(schema);
         auto cache_size = inserted ? (int)schema->mem_usage() : 0;
-        (void)fill_metacache(cache_key, cache_value.release(), cache_size);
+        fill_metacache(cache_key, cache_value.release(), cache_size);
     }
     return Status::OK();
 }

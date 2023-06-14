@@ -17,7 +17,6 @@ package com.starrocks.catalog;
 
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -259,6 +258,8 @@ public class ColocateTableIndexTest {
             }
         };
 
+        long dbId = 100;
+        long dbId2 = 101;
         long tableId = 200;
         new MockUp<OlapTable>() {
             @Mock
@@ -285,11 +286,14 @@ public class ColocateTableIndexTest {
         };
 
         colocateTableIndex.addTableToGroup(
-                100, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(100, 10000), false /* isReplay */);
+                dbId, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(dbId, 10000), false /* isReplay */);
+        Assert.assertTrue(colocateTableIndex.isLakeColocateTable(tableId));
+        colocateTableIndex.addTableToGroup(
+                dbId2, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(dbId2, 10000), false /* isReplay */);
         Assert.assertTrue(colocateTableIndex.isLakeColocateTable(tableId));
 
-        Assert.assertTrue(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(100, 10000)));
-        Assert.assertFalse(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(100, 10001)));
+        Assert.assertTrue(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(dbId, 10000)));
+        Assert.assertFalse(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(dbId, 10001)));
 
         colocateTableIndex.removeTable(tableId, null, false /* isReplay */);
         Assert.assertFalse(colocateTableIndex.isLakeColocateTable(tableId));
@@ -320,7 +324,7 @@ public class ColocateTableIndexTest {
         colocateTableIndex.saveColocateTableIndexV2(image.getDataOutputStream());
 
         ColocateTableIndex followerIndex = new ColocateTableIndex();
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream(), SRMetaBlockID.COLOCATE_TABLE_INDEX);
+        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
         followerIndex.loadColocateTableIndexV2(reader);
         reader.close();
         Assert.assertEquals(colocateTableIndex.getAllGroupIds(), followerIndex.getAllGroupIds());

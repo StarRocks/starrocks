@@ -39,7 +39,7 @@ public class AnalyticAnalyzer {
                         + e.toSql() + " (in " + analyticExpr.toSql() + ")", e.getPos());
             }
             if (!e.getType().canPartitionBy()) {
-                throw new SemanticException("HLL, BITMAP and PERCENTILE type can't as partition by column", e.getPos());
+                throw new SemanticException(e.getType().toSql() + " type can't as partition by column", e.getPos());
             }
         }
 
@@ -49,7 +49,7 @@ public class AnalyticAnalyzer {
                         + e.getExpr().toSql() + " (in " + analyticExpr.toSql() + ")", e.getPos());
             }
             if (!e.getExpr().getType().canOrderBy()) {
-                throw new SemanticException("HLL, BITMAP and PERCENTILE type can't as order by column", e.getPos());
+                throw new SemanticException(e.getExpr().getType().toString() + " type can't as order by column", e.getPos());
             }
         }
 

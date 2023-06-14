@@ -15,7 +15,6 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
@@ -53,7 +52,6 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -63,11 +61,13 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -89,7 +89,6 @@ public class OlapTableFactory implements AbstractTableFactory {
     @NotNull
     public Table createTable(LocalMetastore metastore, Database db, CreateTableStmt stmt) throws DdlException {
         GlobalStateMgr stateMgr = metastore.getStateMgr();
-        EditLog editLog = metastore.getEditLog();
         ColocateTableIndex colocateTableIndex = metastore.getColocateTableIndex();
         String tableName = stmt.getTableName();
 
@@ -131,15 +130,14 @@ public class OlapTableFactory implements AbstractTableFactory {
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
 
             // Automatic partitioning needs to ensure that at least one tablet is opened.
-            if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-                ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            if (partitionInfo.isAutomaticPartition()) {
                 long partitionId = metastore.getNextId();
                 String replicateNum = String.valueOf(RunMode.defaultReplicationNum());
                 if (stmt.getProperties() != null) {
                     replicateNum = stmt.getProperties().getOrDefault("replication_num",
                             String.valueOf(RunMode.defaultReplicationNum()));
                 }
-                expressionRangePartitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
+                partitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
                 partitionNameToId.put(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME, partitionId);
             }
 
@@ -195,20 +193,43 @@ public class OlapTableFactory implements AbstractTableFactory {
                     distributionInfo, indexes, properties);
         } else if (stmt.isOlapEngine()) {
             RunMode runMode = RunMode.getCurrentRunMode();
-            String volume = (properties != null) ? properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME) : null;
+            String volume = "";
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+            }
 
-            if ("local".equalsIgnoreCase(volume)) {
-                table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-            } else if ("default".equalsIgnoreCase(volume)) {
+            if (runMode == RunMode.SHARED_DATA) {
+                if (volume.equals(StorageVolumeMgr.LOCAL)) {
+                    throw new DdlException("Cannot create table " +
+                            "without persistent volume in current run mode \"" + runMode + "\"");
+                }
+
+                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                StorageVolume sv = null;
+                try {
+                    if (volume.isEmpty()) {
+                        if (!db.getStorageVolumeId().isEmpty()) {
+                            sv = svm.getStorageVolume(db.getStorageVolumeId());
+                        } else {
+                            sv = svm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+                        }
+                    } else if (volume.equals(StorageVolumeMgr.DEFAULT)) {
+                        sv = svm.getDefaultStorageVolume();
+                    } else {
+                        sv = svm.getStorageVolumeByName(volume);
+                    }
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+                if (sv == null) {
+                    throw new DdlException("Unknown storage volume \"" + volume + "\"");
+                }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                metastore.setLakeStorageInfo(table, properties);
-            } else if (!Strings.isNullOrEmpty(volume)) {
-                throw new DdlException("Unknown storage volume \"" + volume + "\"");
-            } else if (runMode == RunMode.SHARED_DATA) {
-                table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                metastore.setLakeStorageInfo(table, properties);
+                metastore.setLakeStorageInfo(table, sv.getId(), properties);
+                table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+                table.setStorageVolume(StorageVolumeMgr.LOCAL);
             }
 
             if (table.isCloudNativeTable() && !runMode.isAllowCreateLakeTable())  {
@@ -320,6 +341,17 @@ public class OlapTableFactory implements AbstractTableFactory {
             throw new DdlException(e.getMessage());
         }
 
+        if (table.isCloudNativeTable() && properties != null) {
+            try {
+                PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                if (duration != null) {
+                    table.setDataCachePartitionDuration(duration);
+                }
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
+
         if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             // if this is an unpartitioned table, we should analyze data property and replication num here.
             // if this is a partitioned table, there properties are already analyzed in RangePartitionDesc analyze phase.
@@ -357,7 +389,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
                                                 colocateGroup, false /* expectLakeTable */);
             if (table instanceof ExternalOlapTable == false && addedToColocateGroup) {
-                // Colocate table should keep the same bucket number accross the partitions
+                // Colocate table should keep the same bucket number across the partitions
                 DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
                 if (defaultDistributionInfo.getBucketNum() == 0) {
                     int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
@@ -427,13 +459,9 @@ public class OlapTableFactory implements AbstractTableFactory {
         Preconditions.checkNotNull(version);
 
         // storage_format is not necessary, remove storage_format if exist.
-        if (properties != null && properties.containsKey("storage_format")) {
+        if (properties != null) {
             properties.remove("storage_format");
         }
-
-        // get storage volume
-        String storageVolume = RunMode.allowCreateLakeTable() ? "default" : "local";
-        table.setStorageVolume(storageVolume);
 
         // get compression type
         TCompressionType compressionType = TCompressionType.LZ4_FRAME;
@@ -574,7 +602,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForAddTable(groupId, tableId, backendsPerBucketSeq);
-                editLog.logColocateAddTable(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
                 addToColocateGroupSuccess = true;
             }
             LOG.info("Successfully create table[{};{}]", tableName, tableId);

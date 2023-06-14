@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
@@ -94,13 +95,13 @@ import java.util.stream.Collectors;
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
-    public static Set<MaterializedView> getRelatedMvs(int maxLevel, List<Table> tablesToCheck) {
+    public static Set<MaterializedView> getRelatedMvs(int maxLevel, Set<Table> tablesToCheck) {
         Set<MaterializedView> mvs = Sets.newHashSet();
         getRelatedMvs(maxLevel, 0, tablesToCheck, mvs);
         return mvs;
     }
 
-    public static void getRelatedMvs(int maxLevel, int currentLevel, List<Table> tablesToCheck, Set<MaterializedView> mvs) {
+    public static void getRelatedMvs(int maxLevel, int currentLevel, Set<Table> tablesToCheck, Set<MaterializedView> mvs) {
         if (currentLevel >= maxLevel) {
             return;
         }
@@ -114,7 +115,7 @@ public class MvUtils {
         if (newMvIds.isEmpty()) {
             return;
         }
-        List<Table> newMvs = Lists.newArrayList();
+        Set<Table> newMvs = Sets.newHashSet();
         for (MvId mvId : newMvIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
             if (db == null) {
@@ -315,7 +316,8 @@ public class MvUtils {
         return true;
     }
 
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(String sql,
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(MaterializedView mv,
+                                                                               String sql,
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext) {
         StatementBase mvStmt;
@@ -338,6 +340,10 @@ public class MvUtils {
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
         optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
+        // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
+        if (mv.getRefreshScheme().isSync()) {
+            optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
+        }
         optimizerConfig.setMVRewritePlan(true);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
@@ -617,25 +623,25 @@ public class MvUtils {
                 ConstantOperator upperBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
                 BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.LT, partitionScalar, upperBound);
+                        BinaryType.LT, partitionScalar, upperBound);
                 rangeParts.add(upperPredicate);
             } else if (range.upperEndpoint().isMaxValue()) {
                 ConstantOperator lowerBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
                 BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.GE, partitionScalar, lowerBound);
+                        BinaryType.GE, partitionScalar, lowerBound);
                 rangeParts.add(lowerPredicate);
             } else {
                 // close, open range
                 ConstantOperator lowerBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
                 BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.GE, partitionScalar, lowerBound);
+                        BinaryType.GE, partitionScalar, lowerBound);
 
                 ConstantOperator upperBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
                 BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.LT, partitionScalar, upperBound);
+                        BinaryType.LT, partitionScalar, upperBound);
 
                 CompoundPredicateOperator andPredicate = new CompoundPredicateOperator(
                         CompoundPredicateOperator.CompoundType.AND, lowerPredicate, upperPredicate);
@@ -658,19 +664,19 @@ public class MvUtils {
                 continue;
             } else if (lowerExpr.isMinValue()) {
                 Expr upperBound = range.upperEndpoint().getKeys().get(0);
-                BinaryPredicate upperPredicate = new BinaryPredicate(BinaryPredicate.Operator.LT, slotRef, upperBound);
+                BinaryPredicate upperPredicate = new BinaryPredicate(BinaryType.LT, slotRef, upperBound);
                 rangeParts.add(upperPredicate);
             } else if (range.upperEndpoint().isMaxValue()) {
                 Expr lowerBound = range.lowerEndpoint().getKeys().get(0);
-                BinaryPredicate lowerPredicate = new BinaryPredicate(BinaryPredicate.Operator.GE, slotRef, lowerBound);
+                BinaryPredicate lowerPredicate = new BinaryPredicate(BinaryType.GE, slotRef, lowerBound);
                 rangeParts.add(lowerPredicate);
             } else {
                 // close, open range
                 Expr lowerBound = range.lowerEndpoint().getKeys().get(0);
-                BinaryPredicate lowerPredicate = new BinaryPredicate(BinaryPredicate.Operator.GE, slotRef, lowerBound);
+                BinaryPredicate lowerPredicate = new BinaryPredicate(BinaryType.GE, slotRef, lowerBound);
 
                 Expr upperBound = range.upperEndpoint().getKeys().get(0);
-                BinaryPredicate upperPredicate = new BinaryPredicate(BinaryPredicate.Operator.LT, slotRef, upperBound);
+                BinaryPredicate upperPredicate = new BinaryPredicate(BinaryType.LT, slotRef, upperBound);
 
                 CompoundPredicate andPredicate = new CompoundPredicate(CompoundPredicate.Operator.AND, lowerPredicate,
                         upperPredicate);

@@ -862,6 +862,68 @@ private:
     }
 };
 
+// all/any_match(lambda_func, array1, array2...)-> all/any_match(array_map(lambda_func, array1, array2...))
+// -> all/any_match(bool_array), result is bool type.
+// any_match: if there are true  matched, return true,  else if there are null, return null, otherwise, return false;
+// all_match: if there are false matched, return false, else if there are null, return null, otherwise, return true;
+template <bool isAny>
+class ArrayMatch {
+public:
+    static ColumnPtr process([[maybe_unused]] FunctionContext* ctx, const Columns& columns) {
+        return _array_match(columns);
+    }
+
+private:
+    static ColumnPtr _array_match(const Columns& columns) {
+        DCHECK(columns.size() == 1);
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        size_t chunk_size = columns[0]->size();
+        ColumnPtr bool_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+
+        auto dest_null_column = NullColumn::create(chunk_size, 0);
+        auto dest_data_column = BooleanColumn::create(chunk_size);
+        dest_null_column->get_data().resize(chunk_size, 0);
+
+        ArrayColumn* bool_array;
+        NullColumn* array_null_map = nullptr;
+
+        if (bool_column->is_nullable()) {
+            auto nullable_column = down_cast<NullableColumn*>(bool_column.get());
+            bool_array = down_cast<ArrayColumn*>(nullable_column->data_column().get());
+            array_null_map = nullable_column->null_column().get();
+        } else {
+            bool_array = down_cast<ArrayColumn*>(bool_column.get());
+        }
+        auto offsets = bool_array->offsets().get_data();
+
+        ColumnViewer<TYPE_BOOLEAN> bool_elements(bool_array->elements_column());
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (array_null_map == nullptr || !array_null_map->get_data()[i]) { // array_null_map[i] is not null
+                bool has_null = false;
+                bool res = !isAny;
+                for (auto id = offsets[i]; id < offsets[i + 1]; ++id) {
+                    if (bool_elements.is_null(id)) {
+                        has_null = true;
+                    } else {
+                        if (bool_elements.value(id) == isAny) {
+                            res = isAny;
+                            break;
+                        }
+                    }
+                }
+                dest_null_column->get_data()[i] = res != isAny && has_null;
+                dest_data_column->get_data()[i] = res;
+            } else { // array_null_map[i] is null, result is null
+                dest_null_column->get_data()[i] = 1;
+                dest_data_column->get_data()[i] = 0;
+            }
+        }
+
+        return NullableColumn::create(dest_data_column, dest_null_column);
+    }
+};
+
 // by design array_filter(array, bool_array), if bool_array is null, return an empty array. We do not return null, as
 // it will change the null property of return results which keeps the same with the first argument array.
 class ArrayFilter {

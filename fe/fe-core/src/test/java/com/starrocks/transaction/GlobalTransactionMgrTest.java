@@ -57,7 +57,6 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
@@ -112,12 +111,8 @@ public class GlobalTransactionMgrTest {
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
         slaveGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
-
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
-        masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
-
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
-        slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
 
         UtFrameUtils.setUpForPersistTest();
     }
@@ -798,8 +793,7 @@ public class GlobalTransactionMgrTest {
 
         GlobalTransactionMgr followerTransMgr = new GlobalTransactionMgr(masterGlobalStateMgr);
         followerTransMgr.addDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
-        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream(),
-                SRMetaBlockID.GLOBAL_TRANSACTION_MGR);
+        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream());
         followerTransMgr.loadTransactionStateV2(reader);
         reader.close();
 

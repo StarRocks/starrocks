@@ -36,7 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryPredicate.Operator;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.Table.TableType;
@@ -62,7 +62,7 @@ public class MetadataViewer {
     }
 
     private static List<List<String>> getTabletStatus(String dbName, String tblName, List<String> partitions,
-                                                      ReplicaStatus statusFilter, Operator op) throws DdlException {
+                                                      ReplicaStatus statusFilter, BinaryType op) throws DdlException {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -170,11 +170,11 @@ public class MetadataViewer {
         return result;
     }
 
-    private static boolean filterReplica(ReplicaStatus status, ReplicaStatus statusFilter, Operator op) {
+    private static boolean filterReplica(ReplicaStatus status, ReplicaStatus statusFilter, BinaryType op) {
         if (statusFilter == null) {
             return false;
         }
-        if (op == Operator.EQ) {
+        if (op == BinaryType.EQ) {
             return status != statusFilter;
         } else {
             return status == statusFilter;

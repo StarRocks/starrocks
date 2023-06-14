@@ -66,6 +66,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -109,9 +110,6 @@ import java.util.stream.Stream;
  */
 public class TabletScheduler extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletScheduler.class);
-
-    // handle at most BATCH_NUM tablets in one loop
-    private static final int MIN_BATCH_NUM = 50;
 
     // the minimum interval of updating cluster statistics and priority of tablet info
     private static final long STAT_UPDATE_INTERVAL_MS = 20L * 1000L; // 20s
@@ -293,6 +291,10 @@ public class TabletScheduler extends FrontendDaemon {
                 && (pendingTablets.size() > Config.tablet_sched_max_scheduling_tablets
                 || runningTablets.size() > Config.tablet_sched_max_scheduling_tablets)) {
             return AddResult.LIMIT_EXCEED;
+        }
+
+        if (force) {
+            LOG.debug("forcefully add tablet {} to table scheduler pending queue", tablet.getTabletId());
         }
 
         allTabletIds.add(tablet.getTabletId());
@@ -1772,7 +1774,7 @@ public class TabletScheduler extends FrontendDaemon {
         public synchronized long takeSlot(long pathHash) throws SchedException {
             if (pathHash == -1) {
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("path hash is not set.", new Exception());
+                    LOG.debug("path hash is not set. current stack trace: {}", LogUtil.getCurrentStackTrace());
                 }
                 throw new SchedException(Status.UNRECOVERABLE, "path hash is not set");
             }

@@ -15,22 +15,28 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -69,7 +75,7 @@ public class MvRewritePreprocessor {
     }
 
     public void prepareMvCandidatesForPlan() {
-        List<Table> queryTables = MvUtils.getAllTables(logicOperatorTree);
+        Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
 
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
@@ -77,7 +83,97 @@ public class MvRewritePreprocessor {
         if (relatedMvs.isEmpty()) {
             return;
         }
+        prepareRelatedMVs(queryTables, relatedMvs);
+    }
 
+    public void prepareSyncMvCandidatesForPlan(ConnectContext connectContext) {
+        Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
+
+        Set<MaterializedView> relatedMvs = Sets.newHashSet();
+        // get all related materialized views, include nested mvs
+        for (Table table : queryTables) {
+            if (!(table instanceof OlapTable)) {
+                continue;
+            }
+            OlapTable olapTable = (OlapTable) table;
+            for (MaterializedIndexMeta indexMeta : olapTable.getVisibleIndexMetas()) {
+                long indexId = indexMeta.getIndexId();
+                if (indexMeta.getIndexId() == olapTable.getBaseIndexId()) {
+                    continue;
+                }
+                // Old sync mv may not contain the index define sql.
+                if (Strings.isNullOrEmpty(indexMeta.getViewDefineSql())) {
+                    continue;
+                }
+
+                // TODO: open this later when sync mv supports complex expression.
+                // // To avoid adding optimization times, only put the mv with complex expressions into materialized views.
+                // if (!MVUtils.containComplexExpresses(indexMeta)) {
+                //    continue;
+                // }
+
+                try {
+                    long dbId = indexMeta.getDbId();
+                    String viewDefineSql = indexMeta.getViewDefineSql();
+                    String mvName = olapTable.getIndexNameById(indexId);
+                    Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+
+                    // distribution info
+                    DistributionInfo baseTableDistributionInfo = olapTable.getDefaultDistributionInfo();
+                    DistributionInfo mvDistributionInfo = baseTableDistributionInfo.copy();
+                    Set<String> mvColumnNames =
+                            indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toSet());
+                    if (baseTableDistributionInfo.getType() == DistributionInfoType.HASH) {
+                        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) baseTableDistributionInfo;
+                        Set<String> distributedColumns =
+                                hashDistributionInfo.getDistributionColumns().stream().map(Column::getName)
+                                .collect(Collectors.toSet());
+                        // NOTE: SyncMV's column may not be equal to base table's exactly.
+                        List<Column> newDistributionColumns = Lists.newArrayList();
+                        for (Column mvColumn : indexMeta.getSchema()) {
+                            if (distributedColumns.contains(mvColumn.getName())) {
+                                newDistributionColumns.add(mvColumn);
+                            }
+                        }
+                        // Set random distribution info if sync mv' columns may not contain distribution keys,
+                        if (newDistributionColumns.size() != distributedColumns.size()) {
+                            mvDistributionInfo = new RandomDistributionInfo();
+                        } else {
+                            ((HashDistributionInfo) mvDistributionInfo).setDistributionColumns(newDistributionColumns);
+                        }
+                    }
+                    // partition info
+                    PartitionInfo basePartitionInfo = olapTable.getPartitionInfo();
+                    PartitionInfo mvPartitionInfo = basePartitionInfo;
+                    // Set single partition if sync mv' columns do not contain partition by columns.
+                    if (basePartitionInfo.isPartitioned()) {
+                        if (basePartitionInfo.getPartitionColumns().stream()
+                                .anyMatch(x -> !mvColumnNames.contains(x.getName())) ||
+                                !(basePartitionInfo instanceof ExpressionRangePartitionInfo)) {
+                            mvPartitionInfo = new SinglePartitionInfo();
+                        }
+                    }
+                    // refresh schema
+                    MaterializedView.MvRefreshScheme mvRefreshScheme =
+                            new MaterializedView.MvRefreshScheme(MaterializedView.RefreshType.SYNC);
+                    MaterializedView mv = new MaterializedView(db, mvName, indexMeta, olapTable,
+                            mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                    mv.setViewDefineSql(viewDefineSql);
+                    mv.setBaseIndexId(indexId);
+                    relatedMvs.add(mv);
+                } catch (Exception e) {
+                    LOG.warn("error happens when parsing create sync materialized view stmt [{}] use new parser",
+                            indexId, e);
+                }
+            }
+        }
+        if (relatedMvs.isEmpty()) {
+            return;
+        }
+        prepareRelatedMVs(queryTables, relatedMvs);
+    }
+
+    private void prepareRelatedMVs(Set<Table> queryTables, Set<MaterializedView> relatedMvs) {
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
             try {
@@ -96,7 +192,7 @@ public class MvRewritePreprocessor {
         OptimizerTraceUtil.log(connectContext, mvInfo);
     }
 
-    private void preprocessMv(MaterializedView mv, List<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
+    private void preprocessMv(MaterializedView mv, Set<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
         if (!mv.isActive()) {
             return;
         }
@@ -150,7 +246,7 @@ public class MvRewritePreprocessor {
         connectContext.getDumpInfo().addTable(dbName, mv);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
-        for (Column column : mv.getFullSchema()) {
+        for (Column column : mv.getBaseSchema()) {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         Preconditions.checkState(mvOutputColumns.size() == scanMvOutputColumns.size());
@@ -185,7 +281,23 @@ public class MvRewritePreprocessor {
 
         final ColumnRefFactory columnRefFactory = mvContext.getQueryRefFactory();
         int relationId = columnRefFactory.getNextRelationId();
+
+        // first add base schema to avoid replaced in full schema.
+        Set<String>  columnNames = Sets.newHashSet();
+        for (Column column : mv.getBaseSchema()) {
+            ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
+                    column.getType(),
+                    column.isAllowNull());
+            columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
+            columnRefFactory.updateColumnRefToColumns(columnRef, column, mv);
+            colRefToColumnMetaMapBuilder.put(columnRef, column);
+            columnMetaToColRefMapBuilder.put(column, columnRef);
+            columnNames.add(column.getName());
+        }
         for (Column column : mv.getFullSchema()) {
+            if (columnNames.contains(column.getName())) {
+                continue;
+            }
             ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                     column.getType(),
                     column.isAllowNull());

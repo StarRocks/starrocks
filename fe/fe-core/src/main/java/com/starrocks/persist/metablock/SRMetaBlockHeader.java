@@ -21,12 +21,12 @@ public class SRMetaBlockHeader {
     @SerializedName(value = "n")
     private String name;
     @SerializedName(value = "i")
-    private SRMetaBlockID id;
+    private SRMetaBlockID srMetaBlockID;
     @SerializedName(value = "nj")
     private int numJson;
 
-    public SRMetaBlockHeader(SRMetaBlockID id, int numJson) {
-        this.id = id;
+    public SRMetaBlockHeader(SRMetaBlockID srMetaBlockID, int numJson) {
+        this.srMetaBlockID = srMetaBlockID;
         this.numJson = numJson;
     }
 
@@ -39,15 +39,11 @@ public class SRMetaBlockHeader {
         return numJson;
     }
 
-    public String getName() {
-        return name;
-    }
-
-    public SRMetaBlockID getId() {
-        if (id == null) {
+    public SRMetaBlockID getSrMetaBlockID() {
+        if (srMetaBlockID == null) {
             return SRMetaBlockID.INVALID;
         } else {
-            return id;
+            return srMetaBlockID;
         }
     }
 }

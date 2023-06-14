@@ -107,8 +107,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=3.0\n"));
     }
 
     @Test
@@ -284,8 +283,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=4.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=4.0\n"));
 
         sql = "insert into test.mysql_table(k1) select v1 from t0";
         explainString = getInsertExecPlan(sql);
@@ -308,8 +306,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=3.0\n"));
     }
 
     @Test
@@ -751,22 +748,22 @@ public class InsertPlanTest extends PlanTestBase {
     @Test
     public void testInsertMapColumn() throws Exception {
         String explainString = getInsertExecPlan("insert into tmap values (2,2,map())");
-        Assert.assertTrue(explainString.contains("2 | 2 | {}"));
+        Assert.assertTrue(explainString.contains("2 | 2 | map{}"));
 
         explainString = getInsertExecPlan("insert into tmap values (2,2,null)");
         Assert.assertTrue(explainString.contains("2 | 2 | NULL"));
 
         explainString = getInsertExecPlan("insert into tmap values (2,2,map(2,2))");
-        Assert.assertTrue(explainString.contains("2 | 2 | {2:'2'}")); // implicit cast
+        Assert.assertTrue(explainString.contains("2 | 2 | map{2:'2'}")); // implicit cast
 
-        explainString = getInsertExecPlan("insert into tmap values (2,2,{})");
-        Assert.assertTrue(explainString.contains("2 | 2 | {}"));
+        explainString = getInsertExecPlan("insert into tmap values (2,2,map{})");
+        Assert.assertTrue(explainString.contains("2 | 2 | map{}"));
 
-        explainString = getInsertExecPlan("insert into tmap values (2,2,{2:3, 2:4})");
-        Assert.assertTrue(explainString.contains("2 | 2 | {2:'3',2:'4'}")); // will distinct in BE
+        explainString = getInsertExecPlan("insert into tmap values (2,2,map{2:3, 2:4})");
+        Assert.assertTrue(explainString.contains("2 | 2 | map{2:'3',2:'4'}")); // will distinct in BE
 
-        explainString = getInsertExecPlan("insert into tmap values (2,2,{2:2})");
-        Assert.assertTrue(explainString.contains("2 | 2 | {2:'2'}")); // implicit cast
+        explainString = getInsertExecPlan("insert into tmap values (2,2,map{2:2})");
+        Assert.assertTrue(explainString.contains("2 | 2 | map{2:'2'}")); // implicit cast
     }
 
     @Test

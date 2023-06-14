@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
@@ -79,7 +80,7 @@ import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
+import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 
 /**
  * For a low cardinality string column with global dict, we will rewrite the plan to
@@ -600,14 +601,14 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                                                  DecodeContext context) {
             HashDistributionSpec hashDistributionSpec = (HashDistributionSpec) exchangeOperator.getDistributionSpec();
 
-            List<Integer> shuffledColumns = Lists.newArrayList();
-            for (Integer columnId : hashDistributionSpec.getHashDistributionDesc().getColumns()) {
-                if (context.stringColumnIdToDictColumnIds.containsKey(columnId)) {
-                    Integer dictColumnId = context.stringColumnIdToDictColumnIds.get(columnId);
+            List<DistributionCol> shuffledColumns = Lists.newArrayList();
+            for (DistributionCol column : hashDistributionSpec.getHashDistributionDesc().getDistributionCols()) {
+                if (context.stringColumnIdToDictColumnIds.containsKey(column.getColId())) {
+                    Integer dictColumnId = context.stringColumnIdToDictColumnIds.get(column.getColId());
                     ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(dictColumnId);
-                    shuffledColumns.add(dictColumn.getId());
+                    shuffledColumns.add(new DistributionCol(dictColumn.getId(), column.isNullStrict()));
                 } else {
-                    shuffledColumns.add(columnId);
+                    shuffledColumns.add(column);
                 }
             }
             exchangeOperator.setDistributionSpec(new HashDistributionSpec(new HashDistributionDesc(shuffledColumns,

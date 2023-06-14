@@ -40,7 +40,6 @@ import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -276,7 +275,7 @@ public class CreateTableAnalyzer {
 
         boolean hasHll = false;
         boolean hasBitmap = false;
-        boolean hasJson = false;
+        boolean hasReplace = false;
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
@@ -294,8 +293,8 @@ public class CreateTableAnalyzer {
                 hasBitmap = columnDef.getType().isBitmapType();
             }
 
-            if (columnDef.getType().isJsonType()) {
-                hasJson = true;
+            if (columnDef.getAggregateType() != null && columnDef.getAggregateType().isReplaceFamily()) {
+                hasReplace = true;
             }
 
             if (!columnSet.add(columnDef.getName())) {
@@ -323,10 +322,6 @@ public class CreateTableAnalyzer {
                         throw new SemanticException(e.getMessage());
                     }
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
-                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                        throw new SemanticException("Cloud native table does not support automatic partition");
-                    }
-
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
                         expressionPartitionDesc.analyze(columnDefs, properties);
@@ -341,6 +336,9 @@ public class CreateTableAnalyzer {
 
             // analyze distribution
             if (distributionDesc == null) {
+                if (keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+                    throw new SemanticException("Currently only support default distribution in DUP_KEYS");
+                }
                 if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
                     if (properties == null) {
                         properties = Maps.newHashMap();
@@ -351,8 +349,10 @@ public class CreateTableAnalyzer {
                     distributionDesc = new RandomDistributionDesc();
                 }
             }
-            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
-                throw new SemanticException("Random distribution must be used in DUP_KEYS", distributionDesc.getPos());
+            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS 
+                    && !(keysDesc.getKeysType() == KeysType.AGG_KEYS && !hasReplace)) {
+                throw new SemanticException("Random distribution must be used in DUP_KEYS or AGG_KEYS without replace",
+                        distributionDesc.getPos());
             }
             distributionDesc.analyze(columnSet);
             statement.setDistributionDesc(distributionDesc);

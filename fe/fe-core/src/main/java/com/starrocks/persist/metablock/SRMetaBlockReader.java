@@ -49,14 +49,12 @@ public class SRMetaBlockReader {
     private static final Logger LOG = LogManager.getLogger(SRMetaBlockReader.class);
     private final CheckedInputStream checkedInputStream;
     private SRMetaBlockHeader header;
-    private final SRMetaBlockID id;
     private int numJsonRead;
     // For backward compatibility reason
     private final String oldManagerClassName = "com.starrocks.privilege.PrivilegeManager";
 
-    public SRMetaBlockReader(DataInputStream dis, SRMetaBlockID id) throws IOException {
+    public SRMetaBlockReader(DataInputStream dis) throws IOException {
         this.checkedInputStream = new CheckedInputStream(dis, new CRC32());
-        this.id = id;
         this.header = null;
         this.numJsonRead = 0;
 
@@ -67,7 +65,6 @@ public class SRMetaBlockReader {
     @Deprecated
     public SRMetaBlockReader(DataInputStream dis, String name) throws IOException {
         this.checkedInputStream = new CheckedInputStream(dis, new CRC32());
-        this.id = SRMetaBlockID.INVALID;
         this.header = null;
         this.numJsonRead = 0;
 
@@ -111,7 +108,7 @@ public class SRMetaBlockReader {
             // normally it's because this FE has just rollback from a higher version that would produce more metadata
             int rest = header.getNumJson() - numJsonRead;
             LOG.warn("Meta block for {} read {} json < total {} json, will skip the rest {} json",
-                    header.getName(), numJsonRead, header.getNumJson(), rest);
+                    header.getSrMetaBlockID(), numJsonRead, header.getNumJson(), rest);
             for (int i = 0; i != rest; ++i) {
                 LOG.warn("skip {} json: {}", i, Text.readStringWithChecksum(checkedInputStream));
             }

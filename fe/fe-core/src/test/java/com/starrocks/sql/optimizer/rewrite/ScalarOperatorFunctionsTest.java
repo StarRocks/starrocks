@@ -612,14 +612,15 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
-    public void timeSlice() {
+    public void timeSlice() throws AnalysisException {
         class Param {
             final LocalDateTime dateTime;
             final int interval;
             final String unit;
             final String boundary;
 
-            final LocalDateTime expect;
+            LocalDateTime expect;
+            String e;
 
             public Param(LocalDateTime dateTime, int interval, String unit, LocalDateTime expect) {
                 this(dateTime, interval, unit, "floor", expect);
@@ -632,90 +633,117 @@ public class ScalarOperatorFunctionsTest {
                 this.boundary = boundary;
                 this.expect = expect;
             }
+
+            private Param(LocalDateTime dateTime, int interval, String unit, String boundary, String e) {
+                this.dateTime = dateTime;
+                this.interval = interval;
+                this.unit = unit;
+                this.boundary = boundary;
+                this.e = e;
+            }
         }
 
         // test case from be TimeFunctionsTest
         List<Param> cases = Arrays.asList(
-            // second
-            new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "second", LocalDateTime.of(0001, 1, 1, 21, 22, 50)),
-            new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "second", LocalDateTime.of(0001, 3, 2, 14, 17, 25)),
-            new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "second", LocalDateTime.of(0001, 5, 6, 11, 54, 20)),
-            new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "second", LocalDateTime.of(2022, 7, 8, 9, 13, 15)),
-            new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "second", LocalDateTime.of(2022, 9, 9, 8, 8, 15)),
-            new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "second", LocalDateTime.of(2022, 11, 3, 23, 41, 35)),
+                // second
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "second", LocalDateTime.of(0001, 1, 1, 21, 22, 50)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "second", LocalDateTime.of(0001, 3, 2, 14, 17, 25)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "second", LocalDateTime.of(0001, 5, 6, 11, 54, 20)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "second", LocalDateTime.of(2022, 7, 8, 9, 13, 15)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "second", LocalDateTime.of(2022, 9, 9, 8, 8, 15)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "second", LocalDateTime.of(2022, 11, 3, 23, 41, 35)),
 
-            // minute
-            new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "minute", LocalDateTime.of(0001, 1, 1, 21, 20, 0)),
-            new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "minute", LocalDateTime.of(0001, 3, 2, 14, 15, 0)),
-            new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "minute", LocalDateTime.of(0001, 5, 6, 11, 50, 0)),
-            new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "minute", LocalDateTime.of(2022, 7, 8, 9, 10, 0)),
-            new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "minute", LocalDateTime.of(2022, 9, 9, 8, 5, 0)),
-            new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "minute", LocalDateTime.of(2022, 11, 3, 23, 40, 0)),
+                // minute
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "minute", LocalDateTime.of(0001, 1, 1, 21, 20, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "minute", LocalDateTime.of(0001, 3, 2, 14, 15, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "minute", LocalDateTime.of(0001, 5, 6, 11, 50, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "minute", LocalDateTime.of(2022, 7, 8, 9, 10, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "minute", LocalDateTime.of(2022, 9, 9, 8, 5, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "minute", LocalDateTime.of(2022, 11, 3, 23, 40, 0)),
 
-            // hour
-            new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "hour", LocalDateTime.of(0001, 1, 1, 20, 0, 0)),
-            new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "hour", LocalDateTime.of(0001, 3, 2, 10, 0, 0)),
-            new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "hour", LocalDateTime.of(0001, 5, 6, 10, 0, 0)),
-            new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "hour", LocalDateTime.of(2022, 7, 8, 8, 0, 0)),
-            new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "hour", LocalDateTime.of(2022, 9, 9, 6, 0, 0)),
-            new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "hour", LocalDateTime.of(2022, 11, 3, 21, 0, 0)),
+                // hour
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "hour", LocalDateTime.of(0001, 1, 1, 20, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "hour", LocalDateTime.of(0001, 3, 2, 10, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "hour", LocalDateTime.of(0001, 5, 6, 10, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "hour", LocalDateTime.of(2022, 7, 8, 8, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "hour", LocalDateTime.of(2022, 9, 9, 6, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "hour", LocalDateTime.of(2022, 11, 3, 21, 0, 0)),
 
-            // day
-            new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "day", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "day", LocalDateTime.of(0001, 3, 2, 0, 0, 0)),
-            new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "day", LocalDateTime.of(0001, 5, 6, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "day", LocalDateTime.of(2022, 7, 5, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "day", LocalDateTime.of(2022, 9, 8, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "day", LocalDateTime.of(2022, 11, 2, 0, 0, 0)),
+                // day
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "day", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "day", LocalDateTime.of(0001, 3, 2, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "day", LocalDateTime.of(0001, 5, 6, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "day", LocalDateTime.of(2022, 7, 5, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "day", LocalDateTime.of(2022, 9, 8, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "day", LocalDateTime.of(2022, 11, 2, 0, 0, 0)),
 
-            // month
-            new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "month", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "month", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "month", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "month", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "month", LocalDateTime.of(2022, 9, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "month", LocalDateTime.of(2022, 9, 1, 0, 0, 0)),
+                // month
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "month", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "month", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "month", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "month", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "month", LocalDateTime.of(2022, 9, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "month", LocalDateTime.of(2022, 9, 1, 0, 0, 0)),
 
-            // year
-            new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "year", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "year", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "year", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "year", LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "year", LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "year", LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+                // year
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "year", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "year", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "year", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "year", LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "year", LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "year", LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
 
-            // week
-            new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "week", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "week", LocalDateTime.of(0001, 2, 5, 0, 0, 0)),
-            new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "week", LocalDateTime.of(0001, 4, 16, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "week", LocalDateTime.of(2022, 6, 20, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "week", LocalDateTime.of(2022, 8, 29, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "week", LocalDateTime.of(2022, 10, 3, 0, 0, 0)),
+                // week
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "week", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "week", LocalDateTime.of(0001, 2, 5, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "week", LocalDateTime.of(0001, 4, 16, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "week", LocalDateTime.of(2022, 6, 20, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "week", LocalDateTime.of(2022, 8, 29, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "week", LocalDateTime.of(2022, 10, 3, 0, 0, 0)),
 
-            // quarter
-            new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "quarter", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "quarter", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "quarter", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "quarter", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "quarter", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
-            new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "quarter", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
+                // quarter
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "quarter", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "quarter", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "quarter", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "quarter", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "quarter", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "quarter", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
 
-            // second ceil
-            new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "second", "ceil", LocalDateTime.of(0001, 1, 1, 21, 22, 55)),
-            new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "second", "ceil", LocalDateTime.of(0001, 3, 2, 14, 17, 30)),
-            new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "second", "ceil", LocalDateTime.of(0001, 5, 6, 11, 54, 25)),
-            new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "second", "ceil", LocalDateTime.of(2022, 7, 8, 9, 13, 20)),
-            new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "second", "ceil", LocalDateTime.of(2022, 9, 9, 8, 8, 20)),
-            new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "second", "ceil", LocalDateTime.of(2022, 11, 3, 23, 41, 40))
+                // second ceil
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "second", "ceil", LocalDateTime.of(0001, 1, 1, 21, 22,
+                        55)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "second", "ceil", LocalDateTime.of(0001, 3, 2, 14, 17,
+                        30)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "second", "ceil", LocalDateTime.of(0001, 5, 6, 11, 54,
+                        25)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "second", "ceil", LocalDateTime.of(2022, 7, 8, 9, 13,
+                        20)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "second", "ceil", LocalDateTime.of(2022, 9, 9, 8, 8,
+                        20)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "second", "ceil", LocalDateTime.of(2022, 11, 3, 23, 41,
+                        40)),
+                new Param(LocalDateTime.of(0000, 01, 01, 00, 00, 00), 5, "hour", "floor",
+                        "time used with time_slice can't before 0001-01-01 00:00:00"),
+                new Param(LocalDateTime.of(2023, 12, 31, 03, 12, 00), 2147483647, "minute", "floor",
+                        LocalDateTime.of(0001, 01, 01, 00, 00, 00))
         );
+
         for (Param testCase : cases) {
-            ConstantOperator result = ScalarOperatorFunctions.timeSlice(
-                    ConstantOperator.createDatetime(testCase.dateTime),
-                    ConstantOperator.createInt(testCase.interval),
-                    ConstantOperator.createVarchar(testCase.unit),
-                    ConstantOperator.createVarchar(testCase.boundary)
-            );
-            assertEquals(testCase.expect, result.getDatetime());
+            try {
+                ConstantOperator result = ScalarOperatorFunctions.timeSlice(
+                        ConstantOperator.createDatetime(testCase.dateTime),
+                        ConstantOperator.createInt(testCase.interval),
+                        ConstantOperator.createVarchar(testCase.unit),
+                        ConstantOperator.createVarchar(testCase.boundary)
+                );
+                if (testCase.expect != null) {
+                    assertEquals(testCase.expect, result.getDatetime());
+                } else {
+                    Assert.fail();
+                }
+            } catch (AnalysisException e) {
+                assertTrue(e.getMessage().contains(testCase.e));
+            }
         }
     }
 

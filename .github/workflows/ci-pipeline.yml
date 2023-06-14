@@ -403,6 +403,8 @@ jobs:
         if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
+          echo ">>> Dmesg info:"
+          eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: Prepare coverage files

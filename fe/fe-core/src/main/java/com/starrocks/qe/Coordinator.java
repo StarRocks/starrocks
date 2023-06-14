@@ -184,6 +184,12 @@ public class Coordinator {
     private final ConnectContext connectContext;
     private final boolean needReport;
 
+    // True indicates that the profile has been reported
+    // When `enable_load_profile` is enabled,
+    // if the time costs of stream load is less than `stream_load_profile_collect_second`,
+    // the profile will not be reported to FE to reduce the overhead of profile under high-frequency import
+    private boolean profileAlreadyReported = false;
+
     private final CoordinatorPreprocessor coordinatorPreprocessor;
 
     private boolean thriftServerHighLoad;
@@ -1482,6 +1488,11 @@ public class Coordinator {
                     backendExecStates.keySet());
             return;
         }
+
+        if (params.isSetProfile()) {
+            profileAlreadyReported = true;
+        }
+
         lock();
         try {
             if (!execState.updateProfile(params)) {
@@ -1684,6 +1695,8 @@ public class Coordinator {
                 instanceProfile.removeInfoString("Address");
             });
             fragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+            Counter backendNum = fragmentProfile.addCounter("BackendNum", TUnit.UNIT, null);
+            backendNum.setValue(backendAddresses.size());
 
             // Setup number of instance
             Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT, null);
@@ -1708,21 +1721,6 @@ public class Coordinator {
         // Remove redundant MIN/MAX metrics if MIN and MAX are identical
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
             RuntimeProfile.removeRedundantMinMaxMetrics(fragmentProfile);
-        }
-
-        // Set backend number
-        for (int i = 0; i < fragments.size(); i++) {
-            PlanFragment fragment = fragments.get(i);
-            RuntimeProfile profile = fragmentProfiles.get(i);
-
-            Set<TNetworkAddress> networkAddresses =
-                    coordinatorPreprocessor.getFragmentExecParamsMap()
-                            .get(fragment.getFragmentId()).instanceExecParams.stream()
-                            .map(param -> param.host)
-                            .collect(Collectors.toSet());
-
-            Counter backendNum = profile.addCounter("BackendNum", TUnit.UNIT, null);
-            backendNum.setValue(networkAddresses.size());
         }
 
         long queryAllocatedMemoryUsage = 0;
@@ -1878,6 +1876,10 @@ public class Coordinator {
 
     public boolean isThriftServerHighLoad() {
         return this.thriftServerHighLoad;
+    }
+
+    public boolean isProfileAlreadyReported() {
+        return this.profileAlreadyReported;
     }
 
     // record backend execute state

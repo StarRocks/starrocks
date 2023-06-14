@@ -42,6 +42,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
@@ -870,7 +871,7 @@ public class Load {
                     // case 2
                     exprs.add(new IsNullPredicate(slotRef, true));
                     List<Expr> innerIfExprs = Lists.newArrayList();
-                    innerIfExprs.add(new BinaryPredicate(BinaryPredicate.Operator.NE, slotRef, funcExpr.getChild(0)));
+                    innerIfExprs.add(new BinaryPredicate(BinaryType.NE, slotRef, funcExpr.getChild(0)));
                     innerIfExprs.add(slotRef);
                     if (funcExpr.hasChild(1)) {
                         innerIfExprs.add(funcExpr.getChild(1));

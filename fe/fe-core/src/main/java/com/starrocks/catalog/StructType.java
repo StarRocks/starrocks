@@ -32,6 +32,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -58,7 +59,7 @@ public class StructType extends Type {
         this(structFields, true);
     }
 
-    private StructType(List<StructField> structFields, boolean isNamed) {
+    public StructType(List<StructField> structFields, boolean isNamed) {
         Preconditions.checkNotNull(structFields);
         Preconditions.checkArgument(structFields.size() > 0);
         this.fields = new ArrayList<>();
@@ -127,6 +128,9 @@ public class StructType extends Type {
             if (!fields.get(i).getType().matchesType(rhsType.fields.get(i).getType())) {
                 return false;
             }
+            if (!StringUtils.equals(fields.get(i).getName(), rhsType.fields.get(i).getName())) {
+                return false;
+            }
         }
         return true;
     }
@@ -152,6 +156,10 @@ public class StructType extends Type {
         }
         return String.format("%sSTRUCT<\n%s\n%s>",
                 leftPadding, Joiner.on(",\n").join(fieldsSql), leftPadding);
+    }
+
+    public boolean isNamed() {
+        return isNamed;
     }
 
     public ArrayList<StructField> getFields() {

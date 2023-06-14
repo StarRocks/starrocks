@@ -155,6 +155,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                 for (Column partitionColumn : partitionColumns) {
                     if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
                         slotRef.setType(partitionColumn.getType());
+                        slotRef.setNullable(partitionColumn.isAllowNull());
                         PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
                     }
                 }
@@ -200,5 +201,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             expr.accept(renameVisitor, null);
         }
     }
+
+    @Override
+    public boolean isAutomaticPartition() {
+        return type == PartitionType.EXPR_RANGE;
+    }
+
 }
 

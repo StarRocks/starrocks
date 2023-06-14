@@ -14,10 +14,12 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -34,16 +36,21 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -62,6 +69,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
@@ -70,6 +78,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
@@ -90,6 +99,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.ParsingException;
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
@@ -100,6 +110,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AnalyzerUtils {
 
@@ -434,7 +445,8 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
-    public static void collectSpecifyExternalTables(StatementBase statementBase, List<Table> tables, Predicate<Table> filter) {
+    public static void collectSpecifyExternalTables(StatementBase statementBase, List<Table> tables,
+                                                    Predicate<Table> filter) {
         new ExternalTableCollector(tables, filter).visit(statementBase);
     }
 
@@ -530,7 +542,8 @@ public class AnalyzerUtils {
                 OlapTable table = (OlapTable) node.getTable();
                 olapTables.add(table);
                 // Only copy the necessary olap table meta to avoid the lock when plan query
-                OlapTable copied = table.copyOnlyForQuery();
+                OlapTable copied = new OlapTable();
+                table.copyOnlyForQuery(copied);
                 node.setTable(copied);
             }
             return null;
@@ -649,12 +662,16 @@ public class AnalyzerUtils {
         }
     }
 
+    public static Type transformTableColumnType(Type srcType) {
+        return transformTableColumnType(srcType, true);
+    }
+
     // For char and varchar types, use the inferred length if the length can be inferred,
     // otherwise (include null type) use the longest varchar value.
     // For double and float types, since they may be selected as key columns,
     // the key column must be an exact value, so we unified into a default decimal type.
-    public static Type transformType(Type srcType) {
-        Type newType;
+    public static Type transformTableColumnType(Type srcType, boolean convertDouble) {
+        Type newType = srcType;
         if (srcType.isScalarType()) {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.CHAR == srcType.getPrimitiveType() ||
@@ -671,42 +688,9 @@ public class AnalyzerUtils {
                 newType = stringType;
             } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
                     PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
-                newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
-            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
-                    PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
-                    PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
-                newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
-                        srcType.getPrecision(), srcType.getDecimalDigits());
-            } else {
-                newType = ScalarType.createType(srcType.getPrimitiveType());
-            }
-        } else if (srcType.isArrayType()) {
-            newType = new ArrayType(transformType(((ArrayType) srcType).getItemType()));
-        } else if (srcType.isMapType()) {
-            newType = new MapType(transformType(((MapType) srcType).getKeyType()),
-                    transformType(((MapType) srcType).getValueType()));
-        } else {
-            throw new SemanticException("Unsupported CTAS transform type: %s", srcType);
-        }
-        return newType;
-    }
-
-    public static Type transformTypeForMv(Type srcType) {
-        Type newType;
-        if (srcType.isScalarType()) {
-            if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
-                    PrimitiveType.CHAR == srcType.getPrimitiveType() ||
-                    PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
-                int len = ScalarType.MAX_VARCHAR_LENGTH;
-                if (srcType instanceof ScalarType) {
-                    ScalarType scalarType = (ScalarType) srcType;
-                    if (scalarType.getLength() > 0 && scalarType.isAssignedStrLenInColDefinition()) {
-                        len = scalarType.getLength();
-                    }
+                if (convertDouble) {
+                    newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
                 }
-                ScalarType stringType = ScalarType.createVarcharType(len);
-                stringType.setAssignedStrLenInColDefinition();
-                newType = stringType;
             } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
@@ -716,9 +700,20 @@ public class AnalyzerUtils {
                 newType = ScalarType.createType(srcType.getPrimitiveType());
             }
         } else if (srcType.isArrayType()) {
-            newType = new ArrayType(transformTypeForMv(((ArrayType) srcType).getItemType()));
+            newType = new ArrayType(transformTableColumnType(((ArrayType) srcType).getItemType(), convertDouble));
+        } else if (srcType.isMapType()) {
+            newType = new MapType(transformTableColumnType(((MapType) srcType).getKeyType(), convertDouble),
+                    transformTableColumnType(((MapType) srcType).getValueType(), convertDouble));
+        } else if (srcType.isStructType()) {
+            StructType structType = (StructType) srcType;
+            List<StructField> mappingFields = structType.getFields().stream()
+                    .map(x -> new StructField(x.getName(), transformTableColumnType(x.getType(), convertDouble),
+                            x.getComment()))
+                    .collect(Collectors.toList());
+            newType = new StructType(mappingFields, structType.isNamed());
         } else {
-            throw new SemanticException("Unsupported Mv transform type: %s", srcType);
+            // Default behavior is keep source type
+            return newType;
         }
         return newType;
     }
@@ -764,25 +759,143 @@ public class AnalyzerUtils {
         }
     }
 
+    public static PartitionMeasure checkAndGetPartitionMeasure(
+            ExpressionRangePartitionInfo expressionRangePartitionInfo)
+            throws AnalysisException {
+        long interval = 1;
+        String granularity;
+        List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs();
+
+        if (partitionExprs.size() != 1) {
+            throw new AnalysisException("automatic partition only support one expression partitionExpr.");
+        }
+        Expr expr = partitionExprs.get(0);
+        if (!(expr instanceof FunctionCallExpr)) {
+            throw new AnalysisException("automatic partition only support FunctionCallExpr");
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+        String fnName = functionCallExpr.getFnName().getFunction();
+        if (fnName.equals(FunctionSet.DATE_TRUNC)) {
+            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+            if (paramsExprs.size() != 2) {
+                throw new AnalysisException("date_trunc params exprs size should be 2.");
+            }
+            Expr granularityExpr = paramsExprs.get(0);
+            if (!(granularityExpr instanceof StringLiteral)) {
+                throw new AnalysisException("date_trunc granularity is not string literal.");
+            }
+            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+            granularity = granularityLiteral.getStringValue();
+        } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
+            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+            if (paramsExprs.size() != 4) {
+                throw new AnalysisException("time_slice params exprs size should be 4.");
+            }
+            Expr intervalExpr = paramsExprs.get(1);
+            if (!(intervalExpr instanceof IntLiteral)) {
+                throw new AnalysisException("time_slice interval is not int literal.");
+            }
+            Expr granularityExpr = paramsExprs.get(2);
+            if (!(granularityExpr instanceof StringLiteral)) {
+                throw new AnalysisException("time_slice granularity is not string literal.");
+            }
+            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+            IntLiteral intervalLiteral = (IntLiteral) intervalExpr;
+            granularity = granularityLiteral.getStringValue();
+            interval = intervalLiteral.getLongValue();
+        } else {
+            throw new AnalysisException("automatic partition only support data_trunc function.");
+        }
+        return new PartitionMeasure(interval, granularity);
+    }
+
     public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
-                                                                                           List<String> partitionValues,
-                                                                                           long interval,
-                                                                                           String granularity,
-                                                                                           Type firstPartitionColumnType)
+                                                                                           List<List<String>> partitionValues)
             throws AnalysisException {
         Map<String, AddPartitionClause> result = Maps.newHashMap();
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            PartitionMeasure measure = checkAndGetPartitionMeasure((ExpressionRangePartitionInfo) partitionInfo);
+            getAddPartitionClauseForRangePartition(olapTable, partitionValues, measure, result,
+                    (ExpressionRangePartitionInfo) partitionInfo);
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            Short replicationNum = olapTable.getTableProperty().getReplicationNum();
+            DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
+            Map<String, String> partitionProperties =
+                    ImmutableMap.of("replication_num", String.valueOf(replicationNum));
+            String partitionPrefix = "p";
+
+            for (List<String> partitionValue : partitionValues) {
+                List<String> formattedPartitionValue = Lists.newArrayList();
+                for (String value : partitionValue) {
+                    String formatValue = getFormatPartitionValue(value);
+                    formattedPartitionValue.add(formatValue);
+                }
+                String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
+                if (partitionName.length() > 64) {
+                    partitionName = partitionName.substring(0, 64);
+                }
+                MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
+                        partitionName, Collections.singletonList(partitionValue), partitionProperties);
+
+                multiItemListPartitionDesc.setSystem(true);
+                AddPartitionClause addPartitionClause =
+                        new AddPartitionClause(multiItemListPartitionDesc, distributionDesc,
+                                partitionProperties, false);
+                result.put(partitionName, addPartitionClause);
+            }
+        } else {
+            throw new AnalysisException("automatic partition only support partition by value.");
+        }
+        return result;
+    }
+
+    @VisibleForTesting
+    public static String getFormatPartitionValue(String value) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+                sb.append(ch);
+            } else if (ch == '-' || ch == ':' || ch == ' ') {
+                // remove;
+            } else {
+                int unicodeValue = value.codePointAt(i);
+                String unicodeString = Integer.toHexString(unicodeValue);
+                sb.append(unicodeString);
+            }
+        }
+        return sb.toString();
+    }
+
+    private static void getAddPartitionClauseForRangePartition(OlapTable olapTable, List<List<String>> partitionValues,
+                                                               PartitionMeasure measure,
+                                                               Map<String, AddPartitionClause> result,
+                                                               ExpressionRangePartitionInfo expressionRangePartitionInfo)
+            throws AnalysisException {
+        String granularity = measure.getGranularity();
+        long interval = measure.getInterval();
+        Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns().get(0).getType();
         String partitionPrefix = "p";
-        for (String partitionValue : partitionValues) {
+        Short replicationNum = olapTable.getTableProperty().getReplicationNum();
+        DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
+        Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
+
+        for (List<String> partitionValue : partitionValues) {
+            if (partitionValue.size() != 1) {
+                throw new AnalysisException("automatic partition only support single column for range partition.");
+            }
+            String partitionItem = partitionValue.get(0);
             DateTimeFormatter beginDateTimeFormat;
             LocalDateTime beginTime;
             LocalDateTime endTime;
             String partitionName;
             try {
-                if ("NULL".equalsIgnoreCase(partitionValue)) {
-                    partitionValue = "0000-01-01";
+                if ("NULL".equalsIgnoreCase(partitionItem)) {
+                    partitionItem = "0000-01-01";
                 }
-                beginDateTimeFormat = DateUtils.probeFormat(partitionValue);
-                beginTime = DateUtils.parseStringWithDefaultHSM(partitionValue, beginDateTimeFormat);
+                beginDateTimeFormat = DateUtils.probeFormat(partitionItem);
+                beginTime = DateUtils.parseStringWithDefaultHSM(partitionItem, beginDateTimeFormat);
                 // The start date here is passed by BE through function calculation,
                 // so it must be the start date of a certain partition.
                 switch (granularity.toLowerCase()) {
@@ -809,11 +922,8 @@ public class AnalyzerUtils {
                     default:
                         throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
                 }
-                PartitionKeyDesc partitionKeyDesc = createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
-                Map<String, String> partitionProperties = Maps.newHashMap();
-                Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-                partitionProperties.put("replication_num", String.valueOf(replicationNum));
-                DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
+                PartitionKeyDesc partitionKeyDesc =
+                        createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
                 SingleRangePartitionDesc singleRangePartitionDesc =
                         new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
@@ -826,7 +936,6 @@ public class AnalyzerUtils {
                 throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
             }
         }
-        return result;
     }
 
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
@@ -835,10 +944,12 @@ public class AnalyzerUtils {
         DateTimeFormatter outputDateFormat;
         if (partitionType.isDate()) {
             outputDateFormat = DateUtils.DATE_FORMATTER_UNIX;
-            isMaxValue = endTime.isAfter(TimeUtils.MAX_DATE.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+            isMaxValue =
+                    endTime.isAfter(TimeUtils.MAX_DATE.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
         } else if (partitionType.isDatetime()) {
             outputDateFormat = DateUtils.DATE_TIME_FORMATTER_UNIX;
-            isMaxValue = endTime.isAfter(TimeUtils.MAX_DATETIME.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+            isMaxValue = endTime.isAfter(
+                    TimeUtils.MAX_DATETIME.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
         } else {
             throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionType));
         }

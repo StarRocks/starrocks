@@ -113,7 +113,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("LAKE_MATERIALIZED_VIEW") // for backward and rollback compatibility
         CLOUD_NATIVE_MATERIALIZED_VIEW,
         @SerializedName("TABLE_FUNCTION")
-        TABLE_FUNCTION;
+        TABLE_FUNCTION,
+        @SerializedName("PAIMON")
+        PAIMON;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -321,6 +323,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.DELTALAKE;
     }
 
+    public boolean isPaimonTable() {
+        return type == TableType.PAIMON;
+    }
+
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();
@@ -368,6 +374,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public long getCreateTime() {
         return createTime;
+    }
+
+    public String getTableLocation() {
+        String msg = "The getTableLocation() method needs to be implemented.";
+        throw new NotImplementedException(msg);
     }
 
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
@@ -558,7 +569,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         if (!Strings.isNullOrEmpty(comment)) {
             return comment;
         }
-        return type.name();
+        return "";
+    }
+
+    // Attention: cause the remove escape character in parser phase, when you want to print the
+    // comment, you need add the escape character back
+    public String getDisplayComment() {
+        if (!Strings.isNullOrEmpty(comment)) {
+            return CatalogUtils.addEscapeCharacter(comment);
+        }
+        return "";
     }
 
     public void setComment(String comment) {

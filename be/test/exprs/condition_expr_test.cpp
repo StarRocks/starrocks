@@ -283,7 +283,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
         expr0->_children.push_back(&col2);
 
         ColumnPtr ptr = expr0->evaluate(nullptr, nullptr);
-        if(ptr->is_nullable()) {
+        if (ptr->is_nullable()) {
             ptr = down_cast<NullableColumn*>(ptr.get())->data_column();
         }
         auto* res_col0 = down_cast<Int32Column*>(ptr.get());

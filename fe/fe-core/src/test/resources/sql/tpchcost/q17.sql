@@ -88,7 +88,6 @@ UNPARTITIONED
       tabletRatio=20/20
       cardinality=600000000
       avgRowSize=24.0
-      numNodes=0
 
       PLAN FRAGMENT 3
       OUTPUT EXPRS:
@@ -110,6 +109,5 @@ UNPARTITIONED
       tabletRatio=10/10
       cardinality=20000
       avgRowSize=28.0
-      numNodes=0
 [end]
 

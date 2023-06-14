@@ -75,11 +75,7 @@ public class StorageVolumePEntryObject implements PEntryObject {
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        try {
-            return globalStateMgr.getStorageVolumeMgr().getStorageVolume(id) != null;
-        } catch (AnalysisException e) {
-            return false;
-        }
+        return globalStateMgr.getStorageVolumeMgr().getStorageVolume(id) != null;
     }
 
     @Override

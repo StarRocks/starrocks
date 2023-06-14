@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -85,6 +86,7 @@ import com.starrocks.planner.MysqlScanNode;
 import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
@@ -118,6 +120,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
@@ -149,6 +152,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -1053,6 +1057,46 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        public PlanFragment visitPhysicalPaimonScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalPaimonScanOperator node = (PhysicalPaimonScanOperator) optExpression.getOp();
+            ScanOperatorPredicates predicates = node.getScanOperatorPredicates();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            PaimonScanNode paimonScanNode =
+                    new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
+            paimonScanNode.computeStatistics(optExpression.getStatistics());
+            try {
+                HDFSScanNodePredicates scanNodePredicates = paimonScanNode.getScanNodePredicates();
+                scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
+                scanNodePredicates.setIdToPartitionKey(predicates.getIdToPartitionKey());
+
+                paimonScanNode.setupScanRangeLocations(context.getDescTbl());
+
+                prepareCommonExpr(scanNodePredicates, predicates, context);
+                prepareMinMaxExpr(scanNodePredicates, predicates, context);
+            } catch (Exception e) {
+                LOG.warn("Paimon scan node get scan range locations failed : " + e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            paimonScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(paimonScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), paimonScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
         @Override
         public PlanFragment visitPhysicalIcebergScan(OptExpression optExpression, ExecPlan context) {
             PhysicalIcebergScanOperator node = (PhysicalIcebergScanOperator) optExpression.getOp();
@@ -1147,7 +1191,7 @@ public class PlanFragmentBuilder {
                 ConstantOperator constantOperator = (ConstantOperator) predicate.getChildren().get(1);
                 if (predicate instanceof BinaryPredicateOperator) {
                     BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) predicate;
-                    if (binaryPredicateOperator.getBinaryType() == BinaryPredicateOperator.BinaryType.EQ) {
+                    if (binaryPredicateOperator.getBinaryType() == BinaryType.EQ) {
                         switch (columnRefOperator.getName()) {
                             case "TABLE_SCHEMA":
                             case "DATABASE_NAME":
@@ -1197,17 +1241,17 @@ public class PlanFragmentBuilder {
                     }
                     // support be_logs.timestamp filter
                     if (columnRefOperator.getName().equals("TIMESTAMP")) {
-                        BinaryPredicateOperator.BinaryType opType = binaryPredicateOperator.getBinaryType();
-                        if (opType == BinaryPredicateOperator.BinaryType.EQ) {
+                        BinaryType opType = binaryPredicateOperator.getBinaryType();
+                        if (opType == BinaryType.EQ) {
                             scanNode.setLogStartTs(constantOperator.getBigint());
                             scanNode.setLogEndTs(constantOperator.getBigint() + 1);
-                        } else if (opType == BinaryPredicateOperator.BinaryType.GT) {
+                        } else if (opType == BinaryType.GT) {
                             scanNode.setLogStartTs(constantOperator.getBigint() + 1);
-                        } else if (opType == BinaryPredicateOperator.BinaryType.GE) {
+                        } else if (opType == BinaryType.GE) {
                             scanNode.setLogStartTs(constantOperator.getBigint());
-                        } else if (opType == BinaryPredicateOperator.BinaryType.LT) {
+                        } else if (opType == BinaryType.LT) {
                             scanNode.setLogEndTs(constantOperator.getBigint());
-                        } else if (opType == BinaryPredicateOperator.BinaryType.LE) {
+                        } else if (opType == BinaryType.LE) {
                             scanNode.setLogEndTs(constantOperator.getBigint() + 1);
                         }
                     }
@@ -2148,12 +2192,12 @@ public class PlanFragmentBuilder {
         }
 
         private List<ColumnRefOperator> getShuffleColumns(HashDistributionSpec spec) {
-            List<Integer> columnRefs = spec.getShuffleColumns();
-            Preconditions.checkState(!columnRefs.isEmpty());
+            List<DistributionCol> columns = spec.getShuffleColumns();
+            Preconditions.checkState(!columns.isEmpty());
 
             List<ColumnRefOperator> shuffleColumns = new ArrayList<>();
-            for (int columnId : columnRefs) {
-                shuffleColumns.add(columnRefFactory.getColumnRef(columnId));
+            for (DistributionCol column : columns) {
+                shuffleColumns.add(columnRefFactory.getColumnRef(column.getColId()));
             }
             return shuffleColumns;
         }

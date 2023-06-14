@@ -44,6 +44,10 @@ public class CloudCredentialUtil {
 
         // Mask for gcs's credential
         doMask(properties, CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY);
+
+        // Mask for aliyun's credential
+        doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY);
+        doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY);
     }
 
     private static void doMask(Map<String, String> properties, String configKey) {

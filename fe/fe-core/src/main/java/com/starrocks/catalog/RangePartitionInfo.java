@@ -228,7 +228,8 @@ public class RangePartitionInfo extends PartitionInfo {
         return range;
     }
 
-    public Range<PartitionKey> createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
+    @Override
+    public void createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
         Range<PartitionKey> range = null;
         try {
             PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
@@ -245,7 +246,6 @@ public class RangePartitionInfo extends PartitionInfo {
         idToInMemory.put(partitionId, false);
         idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
                 Config.lake_default_storage_cache_ttl_seconds, false));
-        return range;
     }
 
     public void handleNewRangePartitionDescs(Map<Partition, PartitionDesc> partitionMap,
@@ -555,6 +555,10 @@ public class RangePartitionInfo extends PartitionInfo {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    public boolean isPartitionedBy(PrimitiveType type) {
+        return partitionColumns.size() == 1 && partitionColumns.get(0).getType().getPrimitiveType() == type;
     }
 }
 
