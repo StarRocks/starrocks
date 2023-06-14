@@ -22,6 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -237,13 +238,17 @@ public class EquationRewriter {
 
         @Override
         public boolean canReplace(ScalarOperator operator) {
-            if (operator.isConstantRef() && operator.getType().getPrimitiveType() == PrimitiveType.DATETIME) {
-                ConstantOperator sliced = ScalarOperatorFunctions.timeSlice(
-                        (ConstantOperator) operator,
-                        ((ConstantOperator) mvTimeSlice.getChild(1)),
-                        ((ConstantOperator) mvTimeSlice.getChild(2)),
-                        ((ConstantOperator) mvTimeSlice.getChild(3)));
-                return sliced.equals(operator);
+            try {
+                if (operator.isConstantRef() && operator.getType().getPrimitiveType() == PrimitiveType.DATETIME) {
+                    ConstantOperator sliced = ScalarOperatorFunctions.timeSlice(
+                            (ConstantOperator) operator,
+                            ((ConstantOperator) mvTimeSlice.getChild(1)),
+                            ((ConstantOperator) mvTimeSlice.getChild(2)),
+                            ((ConstantOperator) mvTimeSlice.getChild(3)));
+                    return sliced.equals(operator);
+                }
+            } catch (AnalysisException e) {
+                return false;
             }
             return false;
         }
