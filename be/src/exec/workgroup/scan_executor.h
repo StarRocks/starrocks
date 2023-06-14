@@ -16,6 +16,8 @@
 
 #include <bthread/execution_queue.h>
 
+#include <utility>
+
 #include "util/limit_setter.h"
 #include "util/threadpool.h"
 #include "work_group.h"
@@ -40,7 +42,7 @@ public:
     int submit(void* (*fn)(void*), void* args) override;
     // Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
-    std::unique_ptr<TaskToken> new_token();
+    std::unique_ptr<TaskToken> new_token(const std::string& name);
 
 private:
     void worker_thread();
@@ -69,7 +71,7 @@ public:
 // NOTE: it's a vanilla implementation, without concurrent execution, without priority control
 class ExecutorToken final : public TaskToken {
 public:
-    ExecutorToken(ScanExecutor* executor) : _executor(executor) {}
+    ExecutorToken(std::string name, ScanExecutor* executor) : _name(std::move(name)), _executor(executor) {}
     ~ExecutorToken() override;
 
     // Submit a new task
@@ -111,6 +113,7 @@ private:
     static void* _worker(void*);
 
     mutable std::mutex _mutex;
+    std::string _name;
     std::condition_variable _cond;
     std::deque<TaskT> _tasks;
     ScanExecutor* _executor;

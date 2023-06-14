@@ -95,8 +95,8 @@ int ScanExecutor::submit(void* (*fn)(void*), void* args) {
 //     return _task_queue->try_offer(std::move(task)) ? Status::OK() : Status::ResourceBusy("enqueue failed");
 // }
 
-std::unique_ptr<TaskToken> ScanExecutor::new_token() {
-    return std::make_unique<ExecutorToken>(this);
+std::unique_ptr<TaskToken> ScanExecutor::new_token(const std::string& name) {
+    return std::make_unique<ExecutorToken>(name, this);
 }
 
 ExecutorToken::~ExecutorToken() {
@@ -106,7 +106,13 @@ ExecutorToken::~ExecutorToken() {
 void* ExecutorToken::_worker(void* args) {
     // A worker could only run for at most 100ms, to avoid occupy too much resource
     constexpr int64_t kWorkerTimeSliceNs = 100'000'000;
+
+    // set name of this thread
     auto* token = static_cast<ExecutorToken*>(args);
+    Thread* current = Thread::current_thread();
+    std::string prev_name = current->name();
+    DeferOp defer([&]() { Thread::set_thread_name(current->pthread_id(), prev_name); });
+    Thread::set_thread_name(current->pthread_id(), token->_name);
     token->_executed_workers++;
 
     int64_t total_task_ns = 0;
