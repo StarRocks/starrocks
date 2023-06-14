@@ -24,7 +24,7 @@ StarRocks 2.4 之前的版本提供了一种同步更新的同步物化视图（
 | ---------------------------- | ----------- | ---------- | ----------- | ---------- | -------- |
 | **StarRocks 2.5 异步物化视图** | 是 | 是 | 是 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog</li><li>已有异步物化视图</li></ul> |
 | **StarRocks 2.4 异步物化视图** | 是 | 是 | 否 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持基于 Default Catalog 的多表构建 |
-| **同步物化视图（Rollup）** | 仅部分聚合算子 | 否 | 是 | 导入同步刷新 | 仅支持基于 Default Catalog 的单表构建 |
+| **同步物化视图（Rollup）** | 仅部分聚合函数 | 否 | 是 | 导入同步刷新 | 仅支持基于 Default Catalog 的单表构建 |
 
 ### 相关概念
 
@@ -64,7 +64,11 @@ StarRocks 2.4 之前的版本提供了一种同步更新的同步物化视图（
 
 ## 创建异步物化视图
 
-StarRocks 支持在内、外部数据目录中的一个或多个基表上创建异步物化视图。基表支持所有 StarRocks 表类型。您还可以在已有异步物化视图上创建新的异步物化视图。
+StarRocks 支持在以下数据源创建异步物化视图：
+
+- StarRocks 内部表。基表支持所有 StarRocks 表类型。
+- Hive Catalog、Hudi Catalog 和 Iceberg  Catalog 中的表。
+- 已有异步物化视图。
 
 ### 准备工作
 
@@ -145,6 +149,7 @@ GROUP BY order_id;
 > - 异步物化视图支持分区上卷。例如，基表基于天做分区方式，您可以设置异步物化视图按月做分区。
 > - 异步物化视图的分区列和分桶列必须在查询语句中。
 > - 创建物化视图的查询语句不支持非确定性函数，其中包括 rand()、random()、uuid() 和 sleep()。
+> - 异步物化视图支持多种数据类型。有关详细信息，请参阅 [CREATE MATERIALIZED VIEW - 支持数据类型](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md#支持数据类型)。
 
 - **异步物化视图刷新机制**
 
@@ -242,11 +247,57 @@ from `hive_catalog`.`emp_db`.`emps_par_tbl`
 where empid < 5;
 ```
 
+### 通过 Aggregate Rollup 改写查询
+
+StarRocks 支持通过 Aggregate Rollup 改写查询，即 StarRocks 可以使用通过 `GROUP BY a,b` 子句创建的异步物化视图改写带有 `GROUP BY a` 子句的聚合查询。
+
+在以下示例中，StarRocks 可以使用物化视图 `order_agg_mv` 改写查询 Query 1 和 Query 2：
+
+```SQL
+CREATE MATERIALIZED VIEW order_agg_mv
+DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
+REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+AS
+SELECT
+    order_id,
+    order_date,
+    bitmap_union(to_bitmap(client_id))  -- uv
+FROM order_list 
+GROUP BY order_id, order_date;
+-- Query 1
+SELECT
+    order_date,
+    bitmap_union(to_bitmap(client_id))  -- uv
+FROM order_list 
+GROUP BY order_date;
+-- Query 2
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list 
+GROUP BY order_date;
+```
+
+仅有部分聚合函数支持通过 Aggregate Rollup 改写查询。在先前的示例中，如果物化视图 `order_agg_mv` 使用 `count(distinct client_id)` 而非 `bitmap_union(to_bitmap(client_id))`，StarRocks 将无法通过 Aggregate Rollup 改写查询。
+
+下表展示了原始查询中的聚合函数与用于构建物化视图的聚合函数之间的对应关系。您可以根据自己的业务场景，选择相应的聚合函数构建物化视图。
+
+| **原始查询聚合函数**                                      | **支持 Aggregate Rollup 的物化视图构建聚合函数**                 |
+| ------------------------------------------------------ | ------------------------------------------------------------ |
+| sum                                                    | sum                                                          |
+| count                                                  | count                                                        |
+| min                                                    | min                                                          |
+| max                                                    | max                                                          |
+| avg                                                    | sum / count                                                  |
+| bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                                 |
+| hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                                    |
+| percentile_approx, percentile_union                    | percentile_union                                             |
+
 ### 基于 View Delta Join 场景改写查询
 
-StarRocks 支持基于异步物化视图 Delta Join 场景改写查询，即查询的表是物化视图基表的子集的场景。例如，`table_a INNER JOIN table_b` 形式的查询可以由 `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c` 形式的物化视图重写，其中 `table_b INNER JOIN/LEFT OUTER JOIN table_c` 是 Delta Join。此功能允许对这类查询进行透明加速，从而保持查询的灵活性并避免构建宽表的巨大成本。
+StarRocks 支持基于异步物化视图 Delta Join 场景改写查询，即查询的表是物化视图基表的子集的场景。例如，`table_a INNER JOIN table_b` 形式的查询可以由 `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c` 形式的物化视图改写，其中 `table_b INNER JOIN/LEFT OUTER JOIN table_c` 是 Delta Join。此功能允许对这类查询进行透明加速，从而保持查询的灵活性并避免构建宽表的巨大成本。
 
-View Delta Join 查询只有在满足以下要求时才能被重写：
+View Delta Join 查询只有在满足以下要求时才能被改写：
 
 - Delta Join 必须是 Inner Join 或 Left Outer Join。
 - 如果 Delta Join 是 Inner Join，则需要 Join 的 Key 必须是对应表的 Foreign/Primary/Unique Key 且必须为 NOT NULL。
@@ -261,7 +312,7 @@ View Delta Join 查询只有在满足以下要求时才能被重写：
 
 > **注意**
 >
-> Unique Key 和外键约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+> Unique Key 和外键约束仅用于查询改写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
 
 以下示例在创建表 `lineorder` 时定义了多个外键：
 

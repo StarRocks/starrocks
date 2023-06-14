@@ -2,7 +2,9 @@
 
 ## 功能
 
-创建物化视图。创建物化视图是一个异步的操作。CREATE MATERIALIZED VIEW 命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) 命令查看当前数据库中物化视图的构建状态。关于物化视图适用的场景请参考 [物化视图](../../../using_starrocks/Materialized_view.md)。
+创建物化视图。关于物化视图适用的场景请参考[同步物化视图](../../../using_starrocks/Materialized_view-single_table.md)和[异步物化视图](../../../using_starrocks/Materialized_view.md)。
+
+创建物化视图是一个异步的操作。该命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) 命令查看当前数据库中同步物化视图的构建状态，或通过查询 [Information Schema](../../../administration/information_schema.md) 中的元数据表 `tasks` 和 `task_runs` 来查看异步物化视图的构建状态。
 
 > **注意**
 >
@@ -10,14 +12,110 @@
 
 StarRocks 自 v2.4 起支持异步物化视图。异步物化视图与先前版本中的同步物化视图区别主要体现在以下方面：
 
-|                  | **支持异步及手动刷新** | **支持聚合列** | **支持修改分区分片** | **JOIN、WHERE、GROUP BY 子句** |
-| ---------------- | ------------------- | ------------ | ------------------ | ------------------------------ |
-| **同步物化视图** | 否（v2.3 及之前版本物化视图仅支持同步刷新方式） | 否  | 否 | 否 |
-| **异步物化视图** | 是 | 是  | 是 | 是   |
+|                              | **单表聚合** | **多表关联** | **查询改写** | **刷新策略** | **基表** |
+| ---------------------------- | ----------- | ---------- | ----------- | ---------- | -------- |
+| **StarRocks 2.5 异步物化视图** | 是 | 是 | 是 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog</li><li>已有异步物化视图</li></ul> |
+| **StarRocks 2.4 异步物化视图** | 是 | 是 | 否 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持基于 Default Catalog 的多表构建 |
+| **同步物化视图（Rollup）** | 仅部分聚合函数 | 否 | 是 | 导入同步刷新 | 仅支持基于 Default Catalog 的单表构建 |
 
-StarRocks 2.5 版本中，异步物化视图支持查询改写、嵌套物化视图以及基于 Hive catalog、Hudi catalog 以及 Iceberg catalog 构建物化视图。
+## 同步物化视图
 
-## 语法
+### 语法
+
+```SQL
+CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
+[COMMENT ""]
+[PROPERTIES ("key"="value", ...)]
+AS 
+<query_statement>
+```
+
+### 参数
+
+**mv_name**（必填）
+
+物化视图的名称。命名要求如下：
+
+- 必须由字母（a-z 或 A-Z）、数字（0-9）或下划线（_）组成，且只能以字母开头。
+- 总长度不能超过 64 个字符。
+- 视图名大小写敏感。
+
+**COMMENT**（选填）
+
+物化视图的注释。
+
+**query_statement**（必填）
+
+创建物化视图的查询语句，其结果即为物化视图中的数据。语法如下：
+
+```SQL
+SELECT select_expr[, select_expr ...]
+[GROUP BY column_name[, column_name ...]]
+[ORDER BY column_name[, column_name ...]]
+```
+
+- select_expr（必填）
+
+  查询语句中所有的列，也即物化视图的 schema 中所有的列。该参数支持如下值：
+
+  - 单列或聚合列：形如 `SELECT a, b, c FROM table_a` （适用于创建同步物化视图）或 `SELECT table_a.a, table_a.b, table_b.d,`（仅适用于 2.4 版本以上创建异步物化视图），其中 `a`、`b`、`c` 和 `d` 为基表的列名。如果您没有为物化视图指定列名，那么物化视图的列名也为 `a`、`b`、`c` 和 `d`。
+  - 表达式：形如 `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`，其中 `a+1`、`b+2` 和 `c*c` 为包含基表的列名的表达式，`x`、`y` 和 `z` 为物化视图的列名。
+
+  - 同步物化视图仅支持在单列上使用聚合函数。不支持形如 `sum(a+b)` 形式的查询语句。
+  - 同步物化视图仅支持在单列使用一个聚合函数。不支持形如 `select sum(a), min(a) from table` 形式的查询语句。
+  - 使用聚合函数创建同步物化视图时，必须指定 GROUP BY 子句，并在 `select_expr` 中指定至少一个 GROUP BY 列。
+  - 同步物化视图不支持 JOIN、WHERE、以及 GROUP BY 的 HAVING 子句。
+
+  > **注意**
+  >
+  > 该参数至少需包含一个单列，且所有涉及到的列，均只能出现一次。
+
+- GROUP BY（选填）
+
+  构建物化视图查询语句的分组列。如不指定该参数，则默认不对数据进行分组。
+
+- ORDER BY（选填）
+
+  构建物化视图查询语句的排序列。
+
+  - 排序列的声明顺序必须和 `select_expr` 中列声明顺序一致。
+  - 如果查询语句中包含分组列，则排序列必须和分组列一致。
+  - 如果不指定排序列，则系统根据以下规则自动补充排序列：
+  
+    - 如果物化视图是聚合类型，则所有的分组列自动补充为排序列。
+    - 如果物化视图是非聚合类型，则系统根据前缀列自动选择排序列。
+
+### 查询同步物化视图
+
+因为同步物化视图本质上是基表的索引而不是物理表，所以您只能使用 Hint `[_SYNC_MV_]` 查询同步物化视图：
+
+```SQL
+-- 请勿省略 Hint 中的括号[]。
+SELECT * FROM <mv_name> [_SYNC_MV_];
+```
+
+> **注意**
+>
+> 目前，StarRocks 会自动为同步物化视图中的列生成名称。您为同步物化视图中的列指定的 Alias 将无法生效。
+
+### 同步物化视图查询自动改写
+
+使用同步物化视图查询时，原始查询语句将会被自动改写并用于查询物化视图中保存的中间结果。
+
+下表展示了原始查询聚合函数和构建同步物化视图用到的聚合函数的匹配关系。您可以根据业务场景选择对应的聚合函数构建同步物化视图。
+
+| **原始查询聚合函数**                                   | **物化视图构建聚合函数** |
+| ------------------------------------------------------ | ------------------------ |
+| sum                                                    | sum                      |
+| min                                                    | min                      |
+| max                                                    | max                      |
+| count                                                  | count                    |
+| bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union             |
+| hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                |
+
+## 异步物化视图
+
+### 语法
 
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
@@ -42,7 +140,7 @@ AS
 <query_statement>
 ```
 
-## 参数
+### 参数
 
 **mv_name**（必填）
 
@@ -50,14 +148,15 @@ AS
 
 - 必须由字母（a-z 或 A-Z）、数字（0-9）或下划线（_）组成，且只能以字母开头。
 - 总长度不能超过 64 个字符。
+- 视图名大小写敏感。
 
 > **注意**
 >
-> 同一张基表可以创建多个物化视图，但同一数据库内的物化视图名称不可重复。
+> 同一张基表可以创建多个异步物化视图，但同一数据库内的异步物化视图名称不可重复。
 
-**distribution_desc**（建立异步物化视图时为**必填**）
+**distribution_desc**（必填）
 
-物化视图的分桶方式，形如 `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`。
+异步物化视图的分桶方式，形如 `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`。
 
 > **注意**
 >
@@ -67,8 +166,8 @@ AS
 
 物化视图的刷新时刻。默认值：`IMMEDIATE`。有效值：
 
-- `IMMEDIATE`：物化视图创建成功后立即刷新。
-- `DEFERRED`：物化视图创建成功后不进行刷新。您可以通过手动调用或创建定时任务触发刷新。
+- `IMMEDIATE`：异步物化视图创建成功后立即刷新。
+- `DEFERRED`：异步物化视图创建成功后不进行刷新。您可以通过手动调用或创建定时任务触发刷新。
 
 **refresh_scheme**（选填）
 
@@ -81,15 +180,16 @@ AS
 
 **partition_expression**（选填）
 
-物化视图的分区表达式。目前仅支持在创建物化视图时使用一个分区表达式。该参数支持如下值：
+异步物化视图的分区表达式。目前仅支持在创建异步物化视图时使用一个分区表达式。该参数支持如下值：
 
-- 列：形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
+- `date_column`：用于分区的列的名称。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
 - date_trunc 函数：形如 PARTITION BY date_trunc("MONTH", 'dt')，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
-- 如不指定该参数，则默认物化视图为无分区。
+
+如不指定该参数，则默认物化视图为无分区。
 
 **order_by_expression**（选填）
 
-物化视图的排序键。如不指定该参数，StarRocks 从 SELECT 列中选择部分前缀作为排序键，例如：`select a, b, c, d` 中, 排序列可能为 `a` 和 `b`。此参数自 StarRocks 3.0 起支持。
+异步物化视图的排序键。如不指定该参数，StarRocks 从 SELECT 列中选择部分前缀作为排序键，例如：`select a, b, c, d` 中, 排序列可能为 `a` 和 `b`。此参数自 StarRocks 3.0 起支持。
 
 **COMMENT**（选填）
 
@@ -97,10 +197,10 @@ AS
 
 **PROPERTIES**（选填）
 
-物化视图的属性。您可以使用 [ALTER MATERIALIZED VIEW](./ALTER%20MATERIALIZED%20VIEW.md) 修改现有物化视图的属性。
+异步物化视图的属性。您可以使用 [ALTER MATERIALIZED VIEW](./ALTER%20MATERIALIZED%20VIEW.md) 修改已有异步物化视图的属性。
 
 - `replication_num`：创建物化视图副本数量。
-- `storage_medium`：存储介质类型。
+- `storage_medium`：存储介质类型。有效值：`HDD` 和 `SSD`。
 - `partition_ttl_number`：需要保留的最近的物化视图分区数量。分区数量超过该值后，过期分区将被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。默认值：`-1`。当值为 `-1` 时，将不会拆分刷新任务。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
@@ -115,36 +215,11 @@ AS
 
 **query_statement**（必填）
 
-创建物化视图的查询语句，其结果即为物化视图中的数据。语法如下：
+创建异步物化视图的查询语句，其结果即为异步物化视图中的数据。
 
-```SQL
-SELECT select_expr[, select_expr ...]
-[GROUP BY column_name[, column_name ...]]
-[ORDER BY column_name[, column_name ...]]
-```
+### 查询异步物化视图
 
-- select_expr（必填）
-
-  查询语句中所有的列，也即物化视图的 schema 中所有的列。该参数支持如下值：
-
-  - 单列或聚合列：形如 `SELECT a, b, c FROM table_a` （适用于创建同步物化视图）或 `SELECT table_a.a, table_a.b, table_b.d,`（仅适用于 2.4 版本以上创建异步物化视图），其中 `a`、`b`、`c` 和 `d` 为基表的列名。如果您没有为物化视图指定列名，那么物化视图的列名也为 `a`、`b`、`c` 和 `d`。
-  - 表达式：形如 `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`，其中 `a+1`、`b+2` 和 `c*c` 为包含基表的列名的表达式，`x`、`y` 和 `z` 为物化视图的列名。
-
-  > **注意**
-  >
-  > 该参数至少需包含一个单列，且所有涉及到的列，均只能出现一次。
-
-- GROUP BY（选填）
-
-  构建物化视图查询语句的分组列。如不指定该参数，则默认不对数据进行分组。
-
-- ORDER BY（选填）
-
-  构建物化视图查询语句的排序列。
-
-  - 排序列的声明顺序必须和 `select_expr` 中列声明顺序一致。
-  - 如果不指定排序列，则系统根据规则自动补充排序列。如果物化视图是聚合类型，则所有的分组列自动补充为排序列。如果物化视图是非聚合类型，则系统根据前缀列自动选择排序列。
-  - 如果查询语句中包含分组列，则排序列必须和分组列一致。
+异步物化视图本质是一张实体表。您可以将其作为普通表进行任何**除直接导入数据**以外的操作。
 
 ### 支持数据类型
 
@@ -221,19 +296,6 @@ SELECT select_expr[, select_expr ...]
     - BINARY
     - LIST
 
-### 聚合函数匹配关系
-
-使用物化视图搜索时，原始查询语句将会被自动改写并用于查询物化视图中保存的中间结果。下表展示了原始查询聚合函数和构建物化视图用到的聚合函数的匹配关系。您可以根据您的业务场景选择对应的聚合函数构建物化视图。
-
-| **原始查询聚合函数**                                   | **物化视图构建聚合函数** |
-| ------------------------------------------------------ | ------------------------ |
-| sum                                                    | sum                      |
-| min                                                    | min                      |
-| max                                                    | max                      |
-| count                                                  | count                    |
-| bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union             |
-| hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                |
-
 ## 注意事项
 
 - 当前版本暂时不支持同时创建多个物化视图。仅当当前创建任务完成时，方可执行下一个创建任务。
@@ -260,6 +322,142 @@ SELECT select_expr[, select_expr ...]
   - StarRocks 目前无法感知外部数据目录基表数据是否发生变动，所以每次刷新会默认刷新所有分区。您可以通过手动刷新方式指定刷新部分分区。
 
 ## 示例
+
+### 同步物化视图示例
+
+基表结构为：
+
+```sql
+mysql> desc duplicate_table;
++-------+--------+------+------+---------+-------+
+| Field | Type   | Null | Key  | Default | Extra |
++-------+--------+------+------+---------+-------+
+| k1    | INT    | Yes  | true | N/A     |       |
+| k2    | INT    | Yes  | true | N/A     |       |
+| k3    | BIGINT | Yes  | true | N/A     |       |
+| k4    | BIGINT | Yes  | true | N/A     |       |
++-------+--------+------+------+---------+-------+
+```
+
+1. 创建一个仅包含原始表 （k1，k2）列的物化视图。
+
+    ```sql
+    create materialized view k1_k2 as
+    select k1, k2 from duplicate_table;
+    ```
+
+    物化视图的 schema 如下图，物化视图仅包含两列 k1、k2 且不带任何聚合。
+
+    ```sql
+    +-----------------+-------+--------+------+------+---------+-------+
+    | IndexName       | Field | Type   | Null | Key  | Default | Extra |
+    +-----------------+-------+--------+------+------+---------+-------+
+    | k1_k2           | k1    | INT    | Yes  | true | N/A     |       |
+    |                 | k2    | INT    | Yes  | true | N/A     |       |
+    +-----------------+-------+--------+------+------+---------+-------+
+    ```
+
+2. 创建一个以 k2 为排序列的物化视图。
+
+    ```sql
+    create materialized view k2_order as
+    select k2, k1 from duplicate_table order by k2;
+    ```
+
+    物化视图的 schema 如下图，物化视图仅包含两列 k2、k1，其中 k2 列为排序列，不带任何聚合。
+
+    ```sql
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | IndexName       | Field | Type   | Null | Key   | Default | Extra |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | k2_order        | k2    | INT    | Yes  | true  | N/A     |       |
+    |                 | k1    | INT    | Yes  | false | N/A     | NONE  |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    ```
+
+3. 创建一个以 k1，k2 分组，k3 列为 SUM 聚合的物化视图。
+
+    ```sql
+    create materialized view k1_k2_sumk3 as
+    select k1, k2, sum(k3) from duplicate_table group by k1, k2;
+    ```
+
+    物化视图的 schema 如下图，物化视图包含两列 k1、k2，sum(k3) 其中 k1、k2 为分组列，sum(k3) 为根据 k1、k2 分组后的 k3 列的求和值。
+
+    由于物化视图没有声明排序列，且物化视图带聚合数据，系统默认补充分组列 k1、k2 为排序列。
+
+    ```sql
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | IndexName       | Field | Type   | Null | Key   | Default | Extra |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | k1_k2_sumk3     | k1    | INT    | Yes  | true  | N/A     |       |
+    |                 | k2    | INT    | Yes  | true  | N/A     |       |
+    |                 | k3    | BIGINT | Yes  | false | N/A     | SUM   |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    ```
+
+4. 创建一个去除重复行的物化视图。
+
+    ```sql
+    create materialized view deduplicate as
+    select k1, k2, k3, k4 from duplicate_table group by k1, k2, k3, k4;
+    ```
+
+    物化视图 schema 如下图，物化视图包含 k1、k2、k3、k4 列，且不存在重复行。
+
+    ```sql
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | IndexName       | Field | Type   | Null | Key   | Default | Extra |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | deduplicate     | k1    | INT    | Yes  | true  | N/A     |       |
+    |                 | k2    | INT    | Yes  | true  | N/A     |       |
+    |                 | k3    | BIGINT | Yes  | true  | N/A     |       |
+    |                 | k4    | BIGINT | Yes  | true  | N/A     |       |
+    +-----------------+-------+--------+------+-------+---------+-------+
+
+    ```
+
+5. 创建一个不声明排序列的非聚合型物化视图。
+
+    all_type_table 的 schema 如下：
+
+    ```sql
+    +-------+--------------+------+-------+---------+-------+
+    | Field | Type         | Null | Key   | Default | Extra |
+    +-------+--------------+------+-------+---------+-------+
+    | k1    | TINYINT      | Yes  | true  | N/A     |       |
+    | k2    | SMALLINT     | Yes  | true  | N/A     |       |
+    | k3    | INT          | Yes  | true  | N/A     |       |
+    | k4    | BIGINT       | Yes  | true  | N/A     |       |
+    | k5    | DECIMAL(9,0) | Yes  | true  | N/A     |       |
+    | k6    | DOUBLE       | Yes  | false | N/A     | NONE  |
+    | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
+    +-------+--------------+------+-------+---------+-------+
+    ```
+
+    物化视图包含 k3、k4、k5、k6、k7 列，且不声明排序列，则创建语句如下：
+
+    ```sql
+    create materialized view mv_1 as
+    select k3, k4, k5, k6, k7 from all_type_table;
+    ```
+
+    系统默认补充的排序列为 k3、k4、k5 三列。这三列类型的字节数之和为 4(INT) + 8(BIGINT) + 16(DECIMAL) = 28 < 36。所以补充的是这三列作为排序列。
+    物化视图的 schema 如下，可以看到其中 k3、k4、k5 列的 key 字段为 true，也就是排序列。k6、k7 列的 key 字段为 false，也就是非排序列。
+
+    ```sql
+    +----------------+-------+--------------+------+-------+---------+-------+
+    | IndexName      | Field | Type         | Null | Key   | Default | Extra |
+    +----------------+-------+--------------+------+-------+---------+-------+
+    | mv_1           | k3    | INT          | Yes  | true  | N/A     |       |
+    |                | k4    | BIGINT       | Yes  | true  | N/A     |       |
+    |                | k5    | DECIMAL(9,0) | Yes  | true  | N/A     |       |
+    |                | k6    | DOUBLE       | Yes  | false | N/A     | NONE  |
+    |                | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
+    +----------------+-------+--------------+------+-------+---------+-------+
+    ```
+
+### 异步物化视图示例
 
 以下示例基于下列基表。
 
@@ -487,140 +685,6 @@ INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
 INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
-
-示例四：创建同步物化视图
-
-基表结构为：
-
-```sql
-mysql> desc duplicate_table;
-+-------+--------+------+------+---------+-------+
-| Field | Type   | Null | Key  | Default | Extra |
-+-------+--------+------+------+---------+-------+
-| k1    | INT    | Yes  | true | N/A     |       |
-| k2    | INT    | Yes  | true | N/A     |       |
-| k3    | BIGINT | Yes  | true | N/A     |       |
-| k4    | BIGINT | Yes  | true | N/A     |       |
-+-------+--------+------+------+---------+-------+
-```
-
-1. 创建一个仅包含原始表 （k1，k2）列的物化视图。
-
-    ```sql
-    create materialized view k1_k2 as
-    select k1, k2 from duplicate_table;
-    ```
-
-    物化视图的 schema 如下图，物化视图仅包含两列 k1、k2 且不带任何聚合。
-
-    ```sql
-    +-----------------+-------+--------+------+------+---------+-------+
-    | IndexName       | Field | Type   | Null | Key  | Default | Extra |
-    +-----------------+-------+--------+------+------+---------+-------+
-    | k1_k2           | k1    | INT    | Yes  | true | N/A     |       |
-    |                 | k2    | INT    | Yes  | true | N/A     |       |
-    +-----------------+-------+--------+------+------+---------+-------+
-    ```
-
-2. 创建一个以 k2 为排序列的物化视图。
-
-    ```sql
-    create materialized view k2_order as
-    select k2, k1 from duplicate_table order by k2;
-    ```
-
-    物化视图的 schema 如下图，物化视图仅包含两列 k2、k1，其中 k2 列为排序列，不带任何聚合。
-
-    ```sql
-    +-----------------+-------+--------+------+-------+---------+-------+
-    | IndexName       | Field | Type   | Null | Key   | Default | Extra |
-    +-----------------+-------+--------+------+-------+---------+-------+
-    | k2_order        | k2    | INT    | Yes  | true  | N/A     |       |
-    |                 | k1    | INT    | Yes  | false | N/A     | NONE  |
-    +-----------------+-------+--------+------+-------+---------+-------+
-    ```
-
-3. 创建一个以 k1，k2 分组，k3 列为 SUM 聚合的物化视图。
-
-    ```sql
-    create materialized view k1_k2_sumk3 as
-    select k1, k2, sum(k3) from duplicate_table group by k1, k2;
-    ```
-
-    物化视图的 schema 如下图，物化视图包含两列 k1、k2，sum(k3) 其中 k1、k2 为分组列，sum(k3) 为根据 k1、k2 分组后的 k3 列的求和值。
-
-    由于物化视图没有声明排序列，且物化视图带聚合数据，系统默认补充分组列 k1、k2 为排序列。
-
-    ```sql
-    +-----------------+-------+--------+------+-------+---------+-------+
-    | IndexName       | Field | Type   | Null | Key   | Default | Extra |
-    +-----------------+-------+--------+------+-------+---------+-------+
-    | k1_k2_sumk3     | k1    | INT    | Yes  | true  | N/A     |       |
-    |                 | k2    | INT    | Yes  | true  | N/A     |       |
-    |                 | k3    | BIGINT | Yes  | false | N/A     | SUM   |
-    +-----------------+-------+--------+------+-------+---------+-------+
-    ```
-
-4. 创建一个去除重复行的物化视图。
-
-    ```sql
-    create materialized view deduplicate as
-    select k1, k2, k3, k4 from duplicate_table group by k1, k2, k3, k4;
-    ```
-
-    物化视图 schema 如下图，物化视图包含 k1、k2、k3、k4 列，且不存在重复行。
-
-    ```sql
-    +-----------------+-------+--------+------+-------+---------+-------+
-    | IndexName       | Field | Type   | Null | Key   | Default | Extra |
-    +-----------------+-------+--------+------+-------+---------+-------+
-    | deduplicate     | k1    | INT    | Yes  | true  | N/A     |       |
-    |                 | k2    | INT    | Yes  | true  | N/A     |       |
-    |                 | k3    | BIGINT | Yes  | true  | N/A     |       |
-    |                 | k4    | BIGINT | Yes  | true  | N/A     |       |
-    +-----------------+-------+--------+------+-------+---------+-------+
-
-    ```
-
-5. 创建一个不声明排序列的非聚合型物化视图。
-
-    all_type_table 的 schema 如下：
-
-    ```sql
-    +-------+--------------+------+-------+---------+-------+
-    | Field | Type         | Null | Key   | Default | Extra |
-    +-------+--------------+------+-------+---------+-------+
-    | k1    | TINYINT      | Yes  | true  | N/A     |       |
-    | k2    | SMALLINT     | Yes  | true  | N/A     |       |
-    | k3    | INT          | Yes  | true  | N/A     |       |
-    | k4    | BIGINT       | Yes  | true  | N/A     |       |
-    | k5    | DECIMAL(9,0) | Yes  | true  | N/A     |       |
-    | k6    | DOUBLE       | Yes  | false | N/A     | NONE  |
-    | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
-    +-------+--------------+------+-------+---------+-------+
-    ```
-
-    物化视图包含 k3、k4、k5、k6、k7 列，且不声明排序列，则创建语句如下：
-
-    ```sql
-    create materialized view mv_1 as
-    select k3, k4, k5, k6, k7 from all_type_table;
-    ```
-
-    系统默认补充的排序列为 k3、k4、k5 三列。这三列类型的字节数之和为 4(INT) + 8(BIGINT) + 16(DECIMAL) = 28 < 36。所以补充的是这三列作为排序列。
-    物化视图的 schema 如下，可以看到其中 k3、k4、k5 列的 key 字段为 true，也就是排序列。k6、k7 列的 key 字段为 false，也就是非排序列。
-
-    ```sql
-    +----------------+-------+--------------+------+-------+---------+-------+
-    | IndexName      | Field | Type         | Null | Key   | Default | Extra |
-    +----------------+-------+--------------+------+-------+---------+-------+
-    | mv_1           | k3    | INT          | Yes  | true  | N/A     |       |
-    |                | k4    | BIGINT       | Yes  | true  | N/A     |       |
-    |                | k5    | DECIMAL(9,0) | Yes  | true  | N/A     |       |
-    |                | k6    | DOUBLE       | Yes  | false | N/A     | NONE  |
-    |                | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
-    +----------------+-------+--------------+------+-------+---------+-------+
-    ```
 
 ## 更多操作
 

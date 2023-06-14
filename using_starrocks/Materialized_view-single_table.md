@@ -4,9 +4,9 @@
 
 同步物化视图下，所有对于基表的数据变更都会自动同步更新到物化视图中。您无需手动调用刷新命令，即可实现自动同步刷新物化视图。同步物化视图的管理成本和更新成本都比较低，适合实时场景下单表聚合查询的透明加速。
 
-StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/catalog/default_catalog.md) 中的单个基表创建，是一种特殊的查询加速索引，无法直接查询。
+StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/catalog/default_catalog.md) 中的单个基表创建，是一种特殊的查询加速索引。
 
-自 2.4 版本起，StarRocks 支持**异步物化视图**，可以基于多个基表创建，且支持更丰富的聚合算子。详细信息，请参阅 [异步物化视图](../using_starrocks/Materialized_view.md)。
+自 2.4 版本起，StarRocks 支持**异步物化视图**，可以基于多个基表创建，且支持更丰富的聚合函数。详细信息，请参阅 [异步物化视图](../using_starrocks/Materialized_view.md)。
 
 下表从支持的特性角度比较了 StarRocks 2.5、2.4 中的异步物化视图以及同步物化视图（Rollup）：
 
@@ -14,7 +14,7 @@ StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/
 | ---------------------------- | ----------- | ---------- | ----------- | ---------- | -------- |
 | **StarRocks 2.5 异步物化视图** | 是 | 是 | 是 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog</li><li>已有异步物化视图</li></ul> |
 | **StarRocks 2.4 异步物化视图** | 是 | 是 | 否 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持基于 Default Catalog 的多表构建 |
-| **同步物化视图（Rollup）** | 仅部分聚合算子 | 否 | 是 | 导入同步刷新 | 仅支持基于 Default Catalog 的单表构建 |
+| **同步物化视图（Rollup）** | 仅部分[聚合函数](#聚合函数匹配关系) | 否 | 是 | 导入同步刷新 | 仅支持基于 Default Catalog 的单表构建 |
 
 ## 相关概念
 
@@ -177,6 +177,19 @@ RollupIndexName: store_amt
 ```
 
 其中，`RollupIndexName` 为同步物化视图名称，`State` 项为 `FINISHED`，代表该同步物化视图构建完成。
+
+## 查询同步物化视图
+
+因为同步物化视图本质上是基表的索引而不是物理表，所以您只能使用 Hint `[_SYNC_MV_]` 查询同步物化视图：
+
+```SQL
+-- 请勿省略 Hint 中的括号[]。
+SELECT * FROM <mv_name> [_SYNC_MV_];
+```
+
+> **注意**
+>
+> 目前，StarRocks 会自动为同步物化视图中的列生成名称。您为同步物化视图中的列指定的 Alias 将无法生效。
 
 ## 使用同步物化视图查询
 
