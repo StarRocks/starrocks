@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
@@ -76,5 +77,16 @@ public class MetaVersion implements Writable {
             starrocksVersion = jsonObject.getAsJsonPrimitive(KEY_DORISDB_VERSION).getAsInt();
         }
         return new MetaVersion(communityVersion, starrocksVersion);
+    }
+
+    public static boolean isCompatible(long dataVersion, long codeVersion) {
+        if (dataVersion <= codeVersion) {
+            return true;
+        }
+
+        if (dataVersion == StarRocksFEMetaVersion.VERSION_4 && codeVersion == StarRocksFEMetaVersion.VERSION_3) {
+            return true;
+        }
+        return false;
     }
 }
