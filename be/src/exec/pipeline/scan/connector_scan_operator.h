@@ -50,7 +50,7 @@ public:
 
 struct ConnectorScanOperatorAdaptiveProcessor;
 
-class ConnectorScanOperator : public ScanOperator {
+class ConnectorScanOperator final : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                           ScanNode* scan_node);
@@ -117,6 +117,7 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
+    ConnectorScanOperator* _op = nullptr;
 };
 
 } // namespace pipeline
