@@ -213,7 +213,10 @@ public class InsertPlanner {
                 OlapTable olapTable = (OlapTable) targetTable;
                 boolean enableAutomaticPartition;
                 List<Long> targetPartitionIds = insertStmt.getTargetPartitionIds();
-                if (insertStmt.isSpecifyPartitionNames()) {
+                if (insertStmt.isSystem() && insertStmt.isPartitionNotSpecifiedInOverwrite()) {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+                } else if (insertStmt.isSpecifyPartitionNames()) {
                     Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = false;
                 } else if (insertStmt.isStaticKeyPartitionInsert()) {

@@ -76,3 +76,32 @@ INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-0
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: No partition specified in partition lists.')
 -- !result
+CREATE TABLE `duplicate_table_with_null1` ( `k1`  date, `k2`  datetime,`k3`  char(20), `k4`  varchar(20), `k5`  boolean) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY date_trunc('day', k2) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) PROPERTIES (  "replication_num" = "1", "storage_format" = "v2");
+-- result:
+-- !result
+CREATE TABLE `duplicate_table_with_null2` ( `k1`  date, `k2`  datetime,`k3`  char(20), `k4`  varchar(20), `k5`  boolean) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY date_trunc('month', k2) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) PROPERTIES (  "replication_num" = "1", "storage_format" = "v2");
+-- result:
+-- !result
+INSERT INTO `duplicate_table_with_null1` (`k1`, `k2`, `k3`, `k4`, `k5`)
+VALUES
+('2020-08-01', '2020-08-01 00:00:00', 'char1', 'varchar1', true),
+('2020-08-02', '2020-08-02 00:00:00', 'char2', 'varchar2', false),
+('2020-08-03', '2020-08-03 00:00:00', 'char3', 'varchar3', true),
+('2020-08-04', '2020-08-04 00:00:00', 'char4', 'varchar4', false);
+-- result:
+-- !result
+INSERT INTO `duplicate_table_with_null1` (`k1`, `k2`, `k3`, `k4`, `k5`)
+VALUES
+('2020-07-01', '2020-07-01 00:00:00', 'char1', 'varchar1', true),
+('2020-08-01', '2020-08-01 00:00:00', 'char2', 'varchar2', false)
+insert overwrite duplicate_table_with_null1 select * from duplicate_table_with_null2;
+-- result:
+E: (1064, "Getting syntax error at line 5, column 0. Detail message: Input 'insert' is not valid at this position.")
+-- !result
+select * from duplicate_table_with_null1;
+-- result:
+2020-08-04	2020-08-04 00:00:00	char4	varchar4	0
+2020-08-01	2020-08-01 00:00:00	char1	varchar1	1
+2020-08-02	2020-08-02 00:00:00	char2	varchar2	0
+2020-08-03	2020-08-03 00:00:00	char3	varchar3	1
+-- !result
