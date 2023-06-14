@@ -27,6 +27,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
+import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -239,7 +240,11 @@ public class StorageVolumeTest {
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
-        Assert.assertTrue(hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication().isEmpty());
+        Assert.assertEquals(HDFSCloudCredential.EMPTY,
+                hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasHdfsFsInfo());
     }
 
     @Test

@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 
 public class HDFSCloudCredential implements CloudCredential {
+    public static final String EMPTY = "empty";
+
     private String authentication;
     private String userName;
     private String password;
@@ -67,7 +69,7 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public boolean validate() {
-        if (authentication.isEmpty()) {
+        if (authentication.equals(EMPTY)) {
             return true;
         }
 
