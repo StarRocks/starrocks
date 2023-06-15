@@ -412,6 +412,8 @@ LoadFinishTime: 2023-06-12 18:31:08
 
 You can check the INSERT transaction status by using curl command.
 
+Launch a terminal, and execute the following command:
+
 ```Bash
 curl --location-trusted -u <username>:<password> \
   http://<fe_address>:<fe_http_port>/api/<db_name>/_load_info?label=<label_name>
