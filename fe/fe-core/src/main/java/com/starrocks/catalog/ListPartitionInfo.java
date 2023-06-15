@@ -323,11 +323,17 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     public String getValuesFormat(long partitionId) {
-        if (!this.idToLiteralExprValues.isEmpty()) {
-            return this.valuesToString(this.idToLiteralExprValues.get(partitionId));
+        if (!idToLiteralExprValues.isEmpty()) {
+            List<LiteralExpr> literalExprs = idToLiteralExprValues.get(partitionId);
+            if (literalExprs != null) {
+                return this.valuesToString(literalExprs);
+            }
         }
-        if (!this.idToMultiLiteralExprValues.isEmpty()) {
-            return this.multiValuesToString(this.idToMultiLiteralExprValues.get(partitionId));
+        if (!idToMultiLiteralExprValues.isEmpty()) {
+            List<List<LiteralExpr>> lists = idToMultiLiteralExprValues.get(partitionId);
+            if (lists != null) {
+                return this.multiValuesToString(lists);
+            }
         }
         return "";
     }
