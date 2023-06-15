@@ -15,6 +15,7 @@
 #pragma once
 
 #include <glog/logging.h>
+
 #include <orc/OrcFile.hh>
 
 namespace starrocks {

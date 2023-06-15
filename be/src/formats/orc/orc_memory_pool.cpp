@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <glog/logging.h>
+
 #include <orc/OrcFile.hh>
 
 namespace starrocks {
@@ -30,9 +31,7 @@ public:
         return p;
     }
 
-    void free(char* p) override {
-        std::free(p);
-    }
+    void free(char* p) override { std::free(p); }
 };
 
 orc::MemoryPool* getOrcMemoryPool() {
