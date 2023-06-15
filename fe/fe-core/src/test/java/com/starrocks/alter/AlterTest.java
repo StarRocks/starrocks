@@ -2267,4 +2267,107 @@ public class AlterTest {
         AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
         alter.processAlterTable(stmt);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testDropListPartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE t_recharge_detail DROP PARTITION p2 force;";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testAutoPartitionTableUnsupported() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE site_access_date_trunc ADD PARTITION p20210101 VALUES [(\"2021-01-01\"), (\"2021-01-02\"));";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    @Test(expected = AnalysisException.class)
+    public void testAutoPartitionTableUnsupported2() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE site_access_time_slice\n" +
+                "ADD PARTITIONS START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 1 day)";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    @Test(expected = AnalysisException.class)
+    public void testAutoPartitionTableUnsupported3() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE site_access_date_trunc\n" +
+                "ADD PARTITIONS START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 2 day)";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    @Test
+    public void testAlterMvWithResourceGroup() throws Exception {
+        starRocksAssert.executeResourceGroupDdlSql("create resource group if not exists mv_rg" +
+                "   with (" +
+                "   'cpu_core_limit' = '10'," +
+                "   'mem_limit' = '20%'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'mv'" +
+                "    );");
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `mv2` (a comment \"a1\", b comment \"b2\", c)\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(a) BUCKETS 12\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"resource_group\" = \"mv_rg\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT k1, k2, v1 from test.tbl1");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv2");
+        Assert.assertEquals("mv_rg", mv.getTableProperty().getResourceGroup());
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER MATERIALIZED VIEW mv2\n" +
+                "set (\"resource_group\" =\"\" )";
+        AlterMaterializedViewStmt alterTableStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt);
+        Assert.assertEquals("", mv.getTableProperty().getResourceGroup());
+        sql = "ALTER MATERIALIZED VIEW mv2\n" +
+                "set (\"resource_group\" =\"not_exist_rg\" )";
+        AlterMaterializedViewStmt alterTableStmt2 =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertThrows("resource_group not_exist_rg does not exist.",
+                DdlException.class, () -> GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt2));
+        sql = "ALTER MATERIALIZED VIEW mv2\n" +
+                "set (\"resource_group\" =\"mv_rg\" )";
+        AlterMaterializedViewStmt alterTableStmt3 =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt3);
+        Assert.assertEquals("mv_rg", mv.getTableProperty().getResourceGroup());
+    }
+
+    @Test(expected = DdlException.class)
+    public void testAlterListPartitionUseBatchBuildPartition() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE t2 (\n" +
+                "    dt datetime  not null,\n" +
+                "    user_id  bigint  not null,\n" +
+                "    recharge_money decimal(32,2) not null, \n" +
+                "    province varchar(20) not null,\n" +
+                "    id varchar(20) not null\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(dt)\n" +
+                "PARTITION BY (dt)\n" +
+                "DISTRIBUTED BY HASH(`dt`) BUCKETS 10 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE t2 ADD PARTITIONS START (\"2021-01-04\") END (\"2021-01-06\") EVERY (INTERVAL 1 DAY);";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+>>>>>>> ffbb6a16c ([BugFix] Fix unfriendly tips for creating partitions in batches (#25266))
 }

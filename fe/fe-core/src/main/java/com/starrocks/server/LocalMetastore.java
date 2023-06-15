@@ -845,6 +845,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     Lists.newArrayList(((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()),
                     addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
+<<<<<<< HEAD
             db.readLock();
             RangePartitionInfo rangePartitionInfo;
             Map<String, String> tableProperties;
@@ -859,10 +860,13 @@ public class LocalMetastore implements ConnectorMetadata {
             } finally {
                 db.readUnlock();
             }
+=======
+>>>>>>> ffbb6a16c ([BugFix] Fix unfriendly tips for creating partitions in batches (#25266))
 
-            if (rangePartitionInfo == null) {
-                throw new DdlException("Alter batch get partition info failed.");
+            if (!(partitionInfo instanceof RangePartitionInfo)) {
+                throw new DdlException("Batch creation of partitions only support range partition tables.");
             }
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
             if (partitionColumns.size() != 1) {
