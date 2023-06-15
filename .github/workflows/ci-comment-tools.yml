@@ -4,10 +4,6 @@ on:
   issue_comment:
     types: [ created ]
 
-concurrency:
-  group: ${{ github.event.number }}
-  cancel-in-progress: true
-
 permissions:
   checks: write
   actions: write
