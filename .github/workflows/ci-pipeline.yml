@@ -28,8 +28,24 @@ permissions:
   statuses: write
 
 jobs:
+
+  sync-checker:
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.pull_request.title, '(sync #') &&
+      !contains(github.event.pull_request.labels.*.name, 'sync') &&
+      (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+    name: RUN CHECKER
+    steps:
+      - run: echo "success"
+      - run: |
+          echo "${{ github.event.pull_request.title }}"
+          echo "${{ github.head_ref }}"
+
+
   doc-checker:
     runs-on: ubuntu-latest
+    needs: sync-checker
     name: DOC FILTER
     outputs:
       output1: ${{ steps.doc-changes-info.outputs.doc }}
@@ -100,6 +116,7 @@ jobs:
 
   be-checker:
     runs-on: ubuntu-latest
+    needs: sync-checker
     name: BE FILTER
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
@@ -127,7 +144,7 @@ jobs:
           echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   clang-format:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     needs: be-checker
     name: Clang-Format
     env:
@@ -167,12 +184,13 @@ jobs:
           bash build-support/check-format.sh
 
   thirdparty-update:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     needs: [ be-checker, clang-format ]
     name: Thirdparty Update
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
+      REPO: ${{ github.repository }}
     outputs:
       ip: ${{ steps.update-image.outputs.ip }}
       instance_id: ${{ steps.update-image.outputs.instance_id }}
@@ -218,7 +236,7 @@ jobs:
           fi
 
   be-ut:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     needs: [ be-checker, thirdparty-update ]
     timeout-minutes: 90
     name: BE UT
@@ -245,7 +263,7 @@ jobs:
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }}
 
       - name: clean ECI
         if: always()
@@ -269,6 +287,7 @@ jobs:
 
   fe-checker:
     runs-on: ubuntu-latest
+    needs: sync-checker
     name: FE FILTER
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
@@ -354,9 +373,9 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
-          
+
   fe-ut:
-    runs-on: [self-hosted]
+    runs-on: [self-hosted, normal]
     needs: fe-codestyle-check
     name: FE UT
     env:
@@ -397,7 +416,7 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
         if: always()
@@ -445,10 +464,12 @@ jobs:
       - name: UT Report
         if: always()
         uses: mikepenz/action-junit-report@v3
+        env:
+          github_token: ${{ secrets.PAT }}
+          token: ${{ secrets.PAT }}
         with:
           check_name: 'FE UT Report'
           detailed_summary: true
-          token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
 
       - name: Upload log
@@ -467,7 +488,7 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
   build:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     needs: [be-checker, fe-checker, be-ut, fe-ut, thirdparty-update]
     name: BUILD
     env:
@@ -499,7 +520,7 @@ jobs:
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER}
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }}
 
       - name: build result
         run: |
@@ -518,7 +539,7 @@ jobs:
           rm -f ${{ steps.run_build.outputs.RES_LOG }}
 
   deploy:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     if: always() && needs.build.result == 'success'
     needs: build
     name: DEPLOY SR
@@ -555,13 +576,15 @@ jobs:
         run: |
           set -x
           cd elastic-service
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output oss://starrocks-ci-release/${{steps.branch.outputs.branch}}/Release/pr/${{needs.build.outputs.build_output_tar}}
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output oss://${bucket_prefix}-ci-release/${{steps.branch.outputs.branch}}/Release/pr/${{needs.build.outputs.build_output_tar}}
 
       - run: |
           echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
 
   admit:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     name: ADMIT TEST
     needs: deploy
     if: always() && needs.deploy.result == 'success'
@@ -611,7 +634,7 @@ jobs:
           report_paths: 'StarRocksTest/result/*.xml'
 
   SQL-Tester:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     name: SQL-Tester
     needs: [ build, deploy ]
     if: always() && needs.deploy.result == 'success'
@@ -677,7 +700,7 @@ jobs:
           report_paths: 'test/*.xml'
 
   Teardown:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     name: Teardown
     needs: [ deploy, SQL-Tester, admit ]
     if: always() && needs.deploy.outputs.deploy_conf_file != ''
@@ -691,7 +714,7 @@ jobs:
           rm -rf ./elastic-service
           cp -rf /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
-          ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE
+          ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE --repository ${{ github.repository }}
 
       - name: Clean ECS
         run: |
