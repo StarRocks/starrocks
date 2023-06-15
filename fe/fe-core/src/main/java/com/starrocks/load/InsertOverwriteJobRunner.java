@@ -62,14 +62,14 @@ import static com.starrocks.load.InsertOverwriteJobState.OVERWRITE_FAILED;
 public class InsertOverwriteJobRunner {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobRunner.class);
 
-    private InsertOverwriteJob job;
+    private final InsertOverwriteJob job;
 
     private InsertStmt insertStmt;
     private StmtExecutor stmtExecutor;
     private ConnectContext context;
-    private long dbId;
-    private long tableId;
-    private String postfix;
+    private final long dbId;
+    private final long tableId;
+    private final String postfix;
 
     private long createPartitionElapse;
     private long insertElapse;
@@ -104,7 +104,8 @@ public class InsertOverwriteJobRunner {
     // there is no concurrent problem here
     public void cancel() {
         if (isFinished()) {
-            LOG.warn("cancel failed. insert overwrite job:{} already finished. state:{}", job.getJobState());
+            LOG.warn("cancel failed. insert overwrite job:{} already finished. state:{}", job.getJobId(),
+                    job.getJobState());
             return;
         }
         try {
@@ -259,7 +260,7 @@ public class InsertOverwriteJobRunner {
     private void executeInsert() throws Exception {
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
-        ExecPlan newPlan = new StatementPlanner().plan(insertStmt, context);
+        ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
         stmtExecutor.handleDMLStmt(newPlan, insertStmt);
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
