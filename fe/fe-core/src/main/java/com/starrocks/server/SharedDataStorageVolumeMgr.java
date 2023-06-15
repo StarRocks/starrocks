@@ -35,10 +35,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
 
     @Override
-    public StorageVolume getStorageVolumeByName(String svKey) {
+    public StorageVolume getStorageVolumeByName(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             try {
-                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStoreByName(svKey);
+                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStoreByName(svName);
                 if (fileStoreInfo == null) {
                     return null;
                 }
@@ -91,6 +91,16 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         GlobalStateMgr.getCurrentState().getStarOSAgent().removeFileStoreByName(sv.getName());
     }
 
+    @Override
+    public StorageVolume getDefaultStorageVolume() throws AnalysisException {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            if (defaultStorageVolumeId.isEmpty()) {
+                return getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
+            }
+            return getStorageVolume(getDefaultStorageVolumeId());
+        }
+    }
+
     public void createOrUpdateBuiltinStorageVolume() throws DdlException, AnalysisException, AlreadyExistsException {
         if (Config.cloud_native_storage_type.isEmpty()) {
             return;
@@ -119,7 +129,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 locations.add("s3://" + Config.aws_s3_path);
                 break;
             case "hdfs":
-                locations.add("hdfs://" + Config.cloud_native_hdfs_url);
+                locations.add(Config.cloud_native_hdfs_url);
                 break;
             case "azblob":
                 // TODO

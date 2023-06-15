@@ -248,9 +248,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.asyncRefreshContext = new AsyncRefreshContext();
             this.lastRefreshTime = 0;
         }
+        public MvRefreshScheme(RefreshType type) {
+            this.type = type;
+            this.moment = RefreshMoment.IMMEDIATE;
+            this.asyncRefreshContext = new AsyncRefreshContext();
+            this.lastRefreshTime = 0;
+        }
 
         public boolean isIncremental() {
             return this.type.equals(RefreshType.INCREMENTAL);
+        }
+
+        public boolean isSync() {
+            return this.type.equals(RefreshType.SYNC);
         }
 
         public RefreshMoment getMoment() {
@@ -405,6 +415,23 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
+    }
+
+    // Used for sync mv
+    public MaterializedView(Database db, String mvName,
+                            MaterializedIndexMeta indexMeta, OlapTable baseTable,
+                            PartitionInfo partitionInfo, DistributionInfo distributionInfo,
+                            MvRefreshScheme refreshScheme) {
+        this(indexMeta.getIndexId(), db.getId(), mvName, indexMeta.getSchema(), indexMeta.getKeysType(),
+                partitionInfo, distributionInfo, refreshScheme);
+        Preconditions.checkState(baseTable.getIndexIdByName(mvName) != null);
+        // copy olap table into mv.
+        baseTable.copyOnlyForQuery(this);
+        this.partitionInfo = partitionInfo;
+        this.defaultDistributionInfo = distributionInfo;
+        this.baseIndexId = indexMeta.getIndexId();
+        this.baseTableInfos = Lists.newArrayList();
+        this.baseTableInfos.add(new BaseTableInfo(db.getId(), db.getFullName(), baseTable.getId()));
     }
 
     public MvId getMvId() {
@@ -781,7 +808,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public boolean isForceExternalTableQueryRewrite() {
-        return tableProperty.getForceExternalTableQueryRewrite();
+        return tableProperty != null && tableProperty.getForceExternalTableQueryRewrite();
     }
 
     public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
@@ -836,14 +863,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             StringBuilder colSb = new StringBuilder();
             colSb.append(column.getName());
             if (!Strings.isNullOrEmpty(column.getComment())) {
-                colSb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
+                colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
             }
             colDef.add(colSb.toString());
         }
         sb.append(Joiner.on(", ").join(colDef));
         sb.append(")");
         if (!Strings.isNullOrEmpty(this.getComment())) {
-            sb.append("\nCOMMENT \"").append(this.getComment()).append("\"");
+            sb.append("\nCOMMENT \"").append(this.getDisplayComment()).append("\"");
         }
 
         // partition
@@ -969,6 +996,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         appendUniqueProperties(sb);
 
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(entry.getKey())
+                        .append("\" = \"").append(entry.getValue()).append("\"");
+            }
+        }
+
         sb.append("\n)");
         String define = this.getSimpleDefineSql();
         if (StringUtils.isEmpty(define) || !simple) {
@@ -1041,8 +1075,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public Set<String> getPartitionNamesToRefreshForMv() {
-        PartitionInfo partitionInfo = getPartitionInfo();
+        if (refreshScheme.isSync()) {
+            return Sets.newHashSet();
+        }
 
+        PartitionInfo partitionInfo = getPartitionInfo();
         boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view

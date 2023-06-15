@@ -110,10 +110,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // invalid: -1
     protected long cardinality;
 
-    // number of nodes on which the plan tree rooted at this node would execute;
-    // set in computeStats(); invalid: -1
-    protected int numNodes;
-
     // sum of tupleIds' avgSerializedSizes; set in computeStats()
     protected float avgRowSize;
 
@@ -254,10 +250,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     public long getCardinality() {
         return cardinality;
-    }
-
-    public int getNumNodes() {
-        return numNodes;
     }
 
     public float getAvgRowSize() {
@@ -551,7 +543,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     /**
-     * Computes planner statistics: avgRowSize, numNodes, cardinality.
+     * Computes planner statistics: avgRowSize, cardinality.
      * Subclasses need to override this.
      * Assumes that it has already been called on all children.
      * This is broken out of finalize() so that it can be called separately
@@ -562,9 +554,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         avgRowSize = 0.0F;
         for (TupleId tid : tupleIds) {
             avgRowSize += 4;
-        }
-        if (!children.isEmpty()) {
-            numNodes = getChild(0).numNodes;
         }
     }
 

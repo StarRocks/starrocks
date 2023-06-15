@@ -23,12 +23,6 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.HiveColumnStats;
-import com.starrocks.connector.hive.HiveCommonStats;
-import com.starrocks.connector.hive.HiveMetaClient;
-import com.starrocks.connector.hive.HiveMetastore;
-import com.starrocks.connector.hive.HivePartitionStats;
-import com.starrocks.connector.hive.HiveTableName;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -101,7 +95,8 @@ public class HiveMetastoreTest {
     public void testGetPartitionKeys() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
-        Assert.assertEquals(Lists.newArrayList("col1"), metastore.getPartitionKeys("db1", "tbl1"));
+        Assert.assertEquals(Lists.newArrayList("col1"), metastore.getPartitionKeysByValue("db1", "tbl1",
+                HivePartitionValue.ALL_PARTITION_VALUES));
     }
 
     @Test

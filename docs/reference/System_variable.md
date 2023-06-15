@@ -405,6 +405,14 @@ The variables are described in alphabetical order. Variables with the `global` l
 
   From v3.0 onwards, StarRocks adaptively adjusts this variable based on query parallelism.
 
+* pipeline_profile_level
+
+  Controls the level of the query profile. A query profile often has five layers: Fragment, FragmentInstance, Pipeline, PipelineDriver, and Operator. Different levels provide different details of the profile:
+
+  * 0: StarRocks combines metrics of the profile and shows only a few core metrics.
+  * 1: default value. StarRocks simplifies the profile and combines metrics of the profile to reduce profile layers.
+  * 2: StarRocks retains all the layers of the profile. The profile size is large in this scenario, especially when the SQL query is complex. This value is not recommended.
+
 * query_cache_entry_max_bytes (2.5 and later)
 
   The threshold for triggering the Passthrough mode. Valid values: 0 to 9223372036854775807. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by `query_cache_entry_max_bytes` or `query_cache_entry_max_rows`, the query is switched to Passthrough mode.

@@ -213,6 +213,20 @@ Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
     return Status::OK();
 }
 
+void ArrayColumn::remove_first_n_values(size_t count) {
+    if (count >= _offsets->size()) {
+        count = _offsets->size() - 1;
+    }
+
+    size_t offset = _offsets->get_data()[count];
+    _elements->remove_first_n_values(offset);
+    _offsets->remove_first_n_values(count);
+
+    for (size_t i = 0; i < _offsets->size(); i++) {
+        _offsets->get_data()[i] -= offset;
+    }
+}
+
 uint32_t ArrayColumn::serialize(size_t idx, uint8_t* pos) {
     uint32_t offset = _offsets->get_data()[idx];
     uint32_t array_size = _offsets->get_data()[idx + 1] - offset;
@@ -397,20 +411,9 @@ bool ArrayColumn::equals(size_t left, const Column& rhs, size_t right) const {
     if (lhs_end - lhs_offset != rhs_end - rhs_offset) {
         return false;
     }
-    auto lhs_elements = ColumnHelper::get_data_column(_elements.get());
-    auto rhs_elements = ColumnHelper::get_data_column(rhs_array._elements.get());
     while (lhs_offset < lhs_end) {
-        if (_elements->is_null(lhs_offset)) {
-            if (!rhs_array._elements->is_null(rhs_offset)) {
-                return false;
-            }
-        } else {
-            if (rhs_array._elements->is_null(rhs_offset)) {
-                return false;
-            }
-            if (!lhs_elements->equals(lhs_offset, *rhs_elements, rhs_offset)) {
-                return false;
-            }
+        if (!_elements->equals(lhs_offset, *(rhs_array._elements.get()), rhs_offset)) {
+            return false;
         }
         lhs_offset++;
         rhs_offset++;

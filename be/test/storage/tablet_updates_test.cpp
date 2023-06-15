@@ -1674,29 +1674,34 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
     DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
 
     int N = 100;
+    int loop = 4;
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet_with_sort_key(rand(), rand(), {1, 2});
-    std::vector<int64_t> keys;
-    for (int i = 0; i < N; i++) {
-        keys.push_back(i);
+
+    std::vector<int64_t> sorted_keys;
+    for (int i = 0; i < 100; i++) {
+        for (int j = 0; j < loop; j++) {
+            sorted_keys.emplace_back(100 * j + i);
+        }
     }
-    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
-    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    for (int i = 0; i < loop; i++) {
+        std::vector<int64_t> keys;
+        for (int j = 0; j < N; j++) {
+            keys.push_back(i * 100 + j);
+        }
+        ASSERT_TRUE(_tablet->rowset_commit(2 + i, create_rowset(_tablet, keys)).ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    ASSERT_EQ(N * loop, read_tablet(_tablet, loop + 1));
     const auto& best_tablet =
             StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
     EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 4, keys));
+    EXPECT_EQ(N * loop, read_tablet_and_compare(best_tablet, loop + 1, sorted_keys));
     ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
-    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), loop + 2);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 }
@@ -1862,29 +1867,35 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
     DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
 
     int N = 100;
+    int loop = 4;
     srand(GetCurrentTimeMicros());
-    _tablet = create_tablet_with_sort_key(rand(), rand(), {1});
-    std::vector<int64_t> keys;
-    for (int i = 0; i < N; i++) {
-        keys.push_back(i);
+    _tablet = create_tablet_with_sort_key(rand(), rand(), {1, 2});
+    std::vector<int64_t> sorted_keys;
+    for (int i = 0; i < 100; i++) {
+        for (int j = 0; j < loop; j++) {
+            sorted_keys.emplace_back(100 * j + i);
+        }
     }
-    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
-    ASSERT_EQ(N, read_tablet(_tablet, 4));
+
+    for (int i = 0; i < loop; i++) {
+        std::vector<int64_t> keys;
+        for (int j = 0; j < N; j++) {
+            keys.push_back(i * 100 + j);
+        }
+        ASSERT_TRUE(_tablet->rowset_commit(2 + i, create_rowset(_tablet, keys)).ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+    ASSERT_EQ(N * loop, read_tablet(_tablet, loop + 1));
     const auto& best_tablet =
             StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
     EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    EXPECT_EQ(N, read_tablet_and_compare(best_tablet, 4, keys));
+    EXPECT_EQ(N * loop, read_tablet_and_compare(best_tablet, loop + 1, sorted_keys));
     ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
-    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), loop + 2);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 }
@@ -2003,6 +2014,7 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
             column_mapping->ref_column = column_index;
         }
     }
+    ASSERT_TRUE(chunk_changer->prepare().ok());
     ASSERT_TRUE(tablet_to_schema_change->updates()->convert_from(_tablet, 4, chunk_changer.get()).ok());
 
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed(tablet_to_schema_change, 4, keys));
@@ -2037,6 +2049,7 @@ void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_in
             column_mapping->ref_column = column_index;
         }
     }
+    ASSERT_TRUE(chunk_changer->prepare().ok());
     ASSERT_TRUE(tablet_to_schema_change->rowset_commit(3, create_rowset(tablet_to_schema_change, keys3)).ok());
     ASSERT_TRUE(tablet_to_schema_change->rowset_commit(4, create_rowset(tablet_to_schema_change, keys4)).ok());
 
@@ -2073,6 +2086,7 @@ void TabletUpdatesTest::test_convert_from_with_mutiple_segment(bool enable_persi
             column_mapping->ref_column = column_index;
         }
     }
+    ASSERT_TRUE(chunk_changer->prepare().ok());
     std::vector<int64_t> ori_keys;
     for (int i = 100; i < 200; i++) {
         ori_keys.emplace_back(i);
@@ -2137,9 +2151,9 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
-            column_mapping->ref_base_reader_column_index = i;
         }
     }
+    ASSERT_TRUE(chunk_changer->prepare().ok());
 
     ASSERT_TRUE(tablet_with_sort_key1->updates()->reorder_from(_tablet, 4, chunk_changer.get()).ok());
 
@@ -2154,9 +2168,9 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
-            column_mapping->ref_base_reader_column_index = i;
         }
     }
+    ASSERT_TRUE(chunk_changer->prepare().ok());
     ASSERT_TRUE(tablet_with_sort_key2->updates()->reorder_from(tablet_with_sort_key1, 4, chunk_changer.get()).ok());
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed_sort_key2(tablet_with_sort_key2, 4, keys));
 }
@@ -3182,7 +3196,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
         std::sort(rowids.begin(), rowids.end());
         rowids_by_rssid.emplace(i, rowids);
     }
-    tablet->updates()->get_column_values(read_column_ids, false, rowids_by_rssid, &read_columns, nullptr);
+    tablet->updates()->get_column_values(read_column_ids, 0, false, rowids_by_rssid, &read_columns, nullptr);
     auto values_str_generator = [&rowids_by_rssid](const int modulus, const int base) {
         std::stringstream ss;
         ss << "[";
@@ -3202,7 +3216,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
     for (const auto& read_column : read_columns) {
         read_column->reset_column();
     }
-    tablet->updates()->get_column_values(read_column_ids, true, rowids_by_rssid, &read_columns, nullptr);
+    tablet->updates()->get_column_values(read_column_ids, 0, true, rowids_by_rssid, &read_columns, nullptr);
     ASSERT_EQ(std::string("[0, ") + values_str_generator(100, 1).substr(1), read_columns[0]->debug_string());
     ASSERT_EQ(std::string("[0, ") + values_str_generator(1000, 2).substr(1), read_columns[1]->debug_string());
 }

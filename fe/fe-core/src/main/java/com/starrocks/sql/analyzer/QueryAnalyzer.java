@@ -33,7 +33,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.HiveView;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
@@ -289,11 +290,19 @@ public class QueryAnalyzer {
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
                     return viewRelation;
+                } else if (table instanceof HiveView) {
+                    HiveView hiveView = (HiveView) table;
+                    QueryStatement queryStatement = hiveView.getQueryStatement();
+                    View view = new View(hiveView.getId(), hiveView.getName(), hiveView.getFullSchema());
+                    view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
+                    ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+                    viewRelation.setAlias(tableRelation.getAlias());
+                    return viewRelation;
                 } else {
                     if (tableRelation.getTemporalClause() != null) {
                         if (table.getType() != Table.TableType.MYSQL) {
                             throw unsupportedException(
-                                    "unsupported table type for temporal clauses: " + table.getType() +
+                                    "Unsupported table type for temporal clauses: " + table.getType() +
                                             "; only external MYSQL tables support temporal clauses");
                         }
                     }
@@ -302,7 +311,7 @@ public class QueryAnalyzer {
                         tableRelation.setTable(table);
                         return tableRelation;
                     } else {
-                        throw unsupportedException("unsupported scan table type: " + table.getType());
+                        throw unsupportedException("Unsupported scan table type: " + table.getType());
                     }
                 }
             } else {
@@ -892,7 +901,7 @@ public class QueryAnalyzer {
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
-                Pair<Table, MaterializedIndex> materializedIndex =
+                Pair<Table, MaterializedIndexMeta> materializedIndex =
                         metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
                 if (materializedIndex != null) {
                     Table mvTable = materializedIndex.first;
@@ -901,9 +910,10 @@ public class QueryAnalyzer {
                     try {
                         // Add read lock to avoid concurrent problems.
                         database.readLock();
-                        OlapTable mvOlapTable = ((OlapTable) mvTable).copyOnlyForQuery();
+                        OlapTable mvOlapTable = new OlapTable();
+                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
-                        mvOlapTable.setBaseIndexId(materializedIndex.second.getId());
+                        mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
                         table = mvOlapTable;
                     } finally {
                         database.readUnlock();

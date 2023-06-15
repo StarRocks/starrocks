@@ -4,27 +4,29 @@ create table t1(k int, v int) duplicate key(k);
 -- !result
 create table t2(k int, v int) primary key(k);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Random distribution must be used in DUP_KEYS.')
+E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
 -- !result
 create table t2(k int, v int) primary key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. Detail message: Random distribution must be used in DUP_KEYS.')
+E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. Detail message: Random distribution must be used in DUP_KEYS or AGG_KEYS without replace.')
 -- !result
 create table t3(k int, v int) unique key(k);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Random distribution must be used in DUP_KEYS.')
+E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
 -- !result
 create table t3(k int, v int) unique key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 44 to line 1, column 74. Detail message: Random distribution must be used in DUP_KEYS.')
+E: (1064, 'Getting analyzing error from line 1, column 44 to line 1, column 74. Detail message: Random distribution must be used in DUP_KEYS or AGG_KEYS without replace.')
 -- !result
 create table t4(k int, v int sum) aggregate key(k);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Random distribution must be used in DUP_KEYS.')
+E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
 -- !result
 create table t4(k int, v int sum) aggregate key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 51 to line 1, column 81. Detail message: Random distribution must be used in DUP_KEYS.')
+-- !result
+drop table t4;
+-- result:
 -- !result
 -- name: test_create_default_random_distribution_table
 create table t(k int, v int);

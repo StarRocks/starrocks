@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
@@ -74,6 +75,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+
+import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
 
 /**
  * Optimizer's entrance class
@@ -219,10 +222,15 @@ public class Optimizer {
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !optimizerConfig.isRuleBased()) {
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
-                MvRewritePreprocessor preprocessor =
+            MvRewritePreprocessor preprocessor =
                         new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
                 preprocessor.prepareMvCandidatesForPlan();
+            }
+            if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
+                try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessSyncMvs")) {
+                    preprocessor.prepareSyncMvCandidatesForPlan(connectContext);
+                }
             }
         }
     }
@@ -303,7 +311,7 @@ public class Optimizer {
             }
         }
 
-        if (sessionVariable.isEnableSyncMaterializedViewRewrite()) {
+        if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW) && sessionVariable.isEnableSyncMaterializedViewRewrite()) {
             // Add a config to decide whether to rewrite sync mv.
             tree = new MaterializedViewRule().transform(tree, context).get(0);
             deriveLogicalProperty(tree);
@@ -335,6 +343,8 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
+
+        ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
 
         if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
@@ -536,7 +546,10 @@ public class Optimizer {
     private OptExpression extractBestPlan(PhysicalPropertySet requiredProperty,
                                           Group rootGroup) {
         GroupExpression groupExpression = rootGroup.getBestExpression(requiredProperty);
-        Preconditions.checkNotNull(groupExpression, "no executable plan for this sql");
+        if (groupExpression == null) {
+            String msg = "no executable plan for this sql. group: %s. required property: %s";
+            throw new IllegalArgumentException(String.format(msg, rootGroup, requiredProperty));
+        }
         List<PhysicalPropertySet> inputProperties = groupExpression.getInputProperties(requiredProperty);
 
         List<OptExpression> childPlans = Lists.newArrayList();

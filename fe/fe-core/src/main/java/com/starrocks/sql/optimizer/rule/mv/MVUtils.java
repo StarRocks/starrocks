@@ -16,8 +16,15 @@
 package com.starrocks.sql.optimizer.rule.mv;
 
 import com.starrocks.analysis.CaseExpr;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -69,6 +76,7 @@ public class MVUtils {
         return operator.isColumnRef();
     }
 
+
     public static String getMVColumnName(Column mvColumn, String functionName, String queryColumn) {
         // Support count(column) MV
         // The origin MV design is bad !!!
@@ -76,5 +84,81 @@ public class MVUtils {
             return "mv_" + FunctionSet.COUNT + "_" + queryColumn;
         }
         return "mv_" + mvColumn.getAggregationType().name().toLowerCase() + "_" + queryColumn;
+    }
+
+    // NOTE:
+    // 1. check all materialized view column's defineExpr in MaterializedViewRule:
+    // - only support slot-ref for non-aggregate column.
+    // - only support specific function  for aggregate column.
+    // 2. MV with Complex expressions will be used to rewrite query by AggregatedMaterializedViewRewriter.
+    public static boolean containComplexExpresses(MaterializedIndexMeta mvMeta) {
+        for (Column mvColumn : mvMeta.getSchema()) {
+            Expr definedExpr = mvColumn.getDefineExpr();
+            if (definedExpr == null) {
+                continue;
+            }
+
+            if (mvColumn.isAggregated()) {
+                if (definedExpr instanceof SlotRef) {
+                    continue;
+                } else if (definedExpr instanceof FunctionCallExpr) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) definedExpr;
+                    String argFuncName = functionCallExpr.getFnName().getFunction();
+                    Expr arg0FuncExpr = functionCallExpr.getChild(0);
+                    if (!(arg0FuncExpr instanceof SlotRef)) {
+                        return true;
+                    }
+                    switch (mvColumn.getAggregationType()) {
+                        case BITMAP_UNION: {
+                            if (!argFuncName.equalsIgnoreCase(FunctionSet.TO_BITMAP)) {
+                                return true;
+                            }
+                            break;
+                        }
+                        case HLL_UNION: {
+                            if (!argFuncName.equalsIgnoreCase(FunctionSet.HLL_HASH)) {
+                                return true;
+                            }
+                            break;
+                        }
+                        case PERCENTILE_UNION: {
+                            if (!argFuncName.equalsIgnoreCase(FunctionSet.PERCENTILE_HASH)) {
+                                return true;
+                            }
+                            break;
+                        }
+                        default:
+                            return true;
+                    }
+                } else if (definedExpr instanceof CaseExpr) {
+                    CaseExpr caseExpr = (CaseExpr) definedExpr;
+                    if (mvColumn.getAggregationType() != AggregateType.SUM) {
+                        return true;
+                    }
+                    if (caseExpr.getChildren().size() != 3) {
+                        return true;
+                    }
+                    if (!(caseExpr.getChild(0) instanceof IsNullPredicate) ||
+                            !(((IsNullPredicate) caseExpr.getChild(0)).getChild(0) instanceof SlotRef)) {
+                        return true;
+                    }
+                    if (!(caseExpr.getChild(1) instanceof IntLiteral) ||
+                            ((IntLiteral) (caseExpr.getChild(1))).getLongValue() != 0L) {
+                        return true;
+                    }
+                    if (!(caseExpr.getChild(2) instanceof IntLiteral) ||
+                            ((IntLiteral) (caseExpr.getChild(2))).getLongValue() != 1L) {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            } else {
+                if (!(definedExpr instanceof SlotRef)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

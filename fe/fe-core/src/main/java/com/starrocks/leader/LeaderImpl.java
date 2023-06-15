@@ -1214,7 +1214,8 @@ public class LeaderImpl {
                 LOG.info("commitRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",
                         request.getTxn_id(), addr.toString());
                 response = FrontendServiceProxy.call(addr,
-                        Config.thrift_rpc_timeout_ms,
+                        // commit txn might take a while, so add transaction timeout
+                        Config.thrift_rpc_timeout_ms + Config.external_table_commit_timeout_ms,
                         Config.thrift_rpc_retry_times,
                         client -> client.commitRemoteTxn(request));
             } catch (Exception e) {
@@ -1239,19 +1240,16 @@ public class LeaderImpl {
 
         try {
             TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.getCommit_attachment());
-            long timeoutMs = request.isSetCommit_timeout_ms() ? request.getCommit_timeout_ms() : 5000;
-            // Make publish timeout is less than thrift_rpc_timeout_ms
-            // Otherwise, the publish will be successful but commit timeout in FE
-            // It will results as error like "call frontend service failed"
-            timeoutMs = timeoutMs * 3 / 4;
+            long timeoutMs = request.isSetCommit_timeout_ms() ? request.getCommit_timeout_ms() :
+                    Config.external_table_commit_timeout_ms;
             boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                     db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),
                     TabletFailInfo.fromThrift(request.getFail_infos()),
                     timeoutMs, attachment);
-            if (!ret) {
-                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-                status.setError_msgs(Lists.newArrayList("commit and publish txn failed"));
+            if (!ret) { // timeout
+                TStatus status = new TStatus(TStatusCode.TIMEOUT);
+                status.setError_msgs(Lists.newArrayList("commit and publish txn timeout"));
                 response.setStatus(status);
                 return response;
             }

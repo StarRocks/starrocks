@@ -246,6 +246,8 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
 }
 
 void GlobalDriverExecutor::submit(DriverRawPtr driver) {
+    driver->start_timers();
+
     if (driver->is_precondition_block()) {
         driver->set_driver_state(DriverState::PRECONDITION_BLOCK);
         driver->mark_precondition_not_ready();

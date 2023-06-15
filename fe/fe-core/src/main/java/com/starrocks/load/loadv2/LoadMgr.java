@@ -385,14 +385,21 @@ public class LoadMgr implements Writable {
         return (currentTimeMs - job.getFinishTimestamp()) / 1000 > Config.label_keep_max_second;
     }
 
-    public void removeOldLoadJob() {
-        // 1. record failed insert job
-        for (Map.Entry<Long, LoadJob> entry : idToLoadJob.entrySet()) {
-            LoadJob job = entry.getValue();
-            if (job.getJobType() != EtlJobType.INSERT) {
-                continue;
-            }
-            TransactionStatus st = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(job.getDbId(), job.getLabel());
+    public void cleanResidualJob() {
+        // clean residual insert job
+        readLock();
+        List<LoadJob> insertJobs;
+        try {
+            insertJobs = idToLoadJob.values().stream()
+                    .filter(job -> job.getJobType() == EtlJobType.INSERT && !job.isCompleted())
+                    .collect(Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+
+        insertJobs.forEach(job -> {
+            TransactionStatus st = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(
+                    job.getDbId(), job.getLabel());
             if (st == TransactionStatus.UNKNOWN) {
                 try {
                     recordFinishedOrCacnelledLoadJob(
@@ -402,9 +409,11 @@ public class LoadMgr implements Writable {
                     LOG.warn("failed to abort job: {}", job.getLabel(), e);
                 }
             }
-        }
+        });
+    }
 
-        // 2. clean expired load job
+    public void removeOldLoadJob() {
+        // clean expired load job
         long currentTimeMs = System.currentTimeMillis();
 
         writeLock();
@@ -617,7 +626,12 @@ public class LoadMgr implements Writable {
     }
 
     public LoadJob getLoadJob(long jobId) {
-        return idToLoadJob.get(jobId);
+        readLock();
+        try {
+            return idToLoadJob.get(jobId);
+        } finally {
+            readUnlock();
+        }
     }
 
     public void prepareJobs() {

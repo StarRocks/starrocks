@@ -86,8 +86,7 @@ public class DecimalTypeTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0";
+                "     avgRowSize=3.0\n";
         assertContains(explain, snippet);
     }
 

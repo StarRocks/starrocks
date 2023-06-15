@@ -133,6 +133,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | Parameter                                     | Unit | Default                | Description                                                  |
 | --------------------------------------------- | ---- | ---------------------- | ------------------------------------------------------------ |
 | enable_strict_storage_medium_check            | -    | FALSE                  | Whether the FE strictly checks the storage medium of BEs when users create tables. If this parameter is set to `TRUE`, the FE checks the storage medium of BEs when users create tables and returns an error if the storage medium of the BE is different from the `storage_medium` parameter specified in the CREATE TABLE statement. For example, the storage medium specified in the CREATE TABLE statement is SSD but the actual storage medium of BEs is HDD. As a result, the table creation fails. If this parameter is `FALSE`, the FE does not check the storage medium of BEs when users create table. |
+| enable_auto_tablet_distribution               | -    | TRUE                   | Whether to automatically set the number of buckets. <ul><li> If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets. For the strategy of automatically setting the number of buckets, see [Determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).</li><li>If this parameter is set to `FALSE`, you need to manually specify the the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.</li></ul>|
+Starting from version 2.5.7, StarRocks supports setting this parameter.
 | capacity_used_percent_high_water              | -    | 0.75                   | The upper limit of disk usage on a BE. If this value is exceeded, table creation or clone jobs will not be sent to this BE, until the disk usage returns to normal. |
 | storage_high_watermark_usage_percent          | %    | 85                     | The upper limit of storage space usage for BE's storage directory.  If this value is exceeded, data can no longer be stored in this storage path. |
 | storage_min_left_capacity_bytes               | Byte | 2 \* 1024 \* 1024 \* 1024 | The minimum remaining storage space allowed in the BE storage directory, in Bytes. If this value is exceeded, data can no longer be stored in this storage path. |
@@ -353,7 +355,6 @@ BE dynamic parameters are as follows.
 | load_error_log_reserve_hours | 48 | Hour | The time for which data loading logs are reserved. |
 | streaming_load_max_mb | 10240 | MB | The maximum size of a file that can be streamed into StarRocks. |
 | streaming_load_max_batch_size_mb | 100 | MB | The maximum size of a JSON file that can be streamed into StarRocks. |
-| | | | |
 | memory_maintenance_sleep_time_s | 10 | Second | The time interval at which TCMalloc GC is triggered. StarRocks executes GC periodically, and returns the released memory memory to the operating system. |
 | write_buffer_size | 104857600 | Byte | The buffer size of MemTable in the memory. This configuration item is the threshold to trigger a flush. |
 | tablet_stat_cache_update_interval_second | 300 | Second | The time interval at which to update Tablet Stat Cache. |
@@ -379,7 +380,7 @@ BE dynamic parameters are as follows.
 | size_tiered_level_multiple | 5 | N/A | The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy. |
 | size_tiered_min_level_size | 131072 | Byte | The data size of the minimum level in the Size-tiered Compaction strategy. Rowsets smaller than this value immediately trigger the data compaction. |
 | storage_page_cache_limit | 20% | N/A | The PageCache size. STRING. It can be specified as size, for example, `20G`, `20480M`, `20971520K`, or `21474836480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`. |
-|internal_service_async_thread_num        | -    | 10                                              | The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs. |
+| internal_service_async_thread_num | 10 | N/A | The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs. |
 
 ### Configure BE static parameters
 
@@ -505,7 +506,7 @@ BE static parameters are as follows.
 | enable_event_based_compaction_framework | 0 | N/A | |
 | enable_load_colocate_mv | 0 | N/A | |
 | enable_metric_calculator | 0 | N/A | |
-| enable_new_load_on_memory_limit_exceeded | 0 | N/A | |
+| enable_new_load_on_memory_limit_exceeded | 1 | N/A | |
 | enable_orc_late_materialization | 1 | N/A | |
 | enable_schema_change_v2 | 1 | N/A | |
 | enable_segment_overflow_read_chunk | 1 | N/A | |

@@ -59,7 +59,7 @@ public class StructType extends Type {
         this(structFields, true);
     }
 
-    private StructType(List<StructField> structFields, boolean isNamed) {
+    public StructType(List<StructField> structFields, boolean isNamed) {
         Preconditions.checkNotNull(structFields);
         Preconditions.checkArgument(structFields.size() > 0);
         this.fields = new ArrayList<>();
@@ -156,6 +156,10 @@ public class StructType extends Type {
         }
         return String.format("%sSTRUCT<\n%s\n%s>",
                 leftPadding, Joiner.on(",\n").join(fieldsSql), leftPadding);
+    }
+
+    public boolean isNamed() {
+        return isNamed;
     }
 
     public ArrayList<StructField> getFields() {

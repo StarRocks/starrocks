@@ -126,6 +126,9 @@ struct TInternalScanRange {
   9: optional string table_name 
   10: optional i64 partition_id
   11: optional i64 row_count
+  // Allow this query to cache remote data on local disks or not.
+  // Only the cloud native tablet will respect this field.
+  12: optional bool fill_data_cache = true;
 }
 
 enum TFileFormatType {
@@ -329,6 +332,12 @@ struct THdfsScanRange {
 
     // number of lines at the start of the file to skip
     12: optional i64 skip_header
+
+    // whether to use JNI scanner to read data of paimon table
+    13: optional bool use_paimon_jni_reader
+
+    // paimon split info
+    14: optional string paimon_split_info
 }
 
 struct TBinlogScanRange {
