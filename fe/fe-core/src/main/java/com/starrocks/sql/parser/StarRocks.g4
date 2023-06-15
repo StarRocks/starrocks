@@ -168,6 +168,7 @@ statement
     | cancelLoadStatement
     | alterLoadStatement
 
+
     // Show Statement
     | showAuthorStatement
     | showBackendsStatement
@@ -287,6 +288,9 @@ statement
     | alterPipeStatement
     | showPipeStatement
     | descPipeStatement
+
+    // Compaction Statement
+    | cancelCompactionStatement
 
     //Unsupported Statement
     | unsupportedStatement
@@ -1263,6 +1267,12 @@ cancelLoadStatement
 alterLoadStatement
     : ALTER LOAD FOR (db=qualifiedName '.')? name=identifier
         jobProperties?
+    ;
+
+// ------------------------------------------- Compaction Statement ----------------------------------------------------------
+
+cancelCompactionStatement
+    : CANCEL COMPACTION (WHERE expression)?
     ;
 
 // ------------------------------------------- Show Statement ----------------------------------------------------------
