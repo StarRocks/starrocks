@@ -936,7 +936,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "from emps group by empid*deptno");
     }
 
-
     @Test
     public void testAggregateMaterializationAggregateFuncs19() {
         testRewriteOK("select empid, deptno, count(*) as c, sum(empid) as s\n"
@@ -944,7 +943,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "select empid + 10, count(*) + 1 as c\n"
                         + "from emps group by empid + 10");
     }
-
 
     // TODO: Don't support group by position.
     @Ignore
@@ -1093,7 +1091,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "where depts.deptno > 10\n"
                         + "group by dependents.empid");
     }
-
 
     @Test
     @Ignore
@@ -1400,7 +1397,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "join emps on (emps.deptno = depts.deptno)");
     }
 
-
     @Test
     @Ignore
     public void testJoinMaterialization10() {
@@ -1438,7 +1434,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "(depts.name is not null and emps.name = 'b')");
     }
 
-
     @Test
     @Ignore
     // TODO: agg push down below Join
@@ -1450,7 +1445,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "from emps\n"
                         + "join depts on depts.deptno = empid group by empid, depts.deptno");
     }
-
 
     @Test
     @Ignore
@@ -1537,9 +1531,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 " INNER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
                 " INNER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
 
-        String query = "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
-                "FROM `lineorder` INNER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
-                "WHERE `lineorder`.`lo_orderkey` = 100;";
+        String query =
+                "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
+                        "FROM `lineorder` INNER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                        "WHERE `lineorder`.`lo_orderkey` = 100;";
 
         testRewriteOK(mv, query);
     }
@@ -1561,9 +1556,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
                 " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
 
-        String query = "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
-                "FROM `lineorder` LEFT OUTER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
-                "WHERE `lineorder`.`lo_orderkey` = 100;";
+        String query =
+                "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
+                        "FROM `lineorder` LEFT OUTER JOIN `customer` ON `lineorder`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                        "WHERE `lineorder`.`lo_orderkey` = 100;";
 
         testRewriteOK(mv, query);
 
@@ -1581,9 +1577,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 " LEFT OUTER JOIN `supplier` AS `s` ON `s`.`S_SUPPKEY` = `l`.`LO_SUPPKEY`" +
                 " LEFT OUTER JOIN `part` AS `p` ON `p`.`P_PARTKEY` = `l`.`LO_PARTKEY`;";
 
-        String query2 = "SELECT `lineorder_null`.`lo_orderkey`, `lineorder_null`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
-                "FROM `lineorder_null` LEFT OUTER JOIN `customer` ON `lineorder_null`.`lo_custkey` = `customer`.`c_custkey`\n" +
-                "WHERE `lineorder_null`.`lo_orderkey` = 100;";
+        String query2 =
+                "SELECT `lineorder_null`.`lo_orderkey`, `lineorder_null`.`lo_orderdate`, `customer`.`c_custkey` AS `cd`\n" +
+                        "FROM `lineorder_null` LEFT OUTER JOIN `customer` ON `lineorder_null`.`lo_custkey` = `customer`.`c_custkey`\n" +
+                        "WHERE `lineorder_null`.`lo_orderkey` = 100;";
 
         testRewriteOK(mv2, query2);
     }
@@ -1626,7 +1623,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String mv = "select t1.c1, l.c2 as c2_1, r.c2 as c2_2, r.c3 from hive0.partitioned_db.t1 " +
                 "join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2";
-        String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
+        String query =
+                "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1658,8 +1656,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "(select * from hive0.partitioned_db.t1 where c1 = 1) a\n" +
                 "join hive0.partitioned_db2.t2 on a.c2 = t2.c2\n" +
                 "join hive0.partitioned_db.t3 on a.c2 = t3.c2";
-        String query = "select a.c2 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
-                "on a.c2 = hive0.partitioned_db.t3.c2";
+        String query =
+                "select a.c2 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
+                        "on a.c2 = hive0.partitioned_db.t3.c2";
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2);\" ";
         testRewriteOK(mv, query, constraint)
@@ -1674,8 +1673,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "(select * from hive0.partitioned_db.t1 where c1 = 1) a\n" +
                 "join hive0.partitioned_db2.t2 on a.c2 = t2.c2\n" +
                 "join hive0.partitioned_db.t3 on a.c2 = t3.c2";
-        String query = "select a.c3 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
-                "on a.c2 = hive0.partitioned_db.t3.c2";
+        String query =
+                "select a.c3 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
+                        "on a.c2 = hive0.partitioned_db.t3.c2";
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2);\" ";
         testRewriteFail(mv, query, constraint);
@@ -1687,8 +1687,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "where t1.c1 = 1";
-        String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2 " +
-                "where t1.c1 = 1";
+        String query =
+                "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2 " +
+                        "where t1.c1 = 1";
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1704,8 +1705,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 l on t1.c2= l.c1 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c1 " +
                 "where t1.c1 = 1";
-        String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c1 " +
-                "where t1.c1 = 1";
+        String query =
+                "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c1 " +
+                        "where t1.c1 = 1";
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1719,8 +1721,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "where t1.c1 = 1";
-        String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
-                "where t1.c1 = 1";
+        String query =
+                "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
+                        "where t1.c1 = 1";
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1734,8 +1737,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "left join hive0.partitioned_db2.t2 l on t1.c2 = l.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "where t1.c1 = 1";
-        String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
-                "where t1.c1 = 1";
+        String query =
+                "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
+                        "where t1.c1 = 1";
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1749,8 +1753,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "left join hive0.partitioned_db2.t2 l on t1.c2 = l.c2 " +
                 "where t1.c1 = 1";
-        String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
-                "where t1.c1 = 1";
+        String query =
+                "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
+                        "where t1.c1 = 1";
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
                 "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
@@ -1763,8 +1768,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "left join hive0.partitioned_db.t3 on t1.c2= t3.c2 " +
                 "where t1.c1 = 1";
-        String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 left join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
-                "where t1.c1 = 1";
+        String query =
+                "select t1.c1, t3.c3 from hive0.partitioned_db.t1 left join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
+                        "where t1.c1 = 1";
         String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
                 "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2);\" ";
         testRewriteOK(mv, query, constraint);
@@ -1963,13 +1969,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"foreign_key_constraints\" = \"emps(empid) references dependents(empid)\" ";
         testRewriteOK(mv, query, constraint).
                 contains("0:OlapScanNode\n" +
-                "     TABLE: mv0");
+                        "     TABLE: mv0");
     }
 
     @Test
     public void testViewDeltaJoinUKFKInMV2() {
-        String mv = "select emps_no_constraint.empid, emps_no_constraint.deptno, dependents.name from emps_no_constraint\n"
-                + "join dependents using (empid)";
+        String mv =
+                "select emps_no_constraint.empid, emps_no_constraint.deptno, dependents.name from emps_no_constraint\n"
+                        + "join dependents using (empid)";
         String query = "select empid, deptno from emps_no_constraint\n"
                 + "where empid = 1";
         String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
@@ -1985,8 +1992,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "join dependents using (empid)"
                 + "inner join depts b on (emps.deptno=b.deptno)\n"
                 + "where emps.empid = 1";
-        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
-                + "where empid = 1";
+        String query =
+                "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                        + "where empid = 1";
         String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
         testRewriteOK(mv, query, constraint).
@@ -2000,8 +2008,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "left join dependents using (empid)"
                 + "inner join depts b on (emps.deptno=b.deptno)\n"
                 + "where emps.empid = 1";
-        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
-                + "where empid = 1";
+        String query =
+                "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                        + "where empid = 1";
         String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
         testRewriteOK(mv, query, constraint).
@@ -2016,8 +2025,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "inner join depts b on (emps.deptno=b.deptno)\n"
                 + "left outer join depts a on (emps.deptno=a.deptno)\n"
                 + "where emps.empid = 1";
-        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
-                + "where empid = 1";
+        String query =
+                "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                        + "where empid = 1";
         String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
         testRewriteFail(mv, query, constraint);
@@ -2030,8 +2040,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "inner join depts b on (emps.deptno=b.deptno)\n"
                 + "left outer join depts a on (emps.deptno=a.deptno)\n"
                 + "where emps.empid = 1";
-        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
-                + "where empid = 1";
+        String query =
+                "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                        + "where empid = 1";
         String constraint = "\"unique_constraints\" = \"dependents.empid; depts.deptno\"," +
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid);" +
                 "emps_no_constraint(deptno) references depts(deptno)\" ";
@@ -2266,7 +2277,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
     }
 
-
     @Test
     public void testViewDeltaColumnCaseSensitiveOnUnique() throws Exception {
         {
@@ -2475,6 +2485,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteFail(mv, query);
         }
     }
+
     @Test
     public void testRewriteAvg1() {
         String mv1 = "select user_id, avg(tag_id) from user_tags group by user_id;";
@@ -2491,7 +2502,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testRewriteAvg3() {
-        String mv2 = "select user_id, time, sum(tag_id % 10), count(tag_id % 10) from user_tags group by user_id, time;";
+        String mv2 =
+                "select user_id, time, sum(tag_id % 10), count(tag_id % 10) from user_tags group by user_id, time;";
         testRewriteOK(mv2, "select user_id, avg(tag_id % 10) from user_tags group by user_id;");
     }
 
@@ -2499,14 +2511,16 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
-        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+        testRewriteOK(mv,
+                "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
     }
 
     @Test
     public void testCountDistinctToBitmapCount2() {
         String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;";
-        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+        testRewriteOK(mv,
+                "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
         // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
         testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
     }
@@ -2515,7 +2529,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testCountDistinctToBitmapCount3() {
         String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id % 10)) from user_tags group by user_id, time;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id % 10)) x from user_tags group by user_id;");
-        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id % 10))) x from user_tags group by user_id;");
+        testRewriteOK(mv,
+                "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id % 10))) x from user_tags group by user_id;");
         // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
         testRewriteOK(mv, "select user_id, count(distinct tag_id % 10) x from user_tags group by user_id;");
     }
@@ -2523,24 +2538,31 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testCountDistinctToBitmapCount4() {
         String mv = "select user_id, tag_id from user_tags where user_id > 10;";
-        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
-        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
-        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags  where user_id > 10 group by user_id;");
+        testRewriteOK(mv,
+                "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteOK(mv,
+                "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteOK(mv,
+                "select user_id, count(distinct tag_id) x from user_tags  where user_id > 10 group by user_id;");
     }
 
     @Test
     public void testCountDistinctToBitmapCount5() {
         String mv = "select user_id, tag_id from user_tags;";
-        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
-        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteOK(mv,
+                "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteOK(mv,
+                "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
         testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
     }
 
     @Test
     public void testCountDistinctToBitmapCount6() {
         String mv = "select user_id, count(tag_id) from user_tags group by user_id;";
-        testRewriteFail(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
-        testRewriteFail(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteFail(mv,
+                "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteFail(mv,
+                "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
         testRewriteFail(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
     }
 
@@ -2582,7 +2604,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testPercentile2() {
-        String mv = "select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;";
+        String mv =
+                "select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;";
         testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
     }
@@ -2601,8 +2624,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ");\n");
 
-        String mv = "SELECT ds, sum(sum1), bitmap_union(bitmap1), bitmap_union(bitmap2) from test_bitmap_rewrite_agg_tbl " +
-                "group by ds";
+        String mv =
+                "SELECT ds, sum(sum1), bitmap_union(bitmap1), bitmap_union(bitmap2) from test_bitmap_rewrite_agg_tbl " +
+                        "group by ds";
         testRewriteOK(mv, "select cd1 / cd2 from (select ds, bitmap_union_count(bitmap1) as cd1, " +
                 "bitmap_count(bitmap_and(bitmap_union(bitmap1), bitmap_union(bitmap2))) as cd2 " +
                 "from test_bitmap_rewrite_agg_tbl group by ds) t");
@@ -2695,19 +2719,21 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testUnionRewrite() {
         {
-            String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
-                    " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
-                    "FROM `customer`\n" +
-                    "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+            String mv =
+                    "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
+                            " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
+                            "FROM `customer`\n" +
+                            "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
             String query = "select * from lineorder, customer";
             testRewriteOK(mv, query);
         }
 
         {
-            String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
-                    " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
-                    "FROM `customer`\n" +
-                    "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+            String mv =
+                    "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
+                            " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
+                            "FROM `customer`\n" +
+                            "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
             String query = "select * from customer, lineorder";
             testRewriteOK(mv, query);
         }
@@ -2872,9 +2898,21 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " on lo_custkey = c_custkey";
             // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
             // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name'";
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+    public void testCountDistinctRollupAgg() throws Exception {
+        {
+            String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
+                    + "from emps group by empid, deptno, locationid";
+            String query = "select empid, count(distinct name) as s\n"
+                    + "from emps where deptno=1 and locationid=1 "
+                    + "group by empid ";
             testRewriteOK(mv, query);
         }
 
@@ -2885,7 +2923,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " group by lo_orderkey, c_name";
             // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
             // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
-            String query =  "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
+            String query = "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name'" +
                     " group by lo_orderkey, c_name";
@@ -2897,7 +2935,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey" +
                     " group by lo_orderkey, c_custkey";
-            String query =  "select lo_orderkey, c_custkey, sum(lo_revenue) as total_revenue" +
+            String query = "select lo_orderkey, c_custkey, sum(lo_revenue) as total_revenue" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey" +
                     " group by lo_orderkey, c_custkey";
@@ -2913,7 +2951,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name'";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -2928,7 +2966,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_custkey = 1";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -2943,7 +2981,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -2958,9 +2996,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey and lo_shipmode = c_name";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
-                    " from lineorder inner join customer" +
-                    " on lo_custkey = c_custkey and lo_shipmode = c_name";
+            String query =
+                    "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
+                            " from lineorder inner join customer" +
+                            " on lo_custkey = c_custkey and lo_shipmode = c_name";
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
@@ -2972,7 +3011,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name' and c_custkey = 100";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -2988,7 +3027,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey" +
                     " from lineorder left anti join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3007,7 +3046,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " on lo_custkey = c_custkey";
             // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
             // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey where lo_orderkey = 10";
             testRewriteOK(mv, query);
@@ -3018,7 +3057,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey where lo_linenumber = 10";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3035,7 +3074,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " group by lo_orderkey, lo_custkey";
             // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
             // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
-            String query =  "select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue" +
+            String query = "select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey where lo_orderkey = 10" +
                     " group by lo_orderkey, lo_custkey";
@@ -3047,7 +3086,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey" +
                     " group by lo_custkey, c_name";
-            String query =  "select lo_custkey, c_name, sum(lo_revenue) as total_revenue" +
+            String query = "select lo_custkey, c_name, sum(lo_revenue) as total_revenue" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey" +
                     " group by lo_custkey, c_name";
@@ -3062,7 +3101,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey where lo_orderkey = 1";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3077,7 +3116,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3092,9 +3131,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey and lo_shipmode = c_name";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
-                    " from lineorder inner join customer" +
-                    " on lo_custkey = c_custkey and lo_shipmode = c_name";
+            String query =
+                    "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
+                            " from lineorder inner join customer" +
+                            " on lo_custkey = c_custkey and lo_shipmode = c_name";
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
@@ -3107,7 +3147,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey where lo_linenumber = 10 and lo_quantity = 100";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3124,7 +3164,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select c_name" +
+            String query = "select c_name" +
                     " from lineorder right anti join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3139,7 +3179,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder inner join customer_primary" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
                     " from lineorder left semi join customer_primary" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3152,7 +3192,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder inner join customer_unique" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
                     " from lineorder left semi join customer_unique" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3165,7 +3205,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
                     " from lineorder left semi join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3178,7 +3218,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder_primary inner join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select c_name" +
+            String query = "select c_name" +
                     " from lineorder_primary right semi join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3191,7 +3231,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder_unique inner join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select c_name" +
+            String query = "select c_name" +
                     " from lineorder_unique right semi join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3204,7 +3244,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select c_name" +
+            String query = "select c_name" +
                     " from lineorder right semi join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3218,7 +3258,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3232,7 +3272,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder_null full outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder_null left outer join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3246,7 +3286,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3260,7 +3300,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer_null" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer_null" +
                     " on lo_custkey = c_custkey";
             testRewriteFail(mv, query);
@@ -3270,7 +3310,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3284,7 +3324,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer_null" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder inner join customer_null" +
                     " on lo_custkey = c_custkey";
             testRewriteFail(mv, query);
@@ -3294,7 +3334,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder_null full outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder_null inner join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
@@ -3303,5 +3343,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "     PREDICATES: 30: c_custkey IS NOT NULL, 26: lo_orderkey IS NOT NULL\n" +
                     "     partitions=1/1");
         }
+        {
+            String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
+                + "from emps group by empid, deptno, locationid";
+            String query = "select empid, count(distinct name) as s\n"
+                + "from emps where deptno=1 \n"
+                + "group by empid ";
+            testRewriteFail(mv, query);
+        }
+
     }
 }
