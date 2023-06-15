@@ -78,7 +78,11 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
+    LOG(ERROR) << "TEST_1:" << CurrentThread::mem_tracker()->consumption() << ":"
+            << CurrentThread::mem_tracker()->peak_consumption();
     RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), chunk));
+    LOG(ERROR) << "TEST_2:" << CurrentThread::mem_tracker()->consumption() << ":"
+               << CurrentThread::mem_tracker()->peak_consumption();
     return Status::OK();
 }
 

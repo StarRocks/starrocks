@@ -55,6 +55,8 @@ void AggregateStreamingSinkOperator::set_execute_mode(int performance_level) {
 }
 
 Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    LOG(ERROR) << "TEST_3:" << CurrentThread::mem_tracker()->consumption() << ":"
+               << CurrentThread::mem_tracker()->peak_consumption();
     DeferOp update_revocable_bytes{[this]() {
         set_revocable_mem_bytes(_aggregator->hash_map_variant().allocated_memory_usage(_aggregator->mem_pool()));
     }};

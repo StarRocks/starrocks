@@ -143,7 +143,12 @@ public:
 
     size_t serialize(uint8_t* dst) const;
 
-    uint64_t serialize_size() const { return getSizeInBytes(); }
+    uint64_t serialize_size() const {
+        if (_type == BITMAP) {
+            _bitmap->shrinkToFit();
+        }
+        return getSizeInBytes();
+    }
 
     // When you persist bitmap value to disk, you could call this method.
     // This method should be called before `serialize_size`.

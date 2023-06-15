@@ -79,6 +79,7 @@ public:
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
         auto& bitmap = const_cast<BitmapValue&>(this->data(state));
+        LOG(ERROR) << "SERRRRR_1: " << bitmap.cardinality() << ":" << bitmap.serialize_size();
         col->append(std::move(bitmap));
     }
 
@@ -99,6 +100,7 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
         auto& bitmap = const_cast<BitmapValue&>(this->data(state));
+        LOG(ERROR) << "SERRRRR_2: " << bitmap.cardinality() << ":" << bitmap.serialize_size();
         col->append(std::move(bitmap));
     }
 
