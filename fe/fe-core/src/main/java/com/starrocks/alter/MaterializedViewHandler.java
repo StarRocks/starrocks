@@ -219,11 +219,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
         olapTable.setState(OlapTableState.ROLLUP);
 
-        boolean isColocateMv = PropertyAnalyzer.analyzeBooleanProp(addMVClause.getProperties(),
-                PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false);
-        if (isColocateMv) {
-            olapTable.addColocateMaterializedView(rollupJobV2.getRollupIndexName());
-        }
+
 
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2);
         LOG.info("finished to create materialized view job: {}", rollupJobV2.getJobId());
@@ -354,10 +350,13 @@ public class MaterializedViewHandler extends AlterHandler {
         if (queryStatement != null) {
             viewDefineSql = AstToSQLBuilder.toSQL(queryStatement);
         }
+
+        boolean isColocateMv = PropertyAnalyzer.analyzeBooleanProp(properties,
+                PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false);
         RollupJobV2 mvJob = new RollupJobV2(jobId, dbId, tableId, olapTable.getName(), timeoutMs,
                 baseIndexId, mvIndexId, baseIndexName, mvName,
                 mvColumns, baseSchemaHash, mvSchemaHash,
-                mvKeysType, mvShortKeyColumnCount, origStmt, viewDefineSql);
+                mvKeysType, mvShortKeyColumnCount, origStmt, viewDefineSql, isColocateMv);
 
         /*
          * create all rollup indexes. and set state.

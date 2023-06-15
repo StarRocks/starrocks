@@ -162,6 +162,10 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _automatic_partition_token =
                 state->exec_env()->automatic_partition_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     }
+    // init _colocate_mv_index
+    if (table_sink.__isset.enable_colocate_mv_index) {
+        _colocate_mv_index &= table_sink.enable_colocate_mv_index;
+    }
 
     return Status::OK();
 }
