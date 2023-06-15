@@ -1,17 +1,17 @@
-# max_by
+# min_by
 
 ## Description
 
-Returns the value of `x` associated with the maximum value of `y`.
+Returns the value of `x` associated with the minimum value of `y`.
 
-For example, `SELECT max_by(subject, exam_result) FROM exam;` is to return the subject that has the highest exam score.
+For example, `SELECT min_by(subject, exam_result) FROM exam;` is to return the subject that has the lowest exam score.
 
 This function is supported from v2.5.
 
 ## Syntax
 
 ```Haskell
-max_by(x,y)
+min_by(x,y)
 ```
 
 ## Parameters
@@ -27,7 +27,7 @@ Returns a value that has the same type as `x`.
 
 - `y` must be a sortable type. If you use an unsortable type of `y`, such as `bitmap` or `hll`, an error is returned.
 - If `y` contains a null value, the row that corresponds to the null value is ignored.
-- If more than one value of `x` has the same maximum value of `y`, this function returns the first value of `x` encountered.
+- If more than one value of `x` has the same minimum value of `y`, this function returns the first value of `x` encountered.
 
 ## Examples
 
@@ -66,15 +66,15 @@ Returns a value that has the same type as `x`.
     6 rows in set (0.03 sec)
     ```
 
-3. Obtain the subject that has the highest score.
-   Two subjects `physics` and `music` have the same highest score `95` and the first subject encountered (`physics`) is returned.
+3. Obtain the subject that has the lowest score.
+   The subject `english` that has the lowest score `70` is returned.
 
     ```Plain
-    SELECT max_by(subject, exam_result) FROM exam;
+    SELECT min_by(subject, exam_result) FROM exam;
     +------------------------------+
-    | max_by(subject, exam_result) |
+    | min_by(subject, exam_result) |
     +------------------------------+
-    | physics                      |
+    | english                      |
     +------------------------------+
     1 row in set (0.01 sec)
     ```

@@ -49,7 +49,7 @@ CREATE TABLE Employees (
     Salary DECIMAL(10, 2)
 )
 PRIMARY KEY (EmployeeID) 
-DISTRIBUTED BY HASH (EmployeeID) BUCKETS 1
+DISTRIBUTED BY HASH (EmployeeID)
 PROPERTIES ("replication_num" = "3");
 
 INSERT INTO Employees VALUES
@@ -100,7 +100,7 @@ CREATE TABLE Accounts (
     Sales_person VARCHAR(50) NOT NULL
 ) 
 PRIMARY KEY (Accounts_id)
-DISTRIBUTED BY HASH (Accounts_id) BUCKETS 1
+DISTRIBUTED BY HASH (Accounts_id)
 PROPERTIES ("replication_num" = "3");
 
 INSERT INTO employees VALUES (1,100),(2,1000);

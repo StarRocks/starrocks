@@ -96,8 +96,12 @@ CREATE TABLE example_db.example_tbl1 (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (order_id,pay_dt) 
-DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`order_id`); 
 ```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 #### Submit a Routine Load job
 
@@ -211,8 +215,12 @@ CREATE TABLE `example_tbl2` (
 ) 
 ENGINE=OLAP
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
-DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`commodity_id`); 
 ```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 #### Submit a Routine Load job
 
@@ -312,8 +320,12 @@ CREATE TABLE sensor.sensor_log (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
-DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`id`); 
 ```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 #### Submit a Routine Load job
 
