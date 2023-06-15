@@ -406,38 +406,16 @@ bool MapColumn::equals(size_t left, const starrocks::Column& rhs, size_t right) 
         return false;
     }
 
-    auto lhs_keys = ColumnHelper::get_data_column(_keys.get());
-    auto lhs_values = ColumnHelper::get_data_column(_values.get());
-    auto rhs_keys = ColumnHelper::get_data_column(rhs_map._keys.get());
-    auto rhs_values = ColumnHelper::get_data_column(rhs_map._values.get());
-
     for (uint32_t i = lhs_offset; i < lhs_end; ++i) {
         bool found = false;
         for (uint32_t j = rhs_offset; j < rhs_end; ++j) {
-            if (_keys->is_null(i)) {
-                if (!rhs_map._keys->is_null(i)) {
-                    continue;
-                }
-            } else {
-                if (rhs_map._keys->is_null(i)) {
-                    continue;
-                }
-                if (!lhs_keys->equals(i, *rhs_keys, j)) {
-                    continue;
-                }
+            if (!_keys->equals(i, *(rhs_map._keys.get()), j)) {
+                continue;
             }
+
             // So two keys is the same
-            if (_values->is_null(i)) {
-                if (!rhs_map._values->is_null(i)) {
-                    return false;
-                }
-            } else {
-                if (rhs_map._values->is_null(i)) {
-                    return false;
-                }
-                if (!lhs_values->equals(i, *rhs_values, j)) {
-                    return false;
-                }
+            if (!_values->equals(i, *(rhs_map._values.get()), j)) {
+                return false;
             }
             found = true;
             break;
@@ -457,10 +435,15 @@ void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     *hash = HashUtil::fnv_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
+    uint32_t base_hash = *hash;
     for (size_t i = 0; i < map_size; ++i) {
+        uint32_t pair_hash = base_hash;
         uint32_t ele_offset = offset + static_cast<uint32_t>(i);
-        _keys->fnv_hash_at(hash, ele_offset);
-        _values->fnv_hash_at(hash, ele_offset);
+        _keys->fnv_hash_at(&pair_hash, ele_offset);
+        _values->fnv_hash_at(&pair_hash, ele_offset);
+
+        // for get same hash on un-order map, we need to satisfies the commutative law
+        *hash += pair_hash;
     }
 }
 
@@ -471,10 +454,15 @@ void MapColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     *hash = HashUtil::zlib_crc_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
+    uint32_t base_hash = *hash;
     for (size_t i = 0; i < map_size; ++i) {
+        uint32_t pair_hash = base_hash;
         uint32_t ele_offset = offset + i;
-        _keys->crc32_hash_at(hash, ele_offset);
-        _values->crc32_hash_at(hash, ele_offset);
+        _keys->crc32_hash_at(&pair_hash, ele_offset);
+        _values->crc32_hash_at(&pair_hash, ele_offset);
+
+        // for get same hash on un-order map, we need to satisfies the commutative law
+        *hash += pair_hash;
     }
 }
 

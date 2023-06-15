@@ -411,20 +411,9 @@ bool ArrayColumn::equals(size_t left, const Column& rhs, size_t right) const {
     if (lhs_end - lhs_offset != rhs_end - rhs_offset) {
         return false;
     }
-    auto lhs_elements = ColumnHelper::get_data_column(_elements.get());
-    auto rhs_elements = ColumnHelper::get_data_column(rhs_array._elements.get());
     while (lhs_offset < lhs_end) {
-        if (_elements->is_null(lhs_offset)) {
-            if (!rhs_array._elements->is_null(rhs_offset)) {
-                return false;
-            }
-        } else {
-            if (rhs_array._elements->is_null(rhs_offset)) {
-                return false;
-            }
-            if (!lhs_elements->equals(lhs_offset, *rhs_elements, rhs_offset)) {
-                return false;
-            }
+        if (!_elements->equals(lhs_offset, *(rhs_array._elements.get()), rhs_offset)) {
+            return false;
         }
         lhs_offset++;
         rhs_offset++;
