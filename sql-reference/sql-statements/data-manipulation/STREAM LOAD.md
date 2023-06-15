@@ -60,7 +60,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 用于描述源数据文件，包括源数据文件的名称、格式、列分隔符、行分隔符、目标分区、以及与 StarRocks 表之间的列对应关系等。语法如下：
 
 ```Bash
--T <file_name>
+-T <file_path>
 -H "format: CSV | JSON"
 -H "column_separator: <column_separator>"
 -H "row_delimiter: <row_delimiter>"
@@ -78,7 +78,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 | **参数名称** | **是否必选** | **参数说明**                                                 |
 | ------------ | ------------ | ------------------------------------------------------------ |
-| file_name    | 是           | 指定源数据文件的名称。文件名里可选包含或者不包含扩展名。 |
+| file_path    | 是           | 指定源数据文件的保存路径。文件名里可选包含或者不包含扩展名。 |
 | format       | 否           | 指定待导入数据的格式。取值包括 `CSV` 和 `JSON`。默认值：`CSV`。 |
 | partitions   | 否           | 指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。 |
 | temporary_partitions | 否           | 指定要把数据导入哪些[临时分区](../../../table_design/Temporary_partition.md)。|
