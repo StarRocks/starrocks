@@ -194,7 +194,8 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t d
         _chunks[driver_sequence] = chunk->clone_empty_with_slot(size);
     }
 
-    if (_chunks[driver_sequence]->num_rows() + size > state->chunk_size()) {
+    if (_chunks[driver_sequence]->num_rows() + size > state->chunk_size() ||
+        _chunks[driver_sequence]->memory_usage() > 1 * 1024 * 1024) {
         RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
         // we only clear column data, because we need to reuse column schema
         _chunks[driver_sequence]->set_num_rows(0);
@@ -244,12 +245,17 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
             }
             auto pchunk = _chunk_request->add_chunks();
             TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk)));
+            LOG(ERROR) << "REQUEST_BYTES_1: " << _current_request_bytes;
             _current_request_bytes += pchunk->data().size();
+            LOG(ERROR) << "REQUEST_BYTES_2: " << pchunk->data().size();
+            LOG(ERROR) << "REQUEST_BYTES_3: " << _current_request_bytes;
         }
     }
 
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
     // last packet
+
+    LOG(ERROR) << "REQUEST_BYTES: " << _current_request_bytes;
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);

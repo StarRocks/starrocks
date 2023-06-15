@@ -30,6 +30,10 @@ public:
     using InputColumnType = RunTimeColumnType<LT>;
     using InputCppType = RunTimeCppType<LT>;
 
+    size_t serialize_size(const AggDataPtr __restrict ptr) const override {
+        return this->data(ptr).serialize_size();
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* col = down_cast<const InputColumnType*>(columns[0]);
         auto value = col->get_data()[row_num];
@@ -74,8 +78,8 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
-        auto& bitmap = this->data(state);
-        col->append(bitmap);
+        auto& bitmap = const_cast<BitmapValue&>(this->data(state));
+        col->append(std::move(bitmap));
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,

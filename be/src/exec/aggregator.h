@@ -535,6 +535,7 @@ protected:
 
     template <class HashMapWithKey>
     friend struct AllocateState;
+    int64_t _avg_row_size = 0;
 };
 
 template <class HashMapWithKey>

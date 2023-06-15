@@ -143,7 +143,11 @@ public:
 
     size_t serialize(uint8_t* dst) const;
 
-    uint64_t serialize_size() const { return getSizeInBytes(); }
+    uint64_t serialize_size() const {
+        uint64_t size = getSizeInBytes();
+        std::cout << "SER:" << (int)_type << ":" << size << std::endl;
+        return size;
+    }
 
     // When you persist bitmap value to disk, you could call this method.
     // This method should be called before `serialize_size`.
