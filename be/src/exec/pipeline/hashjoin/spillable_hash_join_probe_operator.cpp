@@ -56,7 +56,7 @@ void SpillableHashJoinProbeOperator::close(RuntimeState* state) {
 }
 
 bool SpillableHashJoinProbeOperator::has_output() const {
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::has_output();
     }
 
@@ -114,7 +114,7 @@ bool SpillableHashJoinProbeOperator::has_output() const {
 }
 
 bool SpillableHashJoinProbeOperator::need_input() const {
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::need_input();
     }
 
@@ -142,7 +142,7 @@ bool SpillableHashJoinProbeOperator::need_input() const {
 }
 
 bool SpillableHashJoinProbeOperator::is_finished() const {
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::is_finished();
     }
 
@@ -158,7 +158,7 @@ bool SpillableHashJoinProbeOperator::is_finished() const {
 }
 
 Status SpillableHashJoinProbeOperator::set_finishing(RuntimeState* state) {
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::set_finishing(state);
     }
     if (state->is_cancelled()) {
@@ -175,7 +175,7 @@ Status SpillableHashJoinProbeOperator::set_finished(RuntimeState* state) {
 
 Status SpillableHashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(_status());
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::push_chunk(state, chunk);
     }
 
@@ -346,7 +346,7 @@ Status SpillableHashJoinProbeOperator::_restore_probe_partition(RuntimeState* st
 
 StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_status());
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::pull_chunk(state);
     }
 

@@ -170,7 +170,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
     if (_is_first_time_spill && ht.get_row_count() > 0) {
         // We estimate the size of the hash table to be twice the size of the already input hash table
         auto num_partitions = ht.mem_usage() * 2 / _join_builder->spiller()->options().spill_mem_table_bytes_size;
-        _join_builder->spiller()->set_partition(state, num_partitions);
+        RETURN_IF_ERROR(_join_builder->spiller()->set_partition(state, num_partitions));
     }
 
     ASSIGN_OR_RETURN(auto spill_chunk, ht.convert_to_spill_schema(chunk));
