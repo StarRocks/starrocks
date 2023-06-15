@@ -1384,7 +1384,7 @@ public class StmtExecutor {
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         try {
-            handleDMLStmtImpl(execPlan, (DmlStmt) parsedStmt);
+            handleDMLStmtImpl(execPlan, stmt);
             if (context.getSessionVariable().isEnableProfile()) {
                 writeProfile(beginTimeInNanoSecond);
             }
