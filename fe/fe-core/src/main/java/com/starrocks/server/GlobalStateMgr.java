@@ -215,6 +215,7 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -1261,8 +1262,13 @@ public class GlobalStateMgr {
         if (RunMode.allowCreateLakeTable()) {
             try {
                 ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
+                String builtinStorageVolumeId = storageVolumeMgr
+                        .getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
+                authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
             } catch (DdlException | AnalysisException | AlreadyExistsException e) {
                 LOG.warn("Failed to create or update builtin storage volume", e);
+            } catch (PrivilegeException e) {
+                LOG.warn("Failed to grant builtin storage volume usage to public role", e);
             }
         }
     }
