@@ -75,6 +75,16 @@ void ObjectColumn<T>::append(const T& object) {
 }
 
 template <typename T>
+void ObjectColumn<T>::append_shallow(const T& object) {
+    if constexpr (std::is_same_v<T, BitmapValue>) {
+        _pool.emplace_back(BitmapValue(object, false));
+        _cache_ok = false;
+    } else {
+        append(object);
+    }
+}
+
+template <typename T>
 void ObjectColumn<T>::remove_first_n_values(size_t count) {
     size_t remain_size = _pool.size() - count;
     for (size_t i = 0; i < remain_size; ++i) {

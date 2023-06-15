@@ -39,17 +39,20 @@ public:
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
         auto& bitmap = const_cast<BitmapValue&>(this->data(state));
+        LOG(ERROR) << "SER: " << bitmap.cardinality() << ":" << bitmap.getSizeInBytes() << std::endl;
         col->append(std::move(bitmap));
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
+        LOG(ERROR) << "CONV: " << src[0]->byte_size() << std::endl;
         *dst = src[0];
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
         auto& bitmap = const_cast<BitmapValue&>(this->data(state));
+        LOG(ERROR) << "FINAL: " << bitmap.cardinality() << ":" << bitmap.getSizeInBytes() << std::endl;
         col->append(std::move(bitmap));
     }
 
