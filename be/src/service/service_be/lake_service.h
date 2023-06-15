@@ -82,6 +82,12 @@ public:
                           ::starrocks::lake::AbortCompactionResponse* response,
                           ::google::protobuf::Closure* done) override;
 
+    void vacuum(::google::protobuf::RpcController* controller, const ::starrocks::lake::VacuumRequest* request,
+                ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) override;
+
+    void vacuum_full(::google::protobuf::RpcController* controller, const ::starrocks::lake::VacuumFullRequest* request,
+                     ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
+
 private:
     ExecEnv* _env;
 };
