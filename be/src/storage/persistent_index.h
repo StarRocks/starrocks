@@ -23,6 +23,7 @@
 #include "storage/edit_version.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/rowset.h"
+#include "storage/storage_engine.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 
@@ -31,6 +32,10 @@ namespace starrocks {
 class Tablet;
 class Schema;
 class Column;
+
+namespace lake {
+class LakePersistentIndex;
+}
 
 // Add version for persistent index file to support future upgrade compatibility
 // There is only one version for now
@@ -331,6 +336,7 @@ public:
 
 private:
     friend class PersistentIndex;
+    friend class starrocks::lake::LakePersistentIndex;
 
     template <int N>
     void _init_loop_helper();
@@ -416,6 +422,7 @@ public:
 
 private:
     friend class PersistentIndex;
+    friend class starrocks::lake::LakePersistentIndex;
     friend class ImmutableIndexWriter;
 
     Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
@@ -625,6 +632,9 @@ public:
 
     bool is_error() { return _error; }
 
+    void set_dump_snapshot(bool dump_snapshot) { _dump_snapshot = dump_snapshot; }
+    void set_flushed(bool flushed) { _flushed = flushed; }
+
 private:
     size_t _dump_bound();
 
@@ -638,7 +648,6 @@ private:
     bool _need_merge_advance();
     Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values);
 
-    Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
     Status _delete_tmp_index_file();
 
     Status _flush_l0();
@@ -672,6 +681,10 @@ private:
     // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
     mutable std::shared_mutex _lock;
 
+protected:
+    Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
+
+protected:
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
@@ -681,6 +694,10 @@ private:
     // _l1_version is used to get l1 file name, update in on_committed
     EditVersion _l1_version;
     std::unique_ptr<ShardByLengthMutableIndex> _l0;
+    bool _has_l1 = false;
+    std::shared_ptr<FileSystem> _fs;
+    bool _dump_snapshot = false;
+    bool _flushed = false;
     // add all l1 into vector
     std::vector<std::unique_ptr<ImmutableIndex>> _l1_vec;
     // The usage and size is not exactly accurate after reload persistent index from disk becaues
@@ -689,11 +706,8 @@ private:
     // write cost of PersistentIndexMeta
     std::map<uint32_t, std::pair<int64_t, int64_t>> _usage_and_size_by_key_length;
     std::vector<int> _l1_merged_num;
-    bool _has_l1 = false;
-    std::shared_ptr<FileSystem> _fs;
 
-    bool _dump_snapshot = false;
-    bool _flushed = false;
+private:
     bool _need_bloom_filter = false;
 
     mutable std::mutex _get_lock;

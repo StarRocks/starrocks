@@ -74,6 +74,7 @@ message TabletMetadataPB {
     // not empty.
     optional int64 prev_garbage_version = 9;
     repeated FileMetaPB orphan_files = 10;
+    optional bool enable_persistent_index = 11;
 }
 
 message TxnLogPB {

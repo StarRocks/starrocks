@@ -309,6 +309,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_next_rowset_id(1);
     tablet_metadata_pb->set_cumulative_point(0);
 
+    if (req.__isset.enable_persistent_index) {
+        tablet_metadata_pb->set_enable_persistent_index(true);
+    }
+
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
         struct Finder {
             std::string_view name;

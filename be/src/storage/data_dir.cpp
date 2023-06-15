@@ -113,6 +113,13 @@ Status DataDir::_init_data_dir() {
     return st;
 }
 
+Status DataDir::init_persistent_index_dir() {
+    std::string persistent_index_path = _path + PERSISTENT_INDEX_PREFIX;
+    auto st = _fs->create_dir_recursive(persistent_index_path);
+    LOG_IF(ERROR, !st.ok()) << "failed to create persistent directory " << persistent_index_path;
+    return st;
+}
+
 Status DataDir::_init_tmp_dir() {
     std::string tmp_path = _path + TMP_PREFIX;
     auto st = _fs->create_dir_recursive(tmp_path);
@@ -215,6 +222,12 @@ std::string DataDir::get_absolute_shard_path(int64_t shard_id) {
 
 std::string DataDir::get_absolute_tablet_path(int64_t shard_id, int64_t tablet_id, int32_t schema_hash) {
     return strings::Substitute("$0/$1/$2", get_absolute_shard_path(shard_id), tablet_id, schema_hash);
+}
+
+Status DataDir::create_dir_if_path_not_exists(std::string path) {
+    auto st = _fs->create_dir_recursive(path);
+    LOG_IF(ERROR, !st.ok()) << "failed to create directory " << path;
+    return st;
 }
 
 void DataDir::find_tablet_in_trash(int64_t tablet_id, std::vector<std::string>* paths) {

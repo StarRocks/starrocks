@@ -273,7 +273,13 @@ Status StorageEngine::_init_store_map() {
     for (auto& store : tmp_stores) {
         _store_map.emplace(store.second->path(), store.second);
         store.first = false;
+        if (_lake_persistent_index_dir_inited == false) {
+            store.second->init_persistent_index_dir();
+            _lake_persistent_index_dir_inited = true;
+            _persistent_index_data_dir = store.second;
+        }
     }
+
     release_guard.cancel();
     return Status::OK();
 }

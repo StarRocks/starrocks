@@ -17,6 +17,7 @@
 #include <bvar/bvar.h>
 
 #include "storage/chunk_helper.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
 #include "util/trace.h"
@@ -57,6 +58,21 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     }
     auto pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
     _set_schema(pkey_schema);
+
+    // load persistent index if enable persistent index meta
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+
+    if (tablet->get_enable_persistent_index(base_version) && (fix_size <= 128)) {
+        DCHECK(_persistent_index == nullptr);
+
+        std::string path = strings::Substitute(
+                "$0/$1/", StorageEngine::instance()->get_persistent_index_store()->get_persistent_index_path(),
+                tablet->id());
+        StorageEngine::instance()->get_persistent_index_store()->create_dir_if_path_not_exists(path);
+        _persistent_index = std::make_unique<LakePersistentIndex>(path);
+        return ((LakePersistentIndex*)_persistent_index.get())
+                ->load_from_lake_tablet(tablet, metadata, base_version, builder);
+    }
 
     OlapReaderStatistics stats;
     std::unique_ptr<Column> pk_column;
