@@ -299,8 +299,15 @@ public class Load {
         if (!specifyFileFieldNames) {
             List<Column> columns = tbl.getBaseSchema();
             for (Column column : columns) {
+<<<<<<< HEAD
                 ImportColumnDesc columnDesc = new ImportColumnDesc(column.getName());
                 copiedColumnExprs.add(columnDesc);
+=======
+                if (!column.isMaterializedColumn() && !column.isAutoIncrement()) {
+                    ImportColumnDesc columnDesc = new ImportColumnDesc(column.getName());
+                    copiedColumnExprs.add(columnDesc);
+                }
+>>>>>>> 462e26f33 ([BugFix] stream load failed when table with auto increment column (#25301) (#25303))
             }
         }
 
