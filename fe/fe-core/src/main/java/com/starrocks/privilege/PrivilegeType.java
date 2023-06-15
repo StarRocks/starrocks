@@ -14,6 +14,14 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.collect.ImmutableSet;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 public class PrivilegeType {
     private final int id;
     private final String name;
@@ -28,7 +36,11 @@ public class PrivilegeType {
     }
 
     public String name() {
-        return name;
+        if (VALID_PRIVILEGE_TYPE.contains(this)) {
+            return name;
+        } else {
+            return "UNKNOWN";
+        }
     }
 
     public static final PrivilegeType GRANT = new PrivilegeType(1, "GRANT");
@@ -58,4 +70,59 @@ public class PrivilegeType {
     public static final PrivilegeType CREATE_RESOURCE_GROUP = new PrivilegeType(25, "CREATE RESOURCE GROUP");
     public static final PrivilegeType CREATE_EXTERNAL_CATALOG = new PrivilegeType(26, "CREATE EXTERNAL CATALOG");
     public static final PrivilegeType CREATE_STORAGE_VOLUME = new PrivilegeType(27, "CREATE STORAGE VOLUME");
+
+    public static final Set<PrivilegeType> VALID_PRIVILEGE_TYPE = new ImmutableSet.Builder<PrivilegeType>().add(
+            GRANT,
+            NODE,
+            OPERATE,
+            DELETE,
+            DROP,
+            INSERT,
+            SELECT,
+            ALTER,
+            EXPORT,
+            UPDATE,
+            USAGE,
+            PLUGIN,
+            FILE,
+            BLACKLIST,
+            REPOSITORY,
+            REFRESH,
+            IMPERSONATE,
+            CREATE_DATABASE,
+            CREATE_TABLE,
+            CREATE_VIEW,
+            CREATE_FUNCTION,
+            CREATE_GLOBAL_FUNCTION,
+            CREATE_MATERIALIZED_VIEW,
+            CREATE_RESOURCE,
+            CREATE_RESOURCE_GROUP,
+            CREATE_EXTERNAL_CATALOG,
+            CREATE_STORAGE_VOLUME
+    ).build();
+
+    public static final Map<String, PrivilegeType> NAME_TO_PRIVILEGE = VALID_PRIVILEGE_TYPE.stream().collect(Collectors.toMap(
+            PrivilegeType::name, Function.identity()));
+
+    @Override
+    public String toString() {
+        return name;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        PrivilegeType that = (PrivilegeType) o;
+        return id == that.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
 }

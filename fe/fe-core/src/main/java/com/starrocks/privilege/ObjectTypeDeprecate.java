@@ -14,10 +14,7 @@
 
 package com.starrocks.privilege;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
-
-import java.util.Map;
 
 public enum ObjectTypeDeprecate {
     TABLE(1),
@@ -44,16 +41,61 @@ public enum ObjectTypeDeprecate {
         return id;
     }
 
-    public static final Map<String, ObjectTypeDeprecate> OBJECT_TO_PLURAL = new ImmutableMap.Builder<String, ObjectTypeDeprecate>()
-            .put("TABLES", ObjectTypeDeprecate.TABLE)
-            .put("DATABASES", ObjectTypeDeprecate.DATABASE)
-            .put("USERS", ObjectTypeDeprecate.USER)
-            .put("RESOURCES", ObjectTypeDeprecate.RESOURCE)
-            .put("VIEWS", ObjectTypeDeprecate.VIEW)
-            .put("CATALOGS", ObjectTypeDeprecate.CATALOG)
-            .put("MATERIALIZED VIEWS", ObjectTypeDeprecate.MATERIALIZED_VIEW)
-            .put("FUNCTIONS", ObjectTypeDeprecate.FUNCTION)
-            .put("RESOURCE GROUPS", ObjectTypeDeprecate.RESOURCE_GROUP)
-            .put("GLOBAL FUNCTIONS", ObjectTypeDeprecate.GLOBAL_FUNCTION)
-            .put("STORAGE VOLUMES", ObjectTypeDeprecate.STORAGE_VOLUME).build();
+    public ObjectType toObjectType() {
+        if (this.equals(TABLE)) {
+            return ObjectType.TABLE;
+        } else if (this.equals(DATABASE)) {
+            return ObjectType.DATABASE;
+        } else if (this.equals(SYSTEM)) {
+            return ObjectType.SYSTEM;
+        } else if (this.equals(USER)) {
+            return ObjectType.USER;
+        } else if (this.equals(RESOURCE)) {
+            return ObjectType.RESOURCE;
+        } else if (this.equals(VIEW)) {
+            return ObjectType.VIEW;
+        } else if (this.equals(CATALOG)) {
+            return ObjectType.CATALOG;
+        } else if (this.equals(MATERIALIZED_VIEW)) {
+            return ObjectType.MATERIALIZED_VIEW;
+        } else if (this.equals(FUNCTION)) {
+            return ObjectType.FUNCTION;
+        } else if (this.equals(RESOURCE_GROUP)) {
+            return ObjectType.RESOURCE_GROUP;
+        } else if (this.equals(GLOBAL_FUNCTION)) {
+            return ObjectType.GLOBAL_FUNCTION;
+        } else if (this.equals(STORAGE_VOLUME)) {
+            return ObjectType.STORAGE_VOLUME;
+        }
+        return null;
+    }
+
+    public static ObjectTypeDeprecate toObjectTypeDeprecate(ObjectType objectType) {
+        if (objectType.equals(ObjectType.TABLE)) {
+            return TABLE;
+        } else if (objectType.equals(ObjectType.DATABASE)) {
+            return DATABASE;
+        } else if (objectType.equals(ObjectType.SYSTEM)) {
+            return SYSTEM;
+        } else if (objectType.equals(ObjectType.USER)) {
+            return USER;
+        } else if (objectType.equals(ObjectType.RESOURCE)) {
+            return RESOURCE;
+        } else if (objectType.equals(ObjectType.VIEW)) {
+            return VIEW;
+        } else if (objectType.equals(ObjectType.CATALOG)) {
+            return CATALOG;
+        } else if (objectType.equals(ObjectType.MATERIALIZED_VIEW)) {
+            return MATERIALIZED_VIEW;
+        } else if (objectType.equals(ObjectType.FUNCTION)) {
+            return FUNCTION;
+        } else if (objectType.equals(ObjectType.RESOURCE_GROUP)) {
+            return RESOURCE_GROUP;
+        } else if (objectType.equals(ObjectType.GLOBAL_FUNCTION)) {
+            return GLOBAL_FUNCTION;
+        } else if (objectType.equals(ObjectType.STORAGE_VOLUME)) {
+            return STORAGE_VOLUME;
+        }
+        return null;
+    }
 }
