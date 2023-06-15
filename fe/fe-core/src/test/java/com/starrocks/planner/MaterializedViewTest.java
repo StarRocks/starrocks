@@ -2928,7 +2928,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
-            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey";
@@ -3019,7 +3018,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
-            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
@@ -3174,6 +3172,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "     partitions=1/1");
         }
 
+        // test full outer join
         {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder full outer join customer" +
