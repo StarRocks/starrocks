@@ -67,7 +67,16 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ##### Data examples
 
-1. In your StarRocks database `test_db`, create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+1. In your local file system, create a CSV file named `example1.csv`. The file consists of three columns, which represent the user ID, user name, and user score in sequence.
+
+   ```Plain
+   1,Lily,23
+   2,Rose,23
+   3,Alice,24
+   4,Julia,25
+   ```
+
+2. In your StarRocks database `test_db`, create a Primary Key table named `table1`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table1`
@@ -79,19 +88,6 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    ENGINE=OLAP
    PRIMARY KEY(`id`)
    DISTRIBUTED BY HASH(`id`);
-   ```
-
-   > **NOTICE**
-   >
-   > Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
-
-2. In your local file system, create a CSV file named `example1.csv`. The file consists of three columns, which represent the user ID, user name, and user score in sequence.
-
-   ```Plain
-   1,Lily,23
-   2,Rose,23
-   3,Alice,24
-   4,Julia,25
    ```
 
 ##### Load data
