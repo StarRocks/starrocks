@@ -827,12 +827,11 @@ public class LocalMetastore implements ConnectorMetadata {
                     Lists.newArrayList(((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()),
                     addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
-            RangePartitionInfo rangePartitionInfo;
-            rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
-            if (rangePartitionInfo == null) {
-                throw new DdlException("Alter batch get partition info failed.");
+            if (!(partitionInfo instanceof RangePartitionInfo)) {
+                throw new DdlException("Batch creation of partitions only support range partition tables.");
             }
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
             if (partitionColumns.size() != 1) {
