@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -297,6 +298,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     // to distinguish with base table's column name, add `mv_` prefix
                     copiedTargetColumn.setName(MVUtils.getMVColumnName(targetCol.getName()));
                     copiedTargetColumn.setDefaultValue(null);
+                    copiedTargetColumn.setDefineExpr(NullLiteral.create(targetCol.getType()));
                     newMVColumns.add(copiedTargetColumn);
                 }
             }
