@@ -123,6 +123,8 @@ import io.trino.sql.tree.Join;
 import io.trino.sql.tree.JoinCriteria;
 import io.trino.sql.tree.JoinOn;
 import io.trino.sql.tree.JoinUsing;
+import io.trino.sql.tree.JsonArray;
+import io.trino.sql.tree.JsonArrayElement;
 import io.trino.sql.tree.LikePredicate;
 import io.trino.sql.tree.Limit;
 import io.trino.sql.tree.LogicalExpression;
@@ -224,6 +226,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     private ParseNode processOptional(Optional<? extends Node> node, ParseTreeContext context) {
         return node.map(value -> process(value, context)).orElse(null);
+    }
+
+    @Override
+    protected ParseNode visitNode(Node node, ParseTreeContext context) {
+        if (node instanceof JsonArrayElement) {
+            return visit(((JsonArrayElement) node).getValue(), context);
+        }
+        return null;
     }
 
     @Override
@@ -691,6 +701,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitTryExpression(TryExpression node, ParseTreeContext context) {
         return visit(node.getInnerExpression(), context);
+    }
+
+
+    @Override
+    protected ParseNode visitJsonArray(JsonArray jsonArray, ParseTreeContext context) {
+        List<Expr> children = visit(jsonArray.getElements(), context, Expr.class);
+        return new FunctionCallExpr("json_array", children);
     }
 
     private static final BigInteger LONG_MAX = new BigInteger("9223372036854775807");

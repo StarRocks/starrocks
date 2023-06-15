@@ -949,4 +949,16 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  );";
         assertPlanContains(sql, "-1 * CAST(if(3: dayofweek = 7, 0, 3: dayofweek) AS BIGINT)");
     }
+
+    @Test
+    public void testJsonArray() throws Exception {
+        String sql = "select json_array(1, true, 'starrocks',1.1);";
+        assertPlanContains(sql, "json_array(CAST(1 AS JSON), CAST(TRUE AS JSON), CAST('starrocks' AS JSON), CAST(1.1 AS JSON))");
+
+        sql = "select json_array()";
+        assertPlanContains(sql, "json_array()");
+
+        sql = "select json_array(ta, tb, tc, tg) from tall;";
+        assertPlanContains(sql, "json_array(CAST(1: ta AS JSON), CAST(2: tb AS JSON), CAST(3: tc AS JSON), CAST(7: tg AS JSON))");
+    }
 }
