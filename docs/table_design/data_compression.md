@@ -24,7 +24,7 @@ CREATE TABLE `data_compression` (
 ENGINE=OLAP 
 UNIQUE KEY(`id`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`id`) BUCKETS 7
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
 "compression" = "ZSTD"
 );

@@ -78,8 +78,12 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    )
    ENGINE=OLAP
    PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   DISTRIBUTED BY HASH(`id`);
    ```
+
+   > **NOTICE**
+   >
+   > Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 2. In your local file system, create a CSV file named `example1.csv`. The file consists of three columns, which represent the user ID, user name, and user score in sequence.
 
@@ -137,8 +141,12 @@ MySQL [test_db]> SELECT * FROM table1;
    )
    ENGINE=OLAP
    PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   DISTRIBUTED BY HASH(`id`);
    ```
+
+   > **NOTICE**
+   >
+   > Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 2. In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
 

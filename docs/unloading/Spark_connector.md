@@ -145,7 +145,7 @@ Do as follows to prepare a sample table:
    ENGINE=OLAP
    PRIMARY KEY(`id`)
    COMMENT "OLAP"
-   DISTRIBUTED BY HASH(`id`) BUCKETS 1
+   DISTRIBUTED BY HASH(`id`)
    PROPERTIES (
        "replication_num" = "3"
    );
@@ -398,7 +398,7 @@ Do as follows to prepare a sample table:
        PARTITION p202202 VALUES [('2022-02-01 00:00:00'), ('2022-03-01 00:00:00')),
        PARTITION p202203 VALUES [('2022-03-01 00:00:00'), ('2022-04-01 00:00:00'))
    )
-   DISTRIBUTED BY HASH(`k`) BUCKETS 3
+   DISTRIBUTED BY HASH(`k`)
    PROPERTIES (
        "replication_num" = "3"
    );

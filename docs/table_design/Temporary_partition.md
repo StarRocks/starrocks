@@ -30,11 +30,11 @@ You can create one or more partitions at a time by using the [ALTER TABLE](../sq
 ALTER TABLE <table_name>
 ADD TEMPORARY PARTITION <temporary_partition_name> VALUES [("value1"), {MAXVALUE|("value2")})]
 [(partition_desc)]
-[DISTRIBUTED BY HASH(<bucket_key>) BUCKETS <bucket_number>];
+[DISTRIBUTED BY HASH(<bucket_key>)];
 ALTER TABLE <table_name> 
 ADD TEMPORARY PARTITION <temporary_partition_name> VALUES LESS THAN {MAXVALUE|(<"value">)}
 [(partition_desc)]
-[DISTRIBUTED BY HASH(<bucket_key>) BUCKETS <bucket_number>];
+[DISTRIBUTED BY HASH(<bucket_key>)];
 ```
 
 **Create multiple partitions at a time**
@@ -43,7 +43,7 @@ ADD TEMPORARY PARTITION <temporary_partition_name> VALUES LESS THAN {MAXVALUE|(<
 ALTER TABLE <table_name>
 ADD TEMPORARY PARTITIONS START ("value1") END ("value2") EVERY {(INTERVAL <num> <time_unit>)|<num>}
 [(partition_desc)]
-[DISTRIBUTED BY HASH(<bucket_key>) BUCKETS <bucket_number>];
+[DISTRIBUTED BY HASH(<bucket_key>)];
 ```
 
 ### Parameters
@@ -66,13 +66,13 @@ ALTER TABLE site_access
 ADD TEMPORARY PARTITION tp2 VALUES LESS THAN ("2020-03-01");
 ```
 
-Create a temporary partition `tp3` in the table `site_access`, specify its upper bound as `2020-04-01` by using the `VALUES LESS THAN (...)` syntax, and specify the number of replicas as `1` and the number of buckets as `5` .
+Create a temporary partition `tp3` in the table `site_access`, specify its upper bound as `2020-04-01` by using the `VALUES LESS THAN (...)` syntax, and specify the number of replicas as `1`.
 
 ```SQL
 ALTER TABLE site_access
 ADD TEMPORARY PARTITION tp3 VALUES LESS THAN ("2020-04-01")
  ("replication_num" = "1")
-DISTRIBUTED BY HASH (site_id) BUCKETS 5;
+DISTRIBUTED BY HASH (site_id);
 ```
 
 Create multiple partitions at a time in the table `site_access` by using the `START (...) END (...) EVERY (...)` syntax, and specify the range of these partitions as `[2020-04-01, 2021-01-01)` with a monthly partition granularity.

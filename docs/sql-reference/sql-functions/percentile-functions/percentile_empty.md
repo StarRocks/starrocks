@@ -32,7 +32,7 @@ CREATE TABLE `aggregate_tbl` (
 ) ENGINE=OLAP
 AGGREGATE KEY(`site_id`, `date`, `city_code`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`site_id`) BUCKETS 8
+DISTRIBUTED BY HASH(`site_id`)
 PROPERTIES ("replication_num" = "3");
 ```
 

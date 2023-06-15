@@ -194,13 +194,17 @@ CREATE TABLE IF NOT EXISTS detail_demo (
     ispass        BOOLEAN        COMMENT "true/false"
 )
 DUPLICATE KEY(recruit_date, region_num)
-DISTRIBUTED BY HASH(recruit_date, region_num) BUCKETS 96
+DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
     "enable_storage_cache" = "true",
     "storage_cache_ttl" = "2592000",
     "enable_async_write_back" = "false"
 );
 ```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 In addition to the regular table PROPERTIES, you need to specify the following PROPERTIES when creating a table for shared-data StarRocks cluster:
 

@@ -137,7 +137,7 @@ Based on the table `goods`, `order_list`, and the query statement mentioned abov
 
 ```SQL
 CREATE MATERIALIZED VIEW order_mv
-DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
+DISTRIBUTED BY HASH(`order_id`)
 REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
 AS SELECT
     order_list.order_id,
@@ -344,7 +344,7 @@ CREATE TABLE `lineorder` (
 ) ENGINE=OLAP
 DUPLICATE KEY(`lo_orderkey`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 192
+DISTRIBUTED BY HASH(`lo_orderkey`)
 PROPERTIES (
 -- Define Unique Keys in unique_constraints
 "unique_constraints" = "lo_orderkey,lo_linenumber",

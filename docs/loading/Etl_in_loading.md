@@ -53,8 +53,12 @@ If you choose [Routine Load](./RoutineLoad.md), make sure that topics are create
        `event_type` TINYINT COMMENT "event type",
        `user_id` BIGINT COMMENT "user ID"
    )
-   DISTRIBUTED BY HASH(user_id) BUCKETS 10;
+   DISTRIBUTED BY HASH(user_id);
    ```
+
+    > **NOTICE**
+    >
+    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
    b. Create a table named `table2`, which consists of four columns: `date`, `year`, `month`, and `day`.
 
@@ -66,7 +70,7 @@ If you choose [Routine Load](./RoutineLoad.md), make sure that topics are create
        `month` TINYINT COMMENT "month",
        `day` TINYINT COMMENT "day"
    )
-   DISTRIBUTED BY HASH(date) BUCKETS 10;
+   DISTRIBUTED BY HASH(date);
    ```
 
 2. Create data files in your local file system.

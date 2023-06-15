@@ -424,7 +424,7 @@ SWAP WITH table_name;
     ```sql
     ALTER TABLE example_db.my_table
     ADD PARTITION p1 VALUES LESS THAN ("2015-01-01")
-    DISTRIBUTED BY HASH(k1) BUCKETS 20;
+    DISTRIBUTED BY HASH(k1);
     ```
 
 3. Add a partition and use the new number of replicas.

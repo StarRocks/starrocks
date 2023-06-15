@@ -30,7 +30,7 @@ create table t0(
   c1 ARRAY<INT>
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 
 -- Define c1 as an nested array whose element type is VARCHAR.
 create table t1(
@@ -38,7 +38,7 @@ create table t1(
   c1 ARRAY<ARRAY<VARCHAR(10)>>
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 
 -- Define c1 as a NOT NULL array column.
 create table t2(
@@ -46,7 +46,7 @@ create table t2(
   c1 ARRAY<INT> NOT NULL
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 ~~~
 
 ## Limits
@@ -186,7 +186,7 @@ create table t0(
   c1 ARRAY<INT>
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 
 INSERT INTO t0 VALUES(1, [1,2,3]);
 ~~~

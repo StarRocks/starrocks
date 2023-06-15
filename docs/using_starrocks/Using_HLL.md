@@ -68,7 +68,7 @@ CREATE TABLE test(
         id INT,
         uv HLL HLL_UNION
 )
-DISTRIBUTED BY HASH(ID) BUCKETS 32;
+DISTRIBUTED BY HASH(ID);
 ~~~
 
 > * Note: When the data volume is large, it is better to create a corresponding rollup table for high frequency HLL queries

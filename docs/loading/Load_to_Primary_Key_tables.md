@@ -83,8 +83,12 @@ If the data file you want to load involves only UPSERT operations, you do not ne
    )
    ENGINE=OLAP
    PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   DISTRIBUTED BY HASH(`id`);
    ```
+
+    > **NOTICE**
+    >
+    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
    b. Insert a record into `table1`.
 
@@ -240,7 +244,7 @@ If the data file you want to load involves only DELETE operations, you must add 
    )
    ENGINE=OLAP
    PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   DISTRIBUTED BY HASH(`id`);
    ```
 
    b. Insert two records into `table2`.
@@ -345,7 +349,7 @@ If the data file you want to load involves both UPSERT and DELETE operations, yo
    )
    ENGINE=OLAP
    PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   DISTRIBUTED BY HASH(`id`);
    ```
 
    b. Insert two records into `table3`.
@@ -458,7 +462,7 @@ Since v2.2, StarRocks supports updating only the specified columns of a table th
    )
    ENGINE=OLAP
    PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   DISTRIBUTED BY HASH(`id`);
    ```
 
    b. Insert a record into `table4`.
@@ -587,7 +591,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
           `score` int(11) NOT NULL COMMENT "user score"
       )
       ENGINE=OLAP
-      PRIMARY KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+      PRIMARY KEY(`id`) DISTRIBUTED BY HASH(`id`);
       ```
 
    b. Insert a record into `table5`.

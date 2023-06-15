@@ -35,7 +35,7 @@ MySQL > SHOW CREATE MATERIALIZED VIEW lo_mv1\G
        Materialized View: lo_mv1
 Create Materialized View: CREATE MATERIALIZED VIEW `lo_mv1`
 COMMENT "MATERIALIZED_VIEW"
-DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 10 
+DISTRIBUTED BY HASH(`lo_orderkey`) 
 REFRESH ASYNC
 PROPERTIES (
 "replication_num" = "3",

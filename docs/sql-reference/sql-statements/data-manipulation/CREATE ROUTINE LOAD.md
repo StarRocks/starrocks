@@ -267,7 +267,7 @@ CREATE TABLE example_db.example_tbl1 (
     `gender` varchar(26) NULL COMMENT "Gender", 
     `price` double NULL COMMENT "Price") 
 DUPLICATE KEY (order_id,pay_dt) 
-DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`order_id`); 
 ```
 
 #### **Consume data starting from** **specified offsets for** **specified** **partitions**
@@ -341,7 +341,7 @@ CREATE TABLE example_db.example_tbl2 (
     `price` double NULL COMMENT "Price"
 ) 
 DUPLICATE KEY (order_id,pay_dt) 
-DISTRIBUTED BY HASH(order_id) BUCKETS 5; 
+DISTRIBUTED BY HASH(order_id); 
 ```
 
 **Routine Load job**
@@ -503,7 +503,7 @@ CREATE TABLE example_db.example_tbl3 (
     pay_time bigint(20) NULL, 
     price double SUM NULL COMMENT "Price") 
 AGGREGATE KEY(commodity_id,customer_name,country,pay_time)
-DISTRIBUTED BY HASH(commodity_id) BUCKETS 5; 
+DISTRIBUTED BY HASH(commodity_id); 
 ```
 
 **Routine Load job**
@@ -553,7 +553,7 @@ CREATE TABLE example_db.example_tbl4 (
     `pay_dt` date NULL, 
     `price` double SUM NULL) 
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
-DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`commodity_id`); 
 ```
 
 **Routine Load job**
@@ -609,7 +609,7 @@ CREATE TABLE example_db.example_tbl3 (
     price double SUM NULL) 
 AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 ENGINE=OLAP
-DISTRIBUTED BY HASH(commodity_id) BUCKETS 5; 
+DISTRIBUTED BY HASH(commodity_id); 
 ```
 
 **Routine Load job**
@@ -679,7 +679,7 @@ CREATE TABLE sensor.sensor_log1 (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
-DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`id`); 
 ```
 
 **Routine Load job**
@@ -757,7 +757,7 @@ CREATE TABLE sensor.sensor_log2 (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
-DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`id`); 
 ```
 
 **Routine Load job**
@@ -837,7 +837,7 @@ CREATE TABLE sensor.sensor_log3 (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
-DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`id`); 
 ```
 
 **Routine Load job**

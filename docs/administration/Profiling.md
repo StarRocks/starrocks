@@ -18,7 +18,7 @@ CREATE TABLE site_visit
     pv BIGINT   SUM DEFAULT '0'
 )
 AGGREGATE KEY(siteid, city, username)
-DISTRIBUTED BY HASH(siteid) BUCKETS 10;
+DISTRIBUTED BY HASH(siteid);
 
 
 CREATE TABLE session_data
@@ -33,7 +33,7 @@ CREATE TABLE session_data
     url         VARCHAR(1024)
 )
 DUPLICATE KEY(visitorid, sessionid)
-DISTRIBUTED BY HASH(sessionid, visitorid) BUCKETS 10;
+DISTRIBUTED BY HASH(sessionid, visitorid);
 
 CREATE TABLE sales_order
 (
@@ -43,7 +43,7 @@ CREATE TABLE sales_order
     amount      BIGINT DEFAULT '0'
 )
 UNIQUE KEY(orderid)
-DISTRIBUTED BY HASH(orderid) BUCKETS 10;
+DISTRIBUTED BY HASH(orderid);
 
 CREATE TABLE sales_order
 (
@@ -53,7 +53,7 @@ CREATE TABLE sales_order
     amount      BIGINT DEFAULT '0'
 )
 PRIMARY KEY(orderid)
-DISTRIBUTED BY HASH(orderid) BUCKETS 10;
+DISTRIBUTED BY HASH(orderid);
 ~~~
 
 ## Colocate Table
@@ -73,7 +73,7 @@ CREATE TABLE colocate_table
     url         VARCHAR(1024)
 )
 DUPLICATE KEY(visitorid, sessionid)
-DISTRIBUTED BY HASH(sessionid, visitorid) BUCKETS 10
+DISTRIBUTED BY HASH(sessionid, visitorid)
 PROPERTIES(
     "colocate_with" = "group1"
 );

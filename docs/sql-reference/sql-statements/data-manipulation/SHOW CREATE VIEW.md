@@ -48,7 +48,7 @@ CREATE TABLE example_table
 )
 ENGINE = olap
 AGGREGATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k1) BUCKETS 10;
+DISTRIBUTED BY HASH(k1);
 ```
 
 Create a view named `example_view` based on `example_table`.
