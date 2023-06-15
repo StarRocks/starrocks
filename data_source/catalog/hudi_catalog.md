@@ -203,6 +203,22 @@ StarRocks 访问 Hudi 集群文件存储的相关参数配置。
 
 有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
+##### 阿里云 OSS
+
+如果选择阿里云 OSS 作为 Hudi 集群的文件存储，需要在 `StorageCredentialParams` 中配置如下认证参数：
+
+```SQL
+"aliyun.oss.access_key" = "<user_access_key>",
+"aliyun.oss.secret_key" = "<user_secret_key>",
+"aliyun.oss.endpoint" = "<oss_endpoint>" 
+```
+
+| 参数                            | 是否必须 | 说明                                                         |
+| ------------------------------- | -------- | ------------------------------------------------------------ |
+| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
+| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
+| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。            ｜
+
 ##### 兼容 S3 协议的对象存储
 
 Hudi Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
