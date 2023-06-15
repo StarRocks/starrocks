@@ -51,6 +51,7 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
               --skip_reruns        skip 3 time reruns, all case will be run exactly once, default False
               --file_filter        Case file regex for filter, default .*
               --case_filter        Case name regex for filter, default .*
+              --config             Config path, default conf/sr.conf
         """
     )
 
@@ -67,6 +68,7 @@ if __name__ == "__main__":
     collect = False
     part = False
     skip_reruns = False
+    config = "conf/sr.conf"
 
     args = "hld:rvc:t:x:y:pa:"
     detail_args = [
@@ -82,6 +84,7 @@ if __name__ == "__main__":
         "part",
         "attr=",
         "skip_reruns",
+        "config=",
     ]
 
     case_dir = None
@@ -137,12 +140,16 @@ if __name__ == "__main__":
         if opt == "--skip_reruns":
             skip_reruns = True
 
+        if opt == "--config":
+            config = arg
+
     # set environment
     os.environ["record_mode"] = "true" if record else "false"
     os.environ["sql_dir"] = str(dirname)
     os.environ["file_filter"] = file_filter
     os.environ["case_filter"] = case_filter
     os.environ["attr"] = attr
+    os.environ["config_path"] = config
 
     argv = [
         "nosetests",

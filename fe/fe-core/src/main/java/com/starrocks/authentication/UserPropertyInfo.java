@@ -18,6 +18,7 @@
 package com.starrocks.authentication;
 
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
@@ -30,7 +31,9 @@ import java.util.List;
 
 public class UserPropertyInfo implements Writable {
 
+    @SerializedName("u")
     private String user;
+    @SerializedName("p")
     private List<Pair<String, String>> properties = Lists.newArrayList();
 
     private UserPropertyInfo() {

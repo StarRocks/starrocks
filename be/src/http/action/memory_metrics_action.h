@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/test/exec/es_query_builder_test.cpp
+//   https://github.com/apache/incubator-doris/blob/master/be/src/http/action/metrics_action.h
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -31,32 +31,31 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
-#include "exec/iceberg//iceberg_delete_builder.h"
 
-#include <gtest/gtest.h>
+#pragma once
 
-#include "fs/fs.h"
-#include "runtime/descriptor_helper.h"
+#include <runtime/mem_tracker.h>
+
+#include <string>
+
+#include "http/http_handler.h"
 
 namespace starrocks {
 
-class IcebergDeleteBuilderTest : public testing::Test {
+class ExecEnv;
+class HttpRequest;
+
+class MemoryMetricsAction : public HttpHandler {
 public:
-    IcebergDeleteBuilderTest() = default;
-    ~IcebergDeleteBuilderTest() override = default;
+    explicit MemoryMetricsAction() = default;
 
-protected:
-    std::string _parquet_delete_path = "./be/test/exec/test_data/parquet_scanner/parquet_delete_file.parquet";
-    std::string _parquet_data_path = "parquet_data_file.parquet";
+    ~MemoryMetricsAction() override = default;
 
-    std::set<int64_t> _need_skip_rowids;
+    void handle(HttpRequest* req) override;
+
+private:
+    void getMemoryMetricTree(MemTracker* memTracker, std::stringstream& result, int64_t total_size,
+                             std::vector<std::string> metric_labels_to_print);
 };
-
-TEST_F(IcebergDeleteBuilderTest, TestParquetBuilder) {
-    std::unique_ptr<ParquetPositionDeleteBuilder> parquet_builder(
-            new ParquetPositionDeleteBuilder(FileSystem::Default(), _parquet_data_path));
-    parquet_builder->build(TQueryGlobals().time_zone, _parquet_delete_path, 845, &_need_skip_rowids);
-    ASSERT_EQ(1, _need_skip_rowids.size());
-}
 
 } // namespace starrocks

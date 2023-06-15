@@ -64,6 +64,8 @@ public:
 
     void finalize();
 
+    void close();
+
     size_t num_rows() const { return _num_rows; }
 
     // Fragmented chunk. it can only be the last chunk in the chunk_list
