@@ -399,6 +399,8 @@ LoadFinishTime: 2023-06-12 18:31:08
 
 您可以通过 curl 命令查看 INSERT 导入作业状态。
 
+启动终端，并运行以下命令：
+
 ```Plain
 curl --location-trusted -u <username>:<password> \
   http://<fe_address>:<fe_http_port>/api/<db_name>/_load_info?label=<label_name>
