@@ -91,8 +91,8 @@ private:
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const vectorized::ChunkPtr& chunk, size_t chunk_size);
     void _dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* filter_ptr);
     Status _dict_decode(vectorized::ChunkPtr* chunk);
-    void _collect_field_io_range(const ParquetField& field, std::vector<SharedBufferedInputStream::IORange>* ranges,
-                                 int64_t* end_offset);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                 std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
 
     // row group meta
     std::shared_ptr<tparquet::RowGroup> _row_group_metadata;

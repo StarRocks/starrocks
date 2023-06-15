@@ -834,6 +834,20 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
+        db.readLock();
+        Map<String, String> tableProperties;
+        OlapTable olapTable;
+        PartitionInfo partitionInfo;
+        try {
+            Table table = db.getTable(tableName);
+            CatalogUtils.checkTableExist(db, tableName);
+            CatalogUtils.checkNativeTable(db, table);
+            olapTable = (OlapTable) table;
+            tableProperties = olapTable.getTableProperty().getProperties();
+            partitionInfo = olapTable.getPartitionInfo();
+        } finally {
+            db.readUnlock();
+        }
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
         if (partitionDesc instanceof SingleItemListPartitionDesc
                 || partitionDesc instanceof MultiItemListPartitionDesc
@@ -845,20 +859,10 @@ public class LocalMetastore implements ConnectorMetadata {
                     Lists.newArrayList(((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()),
                     addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
-            db.readLock();
-            RangePartitionInfo rangePartitionInfo;
-            Map<String, String> tableProperties;
-            try {
-                Table table = db.getTable(tableName);
-                CatalogUtils.checkTableExist(db, tableName);
-                CatalogUtils.checkNativeTable(db, table);
-                OlapTable olapTable = (OlapTable) table;
-                tableProperties = olapTable.getTableProperty().getProperties();
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            } finally {
-                db.readUnlock();
+            if (!(partitionInfo instanceof RangePartitionInfo)) {
+                throw new DdlException("Batch creation of partitions only support range partition tables.");
             }
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
             if (rangePartitionInfo == null) {
                 throw new DdlException("Alter batch get partition info failed.");
@@ -4948,7 +4952,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
             }
             LOG.warn("create partitions from partitions failed.", e);
-            throw new RuntimeException("create partitions failed", e);
+            throw new RuntimeException("create partitions failed: " + e.getMessage(), e);
         }
         return newPartitions;
     }
