@@ -42,56 +42,52 @@ If you choose [Routine Load](./RoutineLoad.md), make sure that topics are create
 
 ## Data examples
 
-1. Create tables in your StarRocks database `test_db`.
-
-   a. Create a table named `table1`, which consists of three columns: `event_date`, `event_type`, and `user_id`.
-
-   ```SQL
-   MySQL [test_db]> CREATE TABLE table1
-   (
-       `event_date` DATE COMMENT "event date",
-       `event_type` TINYINT COMMENT "event type",
-       `user_id` BIGINT COMMENT "user ID"
-   )
-   DISTRIBUTED BY HASH(user_id);
-   ```
-
-    > **NOTICE**
-    >
-    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
-
-   b. Create a table named `table2`, which consists of four columns: `date`, `year`, `month`, and `day`.
-
-   ```SQL
-   MySQL [test_db]> CREATE TABLE table2
-   (
-       `date` DATE COMMENT "date",
-       `year` INT COMMENT "year",
-       `month` TINYINT COMMENT "month",
-       `day` TINYINT COMMENT "day"
-   )
-   DISTRIBUTED BY HASH(date);
-   ```
-
-2. Create data files in your local file system.
+1. Create data files in your local file system.
 
    a. Create a data file named `file1.csv`. The file consists of four columns, which represent user ID, user gender, event date, and event type in sequence.
 
-   ```Plain
-   354,female,2020-05-20,1
-   465,male,2020-05-21,2
-   576,female,2020-05-22,1
-   687,male,2020-05-23,2
-   ```
+      ```Plain
+      354,female,2020-05-20,1
+      465,male,2020-05-21,2
+      576,female,2020-05-22,1
+      687,male,2020-05-23,2
+      ```
 
    b. Create a data file named `file2.csv`. The file consists of only one column, which represents date.
 
-   ```Plain
-   2020-05-20
-   2020-05-21
-   2020-05-22
-   2020-05-23
-   ```
+      ```Plain
+      2020-05-20
+      2020-05-21
+      2020-05-22
+      2020-05-23
+      ```
+
+2. Create tables in your StarRocks database `test_db`.
+
+   a. Create a table named `table1`, which consists of three columns: `event_date`, `event_type`, and `user_id`.
+
+      ```SQL
+      MySQL [test_db]> CREATE TABLE table1
+      (
+          `event_date` DATE COMMENT "event date",
+          `event_type` TINYINT COMMENT "event type",
+          `user_id` BIGINT COMMENT "user ID"
+      )
+      DISTRIBUTED BY HASH(user_id) BUCKETS 10;
+      ```
+
+   b. Create a table named `table2`, which consists of four columns: `date`, `year`, `month`, and `day`.
+
+      ```SQL
+      MySQL [test_db]> CREATE TABLE table2
+      (
+          `date` DATE COMMENT "date",
+          `year` INT COMMENT "year",
+          `month` TINYINT COMMENT "month",
+          `day` TINYINT COMMENT "day"
+      )
+      DISTRIBUTED BY HASH(date) BUCKETS 10;
+      ```
 
 3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/data/input/` path of your HDFS cluster, publish the data of `file1.csv` to `topic1` of your Kafka cluster, and publish the data of `file2.csv` to `topic2` of your Kafka cluster.
 
