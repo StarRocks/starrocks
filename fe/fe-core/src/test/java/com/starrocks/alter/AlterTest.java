@@ -2582,4 +2582,27 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt3);
         Assert.assertEquals("mv_rg", mv.getTableProperty().getResourceGroup());
     }
+
+    @Test(expected = DdlException.class)
+    public void testAlterListPartitionUseBatchBuildPartition() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE t2 (\n" +
+                "    dt datetime  not null,\n" +
+                "    user_id  bigint  not null,\n" +
+                "    recharge_money decimal(32,2) not null, \n" +
+                "    province varchar(20) not null,\n" +
+                "    id varchar(20) not null\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(dt)\n" +
+                "PARTITION BY (dt)\n" +
+                "DISTRIBUTED BY HASH(`dt`) BUCKETS 10 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE t2 ADD PARTITIONS START (\"2021-01-04\") END (\"2021-01-06\") EVERY (INTERVAL 1 DAY);";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
 }
