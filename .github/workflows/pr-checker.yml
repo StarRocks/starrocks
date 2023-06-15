@@ -4,18 +4,28 @@ on:
   pull_request_target:
     branches:
       - main
-      - branch-2.4
-      - branch-2.5
-      - branch-3.0
-      - branch-3.1
+      - 'branch-[0-9].[0-9]'
+
     types:
       - opened
       - reopened
       - edited
 
 jobs:
+
+  sync-checker:
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.pull_request.title, '(sync #') &&
+      !contains(github.event.pull_request.labels.*.name, 'sync') &&
+      (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+    name: SYNC CHECKER
+    steps:
+      - run: echo "Normal PR."
+
   title-check:
     runs-on: ubuntu-latest
+    needs: sync-checker
     steps:
       - uses: thehanimo/pr-title-checker@v1.3.5
         with:
@@ -95,7 +105,16 @@ jobs:
   automerge-check:
     runs-on: ubuntu-latest
     needs: branch-info-check
+<<<<<<< HEAD
     if: ${{ !failure() && (contains(github.event.pull_request.title, 'cherry-pick') || contains(github.event.pull_request.title, 'backport')) }}
+=======
+    if: >
+      !failure() &&
+      github.base_ref != 'main' &&
+      startsWith(github.head_ref, 'mergify/') &&
+      (contains(github.event.pull_request.title, 'cherry-pick') || 
+      contains(github.event.pull_request.title, 'backport'))
+>>>>>>> 36c40b6b8 ([Tool] Unified parameter of pipeline (#25384))
     steps:
       - name: add automerge label
         uses: actions-ecosystem/action-add-labels@v1
@@ -108,4 +127,8 @@ jobs:
         with:
           token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
+<<<<<<< HEAD
           merge-method: rebase
+=======
+          merge-method: rebase
+>>>>>>> 36c40b6b8 ([Tool] Unified parameter of pipeline (#25384))
