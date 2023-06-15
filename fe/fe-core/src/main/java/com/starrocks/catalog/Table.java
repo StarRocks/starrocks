@@ -124,8 +124,8 @@ public class Table extends MetaObject implements Writable {
     @SerializedName(value = "comment")
     protected String comment = "";
 
-    // not serialized field
     // record all materialized views based on this Table
+    @SerializedName(value = "mvs")
     protected Set<MvId> relatedMaterializedViews;
 
     // unique constraints for mv rewrite

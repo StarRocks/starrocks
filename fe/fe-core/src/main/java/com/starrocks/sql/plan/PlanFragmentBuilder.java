@@ -163,7 +163,7 @@ public class PlanFragmentBuilder {
 
     private static final Logger LOG = LogManager.getLogger(PlanFragmentBuilder.class);
 
-    public ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,
+    public static ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,
                                        List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory,
                                        List<String> colNames,
                                        TResultSinkType resultSinkType,
@@ -175,7 +175,7 @@ public class PlanFragmentBuilder {
         return finalizeFragments(execPlan, resultSinkType);
     }
 
-    private void createOutputFragment(PlanFragment inputFragment, ExecPlan execPlan,
+    private static void createOutputFragment(PlanFragment inputFragment, ExecPlan execPlan,
                                       List<ColumnRefOperator> outputColumns,
                                       boolean hasOutputFragment) {
         if (inputFragment.getPlanRoot() instanceof ExchangeNode || !inputFragment.isPartitioned() || !hasOutputFragment) {
@@ -216,7 +216,7 @@ public class PlanFragmentBuilder {
         execPlan.getFragments().add(exchangeFragment);
     }
 
-    boolean useQueryCache(ExecPlan execPlan) {
+    static boolean useQueryCache(ExecPlan execPlan) {
         if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
             return false;
         }
@@ -227,7 +227,7 @@ public class PlanFragmentBuilder {
         return true;
     }
 
-    private ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
+    private static ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
             fragment.createDataSink(resultSinkType);
