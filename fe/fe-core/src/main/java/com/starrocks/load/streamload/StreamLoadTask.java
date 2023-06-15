@@ -53,8 +53,14 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+<<<<<<< HEAD
 public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Writable {
     private static final Logger LOG = LogManager.getLogger(StreamLoadManager.class);
+=======
+public class StreamLoadTask extends AbstractTxnStateChangeCallback
+        implements Writable, GsonPostProcessable, GsonPreProcessable {
+    private static final Logger LOG = LogManager.getLogger(StreamLoadTask.class);
+>>>>>>> e58a27d83 ([Enhancement] Fix log error (#25390))
 
     public enum State {
         BEGIN,
