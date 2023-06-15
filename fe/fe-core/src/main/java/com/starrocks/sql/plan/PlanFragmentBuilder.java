@@ -3106,7 +3106,7 @@ public class PlanFragmentBuilder {
 
             TableFunctionTable table = (TableFunctionTable) node.getTable();
 
-            TupleDescriptor tupleDesc = buildTupleDesc(context, table);
+            TupleDescriptor tupleDesc = context.getDescTbl().createTupleDescriptor();
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
             files.add(table.fileList());
@@ -3130,6 +3130,7 @@ public class PlanFragmentBuilder {
             scanNode.setUseVectorizedLoad(true);
 
             Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), context.getConnectContext());
+            analyzer.setDescTbl(context.getDescTbl());
             try {
                 scanNode.init(analyzer);
                 scanNode.finalizeStats(analyzer);

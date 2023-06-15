@@ -808,6 +808,7 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 
     std::vector<SlotDescriptor> schema;
     st = p_scanner->get_schema(&schema);
+    LOG_IF(WARNING, !st.ok()) << "get schema failed: " << st;
 
     for (const auto& slot : schema) {
         slot.to_protobuf(response->add_schema());
