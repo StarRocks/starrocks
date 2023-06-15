@@ -49,7 +49,7 @@ Together with unnest(), you can achieve the following column-to-row conversion f
         `v2` string NULL COMMENT ""
     )
     DUPLICATE KEY(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+    DISTRIBUTED BY HASH(`v1`)
     PROPERTIES (
         "replication_num" = "3",
         "storage_format" = "DEFAULT"
@@ -120,7 +120,7 @@ Together with unnest(), you can achieve the following column-to-row conversion f
         `v2` ARRAY NULL COMMENT ""
     ) 
     DUPLICATE KEY(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+    DISTRIBUTED BY HASH(`v1`)
     PROPERTIES (
         "replication_num" = "3",
         "storage_format" = "DEFAULT"
@@ -169,7 +169,7 @@ Together with unnest(), you can achieve the following column-to-row conversion f
     `v2` Bitmap BITMAP_UNION COMMENT ""
     )
     AGGREGATE KEY(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1;
+    DISTRIBUTED BY HASH(`v1`);
 
     INSERT INTO lateral_test3 VALUES (1, bitmap_from_string('1, 2')), (2, to_bitmap(3));
     ~~~

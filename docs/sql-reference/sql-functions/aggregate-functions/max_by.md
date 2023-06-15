@@ -38,7 +38,7 @@ Returns a value that has the same type as `x`.
         subject_id INT,
         subject STRING,
         exam_result INT
-    ) DISTRIBUTED BY HASH(`subject_id`) BUCKETS 1;
+    ) DISTRIBUTED BY HASH(`subject_id`);
     ```
 
 2. Insert values into this table and query data from this table.

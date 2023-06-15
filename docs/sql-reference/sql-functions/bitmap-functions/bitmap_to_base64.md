@@ -61,7 +61,7 @@ Example 2: Convert each value in a BITMAP column into Base64-encoded strings.
         `visit_users` BITMAP BITMAP_UNION NOT NULL
         ) ENGINE=OLAP
         AGGREGATE KEY(`page_id`, `visit_date`)
-        DISTRIBUTED BY HASH(`page_id`) BUCKETS 1
+        DISTRIBUTED BY HASH(`page_id`)
         PROPERTIES (
         "replication_num" = "3",
         "storage_format" = "DEFAULT"

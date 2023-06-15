@@ -428,7 +428,7 @@ Create a table and insert values:
 
 ~~~SQL
 CREATE TABLE test_tbl (col_1 INT, col_2 INT)
-DISTRIBUTED BY HASH(col_1) BUCKETS 3;
+DISTRIBUTED BY HASH(col_1);
 
 INSERT INTO test_tbl VALUES 
     (1, NULL),
@@ -560,7 +560,7 @@ Create a table and insert values:
 
 ~~~SQL
 CREATE TABLE test_tbl (col_1 INT, col_2 INT)
-DISTRIBUTED BY HASH(col_1) BUCKETS 3;
+DISTRIBUTED BY HASH(col_1);
 
 INSERT INTO test_tbl VALUES 
     (1, NULL),
@@ -858,7 +858,7 @@ CREATE TABLE sales_record (
    city_id INT,
    item STRING,
    sales INT
-) DISTRIBUTED BY HASH(`city_id`) BUCKETS 1;
+) DISTRIBUTED BY HASH(`city_id`);
 
 -- Insert data into the table.
 insert into sales_record values

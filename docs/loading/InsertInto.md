@@ -65,7 +65,7 @@ PARTITION BY RANGE(event_time)
     PARTITION p18 VALUES LESS THAN ('2015-09-12 18:00:00'),
     PARTITION p24 VALUES LESS THAN ('2015-09-13 00:00:00')
 )
-DISTRIBUTED BY HASH(user) BUCKETS 3;
+DISTRIBUTED BY HASH(user);
 
 CREATE TABLE source_wiki_edit
 (
@@ -99,8 +99,12 @@ PARTITION BY RANGE(event_time)
     PARTITION p18 VALUES LESS THAN ('2015-09-12 18:00:00'),
     PARTITION p24 VALUES LESS THAN ('2015-09-13 00:00:00')
 )
-DISTRIBUTED BY HASH(user) BUCKETS 3;
+DISTRIBUTED BY HASH(user);
 ```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ## Insert data via INSERT INTO VALUES
 

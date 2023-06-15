@@ -14,7 +14,7 @@ CREATE TABLE `pv_bitmap` (
 ) ENGINE=OLAP
 AGGREGATE KEY(`dt`, `page`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`dt`) BUCKETS 2;
+DISTRIBUTED BY HASH(`dt`);
 ```
 
 Note: With an amount of data, you'd better create a rollup table corresponding to high-frequent bitmap_union.

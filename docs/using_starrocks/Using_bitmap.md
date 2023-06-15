@@ -76,7 +76,7 @@ Take the calculation of page UVs as an example.
       `visit_users` BITMAP BITMAP_UNION NOT NULL COMMENT 'user ID'
     ) ENGINE=OLAP
     AGGREGATE KEY(`page_id`, `visit_date`)
-    DISTRIBUTED BY HASH(`page_id`) BUCKETS 1
+    DISTRIBUTED BY HASH(`page_id`)
     PROPERTIES (
       "replication_num" = "3",
       "storage_format" = "DEFAULT"

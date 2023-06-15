@@ -58,11 +58,16 @@ CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
     pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
 )
 AGGREGATE KEY(site_id, date, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 8
+DISTRIBUTED BY HASH(site_id)
 PROPERTIES (
 "replication_num" = "3"
 );
 ```
+
+> **NOTICE**
+>
+> - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../Data_distribution.md#design-partitioning-and-bucketing-rules).
+> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../Data_distribution.md#determine-the-number-of-buckets).
 
 ## Usage notes
 

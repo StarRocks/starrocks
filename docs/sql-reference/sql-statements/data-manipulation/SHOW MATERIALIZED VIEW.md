@@ -70,7 +70,7 @@ CREATE TABLE customer ( C_CUSTKEY     INTEGER NOT NULL,
     ENGINE=OLAP
 DUPLICATE KEY(`c_custkey`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 10
+DISTRIBUTED BY HASH(`c_custkey`)
 PROPERTIES (
 "replication_num" = "1",
 "storage_format" = "DEFAULT"
@@ -78,7 +78,7 @@ PROPERTIES (
 
 -- Create MV: customer_mv
 CREATE MATERIALIZED VIEW customer_mv
-DISTRIBUTED BY HASH(c_custkey) buckets 10
+DISTRIBUTED BY HASH(c_custkey)
 REFRESH MANUAL
 PROPERTIES (
     "replication_num" = "1"
@@ -111,7 +111,7 @@ last_refresh_finished_time: 2023-02-17 10:27:33
            inactive_reason:
                       text: CREATE MATERIALIZED VIEW `customer_mv`
 COMMENT "MATERIALIZED_VIEW"
-DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 10
+DISTRIBUTED BY HASH(`c_custkey`)
 REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1",
@@ -142,7 +142,7 @@ last_refresh_finished_time: 2023-02-17 10:27:33
            inactive_reason:
                       text: CREATE MATERIALIZED VIEW `customer_mv`
 COMMENT "MATERIALIZED_VIEW"
-DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 10
+DISTRIBUTED BY HASH(`c_custkey`)
 REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1",

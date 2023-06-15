@@ -31,7 +31,7 @@ EMPTY_HLL(): This generates empty HLL column and is used to fill in default valu
     os char(1),
     set1 hll hll_union,
     set2 hll hll_union)
-    distributed by hash(id) buckets 32;
+    distributed by hash(id);
     ```
 
 2. Import data. Please refer to [Stream Load](../../../loading/StreamLoad.md) for the import method.
@@ -60,7 +60,7 @@ EMPTY_HLL(): This generates empty HLL column and is used to fill in default valu
     dt date,
     id int
     uv_set hll hll_union)
-    distributed by hash(id) buckets 32;
+    distributed by hash(id);
 
     insert into test_uv select dt, id, set1 from test;
 
@@ -70,7 +70,7 @@ EMPTY_HLL(): This generates empty HLL column and is used to fill in default valu
     dt date,
     id int,
     id_set hll hll_union)
-    distributed by hash(id) buckets 32;
+    distributed by hash(id);
 
     insert into test_uv select dt, id, hll_hash(id) from test;
     ```

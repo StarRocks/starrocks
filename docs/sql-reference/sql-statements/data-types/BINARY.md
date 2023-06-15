@@ -31,7 +31,7 @@ CREATE TABLE `test_binary` (
 ) ENGINE=OLAP
 DUPLICATE KEY(`id`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
     "replication_num" = "3",
     "storage_format" = "DEFAULT"
@@ -91,7 +91,7 @@ StarRocks supports the following ways to load data and store it as BINARY type.
     PARTITION p1 VALUES [("-2147483648"), ("0")),
     PARTITION p2 VALUES [("0"), ("10")),
     PARTITION p3 VALUES [("10"), ("20")))
-    DISTRIBUTED BY HASH(`k`) BUCKETS 1
+    DISTRIBUTED BY HASH(`k`)
     PROPERTIES ("replication_num" = "1");
 
     -- csv file

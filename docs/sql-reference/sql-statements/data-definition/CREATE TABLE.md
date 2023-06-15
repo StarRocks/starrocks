@@ -290,7 +290,7 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 
 **Precautions**:
 
-- **When a table is created, you must specify the bucketing columns**.
+- **When you create a table, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
 - Bucketing columns cannot be modified after they are specified.
 - Since StarRocks 2.5, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
@@ -487,7 +487,7 @@ CREATE TABLE example_db.table_hash
 ENGINE=olap
 AGGREGATE KEY(k1, k2)
 COMMENT "my first starrocks table"
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -503,7 +503,7 @@ CREATE TABLE example_db.table_hash
 )
 ENGINE=olap
 UNIQUE KEY(k1, k2)
-DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
+DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES(
     "storage_type"="column",
     "storage_medium" = "SSD",
@@ -523,7 +523,7 @@ CREATE TABLE example_db.table_hash
 )
 ENGINE=olap
 PRIMARY KEY(k1, k2)
-DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
+DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES(
     "storage_type"="column",
     "storage_medium" = "SSD",
@@ -552,7 +552,7 @@ PARTITION BY RANGE (k1)
     PARTITION p2 VALUES LESS THAN ("2014-06-01"),
     PARTITION p3 VALUES LESS THAN ("2014-12-01")
 )
-DISTRIBUTED BY HASH(k2) BUCKETS 10
+DISTRIBUTED BY HASH(k2)
 PROPERTIES(
     "storage_medium" = "SSD", 
     "storage_cooldown_time" = "2015-06-04 00:00:00"
@@ -589,7 +589,7 @@ PARTITION BY RANGE (k1, k2, k3)
     PARTITION p1 VALUES [("2014-01-01", "10", "200"), ("2014-01-01", "20", "300")),
     PARTITION p2 VALUES [("2014-06-01", "100", "200"), ("2014-07-01", "100", "300"))
 )
-DISTRIBUTED BY HASH(k2) BUCKETS 10
+DISTRIBUTED BY HASH(k2)
 PROPERTIES(
     "storage_medium" = "SSD"
 );
@@ -630,7 +630,7 @@ CREATE TABLE example_db.example_table
 )
 ENGINE=olap
 AGGREGATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -648,7 +648,7 @@ CREATE TABLE example_db.example_table
 )
 ENGINE=olap
 AGGREGATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -662,7 +662,7 @@ CREATE TABLE `t1`
 ) 
 ENGINE=OLAP
 DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 10
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES 
 (
     "colocate_with" = "t1"
@@ -675,7 +675,7 @@ CREATE TABLE `t2`
 ) 
 ENGINE=OLAP
 DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 10
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES 
 (
     "colocate_with" = "t1"
@@ -696,7 +696,7 @@ CREATE TABLE example_db.table_hash
 ENGINE=olap
 AGGREGATE KEY(k1, k2)
 COMMENT "my first starrocks table"
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -730,7 +730,7 @@ PARTITION BY RANGE (k1)
     PARTITION p2 VALUES LESS THAN ("2014-06-01"),
     PARTITION p3 VALUES LESS THAN ("2014-12-01")
 )
-DISTRIBUTED BY HASH(k2) BUCKETS 10
+DISTRIBUTED BY HASH(k2)
 PROPERTIES(
     "storage_medium" = "SSD",
     "dynamic_partition.enable" = "true",
@@ -781,7 +781,7 @@ create table users (
     property3 tinyint NOT NULL
 ) 
 PRIMARY KEY (`user_id`)
-DISTRIBUTED BY HASH(`user_id`) BUCKETS 4
+DISTRIBUTED BY HASH(`user_id`)
 ORDER BY(`address`,`last_active`)
 PROPERTIES(
     "replication_num" = "3",

@@ -45,7 +45,7 @@ CREATE TABLE example_table
 ENGINE = olap
 AGGREGATE KEY(k1, k2)
 COMMENT "my first starrocks table"
-DISTRIBUTED BY HASH(k1) BUCKETS 10;
+DISTRIBUTED BY HASH(k1);
 ```
 
 Display the CREATE TABLE statement of `example_table`. Note that if you did not specify PROPERTIES when you create the table, the default properties are displayed in the output of SHOW CREATE TABLE.
@@ -64,7 +64,7 @@ SHOW CREATE TABLE example_db.example_table;
 ) ENGINE=OLAP 
 AGGREGATE KEY(`k1`, `k2`)
 COMMENT "my first starrocks table"
-DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
+DISTRIBUTED BY HASH(`k1`) 
 PROPERTIES (
 "replication_num" = "3",
 "in_memory" = "false",
