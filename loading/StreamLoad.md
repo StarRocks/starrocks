@@ -64,32 +64,28 @@ Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 ##### 数据样例
 
-1. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，主键为 `id` 列，如下所示：
+1. 在本地文件系统中创建一个 CSV 格式的数据文件 `example1.csv`。文件一共包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
-    ```SQL
-    MySQL [test_db]> CREATE TABLE `table1`
-    (
-        `id` int(11) NOT NULL COMMENT "用户 ID",
-        `name` varchar(65533) NULL COMMENT "用户姓名",
-        `score` int(11) NOT NULL COMMENT "用户得分"
-    )
-    ENGINE=OLAP
-    PRIMARY KEY(`id`)
-    DISTRIBUTED BY HASH(`id`);
+   ```Plain%20Text
+   1,Lily,23
+   2,Rose,23
+   3,Alice,24
+   4,Julia,25
     ```
 
-    > **注意**
-    >
-    > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+2. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，主键为 `id` 列，如下所示：
 
-2. 在本地文件系统中创建一个 CSV 格式的数据文件 `example1.csv`。文件一共包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
-
-    ```Plain%20Text
-    1,Lily,23
-    2,Rose,23
-    3,Alice,24
-    4,Julia,25
-    ```
+   ```SQL
+   MySQL [test_db]> CREATE TABLE `table1`
+   (
+       `id` int(11) NOT NULL COMMENT "用户 ID",
+       `name` varchar(65533) NULL COMMENT "用户姓名",
+       `score` int(11) NOT NULL COMMENT "用户得分"
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   ```
 
 ##### 命令示例
 
@@ -131,16 +127,16 @@ MySQL [test_db]> SELECT * FROM table1;
 
 1. 在数据库 `test_db` 中创建一张名为 `table2` 的主键模型表。表包含 `id` 和 `city` 两列，主键为 `id` 列，如下所示：
 
-    ```SQL
-    MySQL [test_db]> CREATE TABLE `table2`
-    (
-        `id` int(11) NOT NULL COMMENT "城市 ID",
+   ```SQL
+   MySQL [test_db]> CREATE TABLE `table2`
+   (
+       `id` int(11) NOT NULL COMMENT "城市 ID",
         `city` varchar(65533) NULL COMMENT "城市名称"
-    )
-    ENGINE=OLAP
-    PRIMARY KEY(`id`)
-    DISTRIBUTED BY HASH(`id`);
-    ```
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   ```
 
   > **注意**
   >
@@ -148,9 +144,9 @@ MySQL [test_db]> SELECT * FROM table1;
 
 2. 在本地文件系统中创建一个 JSON 格式的数据文件 `example2.json`。文件一共包含两个字段，分别代表城市名称和城市 ID，如下所示：
 
-    ```JSON
-    {"name": "北京", "code": 2}
-    ```
+   ```JSON
+   {"name": "北京", "code": 2}
+   ```
 
 ##### 命令示例
 
