@@ -60,7 +60,7 @@ The following table describes the parameters in the URL.
 Describes the data file that you want to load. The `data_desc` descriptor can include the data file's name, format, column separator, row separator, destination partitions, and column mapping against the StarRocks table. Syntax:
 
 ```Bash
--T <file_name>
+-T <file_path>
 -H "format: CSV | JSON"
 -H "column_separator: <column_separator>"
 -H "row_delimiter: <row_delimiter>"
@@ -78,7 +78,7 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 
 | Parameter  | Required | Description                                                  |
 | ---------- | -------- | ------------------------------------------------------------ |
-| file_name  | Yes      | The name of the data file. You can optionally include the extension of the file name. |
+| file_path  | Yes      | The save path of the data file. You can optionally include the extension of the file name. |
 | format     | No       | The format of the data file. Valid values: `CSV` and `JSON`. Default value: `CSV`. |
 | partitions | No       | The partitions into which you want to load the data file. By default, if you do not specify this parameter, StarRocks loads the data file into all partitions of the StarRocks table. |
 | temporary_partitions| No | The name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data file. You can specify multiple temporary partitions, which must be separated by commas (,).|
