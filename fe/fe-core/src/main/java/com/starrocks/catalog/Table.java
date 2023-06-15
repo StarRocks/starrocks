@@ -113,7 +113,15 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("LAKE_MATERIALIZED_VIEW") // for backward and rollback compatibility
         CLOUD_NATIVE_MATERIALIZED_VIEW,
         @SerializedName("TABLE_FUNCTION")
+<<<<<<< HEAD
         TABLE_FUNCTION;
+=======
+        TABLE_FUNCTION,
+        @SerializedName("PAIMON")
+        PAIMON,
+        @SerializedName("HIVE_VIEW")
+        HIVE_VIEW;
+>>>>>>> 2ef2c58d7 ([BugFix] Fix show tables without hive view (#25085))
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -212,7 +220,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             }
         } else {
             // Only view in with-clause have null base
-            Preconditions.checkArgument(type == TableType.VIEW, "Table has no columns");
+            Preconditions.checkArgument(type == TableType.VIEW || type == TableType.HIVE_VIEW,
+                    "Table has no columns");
         }
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
