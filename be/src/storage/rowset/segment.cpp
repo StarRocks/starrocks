@@ -400,4 +400,12 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
                          TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()), nullptr);
 }
 
+Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
+    RETURN_IF_ERROR(load_index(false));
+    for (size_t i = 0; i < _sk_index_decoder->num_items(); i++) {
+        sk_index_values->emplace_back(_sk_index_decoder->key(i).to_string());
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks
