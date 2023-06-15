@@ -189,4 +189,13 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
         assertPlanContains(sql, "[], []");
     }
+
+    @Test
+    public void testCast() throws Exception {
+        String sql = "select cast(row(null, null, null) as STRUCT<a int, b MAP<int, int>, c ARRAY<INT>>); ";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "cast(row[(NULL, NULL, NULL); args: BOOLEAN,BOOLEAN,BOOLEAN; " +
+                "result: struct<col1 boolean, col2 boolean, col3 boolean>; args nullable: true; result nullable: true] " +
+                "as struct<a int(11), b map<int(11),int(11)>, c array<int(11)>>)");
+    }
 }
