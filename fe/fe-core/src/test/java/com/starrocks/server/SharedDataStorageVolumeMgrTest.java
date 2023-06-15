@@ -252,7 +252,7 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals("s3://default-bucket/1", locations.get(0));
 
         Config.cloud_native_storage_type = "hdfs";
-        Config.cloud_native_hdfs_url = "url";
+        Config.cloud_native_hdfs_url = "hdfs://url";
         locations = Deencapsulation.invoke(sdsvm, "parseLocationsFromConfig");
         Assert.assertEquals(1, locations.size());
         Assert.assertEquals("hdfs://url", locations.get(0));

@@ -46,17 +46,18 @@ public abstract class CloudConfigurationFactory {
             return cloudConfiguration;
         }
 
+        factory = new AliyunCloudConfigurationFactory(properties);
+        cloudConfiguration = factory.buildForStorage();
+        if (cloudConfiguration != null) {
+            return cloudConfiguration;
+        }
+
         factory = new HDFSCloudConfigurationFactory(properties);
         cloudConfiguration = factory.buildForStorage();
         if (cloudConfiguration != null) {
             return cloudConfiguration;
         }
 
-        factory = new AliyunCloudConfigurationFactory(properties);
-        cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
-        }
         return buildDefaultCloudConfiguration();
     }
 
