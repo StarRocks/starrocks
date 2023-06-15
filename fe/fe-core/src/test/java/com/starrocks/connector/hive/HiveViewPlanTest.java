@@ -15,7 +15,7 @@
 package com.starrocks.connector.hive;
 
 import com.starrocks.catalog.HiveView;
-import com.starrocks.common.UserException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
@@ -74,8 +74,8 @@ public class HiveViewPlanTest extends PlanTestBase {
                  "from\n" +
                  "    test_all_type\n" +
                  "    lateral view explode(split(t1a,',')) t1a");
-        expectedException.expect(UserException.class);
+        expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("Failed to parse view-definition statement of view");
-        hiveView.init();
+        hiveView.getQueryStatementWithSRParser();
     }
 }
