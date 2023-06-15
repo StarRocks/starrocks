@@ -376,7 +376,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
-          
+
   fe-ut:
     runs-on: [self-hosted, normal]
     needs: fe-codestyle-check
@@ -579,7 +579,9 @@ jobs:
         run: |
           set -x
           cd elastic-service
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output oss://celerdata-ci-release/${{steps.branch.outputs.branch}}/Release/pr/${{needs.build.outputs.build_output_tar}}
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output oss://${bucket_prefix}-ci-release/${{steps.branch.outputs.branch}}/Release/pr/${{needs.build.outputs.build_output_tar}}
 
       - run: |
           echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
