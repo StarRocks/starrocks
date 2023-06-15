@@ -42,6 +42,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/file_result_writer.h"
+#include "runtime/ignore_data_result_writer.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/result_buffer_mgr.h"
@@ -107,7 +108,7 @@ Status ResultSink::prepare(RuntimeState* state) {
         _writer.reset(new (std::nothrow) VariableResultWriter(_sender.get(), _output_expr_ctxs, _profile));
         break;
     default:
-        return Status::InternalError("Unknown result sink type");
+        return Status::InternalError(fmt::format("Unknown result sink type {}", _sink_type));
     }
 
     RETURN_IF_ERROR(_writer->init(state));

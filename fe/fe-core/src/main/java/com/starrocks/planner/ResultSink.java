@@ -99,7 +99,7 @@ public class ResultSink extends DataSink {
     }
 
     public boolean isQuerySink() {
-        return sinkType == TResultSinkType.MYSQL_PROTOCAL;
+        return sinkType == TResultSinkType.MYSQL_PROTOCAL || sinkType == TResultSinkType.IGNORE_DATA;
     }
 
     public boolean isStatisticSink() {
@@ -133,6 +133,6 @@ public class ResultSink extends DataSink {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return sinkType == TResultSinkType.MYSQL_PROTOCAL || sinkType == TResultSinkType.STATISTIC ||
-                sinkType == TResultSinkType.VARIABLE;
+                sinkType == TResultSinkType.VARIABLE || sinkType == TResultSinkType.IGNORE_DATA;
     }
 }

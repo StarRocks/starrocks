@@ -115,6 +115,8 @@ public class ConnectContext {
     protected QueryState state;
     protected long returnRows;
 
+    private boolean isExplainAnalyze = false;
+
     // error code
     protected String errorCode = "";
 
@@ -726,6 +728,14 @@ public class ConnectContext {
             LOG.warn("construct SSLChannelImp class failed");
             throw new IOException("construct SSLChannelImp class failed");
         }
+    }
+
+    public boolean isExplainAnalyze() {
+        return isExplainAnalyze;
+    }
+
+    public void setExplainAnalyze(boolean explainAnalyze) {
+        isExplainAnalyze = explainAnalyze;
     }
 
     public StmtExecutor executeSql(String sql) throws Exception {

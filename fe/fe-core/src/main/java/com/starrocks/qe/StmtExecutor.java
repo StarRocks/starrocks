@@ -385,6 +385,7 @@ public class StmtExecutor {
                     context.setSessionVariable(sessionVariable);
                 }
             }
+            context.setExplainAnalyze(parsedStmt.isExplainAnalyze());
 
             // execPlan is the output of new planner
             ExecPlan execPlan = null;
@@ -854,18 +855,18 @@ public class StmtExecutor {
         // 2. If this is a query, send the result expr fields first, and send result data back to client.
         RowBatch batch;
         MysqlChannel channel = context.getMysqlChannel();
-        boolean isOutfileQuery = false;
+        boolean ignoreData = false;
         if (queryStmt instanceof QueryStatement) {
-            isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
+            ignoreData = ((QueryStatement) queryStmt).hasOutFileClause();
         }
         if (parsedStmt.isExplainAnalyze()) {
-            isOutfileQuery = true;
+            ignoreData = true;
         }
         boolean isSendFields = false;
         while (true) {
             batch = coord.getNext();
             // for outfile query, there will be only one empty batch send back with eos flag
-            if (batch.getBatch() != null && !isOutfileQuery) {
+            if (batch.getBatch() != null && !ignoreData) {
                 // For some language driver, getting error packet after fields packet will be recognized as a success result
                 // so We need to send fields after first batch arrived
                 if (!isSendFields) {
@@ -894,12 +895,12 @@ public class StmtExecutor {
                 break;
             }
         }
-        if (!isSendFields && !isOutfileQuery) {
+        if (!isSendFields && !ignoreData) {
             sendFields(colNames, outputExprs);
         }
 
         statisticsForAuditLog = batch.getQueryStatistics();
-        if (!isOutfileQuery) {
+        if (!ignoreData) {
             context.getState().setEof();
         } else {
             context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");

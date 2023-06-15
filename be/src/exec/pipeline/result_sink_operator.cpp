@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/ignore_data_result_writer.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
@@ -42,8 +43,11 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     case TResultSinkType::VARIABLE:
         _writer = std::make_shared<VariableResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
         break;
+    case TResultSinkType::IGNORE_DATA:
+        _writer = std::make_shared<IgnoreDataResultWriter>(_sender.get());
+        break;
     default:
-        return Status::InternalError("Unknown result sink type");
+        return Status::InternalError(fmt::format("Unknown result sink type {}", _sink_type));
     }
 
     RETURN_IF_ERROR(_writer->init(state));
@@ -129,6 +133,10 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
     }
     DCHECK(_fetch_data_result.empty());
 
+    if (_sink_type == TResultSinkType::IGNORE_DATA) {
+        _writer->process_chunk(chunk.get());
+        return Status::OK();
+    }
     auto status = _writer->process_chunk(chunk.get());
     if (status.ok()) {
         _fetch_data_result = std::move(status.value());

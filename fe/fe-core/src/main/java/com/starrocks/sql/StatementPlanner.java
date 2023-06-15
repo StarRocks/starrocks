@@ -52,7 +52,11 @@ import java.util.stream.Collectors;
 public class StatementPlanner {
 
     public static ExecPlan plan(StatementBase stmt, ConnectContext session) {
-        return plan(stmt, session, TResultSinkType.MYSQL_PROTOCAL);
+        TResultSinkType resultSinkType = TResultSinkType.MYSQL_PROTOCAL;
+        if (session.isExplainAnalyze()) {
+            resultSinkType = TResultSinkType.IGNORE_DATA;
+        }
+        return plan(stmt, session, resultSinkType);
     }
 
     public static ExecPlan plan(StatementBase stmt, ConnectContext session,
