@@ -138,6 +138,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
+    reader_params.fill_data_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
@@ -175,7 +176,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
 
         progress->update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
                          column_group_size);
-        VLOG_EVERY_N(3, 1000) << "Compaction progress: " << progress->value();
+        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet->id() << ", compaction progress: " << progress->value();
     }
     RETURN_IF_ERROR(writer->flush_columns());
 

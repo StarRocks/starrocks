@@ -73,6 +73,9 @@ public class InsertStmt extends DmlStmt {
     // it is not allowed to write data to the materialized view.
     // If this is set to true it means a system refresh operation, which is allowed to write to materialized view.
     private boolean isSystem = false;
+    // Since insert overwrite internally reuses the insert statement,
+    // this variable can be used to distinguish whether a partition is specified.
+    private boolean partitionNotSpecifiedInOverwrite = false;
 
     /**
      * `true` means that it's created by CTAS statement
@@ -169,8 +172,8 @@ public class InsertStmt extends DmlStmt {
         return targetPartitionNames;
     }
 
-    public boolean isSpecifyPartition() {
-        return targetPartitionNames != null;
+    public boolean isSpecifyPartitionNames() {
+        return targetPartitionNames != null && !targetPartitionNames.isStaticKeyPartitionInsert();
     }
 
     public List<String> getTargetColumnNames() {
@@ -199,6 +202,14 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isStaticKeyPartitionInsert() {
         return targetPartitionNames != null && targetPartitionNames.isStaticKeyPartitionInsert();
+    }
+
+    public boolean isPartitionNotSpecifiedInOverwrite() {
+        return partitionNotSpecifiedInOverwrite;
+    }
+
+    public void setPartitionNotSpecifiedInOverwrite(boolean partitionNotSpecifiedInOverwrite) {
+        this.partitionNotSpecifiedInOverwrite = partitionNotSpecifiedInOverwrite;
     }
 
     @Override

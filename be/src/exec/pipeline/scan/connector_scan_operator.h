@@ -27,7 +27,7 @@ class ScanNode;
 
 namespace pipeline {
 
-class ConnectorScanOperatorIOTasksMemLimiter;
+struct ConnectorScanOperatorIOTasksMemLimiter;
 
 class ConnectorScanOperatorFactory : public ScanOperatorFactory {
 public:
@@ -61,7 +61,7 @@ public:
     ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter;
 };
 
-class ConnectorScanOperatorAdaptiveProcessor;
+struct ConnectorScanOperatorAdaptiveProcessor;
 class ConnectorScanOperator : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
@@ -135,7 +135,6 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
-    ConnectorScanOperator* _op = nullptr;
 };
 
 } // namespace pipeline

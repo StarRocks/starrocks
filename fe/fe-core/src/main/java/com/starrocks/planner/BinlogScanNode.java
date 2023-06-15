@@ -99,9 +99,6 @@ public class BinlogScanNode extends ScanNode {
 
     @Override
     public void computeStats(Analyzer analyzer) {
-        if (CollectionUtils.isNotEmpty(scanBackendIds)) {
-            numNodes = scanBackendIds.size();
-        }
     }
 
     @Override

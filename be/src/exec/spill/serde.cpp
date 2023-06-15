@@ -150,7 +150,10 @@ Status ColumnarSerde::serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockP
     std::vector<Slice> data;
     data.emplace_back(Slice(meta_buf.get(), meta_len));
     data.emplace_back(Slice(serialize_buffer.data(), serialize_buffer.size()));
-    RETURN_IF_ERROR(block->append(data));
+    {
+        SCOPED_TIMER(_parent->metrics().write_io_timer);
+        RETURN_IF_ERROR(block->append(data));
+    }
     COUNTER_UPDATE(_parent->metrics().flush_bytes, meta_len + serialize_buffer.size());
     TRACE_SPILL_LOG << "serialize chunk to block: " << block->debug_string()
                     << ", original size: " << chunk->bytes_usage() << ", encoded size: " << serialize_buffer.size();
@@ -159,13 +162,17 @@ Status ColumnarSerde::serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockP
 
 StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockReader* reader) {
     size_t encoded_size;
-    RETURN_IF_ERROR(reader->read_fully(&encoded_size, sizeof(size_t)));
+    {
+        SCOPED_TIMER(_parent->metrics().read_io_timer);
+        RETURN_IF_ERROR(reader->read_fully(&encoded_size, sizeof(size_t)));
+    }
     size_t read_bytes = sizeof(size_t) + encoded_size;
     std::vector<uint32_t> encode_levels;
     auto chunk = _chunk_builder();
     auto& columns = chunk->columns();
     if (_encode_context != nullptr) {
         // decode encode levels for each column
+        SCOPED_TIMER(_parent->metrics().read_io_timer);
         for (size_t i = 0; i < columns.size(); i++) {
             uint32_t encode_level;
             RETURN_IF_ERROR(reader->read_fully(&encode_level, sizeof(uint32_t)));
@@ -177,7 +184,10 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     serialize_buffer.resize(encoded_size);
 
     auto buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
-    RETURN_IF_ERROR(reader->read_fully(buf, encoded_size));
+    {
+        SCOPED_TIMER(_parent->metrics().read_io_timer);
+        RETURN_IF_ERROR(reader->read_fully(buf, encoded_size));
+    }
 
     const uint8_t* read_cursor = reinterpret_cast<uint8_t*>(serialize_buffer.data());
     if (_encode_context == nullptr) {

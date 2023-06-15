@@ -180,7 +180,6 @@ public class GrantsTo {
                                 Database database;
                                 if (CatalogMgr.isInternalCatalog(catalogName)) {
                                     database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(dbPEntryObject.getUUID()));
-
                                 } else {
                                     String dbName = ExternalCatalog.getDbNameFromUUID(dbPEntryObject.getUUID());
                                     database = metadataMgr.getDb(catalogName, dbName);
@@ -210,15 +209,7 @@ public class GrantsTo {
                             catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
 
                             for (String catalogName : catalogs) {
-                                List<String> dbNames = metadataMgr.listDbNames(catalogName);
-                                for (String dbName : dbNames) {
-                                    Database database = metadataMgr.getDb(catalogName, dbName);
-                                    if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
-                                        continue;
-                                    }
-
-                                    objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
-                                }
+                                objects.addAll(expandAllDatabaseAndTables(metadataMgr, catalogName, privEntry.getKey()));
                             }
                         } else {
                             String catalogName = getCatalogName(tablePEntryObject.getCatalogId());
@@ -228,15 +219,7 @@ public class GrantsTo {
 
                             if (tablePEntryObject.getDatabaseUUID().equalsIgnoreCase(
                                     PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
-                                List<String> dbNames = metadataMgr.listDbNames(catalogName);
-                                for (String dbName : dbNames) {
-                                    Database database = metadataMgr.getDb(catalogName, dbName);
-                                    if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
-                                        continue;
-                                    }
-
-                                    objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
-                                }
+                                objects.addAll(expandAllDatabaseAndTables(metadataMgr, catalogName, privEntry.getKey()));
                             } else {
                                 Database database;
                                 if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
@@ -259,9 +242,11 @@ public class GrantsTo {
                                         PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
                                     objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
                                 } else {
-                                    Table table;
                                     if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
-                                        table = database.getTable((Long.parseLong(tablePEntryObject.getTableUUID())));
+                                        Table table = database.getTable((Long.parseLong(tablePEntryObject.getTableUUID())));
+                                        if (table == null) {
+                                            continue;
+                                        }
                                         objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
                                     } else {
                                         String tableName = ExternalCatalog.getTableNameFromUUID(tablePEntryObject.getTableUUID());
@@ -313,6 +298,9 @@ public class GrantsTo {
                         } else {
                             ResourceGroup resourceGroup =
                                     GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroupId);
+                            if (resourceGroup == null) {
+                                continue;
+                            }
                             objects.add(Lists.newArrayList(null, null, resourceGroup.getName()));
                         }
                         break;
@@ -324,6 +312,9 @@ public class GrantsTo {
                             List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
                             for (String dbName : dbNames) {
                                 Database database = GlobalStateMgr.getCurrentState().getDb(dbName);
+                                if (database == null) {
+                                    continue;
+                                }
                                 if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
                                     continue;
                                 }
@@ -335,6 +326,9 @@ public class GrantsTo {
                             }
                         } else {
                             Database database = GlobalStateMgr.getCurrentState().getDb(databaseId);
+                            if (database == null) {
+                                continue;
+                            }
                             if (functionPEntryObject.getFunctionId().equals(PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID)) {
                                 List<Function> functions = database.getFunctions();
                                 for (Function function : functions) {
@@ -358,8 +352,7 @@ public class GrantsTo {
                                 (FunctionPEntryObject) privilegeEntry.getObject();
                         GlobalFunctionMgr globalFunctionMgr = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr();
 
-                        if (globalFunctionPEntryObject.getDatabaseId() ==
-                                PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID) {
+                        if (globalFunctionPEntryObject.getFunctionId() == PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID) {
                             for (Function function : globalFunctionMgr.getFunctions()) {
                                 objects.add(Lists.newArrayList(null, null, function.signatureString()));
                             }
@@ -444,6 +437,9 @@ public class GrantsTo {
         List<String> dbNames = metadataMgr.listDbNames(catalogName);
         for (String dbName : dbNames) {
             Database database = metadataMgr.getDb(catalogName, dbName);
+            if (database == null) {
+                continue;
+            }
             if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
                 continue;
             }
@@ -460,6 +456,9 @@ public class GrantsTo {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             for (String tableName : tableNames) {
                 Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+                if (table == null) {
+                    continue;
+                }
                 if (objectType.equals(ObjectType.VIEW) && !(table instanceof View)) {
                     continue;
                 } else if (objectType.equals(ObjectType.MATERIALIZED_VIEW)
@@ -474,6 +473,25 @@ public class GrantsTo {
                 objects.add(Lists.newArrayList(catalogName, dbName, tableName));
             }
         }
+        return objects;
+    }
+
+    private static Set<List<String>> expandAllDatabaseAndTables(MetadataMgr metadataMgr, String catalogName,
+                                                                ObjectType objectType) {
+        Set<List<String>> objects = new HashSet<>();
+        List<String> dbNames = metadataMgr.listDbNames(catalogName);
+        for (String dbName : dbNames) {
+            Database database = metadataMgr.getDb(catalogName, dbName);
+            if (database == null) {
+                continue;
+            }
+            if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
+                continue;
+            }
+
+            objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, objectType));
+        }
+
         return objects;
     }
 }
