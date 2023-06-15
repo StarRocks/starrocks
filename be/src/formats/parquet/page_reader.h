@@ -25,7 +25,8 @@ namespace starrocks::parquet {
 // Used to parse page header of column chunk. This class don't parse page's type.
 class PageReader {
 public:
-    PageReader(io::SeekableInputStream* stream, size_t start, size_t length);
+    PageReader(io::SeekableInputStream* stream, size_t start, size_t length, size_t num_values);
+
     ~PageReader() = default;
 
     // Try to parse header starts from current _offset. Caller should assure that
@@ -59,6 +60,8 @@ private:
     uint64_t _offset = 0;
     uint64_t _next_header_pos = 0;
     uint64_t _finish_offset = 0;
+    uint64_t _num_values_total = 0;
+    uint64_t _num_values_read = 0;
 };
 
 } // namespace starrocks::parquet
