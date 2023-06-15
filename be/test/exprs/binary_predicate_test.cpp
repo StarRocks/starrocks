@@ -545,4 +545,102 @@ TEST_F(VectorizedBinaryPredicateStringTest, nullEqExpr) {
     }
 }
 
+class VectorizedBinaryPredicateMapTest : public ::testing::Test {
+public:
+    void SetUp() override {
+        expr_node.opcode = TExprOpcode::INVALID_OPCODE;
+        expr_node.child_type = TPrimitiveType::VARCHAR;
+        expr_node.node_type = TExprNodeType::BINARY_PRED;
+        expr_node.num_children = 2;
+        expr_node.__isset.opcode = true;
+        expr_node.__isset.child_type = true;
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+
+        std::vector<TTypeNode> types_list;
+
+        TTypeNode type_map;
+        type_map.type = TTypeNodeType::MAP;
+        types_list.push_back(type_map);
+
+        TTypeNode type_scalar;
+        TScalarType scalar_type;
+        scalar_type.__set_type(TPrimitiveType::INT);
+        type_scalar.__set_scalar_type(scalar_type);
+        types_list.push_back(type_scalar);
+        types_list.push_back(type_scalar);
+
+        TTypeDesc type_desc;
+        type_desc.__set_types(types_list);
+
+        expr_node.__set_child_type_desc(type_desc);
+    }
+
+public:
+    TExprNode expr_node;
+};
+
+TEST_F(VectorizedBinaryPredicateMapTest, mapEqExpr1) {
+    expr_node.opcode = TExprOpcode::EQ;
+
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    auto col1 = ColumnHelper::create_column(map_type(LogicalType::TYPE_INT, LogicalType::TYPE_INT), true);
+    DatumMap map1;
+    map1[(int32_t)1] = (int32_t)1;
+    map1[(int32_t)2] = (int32_t)2;
+    col1->append_datum(map1);
+
+    MockColumnExpr expr1(expr_node, col1);
+    expr->add_child(&expr1);
+
+    auto col2 = ColumnHelper::create_column(map_type(LogicalType::TYPE_INT, LogicalType::TYPE_INT), true);
+    DatumMap map2;
+    map2[(int32_t)1] = (int32_t)1;
+    map2[(int32_t)2] = (int32_t)2;
+    col2->append_datum(map2);
+
+    MockColumnExpr expr2(expr_node, col2);
+    expr->add_child(&expr2);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_FALSE(ptr->is_nullable());
+    ASSERT_TRUE(ptr->is_numeric());
+
+    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_TRUE(v->get_data()[j]);
+    }
+}
+
+TEST_F(VectorizedBinaryPredicateMapTest, mapEqExpr2) {
+    expr_node.opcode = TExprOpcode::EQ;
+
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    auto col1 = ColumnHelper::create_column(map_type(LogicalType::TYPE_INT, LogicalType::TYPE_INT), true);
+    DatumMap map1;
+    map1[(int32_t)1] = (int32_t)1;
+    map1[(int32_t)2] = (int32_t)2;
+    col1->append_datum(map1);
+
+    MockColumnExpr expr1(expr_node, col1);
+    expr->add_child(&expr1);
+
+    auto col2 = ColumnHelper::create_column(map_type(LogicalType::TYPE_INT, LogicalType::TYPE_INT), true);
+    DatumMap map2;
+    map2[(int32_t)3] = (int32_t)1;
+    map2[(int32_t)4] = (int32_t)2;
+    col2->append_datum(map2);
+
+    MockColumnExpr expr2(expr_node, col2);
+    expr->add_child(&expr2);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_FALSE(ptr->is_nullable());
+    ASSERT_TRUE(ptr->is_numeric());
+
+    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_FALSE(v->get_data()[j]);
+    }
+}
+
 } // namespace starrocks
