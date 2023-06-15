@@ -290,7 +290,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     // spill components
     // TODO: avoid create spill channel when when disable spill
 
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
+    auto workgroup = context->fragment_context()->workgroup();
+    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
 
