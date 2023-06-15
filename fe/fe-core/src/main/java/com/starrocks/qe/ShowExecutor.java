@@ -862,12 +862,7 @@ public class ShowExecutor {
                     LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
                     continue;
                 }
-                if (table.isView()) {
-                    if (!PrivilegeActions.checkAnyActionOnView(
-                            connectContext, catalogName, db.getFullName(), table.getName())) {
-                        continue;
-                    }
-                } else if (!PrivilegeActions.checkAnyActionOnTable(connectContext,
+                if (!PrivilegeActions.checkAnyActionOnTable(connectContext,
                         catalogName, dbName, tableName)) {
                     continue;
                 }
