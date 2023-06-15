@@ -583,56 +583,6 @@ jobs:
       - run: |
           echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
 
-  admit:
-    runs-on: [self-hosted, normal]
-    name: ADMIT TEST
-    needs: deploy
-    if: always() && needs.deploy.result == 'success'
-    timeout-minutes: 40
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-      CLUSTER_NAME: ci-admit
-      FE_NODE: ${{ needs.deploy.outputs.fe }}
-      BE_NODE: ${{ needs.deploy.outputs.be }}
-    steps:
-      - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
-
-      - name: Prepare Tools
-        run: |
-          cd ${{ github.workspace }}
-          rm -rf .actions
-          mkdir -p .actions/nose-report-action
-          cd .actions/nose-report-action
-          git clone https://github.com/StarRocks/action-junit-report.git .
-
-      - name: Run Case
-        run: |
-          set -x
-          echo "FE: ${{needs.deploy.outputs.fe}}, BE: ${{needs.deploy.outputs.be}}"
-          
-          cd ${{ github.workspace }}
-          rm -rf ./elastic-service
-          ln -s /var/lib/elastic-service ./elastic-service
-          cd elastic-service && git pull
-          
-          cd ${{ github.workspace }}
-          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest
-          cd ./StarRocksTest && git pull
-          
-          cd ${{ github.workspace }}/elastic-service
-          ./bin/run-admit.sh
-
-      - name: Publish Test Results
-        uses: ./.actions/nose-report-action
-        if: success() || failure()
-        with:
-          check_name: 'Admit Test Results'
-          fail_on_failure: true
-          detailed_summary: true
-          token: ${{ secrets.GITHUB_TOKEN }}
-          report_paths: 'StarRocksTest/result/*.xml'
-
   SQL-Tester:
     runs-on: [self-hosted, normal]
     name: SQL-Tester
@@ -699,10 +649,60 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'test/*.xml'
 
+  admit:
+    runs-on: [self-hosted, normal]
+    name: ADMIT TEST
+    needs: [ deploy, SQL-Tester ]
+    if: always() && needs.deploy.result == 'success' && needs.SQL-Tester.result == 'success'
+    timeout-minutes: 40
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: ci-admit
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Prepare Tools
+        run: |
+          cd ${{ github.workspace }}
+          rm -rf .actions
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
+      - name: Run Case
+        run: |
+          set -x
+          echo "FE: ${{needs.deploy.outputs.fe}}, BE: ${{needs.deploy.outputs.be}}"
+          
+          cd ${{ github.workspace }}
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          
+          cd ${{ github.workspace }}
+          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest
+          cd ./StarRocksTest && git pull
+          
+          cd ${{ github.workspace }}/elastic-service
+          ./bin/run-admit.sh
+
+      - name: Publish Test Results
+        uses: ./.actions/nose-report-action
+        if: success() || failure()
+        with:
+          check_name: 'Admit Test Results'
+          fail_on_failure: true
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: 'StarRocksTest/result/*.xml'
+
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
-    needs: [ deploy, SQL-Tester, admit ]
+    needs: [ deploy, admit ]
     if: always() && needs.deploy.outputs.deploy_conf_file != ''
     env:
       PR_NUMBER: ${{ github.event.number }}
