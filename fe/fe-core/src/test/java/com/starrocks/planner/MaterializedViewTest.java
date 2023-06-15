@@ -2590,4 +2590,152 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteOK(mv, query);
         }
     }
+<<<<<<< HEAD
+=======
+
+    // Single Predicates
+    @Test
+    public void testRangePredicates1() {
+        // =
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno = 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 10");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 20");
+        }
+
+        // >
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno > 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno > 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno > 20");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno < 10");
+        }
+
+        // >=
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno >= 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno >= 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno >= 20");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno <= 10");
+        }
+
+        // <
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno < 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno < 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno < 5");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno > 10");
+        }
+
+        // <=
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno <= 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno <= 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno <= 5");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno >= 10");
+        }
+
+        // !=
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno != 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno != 10");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 10");
+            // TODO: Support != as Range Predicates
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno > 10");
+            // TODO: Support != as Range Predicates
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno < 10");
+        }
+    }
+
+    // Multi Predicates
+    @Test
+    public void testRangePredicates2() {
+        // !=
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno < 10 or emps.deptno > 10";
+            testRewriteOK(mv, "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno < 10 or emps.deptno > 10");
+            // TODO: support OrPredicates as Range Predicates.
+            testRewriteFail(mv, "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno < 5 or emps.deptno > 20");
+        }
+    }
+
+    @Test
+    public void testTimeSliceRewrite() throws Exception {
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t_time_slice` (\n" +
+            "    `dt` datetime NOT NULL COMMENT \"\",\n" +
+            "    `c1` int(11) NOT NULL COMMENT \"\"\n" +
+            ") ENGINE=OLAP\n" +
+            "DUPLICATE KEY(`dt`)\n" +
+            "COMMENT \"OLAP\"\n" +
+            "PARTITION BY RANGE(`dt`)\n" +
+            "(\n" +
+            "    PARTITION p1 VALUES [(\"2023-06-01\"), (\"2023-06-02\")),\n" +
+            "    PARTITION p2 VALUES [(\"2023-06-02\"), (\"2023-06-03\")),\n" +
+            "    PARTITION p3 VALUES [(\"2023-06-03\"), (\"2023-06-04\"))\n" +
+            ")\n" +
+            "DISTRIBUTED BY HASH(`c1`) BUCKETS 1\n" +
+            "PROPERTIES (\n" +
+            "    \"replication_num\" = \"1\",\n" +
+            "    \"in_memory\" = \"false\"\n" +
+            ")");
+
+        String mv = "SELECT time_slice(dt, interval 5 minute) as t, sum(c1) FROM t_time_slice GROUP BY t";
+        testRewriteOK(mv, "SELECT time_slice(dt, interval 5 minute) as t FROM t_time_slice " +
+            "WHERE dt BETWEEN '2023-06-01' AND '2023-06-02' GROUP BY t");
+        starRocksAssert.dropTable("t_time_slice");
+    }
+
+    @Test
+    public void testCountDistinctRollupAgg() throws Exception {
+        {
+            String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
+                + "from emps group by empid, deptno, locationid";
+            String query = "select empid, count(distinct name) as s\n"
+                + "from emps where deptno=1 and locationid=1 "
+                + "group by empid ";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
+                + "from emps group by empid, deptno, locationid";
+            String query = "select empid, count(distinct name) as s\n"
+                + "from emps where deptno=1 \n"
+                + "group by empid ";
+            testRewriteFail(mv, query);
+        }
+
+    }
+>>>>>>> 050a69fac ([Enhancement] count distinct mv can rewrite when missing group by has equal predicate (#25006))
 }
