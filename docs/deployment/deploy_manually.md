@@ -326,7 +326,7 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
    >
    > You can add multiple CN nodes with one SQL. Each `<cn_address>:<heartbeat_service_port>` pair represents one CN node.
 
-7. (Optional) Check the status of the CN nodes by executing the following SQL.
+6. (Optional) Check the status of the CN nodes by executing the following SQL.
 
    ```SQL
    SHOW PROC '/compute_nodes'\G
@@ -382,11 +382,10 @@ A high-availability FE cluster requires at least THREE Follower FE nodes in the 
    > - You can use the preceding command to add a single Follower FE nodes each time.
    > - If you want to add Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md).
 
-
 3. Launch a terminal on the new FE instance, create a dedicated directory for metadata storage, navigate to the directory that stores the StarRocks FE deployment files, and modify the FE configuration file **fe/conf/fe.conf**. For more instructions, see [Step 1: Start the Leader FE node](#step-1-start-the-leader-fe-node) Basically, you can repeat the procedures in Step 1 **except for the command used to start the FE node**.
   
    After configuring the Follower FE node, execute the following SQL to assign a helper node for Follower FE node and start the Follower FE node.
-   
+
    > **NOTE**
    >
    > When adding new Follower FE node to a cluster, you must assign a helper node (essentially an existing Follower FE node) to the new Follower FE node to synchronize the metadata.
