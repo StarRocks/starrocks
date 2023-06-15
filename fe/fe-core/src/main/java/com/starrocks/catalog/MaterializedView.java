@@ -996,6 +996,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         appendUniqueProperties(sb);
 
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(entry.getKey())
+                        .append("\" = \"").append(entry.getValue()).append("\"");
+            }
+        }
+
         sb.append("\n)");
         String define = this.getSimpleDefineSql();
         if (StringUtils.isEmpty(define) || !simple) {
