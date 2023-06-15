@@ -33,7 +33,7 @@ jobs:
       - name: Checkout the latest code
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT }}
           fetch-depth: 0
 
       - name: Automatic Rebase
