@@ -4509,7 +4509,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
             }
             LOG.warn("create partitions from partitions failed.", e);
-            throw new RuntimeException("create partitions failed", e);
+            throw new RuntimeException("create partitions failed: " + e.getMessage(), e);
         }
         return newPartitions;
     }
