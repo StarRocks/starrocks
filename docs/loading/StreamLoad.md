@@ -90,6 +90,10 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    DISTRIBUTED BY HASH(`id`);
    ```
 
+   > **NOTE**
+   >
+   > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
 ##### Load data
 
 Run the following command to load the data of `example1.csv` into `table1`:
@@ -127,7 +131,13 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ##### Data examples
 
-1. In your StarRocks database `test_db`, create a table named `table2` that uses the Primary Key table. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+1. In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
+
+   ```JSON
+   {"name": "Beijing", "code": 2}
+   ```
+
+2. In your StarRocks database `test_db`, create a Primary Key table named `table2`. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table2`
@@ -140,15 +150,9 @@ MySQL [test_db]> SELECT * FROM table1;
    DISTRIBUTED BY HASH(`id`);
    ```
 
-   > **NOTICE**
+   > **NOTE**
    >
    > Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
-
-2. In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
-
-   ```JSON
-   {"name": "Beijing", "code": 2}
-   ```
 
 ##### Load data
 
