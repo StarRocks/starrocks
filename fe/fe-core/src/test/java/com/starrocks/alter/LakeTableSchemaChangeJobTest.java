@@ -77,6 +77,7 @@ import javax.validation.constraints.NotNull;
 import static com.starrocks.catalog.TabletInvertedIndex.NOT_EXIST_TABLET_META;
 
 public class LakeTableSchemaChangeJobTest {
+    private static final int NUM_BUCKETS = 4;
     private ConnectContext connectContext;
     private LakeTableSchemaChangeJob schemaChangeJob;
     private Database db;
@@ -103,7 +104,6 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        final int numBuckets = 4;
         final long dbId = GlobalStateMgr.getCurrentState().getNextId();
         final long partitionId = GlobalStateMgr.getCurrentState().getNextId();
         final long tableId = GlobalStateMgr.getCurrentState().getNextId();
@@ -118,7 +118,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertNull(oldDb);
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
-        DistributionInfo dist = new HashDistributionInfo(numBuckets, Collections.singletonList(c0));
+        DistributionInfo dist = new HashDistributionInfo(NUM_BUCKETS, Collections.singletonList(c0));
         PartitionInfo partitionInfo = new RangePartitionInfo(Collections.singletonList(c0));
         partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
 
@@ -127,7 +127,7 @@ public class LakeTableSchemaChangeJobTest {
         Partition partition = new Partition(partitionId, "t0", index, dist);
         TStorageMedium storage = TStorageMedium.HDD;
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
-        for (int i = 0; i < numBuckets; i++) {
+        for (int i = 0; i < NUM_BUCKETS; i++) {
             Tablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
             index.addTablet(tablet, tabletMeta);
         }
@@ -322,7 +322,7 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
                                              long timeoutSeconds) throws AlterCancelException {
-                // nothing to do.
+                Assert.assertEquals(NUM_BUCKETS, countDownLatch.getCount());
             }
 
             @Mock
