@@ -4104,6 +4104,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitPartitionNames(StarRocksParser.PartitionNamesContext context) {
+        if (context.keyPartitions() != null) {
+            return visit(context.keyPartitions());
+        }
+
         List<Identifier> identifierList = visit(context.identifierOrString(), Identifier.class);
         return new PartitionNames(context.TEMPORARY() != null,
                 identifierList.stream().map(Identifier::getValue).collect(toList()));
@@ -4120,6 +4124,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new SubqueryRelation(new QueryStatement(relation));
     }
 
+    @Override
+    public ParseNode visitKeyPartitionList(StarRocksParser.KeyPartitionListContext context) {
+        List<String> partitionColNames = Lists.newArrayList();
+        List<Expr> partitionColValues = Lists.newArrayList();
+        for (StarRocksParser.KeyPartitionContext pair : context.keyPartition()) {
+            Identifier partitionName = (Identifier) visit(pair.partitionColName);
+            Expr partitionValue = (Expr) visit(pair.partitionColValue);
+            partitionColNames.add(partitionName.getValue());
+            partitionColValues.add(partitionValue);
+        }
+
+        return new PartitionNames(false, new ArrayList<>(), partitionColNames, partitionColValues);
+    }
     @Override
     public ParseNode visitSubqueryWithAlias(StarRocksParser.SubqueryWithAliasContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.subquery());

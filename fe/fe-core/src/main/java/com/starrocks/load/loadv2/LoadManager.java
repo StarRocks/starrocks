@@ -56,6 +56,9 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
@@ -64,6 +67,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TransactionStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -383,7 +387,34 @@ public class LoadManager implements Writable {
         return (currentTimeMs - job.getFinishTimestamp()) / 1000 > Config.label_keep_max_second;
     }
 
+    public void cleanResidualJob() {
+        // clean residual insert job
+        readLock();
+        List<LoadJob> insertJobs;
+        try {
+            insertJobs = idToLoadJob.values().stream().filter(job -> job.getJobType() == EtlJobType.INSERT).collect(
+                    Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+
+        insertJobs.forEach(job -> {
+            TransactionStatus st = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(
+                    job.getDbId(), job.getLabel());
+            if (st == TransactionStatus.UNKNOWN) {
+                try {
+                    recordFinishedOrCacnelledLoadJob(
+                            job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
+                    LOG.info("abort job: {} since transaction status unknown", job.getLabel());
+                } catch (UserException e) {
+                    LOG.warn("failed to abort job: {}", job.getLabel(), e);
+                }
+            }
+        });
+    }
+
     public void removeOldLoadJob() {
+        // clean expired load job
         long currentTimeMs = System.currentTimeMillis();
 
         writeLock();
@@ -590,7 +621,12 @@ public class LoadManager implements Writable {
     }
 
     public LoadJob getLoadJob(long jobId) {
-        return idToLoadJob.get(jobId);
+        readLock();
+        try {
+            return idToLoadJob.get(jobId);
+        } finally {
+            readUnlock();
+        }
     }
 
     public void prepareJobs() {
@@ -713,25 +749,8 @@ public class LoadManager implements Writable {
                 LOG.info("discard expired job: {}", loadJob);
                 continue;
             }
-            idToLoadJob.put(loadJob.getId(), loadJob);
-            Map<String, List<LoadJob>> map = dbIdToLabelToLoadJobs.get(loadJob.getDbId());
-            if (map == null) {
-                map = Maps.newConcurrentMap();
-                dbIdToLabelToLoadJobs.put(loadJob.getDbId(), map);
-            }
 
-            List<LoadJob> jobs = map.get(loadJob.getLabel());
-            if (jobs == null) {
-                jobs = Lists.newArrayList();
-                map.put(loadJob.getLabel(), jobs);
-            }
-            jobs.add(loadJob);
-            // The callback of load job which is replayed by image need to be registered in callback factory.
-            // The commit and visible txn will callback the unfinished load job.
-            // Otherwise, the load job always does not be completed while the txn is visible.
-            if (!loadJob.isCompleted()) {
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
-            }
+            putLoadJob(loadJob);
         }
     }
 
@@ -746,5 +765,41 @@ public class LoadManager implements Writable {
     public long saveLoadJobsV2(DataOutputStream out, long checksum) throws IOException {
         write(out);
         return checksum;
+    }
+
+    public void loadLoadJobsV2JsonFormat(DataInputStream in) throws IOException,
+            SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(in, LoadManager.class.getName());
+        try {
+            int size = reader.readInt();
+            long now = System.currentTimeMillis();
+            while (size-- > 0) {
+                LoadJob loadJob = reader.readJson(LoadJob.class);
+                // discard expired job right away
+                if (isJobExpired(loadJob, now)) {
+                    LOG.info("discard expired job: {}", loadJob);
+                    continue;
+                }
+
+                putLoadJob(loadJob);
+            }
+        } finally {
+            reader.close();
+        }
+    }
+
+    private void putLoadJob(LoadJob loadJob) {
+        idToLoadJob.put(loadJob.getId(), loadJob);
+        Map<String, List<LoadJob>> map =
+                dbIdToLabelToLoadJobs.computeIfAbsent(loadJob.getDbId(), k -> Maps.newConcurrentMap());
+
+        List<LoadJob> jobs = map.computeIfAbsent(loadJob.getLabel(), k -> Lists.newArrayList());
+        jobs.add(loadJob);
+        // The callback of load job which is replayed by image need to be registered in callback factory.
+        // The commit and visible txn will callback the unfinished load job.
+        // Otherwise, the load job always does not be completed while the txn is visible.
+        if (!loadJob.isCompleted()) {
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+        }
     }
 }

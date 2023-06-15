@@ -77,6 +77,7 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -191,9 +192,17 @@ public class InsertPlanner {
                 OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
 
                 boolean enableAutomaticPartition;
-                if (!insertStmt.isOverwrite() && insertStmt.isSpecifyPartition()) {
+                List<Long> targetPartitionIds = insertStmt.getTargetPartitionIds();
+                if (insertStmt.isSystem() && insertStmt.isPartitionNotSpecifiedInOverwrite()) {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+                } else if (insertStmt.isSpecifyPartitionNames()) {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = false;
+                } else if (insertStmt.isStaticKeyPartitionInsert()) {
                     enableAutomaticPartition = false;
                 } else {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 }
                 dataSink = new OlapTableSink(olapTable, olapTuple, insertStmt.getTargetPartitionIds(),

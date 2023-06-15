@@ -120,6 +120,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.LeaderDaemon;
@@ -186,6 +187,7 @@ import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.ImageHeader;
 import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -203,6 +205,7 @@ import com.starrocks.persist.Storage;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AuthorizationManager;
@@ -1482,6 +1485,32 @@ public class GlobalStateMgr {
         }
     }
 
+    public long loadVersion(DataInputStream dis, long checksum) throws IOException {
+        // for new format, version schema is [starrocksMetaVersion], and the int value must be positive
+        // for old format, version schema is [-1, metaVersion, starrocksMetaVersion]
+        // so we can check the first int to determine the version schema
+        int flag = dis.readInt();
+        checksum = checksum ^ flag;
+        int starrocksMetaVersion;
+        if (flag < 0) {
+            checksum ^= dis.readInt();
+            starrocksMetaVersion = dis.readInt();
+            checksum ^= starrocksMetaVersion;
+        } else {
+            // when flag is positive, this is new version format
+            starrocksMetaVersion = flag;
+        }
+
+        if (!MetaVersion.isCompatible(starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION)) {
+            LOG.error("Not compatible with meta version {}, current version is {}",
+                    starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION);
+            System.exit(-1);
+        }
+
+        MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
+
+        return checksum;
+    }
 
     public long loadHeader(DataInputStream dis, long checksum) throws IOException {
         // for community, version schema is [int], and the int value must be positive
@@ -1533,6 +1562,18 @@ public class GlobalStateMgr {
 
         LOG.info("finished replay header from image");
         return newChecksum;
+    }
+
+    public long loadHeaderV2(DataInputStream dis, long checksum) throws IOException {
+        ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
+
+        checksum ^= header.getBatchEndId();
+        idGenerator.setId(header.getBatchEndId());
+
+        isDefaultClusterCreated = header.isDefaultClusterCreated();
+
+        LOG.info("finished to replay header from image");
+        return checksum;
     }
 
     public long loadAlterJob(DataInputStream dis, long checksum) throws IOException {
@@ -3706,6 +3747,13 @@ public class GlobalStateMgr {
         } catch (Throwable t) {
             LOG.warn("load manager remove old load jobs failed", t);
         }
+
+        try {
+            loadManager.cleanResidualJob();
+        } catch (Throwable t) {
+            LOG.warn("load manager clean residual job failed", t);
+        }
+
         try {
             exportMgr.removeOldExportJobs();
         } catch (Throwable t) {

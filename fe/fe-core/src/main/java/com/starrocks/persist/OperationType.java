@@ -313,4 +313,33 @@ public class OperationType {
 
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
+
+    //Load Job json format log
+    public static final short OP_CREATE_LOAD_JOB_V2 = 12100;
+    public static final short OP_END_LOAD_JOB_V2 = 12101;
+    public static final short OP_CREATE_ROUTINE_LOAD_JOB_V2 = 12102;
+    public static final short OP_CHANGE_ROUTINE_LOAD_JOB_V2 = 12103;
+
+    //Txn json format log
+    public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
+    public static final short OP_SAVE_TRANSACTION_ID_V2 = 12111;
+
+    //colocate table json format log
+    public static final short OP_COLOCATE_ADD_TABLE_V2 = 12130;
+    public static final short OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2 = 12131;
+    public static final short OP_COLOCATE_MARK_UNSTABLE_V2 = 12132;
+    public static final short OP_COLOCATE_MARK_STABLE_V2 = 12133;
+    public static final short OP_MODIFY_TABLE_COLOCATE_V2 = 12134;
+
+    //Export json format log
+    public static final short OP_EXPORT_CREATE_V2 = 12120;
+    public static final short OP_EXPORT_UPDATE_INFO_V2 = 12121;
+
+    // small files json format log
+    public static final short OP_CREATE_SMALL_FILE_V2 = 12140;
+    public static final short OP_DROP_SMALL_FILE_V2 = 12141;
+
+    //Backup/Restore json format log
+    public static final short OP_BACKUP_JOB_V2 = 12150;
+    public static final short OP_RESTORE_JOB_V2 = 12151;
 }

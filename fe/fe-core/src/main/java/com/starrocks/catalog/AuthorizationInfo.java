@@ -19,6 +19,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -39,7 +40,9 @@ import java.util.Set;
  * The job checks the priv by auth info.
  */
 public class AuthorizationInfo implements Writable {
+    @SerializedName("d")
     private String dbName;
+    @SerializedName("t")
     private Set<String> tableNameList;
 
     // only for persist

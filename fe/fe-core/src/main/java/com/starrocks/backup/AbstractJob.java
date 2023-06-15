@@ -88,6 +88,7 @@ public abstract class AbstractJob implements Writable {
     @SerializedName(value = "dbName")
     protected String dbName;
 
+    @SerializedName("status")
     protected Status status = Status.OK;
 
     @SerializedName(value = "createTime")

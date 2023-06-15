@@ -34,6 +34,7 @@
 
 package com.starrocks.transaction;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
@@ -50,6 +51,7 @@ import java.io.IOException;
 
 public abstract class TxnCommitAttachment implements Writable {
 
+    @SerializedName("s")
     protected TransactionState.LoadJobSourceType sourceType;
     protected boolean isTypeRead = false;
 

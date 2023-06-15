@@ -150,6 +150,12 @@ public class EditLog {
                             .initTransactionId(id + 1);
                     break;
                 }
+                case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
+                    TransactionIdInfo idInfo = (TransactionIdInfo) journal.getData();
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+                            .initTransactionId(idInfo.getTxnId() + 1);
+                    break;
+                }
                 case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
                 case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
                     AutoIncrementInfo info = (AutoIncrementInfo) journal.getData();
@@ -339,12 +345,14 @@ public class EditLog {
                     globalStateMgr.replayRenamePartition(info);
                     break;
                 }
-                case OperationType.OP_BACKUP_JOB: {
+                case OperationType.OP_BACKUP_JOB:
+                case OperationType.OP_BACKUP_JOB_V2: {
                     BackupJob job = (BackupJob) journal.getData();
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
-                case OperationType.OP_RESTORE_JOB: {
+                case OperationType.OP_RESTORE_JOB:
+                case OperationType.OP_RESTORE_JOB_V2: {
                     RestoreJob job = (RestoreJob) journal.getData();
                     job.setGlobalStateMgr(globalStateMgr);
                     globalStateMgr.getBackupHandler().replayAddJob(job);
@@ -378,7 +386,8 @@ public class EditLog {
                     globalStateMgr.replayRenameRollup(info);
                     break;
                 }
-                case OperationType.OP_EXPORT_CREATE: {
+                case OperationType.OP_EXPORT_CREATE:
+                case OperationType.OP_EXPORT_CREATE_V2: {
                     ExportJob job = (ExportJob) journal.getData();
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayCreateExportJob(job);
@@ -389,6 +398,7 @@ public class EditLog {
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayUpdateJobState(op.getJobId(), op.getState());
                     break;
+                case OperationType.OP_EXPORT_UPDATE_INFO_V2:
                 case OperationType.OP_EXPORT_UPDATE_INFO:
                     ExportJob.ExportUpdateInfo exportUpdateInfo = (ExportJob.ExportUpdateInfo) journal.getData();
                     globalStateMgr.getExportMgr().replayUpdateJobInfo(exportUpdateInfo);
@@ -553,6 +563,7 @@ public class EditLog {
                     globalStateMgr.replayUpdateClusterAndBackends(info);
                     break;
                 }
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_V2:
                 case OperationType.OP_UPSERT_TRANSACTION_STATE: {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
@@ -580,7 +591,8 @@ public class EditLog {
                     globalStateMgr.replayTruncateTable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_ADD_TABLE: {
+                case OperationType.OP_COLOCATE_ADD_TABLE:
+                case OperationType.OP_COLOCATE_ADD_TABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayAddTableToGroup(info);
                     break;
@@ -590,22 +602,26 @@ public class EditLog {
                     globalStateMgr.getColocateTableIndex().replayRemoveTable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ: {
+                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ:
+                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayAddBackendsPerBucketSeq(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_MARK_UNSTABLE: {
+                case OperationType.OP_COLOCATE_MARK_UNSTABLE:
+                case OperationType.OP_COLOCATE_MARK_UNSTABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayMarkGroupUnstable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_MARK_STABLE: {
+                case OperationType.OP_COLOCATE_MARK_STABLE:
+                case OperationType.OP_COLOCATE_MARK_STABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayMarkGroupStable(info);
                     break;
                 }
-                case OperationType.OP_MODIFY_TABLE_COLOCATE: {
+                case OperationType.OP_MODIFY_TABLE_COLOCATE:
+                case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
                     final TablePropertyInfo info = (TablePropertyInfo) journal.getData();
                     globalStateMgr.replayModifyTableColocate(info);
                     break;
@@ -639,11 +655,13 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().replayBackendTabletsInfo(backendTabletsInfo);
                     break;
                 }
+                case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2:
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB: {
                     RoutineLoadJob routineLoadJob = (RoutineLoadJob) journal.getData();
                     GlobalStateMgr.getCurrentState().getRoutineLoadManager().replayCreateRoutineLoadJob(routineLoadJob);
                     break;
                 }
+                case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2:
                 case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB: {
                     RoutineLoadOperation operation = (RoutineLoadOperation) journal.getData();
                     GlobalStateMgr.getCurrentState().getRoutineLoadManager().replayChangeRoutineLoadJob(operation);
@@ -659,12 +677,14 @@ public class EditLog {
                     globalStateMgr.getStreamLoadManager().replayCreateLoadTask(streamLoadTask);
                     break;
                 }
+                case OperationType.OP_CREATE_LOAD_JOB_V2:
                 case OperationType.OP_CREATE_LOAD_JOB: {
                     com.starrocks.load.loadv2.LoadJob loadJob =
                             (com.starrocks.load.loadv2.LoadJob) journal.getData();
                     globalStateMgr.getLoadManager().replayCreateLoadJob(loadJob);
                     break;
                 }
+                case OperationType.OP_END_LOAD_JOB_V2:
                 case OperationType.OP_END_LOAD_JOB: {
                     LoadJobFinalOperation operation = (LoadJobFinalOperation) journal.getData();
                     globalStateMgr.getLoadManager().replayEndLoadJob(operation);
@@ -721,12 +741,14 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayAlterRunningTaskRunProgress(
                             taskRunPeriodStatusChange.getTaskRunProgressMap());
                     break;
-                case OperationType.OP_CREATE_SMALL_FILE: {
+                case OperationType.OP_CREATE_SMALL_FILE:
+                case OperationType.OP_CREATE_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
                     break;
                 }
-                case OperationType.OP_DROP_SMALL_FILE: {
+                case OperationType.OP_DROP_SMALL_FILE:
+                case OperationType.OP_DROP_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayRemoveFile(smallFile);
                     break;
@@ -1449,10 +1471,6 @@ public class EditLog {
 
     public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
         logEdit(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB, routineLoadOperation);
-    }
-
-    public void logRemoveRoutineLoadJob(RoutineLoadOperation operation) {
-        logEdit(OperationType.OP_REMOVE_ROUTINE_LOAD_JOB, operation);
     }
 
     public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {

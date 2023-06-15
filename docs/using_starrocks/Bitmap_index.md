@@ -38,7 +38,7 @@ There are two ways to create a bitmap index for a column.
     )
     ENGINE = olap
     AGGREGATE KEY(k1, k2)
-    DISTRIBUTED BY HASH(k1) BUCKETS 10
+    DISTRIBUTED BY HASH(k1)
     PROPERTIES ("storage_type" = "column");
     ```
 

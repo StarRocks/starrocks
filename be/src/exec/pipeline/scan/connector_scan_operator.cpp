@@ -460,7 +460,6 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
-    _op = down_cast<ConnectorScanOperator*>(op);
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -477,8 +476,7 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
 }
 
 ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_limiter() const {
-    ConnectorScanOperator* op = down_cast<ConnectorScanOperator*>(_scan_op);
-    ConnectorScanOperatorFactory* f = down_cast<ConnectorScanOperatorFactory*>(op->get_factory());
+    auto* f = down_cast<ConnectorScanOperatorFactory*>(_scan_op->get_factory());
     return f->_io_tasks_mem_limiter;
 }
 

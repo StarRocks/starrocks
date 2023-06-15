@@ -34,28 +34,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
   [ ... ]
   ```
 
-  The preceding syntax creates a Task, which is a template for storing a task that executes the CTAS statement. You can check the information of the Task by using the following syntax.
-
-  ```SQL
-  SELECT * FROM INFORMATION_SCHEMA.tasks;
-  ```
-
-  After you run the Task, a TaskRun is generated accordingly. A TaskRun indicates a task that executes the CTAS statement. A TaskRun has the following four states:
-
-  - `PENDING`: The task waits to be run.
-  - `RUNNING`: The task is running.
-  - `FAILED`: The task failed.
-  - `SUCCESS`: The task runs successfully.
-
-  You can check the state of a TaskRun by using the following syntax.
-
-  ```SQL
-  SELECT * FROM INFORMATION_SCHEMA.task_runs;
-  ```
-
 ## Parameters
-
-### Parameters of the CTAS statement
 
 | **Parameter**     | **Required** | **Description**                                              |
 | ----------------- | ------------ | ------------------------------------------------------------ |
@@ -65,18 +44,6 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 | distribution_desc | No           | The bucketing method of the new table. If you do not specify this parameter, the bucket column defaults to the column with the highest cardinality collected by the cost-based optimizer (CBO). The number of buckets defaults to 10. If the CBO does not collect information about the cardinality, the bucket column defaults to the first column in the new table. For more information about bucketing, see CREATE TABLE. |
 | Properties        | No           | The properties of the new table.                             |
 | AS SELECT query   | Yes          | The query result.  You can specify columns in `... AS SELECT query`, for example, `... AS SELECT a, b, c FROM table_a;`. In this example, `a`, `b`, and `c` indicates the column names of the table that is queried. If you do not specify the column names of the new table, the column names of the new table are also `a`, `b`, and `c`. You can specify expressions in `... AS SELECT query`, for example, `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`. In this example, `a+1`, `b+2`, and `c*c` indicates the column names of the table that is queried, and `x`, `y`, and `z` indicates the column names of the new table. Note:  The number of columns in the new table need to be the same as the number of the columns specified in the SELECT statement . We recommend that you use column names that are easy to identify. |
-
-### Parameters of frontends (FEs)
-
-If you asynchronously query a table and create a new table based on the query result, you also need to configure the following parameters.
-
-| **Parameter**              | **Default value** | **Description**                                              |
-| -------------------------- | ----------------- | ------------------------------------------------------------ |
-| task_ttl_second            | 259200            | The period during which a Task is valid. Unit: seconds. Tasks that exceed the validity period are deleted. |
-| task_check_interval_second | 14400             | The time interval to delete invalid Tasks. Unit: seconds.    |
-| task_runs_ttl_second       | 259200            | The period during which a TaskRun is valid. Unit: seconds. TaskRuns that exceed the validity period are deleted automatically. Additionally, TaskRuns in the `FAILED` and `SUCCESS` states are also deleted automatically. |
-| task_runs_concurrency      | 20                | The maximum number of TaskRuns that can be run in parallel.  |
-| task_runs_queue_length     | 500               | The maximum number of TaskRuns that are pending for running. If the number exceeds the default value, the incoming tasks will be suspended. |
 
 ## Usage notes
 
@@ -150,7 +117,7 @@ PARTITION BY RANGE(`LO_ORDERDATE`)
 (
     START ("1993-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR)
 )
-DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 120 AS SELECT
+DISTRIBUTED BY HASH(`LO_ORDERKEY`) AS SELECT
     l.LO_ORDERKEY AS LO_ORDERKEY,
     l.LO_LINENUMBER AS LO_LINENUMBER,
     l.LO_CUSTKEY AS LO_CUSTKEY,

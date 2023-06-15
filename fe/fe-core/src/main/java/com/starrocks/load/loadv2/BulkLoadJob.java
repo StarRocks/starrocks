@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
@@ -80,10 +81,12 @@ public abstract class BulkLoadJob extends LoadJob {
     private static final Logger LOG = LogManager.getLogger(BulkLoadJob.class);
 
     // input params
+    @SerializedName("bds")
     protected BrokerDesc brokerDesc;
     // this param is used to persist the expr of columns
     // the origin stmt is persisted instead of columns expr
     // the expr of columns will be reanalyze when the log is replayed
+    @SerializedName("ost")
     protected OriginStatement originStmt;
 
     // include broker desc and data desc
@@ -93,6 +96,7 @@ public abstract class BulkLoadJob extends LoadJob {
 
     // sessionVariable's name -> sessionVariable's value
     // we persist these sessionVariables due to the session is not available when replaying the job.
+    @SerializedName("svs")
     protected Map<String, String> sessionVariables = Maps.newHashMap();
 
     protected static final String PRIORITY_SESSION_VARIABLE_KEY = "priority.session.variable.key";
