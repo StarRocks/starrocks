@@ -82,7 +82,6 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
     auto scoped = trace::Scope(_span);
     ClosureGuard done_guard(done);
-    auto t0 = std::chrono::steady_clock::now();
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     int64_t index_id = request.index_id();
