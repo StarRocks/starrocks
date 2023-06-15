@@ -98,6 +98,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
@@ -186,6 +187,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
+
+    // Record the alter, schema change, MV update time
+    public AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
+    // Record the start and end time for data load version update phase
+    public AtomicLong lastVersionUpdateStartTime = new AtomicLong(-1);
+    public AtomicLong lastVersionUpdateEndTime = new AtomicLong(0);
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -321,10 +328,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
             return Lists.newArrayList();
         }
         return indexes.getIndexes();
-    }
-
-    public TableIndexes getTableIndexes() {
-        return indexes;
     }
 
     public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
@@ -1486,6 +1489,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
         // The table may be restored from another cluster, it should be set to current cluster id.
         clusterId = GlobalStateMgr.getCurrentState().getClusterId();
+
+        lastSchemaUpdateTime = new AtomicLong(-1);
+        // Record the start and end time for data load version update phase
+        lastVersionUpdateStartTime = new AtomicLong(-1);
+        lastVersionUpdateEndTime = new AtomicLong(0);
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {

@@ -807,8 +807,6 @@ public class Coordinator {
             int backendId = 0;
             int profileFragmentId = 0;
 
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
                 FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
@@ -887,7 +885,7 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine,
+                            params.toThrift(instanceId2Host.keySet(), descTable, enablePipelineEngine,
                                     accTabletSinkDop, tabletSinkTotalDop);
                     if (enablePipelineTableSinkDop) {
                         for (FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
@@ -1085,8 +1083,6 @@ public class Coordinator {
             int backendNum = 0;
             int profileFragmentId = 0;
 
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-
             this.descTable.setIs_cached(false);
             TDescriptorTable emptyDescTable = new TDescriptorTable();
             emptyDescTable.setIs_cached(true);
@@ -1179,7 +1175,7 @@ public class Coordinator {
                                 .map(FInstanceExecParam::getInstanceId)
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
-                                params.toThriftInBatch(curInstanceIds, host, curDescTable, dbIds, enablePipelineEngine,
+                                params.toThriftInBatch(curInstanceIds, host, curDescTable, enablePipelineEngine,
                                         accTabletSinkDop, tabletSinkTotalDop);
                         if (enablePipelineTableSinkDop) {
                             for (FInstanceExecParam request : requests) {
@@ -3342,7 +3338,7 @@ public class Coordinator {
         }
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
-                                               TDescriptorTable descTable, Set<Long> dbIds,
+                                               TDescriptorTable descTable,
                                                boolean enablePipelineEngine, int accTabletSinkDop,
                                                int tabletSinkTotalDop) throws Exception {
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
@@ -3375,7 +3371,7 @@ public class Coordinator {
 
         TExecBatchPlanFragmentsParams toThriftInBatch(
                 Set<TUniqueId> inFlightInstanceIds, TNetworkAddress destHost, TDescriptorTable descTable,
-                Set<Long> dbIds, boolean enablePipelineEngine, int accTabletSinkDop,
+                boolean enablePipelineEngine, int accTabletSinkDop,
                 int tabletSinkTotalDop) throws Exception {
 
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
