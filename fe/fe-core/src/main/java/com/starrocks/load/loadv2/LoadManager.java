@@ -375,8 +375,9 @@ public class LoadManager implements Writable {
         readLock();
         List<LoadJob> insertJobs;
         try {
-            insertJobs = idToLoadJob.values().stream().filter(job -> job.getJobType() == EtlJobType.INSERT).collect(
-                    Collectors.toList());
+            insertJobs = idToLoadJob.values().stream()
+                    .filter(job -> job.getJobType() == EtlJobType.INSERT && !job.isCompleted())
+                    .collect(Collectors.toList());
         } finally {
             readUnlock();
         }
