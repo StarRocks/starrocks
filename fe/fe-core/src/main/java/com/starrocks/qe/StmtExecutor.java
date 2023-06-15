@@ -1385,13 +1385,13 @@ public class StmtExecutor {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         try {
             handleDMLStmtImpl(execPlan, (DmlStmt) parsedStmt);
+            if (context.getSessionVariable().isEnableProfile()) {
+                writeProfile(beginTimeInNanoSecond);
+            }
         } catch (Throwable t) {
             LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
             throw t;
         } finally {
-            if (context.getSessionVariable().isEnableProfile()) {
-                writeProfile(beginTimeInNanoSecond);
-            }
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
     }
