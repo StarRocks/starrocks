@@ -337,6 +337,7 @@ public class OperationType {
     @Deprecated
     public static final short OP_DROP_TASK_RUNS = 10083;
     public static final short OP_UPDATE_TASK_RUN_STATE = 10084;
+    public static final short OP_ALTER_TASK = 10085;
 
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
