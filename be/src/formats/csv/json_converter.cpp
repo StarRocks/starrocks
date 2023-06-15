@@ -40,7 +40,7 @@ bool JsonConverter::read_string(Column* column, Slice s, const Options& options)
     auto json = JsonValue::parse(s);
     if (json.ok()) {
         auto json_column = down_cast<JsonColumn*>(column);
-        json_column->append(&json.value());
+        json_column->append(std::move(json.value()));
         return true;
     }
     return false;
