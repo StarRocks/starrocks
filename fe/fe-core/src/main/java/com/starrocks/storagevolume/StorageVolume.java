@@ -24,6 +24,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
+import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.parquet.Strings;
@@ -32,6 +33,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
 
 public class StorageVolume {
     public static final String S3_PREFIX = "s3://";
@@ -68,6 +71,7 @@ public class StorageVolume {
         this.locations = new ArrayList<>(locations);
         this.comment = comment;
         this.enabled = enabled;
+        setEmptyAuthenticationIfNeeded(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
         if (!isValidCloudConfiguration()) {
             throw new SemanticException("Storage params is not valid");
@@ -215,6 +219,12 @@ public class StorageVolume {
                 // TODO
             default:
                 return params;
+        }
+    }
+
+    private void setEmptyAuthenticationIfNeeded(Map<String, String> params) {
+        if (svt == StorageVolumeType.HDFS) {
+            params.computeIfAbsent(HDFS_AUTHENTICATION, key -> HDFSCloudCredential.EMPTY);
         }
     }
 }

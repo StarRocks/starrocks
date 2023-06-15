@@ -27,6 +27,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
+import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -229,6 +230,21 @@ public class StorageVolumeTest {
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
         Assert.assertEquals("kerberos", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
         Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHaConfigurations().size());
+    }
+
+    @Test
+    public void testHDFSEmptyCredential() {
+        Map<String, String> storageParams = new HashMap<>();
+        StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
+                storageParams, true, "");
+        CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+        Assert.assertEquals(HDFSCloudCredential.EMPTY,
+                hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasHdfsFsInfo());
     }
 
     @Test
