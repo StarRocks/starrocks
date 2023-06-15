@@ -21,7 +21,7 @@ PARTITION BY RANGE(event_day)(
     PARTITION p20200323 VALUES LESS THAN ("2020-03-24"),
     PARTITION p20200324 VALUES LESS THAN ("2020-03-25")
 )
-DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32
+DISTRIBUTED BY HASH(event_day, site_id)
 PROPERTIES(
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
