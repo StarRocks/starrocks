@@ -499,17 +499,7 @@ public class StmtExecutor {
                     throw new AnalysisException("old planner does not support CTAS statement");
                 }
             } else if (parsedStmt instanceof DmlStmt) {
-                try {
-                    handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
-                    if (context.getSessionVariable().isEnableProfile()) {
-                        writeProfile(beginTimeInNanoSecond);
-                    }
-                } catch (Throwable t) {
-                    LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
-                    throw t;
-                } finally {
-                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
-                }
+                handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
             } else if (parsedStmt instanceof DdlStmt) {
                 handleDdlStmt();
             } else if (parsedStmt instanceof ShowStmt) {
@@ -1279,6 +1269,21 @@ public class StmtExecutor {
     }
 
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+        long beginTimeInNanoSecond = TimeUtils.getStartTime();
+        try {
+            handleDMLStmtImpl(execPlan, stmt);
+            if (context.getSessionVariable().isEnableProfile()) {
+                writeProfile(beginTimeInNanoSecond);
+            }
+        } catch (Throwable t) {
+            LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
+            throw t;
+        } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+        }
+    }
+
+    private void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;
