@@ -394,13 +394,13 @@ public class OlapScanNode extends ScanNode {
             Collections.shuffle(replicas);
             boolean tabletIsNull = true;
             for (Replica replica : replicas) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
-                if (backend == null) {
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
                 }
-                String ip = backend.getHost();
-                int port = backend.getBePort();
+                String ip = node.getHost();
+                int port = node.getBePort();
                 TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(ip, port));
                 scanRangeLocation.setBackend_id(replica.getBackendId());
                 scanRangeLocations.addToLocations(scanRangeLocation);
@@ -485,14 +485,13 @@ public class OlapScanNode extends ScanNode {
             boolean collectedStat = false;
             for (Replica replica : replicas) {
                 // TODO: need to refactor after be split into cn + dn
-                ComputeNode backend =  GlobalStateMgr.getCurrentSystemInfo().
-                        getBackendOrComputeNode(replica.getBackendId());
-                if (backend == null) {
+                ComputeNode node =  GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
                 }
-                String ip = backend.getHost();
-                int port = backend.getBePort();
+                String ip = node.getHost();
+                int port = node.getBePort();
                 TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(ip, port));
                 scanRangeLocation.setBackend_id(replica.getBackendId());
                 scanRangeLocations.addToLocations(scanRangeLocation);
@@ -505,7 +504,7 @@ public class OlapScanNode extends ScanNode {
                     actualRows += replica.getRowCount();
                     collectedStat = true;
                 }
-                scanBackendIds.add(backend.getId());
+                scanBackendIds.add(node.getId());
             }
             if (tabletIsNull) {
                 throw new UserException(tabletId + "have no alive replicas");

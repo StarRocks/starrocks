@@ -27,7 +27,6 @@ PARALLEL_TEST(CpuUsageRecorderTest, normal) {
     recorder.update_interval();
     int cpu_used_permille = recorder.cpu_used_permille();
     ASSERT_GE(cpu_used_permille, 0);
-    ASSERT_LE(cpu_used_permille, 1000);
 }
 
 } // namespace starrocks

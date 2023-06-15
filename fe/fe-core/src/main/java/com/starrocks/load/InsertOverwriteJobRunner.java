@@ -392,9 +392,14 @@ public class InsertOverwriteJobRunner {
             PartitionNames partitionNames = new PartitionNames(true, tmpPartitionNames);
             // change the TargetPartitionNames from source partitions to new tmp partitions
             // should replan when load data
+            if (insertStmt.getTargetPartitionNames() == null) {
+                insertStmt.setPartitionNotSpecifiedInOverwrite(true);
+            }
             insertStmt.setTargetPartitionNames(partitionNames);
             insertStmt.setTargetPartitionIds(job.getTmpPartitionIds());
             insertStmt.setOverwrite(false);
+            insertStmt.setSystem(true);
+
         } catch (Exception e) {
             throw new DmlException("prepareInsert exception", e);
         } finally {

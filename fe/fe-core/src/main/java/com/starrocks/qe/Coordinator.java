@@ -1932,11 +1932,10 @@ public class Coordinator {
             this.initiated = false;
             this.done = false;
             this.address = host;
-            this.backend = coordinatorPreprocessor.getIdToBackend().get(addressToBackendID.get(address));
+
             // if useComputeNode and it's olapScan now, backend is null ,need get from olapScanNodeIdToComputeNode
-            if (backend == null) {
-                backend = coordinatorPreprocessor.getIdToComputeNode().get(addressToBackendID.get(address));
-            }
+            this.backend = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(addressToBackendID.get(address));
+
             String name =
                     "Instance " + DebugUtil.printId(uniqueRpcParams.params.fragment_instance_id) + " (host=" + address +
                             ")";
