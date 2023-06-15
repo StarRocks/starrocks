@@ -48,6 +48,7 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
               -t|--timeout         Timeout(s) of each case, >0, default 600
               -l|--list            Only list cases name and don't run
               -a|--attr            Case attrs for filter, default all cases, e.x: system,admit
+              --skip_reruns        skip 3 time reruns, all case will be run exactly once, default False
               --file_filter        Case file regex for filter, default .*
               --case_filter        Case name regex for filter, default .*
         """
@@ -55,20 +56,42 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
 
 
 if __name__ == "__main__":
-    """ main """
+    """main"""
 
     record = False
     dirname = None
     concurrency = 8
-    timeout = 600
+    timeout = 1200
     file_filter = ".*"
     case_filter = ".*"
     collect = False
     part = False
+<<<<<<< HEAD
 
     args = "hld:rvc:t:x:y:pa:"
     detail_args = ["help", "list", "dir=", "record", "validate", "concurrency=", "timeout=", "file_filter=",
                    "case_filter=", "part", "attr="]
+=======
+    skip_reruns = False
+    config = "conf/sr.conf"
+
+    args = "hld:rvc:t:x:y:pa:"
+    detail_args = [
+        "help",
+        "list",
+        "dir=",
+        "record",
+        "validate",
+        "concurrency=",
+        "timeout=",
+        "file_filter=",
+        "case_filter=",
+        "part",
+        "attr=",
+        "skip_reruns",
+        "config=",
+    ]
+>>>>>>> aa16cd077c ([Tool] rebuild sql test framework and add repeat runs (#25315))
 
     case_dir = None
 
@@ -120,6 +143,15 @@ if __name__ == "__main__":
         if opt in ("-a", "--attr"):
             attr = arg
 
+<<<<<<< HEAD
+=======
+        if opt == "--skip_reruns":
+            skip_reruns = True
+
+        if opt == "--config":
+            config = arg
+
+>>>>>>> aa16cd077c ([Tool] rebuild sql test framework and add repeat runs (#25315))
     # set environment
     os.environ["record_mode"] = "true" if record else "false"
     os.environ["sql_dir"] = str(dirname)
@@ -132,8 +164,16 @@ if __name__ == "__main__":
         "test_sql_cases.py",
         "-vv",
         "-s",
-        "--nologcapture"
+        "--nologcapture",
     ]
+
+    if not skip_reruns and not record:
+        argv.extend([
+            "--with-flaky",
+            "--force-flaky",
+            "--max-runs=3",
+            "--min-passes=3",
+        ])
 
     # concurrency
     if concurrency <= 0:
