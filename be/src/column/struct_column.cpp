@@ -300,34 +300,20 @@ bool StructColumn::equals(size_t left, const Column& rhs, size_t right) const {
         return false;
     }
     for (int i = 0; i < _fields.size(); ++i) {
-        if (_fields[i]->is_null(left)) {
-            if (!rhs_struct._fields[i]->is_null(right)) {
-                return false;
-            }
-        } else {
-            if (rhs_struct._fields[i]->is_null(right)) {
-                return false;
-            }
-
-            auto lhs_field = ColumnHelper::get_data_column(_fields[i].get());
-            auto rhs_field = ColumnHelper::get_data_column(rhs_struct._fields[i].get());
-            if (!lhs_field->equals(left, *rhs_field, right)) {
-                return false;
-            }
+        if (!_fields[i]->equals(left, *rhs_struct._fields[i].get(), right)) {
+            return false;
         }
     }
     return true;
 }
 
 void StructColumn::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
-    // TODO(SmithCruise) Not tested.
     for (const ColumnPtr& column : _fields) {
         column->fnv_hash(seed, from, to);
     }
 }
 
 void StructColumn::crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
-    // TODO(SmithCruise) Not tested.
     for (const ColumnPtr& column : _fields) {
         column->crc32_hash(seed, from, to);
     }
@@ -447,12 +433,13 @@ bool StructColumn::capacity_limit_reached(std::string* msg) const {
 void StructColumn::check_or_die() const {
     // Struct must have at least one field.
     DCHECK(_fields.size() > 0);
-    // DCHECK(_field_names.size() > 0);
+    DCHECK(_field_names.size() > 0);
 
     // fields and field_names must have the same size.
-    // DCHECK(_fields.size() == _field_names.size());
+    DCHECK(_fields.size() == _field_names.size());
 
     for (const auto& column : _fields) {
+        DCHECK(column->is_nullable());
         column->check_or_die();
     }
 }

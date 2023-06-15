@@ -1446,6 +1446,12 @@ static std::unique_ptr<Expr> create_slot_ref(const TypeDescriptor& type) {
     return std::make_unique<ColumnRef>(ref_node);
 }
 
+StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+    auto column = ColumnHelper::create_column(_type, true);
+    column->append_nulls(ptr->num_rows());
+    return std::move(column);
+}
+
 Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
                                                        LogicalType to_type, bool allow_throw_exception) {
     if (to_type == TYPE_CHAR) {
@@ -1633,6 +1639,9 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
             pool->add(cast_input.release());
         }
         return std::make_unique<CastStructExpr>(node, std::move(field_casts));
+    }
+    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) && to_type.is_complex_type()) {
+        return std::make_unique<MustNullExpr>(node);
     }
     auto res = create_primitive_cast(pool, node, from_type.type, to_type.type, allow_throw_exception);
     if (res == nullptr) {
