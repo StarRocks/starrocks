@@ -76,6 +76,7 @@ import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -646,6 +647,13 @@ public class PrivilegeChecker {
         @Override
         public Void visitCancelLoadStatement(CancelLoadStmt statement, ConnectContext context) {
             checkOperateLoadPrivilege(context, statement.getDbName(), statement.getLabel());
+            return null;
+        }
+
+        // --------------------------------- Compaction Statement ---------------------------------
+        @Override
+        public Void visitCancelCompactionStatement(CancelCompactionStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
             return null;
         }
 

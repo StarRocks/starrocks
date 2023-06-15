@@ -173,6 +173,7 @@ statement
     | cancelLoadStatement
     | alterLoadStatement
 
+
     // Show Statement
     | showAuthorStatement
     | showBackendsStatement
@@ -285,6 +286,9 @@ statement
     | showStorageVolumesStatement
     | descStorageVolumeStatement
     | setDefaultStorageVolumeStatement
+
+    // Compaction Statement
+    | cancelCompactionStatement
 
     //Unsupported Statement
     | unsupportedStatement
@@ -1261,6 +1265,12 @@ cancelLoadStatement
 alterLoadStatement
     : ALTER LOAD FOR (db=qualifiedName '.')? name=identifier
         jobProperties?
+    ;
+
+// ------------------------------------------- Compaction Statement ----------------------------------------------------------
+
+cancelCompactionStatement
+    : CANCEL COMPACTION (WHERE expression)?
     ;
 
 // ------------------------------------------- Show Statement ----------------------------------------------------------

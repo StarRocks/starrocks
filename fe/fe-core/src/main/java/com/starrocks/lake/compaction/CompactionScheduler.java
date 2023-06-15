@@ -144,6 +144,7 @@ public class CompactionScheduler extends Daemon {
                     }
                 } else if (job.isFailed()) {
                     errorMsg = Objects.requireNonNull(job.getFailMessage(), "getFailMessage() is null");
+                    LOG.error("Compaction job {} failed: {}", job.getDebugString(), errorMsg);
                     job.abort(); // Abort any executing task, if present.
                 }
 
@@ -413,6 +414,25 @@ public class CompactionScheduler extends Daemon {
             builder.add(CompactionRecord.build(job));
         }
         return builder.build();
+    }
+
+    @NotNull
+    public void cancelCompaction(long txnId) {
+        for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = runningCompactions.entrySet().iterator();
+                iterator.hasNext(); ) {
+            Map.Entry<PartitionIdentifier, CompactionJob> entry = iterator.next();
+            CompactionJob job = entry.getValue();
+
+            if (job.getTxnId() == txnId) {
+                job.abort();
+                PartitionIdentifier partitionIdentifier = entry.getKey();
+                Database db = stateMgr.getDb(partitionIdentifier.getDbId());
+                if (db == null) {
+                    return;
+                }
+                abortTransactionIgnoreError(db.getId(), txnId, "user cancel compaction");
+            }
+        }
     }
 
     private static class SynchronizedCircularQueue<E> {
