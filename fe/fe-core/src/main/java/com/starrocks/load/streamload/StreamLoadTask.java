@@ -74,7 +74,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class StreamLoadTask extends AbstractTxnStateChangeCallback
         implements Writable, GsonPostProcessable, GsonPreProcessable {
-    private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
+    private static final Logger LOG = LogManager.getLogger(StreamLoadTask.class);
 
     public enum State {
         BEGIN,
