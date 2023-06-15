@@ -64,29 +64,33 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 2. 在 `test_db` 的数据库中创建 StarRocks 表。
 
+   > **说明**
+   >
+   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+
    a. 创建一张名为 `table1` 的表，包含 `user_id`、`event_date` 和 `event_type` 三列，如下所示：
 
       ```SQL
-      MySQL [test_db]> CREATE TABLE table1
+      CREATE TABLE table1
       (
           `user_id` BIGINT COMMENT "用户 ID",
           `event_date` DATE COMMENT "事件日期",
           `event_type` TINYINT COMMENT "事件类型"
       )
-      DISTRIBUTED BY HASH(user_id) BUCKETS 10;
+      DISTRIBUTED BY HASH(user_id);
       ```
 
    b. 创建一张名为 `table2` 的表，包含 `date`、`year`、`month` 和 `day` 四列，如下所示：
 
       ```SQL
-      MySQL [test_db]> CREATE TABLE table2
+      CREATE TABLE table2
       (
           `date` DATE COMMENT "日期",
           `year` INT COMMENT "年",
           `month` TINYINT COMMENT "月",
           `day` TINYINT COMMENT "日"
       )
-      DISTRIBUTED BY HASH(date) BUCKETS 10;
+      DISTRIBUTED BY HASH(date);
       ```
 
 3. 把 `file1.csv` 和 `file2.csv` 文件上传到 HDFS 集群的 `/user/starrocks/data/input/` 路径下，并把 `file1.csv` 和 `file2.csv` 文件中的数据分别上传到 Apache Kafka® 集群的 `topic1` 和 `topic2` 中。
@@ -124,6 +128,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns: user_id, user_gender, event_date, event_type" \
     -T file1.csv -XPUT \
@@ -185,7 +190,7 @@ FROM KAFKA
 从本地文件系统、HDFS、或者 Kafka 导入上述数据后，查询 `table1` 表，如下所示：
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table1;
+SELECT * FROM table1;
 +------------+------------+---------+
 | event_date | event_type | user_id |
 +------------+------------+---------+
@@ -222,6 +227,7 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns: user_id, user_gender, event_date, event_type" \
     -H "where: event_type=1" \
@@ -274,7 +280,7 @@ FROM KAFKA
 从本地文件系统、HDFS、或者 Kafka 导入上述数据后，查询 `table1` 表，如下所示：
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table1;
+SELECT * FROM table1;
 +------------+------------+---------+
 | event_date | event_type | user_id |
 +------------+------------+---------+
@@ -309,6 +315,7 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns:date,year=year(date),month=month(date),day=day(date)" \
     -T file2.csv -XPUT \
@@ -373,7 +380,7 @@ FROM KAFKA
 从本地文件系统、HDFS、或者 Kafka 导入上述数据后，查询 `table2` 表，如下所示：
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table2;
+SELECT * FROM table2;
 +------------+------+-------+------+
 | date       | year | month | day  |
 +------------+------+-------+------+
@@ -431,7 +438,7 @@ WITH BROKER
 从 HDFS 导入上述数据后，查询 `table1` 表，如下所示：
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table1;
+SELECT * FROM table1;
 +------------+------------+---------+
 | event_date | event_type | user_id |
 +------------+------------+---------+
