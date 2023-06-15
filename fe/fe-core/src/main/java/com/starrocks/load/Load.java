@@ -348,7 +348,7 @@ public class Load {
         if (!specifyFileFieldNames) {
             List<Column> columns = tbl.getBaseSchema();
             for (Column column : columns) {
-                if (!column.isMaterializedColumn()) {
+                if (!column.isMaterializedColumn() && !column.isAutoIncrement()) {
                     ImportColumnDesc columnDesc = new ImportColumnDesc(column.getName());
                     copiedColumnExprs.add(columnDesc);
                 }
