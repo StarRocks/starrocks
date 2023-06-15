@@ -637,4 +637,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const 
     return seg_iterators;
 }
 
+Status Rowset::get_segment_sk_index(std::vector<std::string>* sk_index_values) {
+    RETURN_IF_ERROR(load());
+    for (auto& segment : _segments) {
+        RETURN_IF_ERROR(segment->get_short_key_index(sk_index_values));
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks

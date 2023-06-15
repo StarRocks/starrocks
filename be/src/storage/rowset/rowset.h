@@ -338,6 +338,9 @@ public:
 
     bool is_column_mode_partial_update() const { return _rowset_meta->is_column_mode_partial_update(); }
 
+    // only used in unit test
+    Status get_segment_sk_index(std::vector<std::string>* sk_index_values);
+
 protected:
     friend class RowsetFactory;
 
