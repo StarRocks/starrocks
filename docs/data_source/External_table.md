@@ -66,7 +66,7 @@ CREATE TABLE t
     k5 DATETIME
 )
 ENGINE=olap
-DISTRIBUTED BY HASH(k1) BUCKETS 10;
+DISTRIBUTED BY HASH(k1);
 
 # Create an external table in the source StarRocks cluster.
 CREATE EXTERNAL TABLE external_t
@@ -78,7 +78,7 @@ CREATE EXTERNAL TABLE external_t
     k5 DATETIME
 )
 ENGINE=olap
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES
 (
     "host" = "127.0.0.1",
