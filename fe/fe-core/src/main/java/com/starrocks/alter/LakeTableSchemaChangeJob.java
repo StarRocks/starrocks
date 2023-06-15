@@ -258,7 +258,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             LakeTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
-            numTablets = partitionIndexMap.values().stream().map(MaterializedIndex::getTablets).count();
+            numTablets = partitionIndexMap.values().stream().map(MaterializedIndex::getTablets).mapToLong(List::size).sum();
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
