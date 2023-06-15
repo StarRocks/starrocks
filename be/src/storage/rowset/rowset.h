@@ -310,6 +310,14 @@ public:
         std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->close(); });
     }
 
+<<<<<<< HEAD
+=======
+    bool is_column_mode_partial_update() const { return _rowset_meta->is_column_mode_partial_update(); }
+
+    // only used in unit test
+    Status get_segment_sk_index(std::vector<std::string>* sk_index_values);
+
+>>>>>>> 0c71d3f17 ([BugFix] The short key index and segment data may not be consistent after vertical compaction of primary key table which sort key  and primary key are separated (#25286))
 protected:
     friend class RowsetFactory;
 
