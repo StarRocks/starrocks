@@ -106,7 +106,7 @@ INSERT INTO low_card_duplicate (c0,c1,c2,c3,c4,c5,c6) VALUES
 -- result:
 -- !result
 
-set SCAN_OR_TO_UNION_THRESHOLD = 100000000;
+set SCAN_OR_TO_UNION_THRESHOLD = 50;
 -- result:
 -- !result
 select count(*) from low_card_duplicate where c0 <=> 1 or c1 is null;
