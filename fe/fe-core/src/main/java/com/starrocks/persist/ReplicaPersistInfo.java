@@ -35,8 +35,8 @@
 package com.starrocks.persist;
 
 import com.google.common.base.Objects;
-import com.starrocks.common.FeMetaVersion;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
 
