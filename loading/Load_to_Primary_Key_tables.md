@@ -68,39 +68,43 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 #### 数据样例
 
-1. 准备 StarRocks 表。
-
-   a. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
-
-    ```SQL
-    MySQL [test_db]> CREATE TABLE `table1`
-    (
-        `id` int(11) NOT NULL COMMENT "用户 ID",
-        `name` varchar(65533) NOT NULL COMMENT "用户姓名",
-        `score` int(11) NOT NULL COMMENT "用户得分"
-    )
-    ENGINE=OLAP
-    PRIMARY KEY(`id`)
-    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
-    ```
-
-   b. 向 `table1` 表中插入一条数据，如下所示：
-
-    ```SQL
-    MySQL [test_db]> INSERT INTO table1 VALUES
-        (101, 'Lily',80);
-    ```
-
-2. 准备数据文件。
+1. 准备数据文件。
 
    a. 在本地文件系统创建一个 CSV 格式的数据文件 `example1.csv`。文件包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
-    ```Plain
-    101,Lily,100
-    102,Rose,100
-    ```
+      ```Plain
+      101,Lily,100
+      102,Rose,100
+      ```
 
    b. 把 `example1.csv` 文件中的数据上传到 Kafka 集群的 `topic1` 中。
+
+2. 准备 StarRocks 表。
+
+   a. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+
+      ```SQL
+      CREATE TABLE `table1`
+      (
+          `id` int(11) NOT NULL COMMENT "用户 ID",
+          `name` varchar(65533) NOT NULL COMMENT "用户姓名",
+          `score` int(11) NOT NULL COMMENT "用户得分"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+
+      > **说明**
+      >
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+
+   b. 向 `table1` 表中插入一条数据，如下所示：
+
+      ```SQL
+      INSERT INTO table1 VALUES
+          (101, 'Lily',80);
+      ```
 
 #### 导入数据
 
@@ -111,9 +115,10 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
     ```Bash
     curl --location-trusted -u <username>:<password> \
+        -H "Expect:100-continue" \
         -H "label:label1" \
         -H "column_separator:," \
-        -T example1.csv -XPUT\
+        -T example1.csv -XPUT \
         http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
     ```
 
@@ -121,10 +126,11 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
     ```Bash
     curl --location-trusted -u <username>:<password> \
+        -H "Expect:100-continue" \
         -H "label:label2" \
         -H "column_separator:," \
         -H "columns:__op ='upsert'" \
-        -T example1.csv -XPUT\
+        -T example1.csv -XPUT \
         http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
     ```
 
@@ -206,7 +212,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 导入完成后，查询 `table1` 表的数据，如下所示：
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table1;
+SELECT * FROM table1;
 +------+------+-------+
 | id   | name | score |
 +------+------+-------+
@@ -224,39 +230,43 @@ MySQL [test_db]> SELECT * FROM table1;
 
 #### 数据样例
 
-1. 准备 StarRocks 表。
-
-   a. 在数据库 `test_db` 中创建一张名为 `table2` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
-
-   ```SQL
-   MySQL [test_db]> CREATE TABLE `table2`
-   (
-       `id` int(11) NOT NULL COMMENT "用户 ID",
-       `name` varchar(65533) NOT NULL COMMENT "用户姓名",
-       `score` int(11) NOT NULL COMMENT "用户得分"
-   )
-   ENGINE=OLAP
-   PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
-   ```
-
-   b. 向 `table2` 表中插入数据，如下所示：
-
-   ```SQL
-   MySQL [test_db]> INSERT INTO table2 VALUES
-       (101, 'Jack', 100),
-       (102, 'Bob', 90);
-   ```
-
-2. 准备数据文件。
+1. 准备数据文件。
 
    a. 在本地文件系统创建一个 CSV 格式的数据文件 `example2.csv`。文件包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
-   ```Plain
-   101,Jack,100
-   ```
+      ```Plain
+      101,Jack,100
+      ```
 
    b. 把 `example2.csv` 文件中的数据上传到 Kafka 集群的 `topic2` 中。
+
+2. 准备 StarRocks 表。
+
+   a. 在数据库 `test_db` 中创建一张名为 `table2` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+
+      ```SQL
+      CREATE TABLE `table2`
+      (
+          `id` int(11) NOT NULL COMMENT "用户 ID",
+          `name` varchar(65533) NOT NULL COMMENT "用户姓名",
+          `score` int(11) NOT NULL COMMENT "用户得分"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+
+      > **说明**
+      >
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+
+   b. 向 `table2` 表中插入数据，如下所示：
+
+      ```SQL
+      INSERT INTO table2 VALUES
+          (101, 'Jack', 100),
+          (102, 'Bob', 90);
+      ```
 
 #### 导入数据
 
@@ -266,10 +276,11 @@ MySQL [test_db]> SELECT * FROM table1;
 
   ```Bash
   curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
       -H "label:label3" \
       -H "column_separator:," \
       -H "columns:__op='delete'" \
-      -T example2.csv -XPUT\
+      -T example2.csv -XPUT \
       http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
   ```
 
@@ -312,7 +323,7 @@ MySQL [test_db]> SELECT * FROM table1;
 导入完成后，查询 `table2` 表的数据，如下所示：
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table2;
+SELECT * FROM table2;
 +------+------+-------+
 | id   | name | score |
 +------+------+-------+
@@ -329,41 +340,45 @@ MySQL [test_db]> SELECT * FROM table2;
 
 #### 数据样例
 
-1. 准备 StarRocks 表。
-
-   a. 在数据库 `test_db` 中创建一张名为 `table3` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
-
-   ```SQL
-   MySQL [test_db]> CREATE TABLE `table3`
-   (
-       `id` int(11) NOT NULL COMMENT "用户 ID",
-       `name` varchar(65533) NOT NULL COMMENT "用户姓名",
-       `score` int(11) NOT NULL COMMENT "用户得分"
-   )
-   ENGINE=OLAP
-   PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
-   ```
-
-   b. 向 `table3` 表中插入数据，如下所示：
-
-   ```SQL
-   MySQL [test_db]> INSERT INTO table3 VALUES
-       (101, 'Tom', 100),
-       (102, 'Sam', 90);
-   ```
-
-2. 准备数据文件。
+1. 准备数据文件。
 
    a. 在本地文件系统创建一个 CSV 格式的数据文件 `example3.csv`。文件包含四列，分别代表用户 ID、用户姓名、用户得分和操作类型，如下所示：
 
-   ```Plain
-   101,Tom,100,1
-   102,Sam,70,0
-   103,Stan,80,0
-   ```
+      ```Plain
+      101,Tom,100,1
+      102,Sam,70,0
+      103,Stan,80,0
+      ```
 
    b. 把 `example3.csv` 文件中的数据上传到 Kafka 集群的 `topic3` 中。
+
+2. 准备 StarRocks 表。
+
+   a. 在数据库 `test_db` 中创建一张名为 `table3` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+
+      ```SQL
+      CREATE TABLE `table3`
+      (
+          `id` int(11) NOT NULL COMMENT "用户 ID",
+          `name` varchar(65533) NOT NULL COMMENT "用户姓名",
+          `score` int(11) NOT NULL COMMENT "用户得分"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+
+      > **说明**
+      >
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+
+   b. 向 `table3` 表中插入数据，如下所示：
+
+      ```SQL
+      INSERT INTO table3 VALUES
+          (101, 'Tom', 100),
+          (102, 'Sam', 90);
+      ```
 
 #### 导入数据
 
@@ -373,10 +388,11 @@ MySQL [test_db]> SELECT * FROM table2;
 
   ```Bash
   curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
       -H "label:label4" \
       -H "column_separator:," \
       -H "columns: id, name, score, temp, __op = temp" \
-      -T example3.csv -XPUT\
+      -T example3.csv -XPUT \
       http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
   ```
 
@@ -424,7 +440,7 @@ MySQL [test_db]> SELECT * FROM table2;
 导入完成后，查询 `table3` 表的数据，如下所示：
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table3;
+SELECT * FROM table3;
 +------+------+-------+
 | id   | name | score |
 +------+------+-------+
@@ -442,40 +458,44 @@ MySQL [test_db]> SELECT * FROM table3;
 
 ### 数据样例
 
-1. 准备 StarRocks 表。
-
-   a. 在数据库 `test_db` 中创建一张名为 `table4` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
-
-   ```SQL
-   MySQL [test_db]> CREATE TABLE `table4`
-   (
-       `id` int(11) NOT NULL COMMENT "用户 ID",
-       `name` varchar(65533) NOT NULL COMMENT "用户姓名",
-       `score` int(11) NOT NULL COMMENT "用户得分"
-   )
-   ENGINE=OLAP
-   PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
-   ```
-
-   b. 向 `table4` 表中插入一条数据，如下所示：
-
-   ```SQL
-   MySQL [test_db]> INSERT INTO table4 VALUES
-       (101, 'Tom',80);
-   ```
-
-2. 准备数据文件。
+1. 准备数据文件。
 
    a. 在本地文件系统创建一个 CSV 格式的数据文件 `example4.csv`。文件包含两列，分别代表用户 ID 和用户姓名，如下所示：
 
-   ```Plain
-   101,Lily
-   102,Rose
-   103,Alice
-   ```
+      ```Plain
+      101,Lily
+      102,Rose
+      103,Alice
+      ```
 
    b. 把 `example4.csv` 文件中的数据上传到 Kafka 集群的 `topic4` 中。
+
+2. 准备 StarRocks 表。
+
+   a. 在数据库 `test_db` 中创建一张名为 `table4` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+
+      ```SQL
+      CREATE TABLE `table4`
+      (
+          `id` int(11) NOT NULL COMMENT "用户 ID",
+          `name` varchar(65533) NOT NULL COMMENT "用户姓名",
+          `score` int(11) NOT NULL COMMENT "用户得分"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+
+      > **说明**
+      >
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+
+   b. 向 `table4` 表中插入一条数据，如下所示：
+
+      ```SQL
+      INSERT INTO table4 VALUES
+          (101, 'Tom',80);
+      ```
 
 ### 导入数据
 
@@ -485,10 +505,11 @@ MySQL [test_db]> SELECT * FROM table3;
 
   ```Bash
   curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
       -H "label:label7" -H "column_separator:," \
       -H "partial_update:true" \
       -H "columns:id,name" \
-      -T example4.csv -XPUT\
+      -T example4.csv -XPUT \
       http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
   ```
 
@@ -544,7 +565,7 @@ MySQL [test_db]> SELECT * FROM table3;
 导入完成后，查询 `table4` 表的数据，如下所示：
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table4;
+SELECT * FROM table4;
 +------+-------+-------+
 | id   | name  | score |
 +------+-------+-------+
@@ -563,7 +584,7 @@ MySQL [test_db]> SELECT * FROM table4;
 
 条件更新功能用于解决数据乱序的问题。如果上游数据发生乱序，可以使用条件更新功能保证新的数据不被老的数据覆盖。
 
-> **注意**
+> **说明**
 >
 > - 不支持给同一批导入的数据指定不同的条件。
 >
@@ -575,39 +596,43 @@ MySQL [test_db]> SELECT * FROM table4;
 
 ### 数据样例
 
-1. 准备 StarRocks 表。
+1. 准备数据文件。
+
+   a. 在本地文件系统创建一个 CSV 格式的数据文件 `example5.csv`。文件包含三列，分别代表用户 ID、版本号和用户得分，如下所示：
+
+      ```Plain
+      101,1,100
+      102,3,100
+      ```
+
+   b. 把 `example5.csv` 文件中的数据上传到 Kafka 集群的 `topic5` 中。
+
+2. 准备 StarRocks 表。
 
    a. 在数据库 `test_db` 中创建一张名为 `table5` 的主键模型表。表包含 `id`、`version` 和 `score` 三列，分别代表用户 ID、版本号和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
-      MySQL [test_db]> CREATE TABLE `table5`
+      CREATE TABLE `table5`
       (
           `id` int(11) NOT NULL COMMENT "用户 ID", 
           `version` int NOT NULL COMMENT "版本号",
           `score` int(11) NOT NULL COMMENT "用户得分"
       )
       ENGINE=OLAP
-      PRIMARY KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+      PRIMARY KEY(`id`) DISTRIBUTED BY HASH(`id`);
       ```
+
+      > **说明**
+      >
+      > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
 
    b. 向 `table5` 表中插入两条数据，如下所示：
 
       ```SQL
-      MySQL [test_db]> INSERT INTO table5 VALUES
+      INSERT INTO table5 VALUES
           (101, 2, 80),
           (102, 2, 90);
       ```
-
-2. 准备数据文件。
-
-   在本地文件系统创建一个 CSV 格式的数据文件 `example5.csv`。文件包含三列，分别代表用户 ID、版本号和用户得分，如下所示：
-
-   ```Plain
-   101,1,100
-   102,3,100
-   ```
-
-3. 把 `example5.csv` 文件中的数据上传到 Kafka 集群的 `topic5` 中。
 
 ### 导入数据
 
@@ -617,10 +642,12 @@ MySQL [test_db]> SELECT * FROM table4;
 
   ```Bash
   curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
+      -H "Expect:100-continue" \
       -H "label:label10" \
       -H "column_separator:," \
       -H "merge_condition:version" \
-      -T example5.csv -XPUT\
+      -T example5.csv -XPUT \
       http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
   ```
 
@@ -647,7 +674,7 @@ MySQL [test_db]> SELECT * FROM table4;
 导入完成后，查询 `table5` 表的数据，如下所示：
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table5;
+SELECT * FROM table5;
 +------+------+-------+
 | id   | version | score |
 +------+------+-------+
