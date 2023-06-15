@@ -241,7 +241,7 @@ CANCEL ALTER TABLE COLUMN FROM table_name\G;
 
 ```sql
 CREATE USER 'test' IDENTIFIED by '123456';
-GRANT ALL on example_db to test;
+GRANT ALL on example_db.* to test;
 ```
 
 通过登录被授权的 `test` 账户，就可以操作 `example_db` 数据库。
