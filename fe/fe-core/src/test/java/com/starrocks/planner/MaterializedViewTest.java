@@ -2590,8 +2590,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteOK(mv, query);
         }
     }
-<<<<<<< HEAD
-=======
 
     // Single Predicates
     @Test
@@ -2737,5 +2735,4 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
     }
->>>>>>> 050a69fac ([Enhancement] count distinct mv can rewrite when missing group by has equal predicate (#25006))
 }

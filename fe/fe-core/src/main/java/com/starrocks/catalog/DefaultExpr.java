@@ -14,8 +14,8 @@
 
 package com.starrocks.catalog;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
