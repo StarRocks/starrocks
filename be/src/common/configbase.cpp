@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <strings.h>
+
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
@@ -112,9 +114,9 @@ bool strtox(const std::string& valstr, std::vector<T>& retval) {
 }
 
 bool strtox(const std::string& valstr, bool& retval) {
-    if (valstr.compare("true") == 0) {
+    if (strcasecmp(valstr.c_str(), "true") == 0 || strcmp(valstr.c_str(), "1") == 0) {
         retval = true;
-    } else if (valstr.compare("false") == 0) {
+    } else if (strcasecmp(valstr.c_str(), "false") == 0 || strcmp(valstr.c_str(), "0") == 0) {
         retval = false;
     } else {
         return false;

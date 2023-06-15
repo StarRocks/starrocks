@@ -298,7 +298,6 @@ public class ExternalOlapTable extends OlapTable {
             throws DdlException, IOException {
         // no meta changed since last time, do nothing
         if (lastExternalMeta != null && meta.compareTo(lastExternalMeta) == 0) {
-            LOG.info("no meta changed since last time, do nothing");
             return;
         }
 
@@ -314,8 +313,6 @@ public class ExternalOlapTable extends OlapTable {
         long start = System.currentTimeMillis();
 
         try {
-            lastExternalMeta = meta;
-
             state = OlapTableState.valueOf(meta.getState());
             baseIndexId = meta.getBase_index_id();
             colocateGroup = meta.getColocate_group();
@@ -525,6 +522,7 @@ public class ExternalOlapTable extends OlapTable {
                     backend.setBackendState(BackendState.values()[backendMeta.getState()]);
                 }
             }
+            lastExternalMeta = meta;
             LOG.info("TableMetaSyncer finish meta update. partition build cost: {}ms, " +
                             "index meta build cost: {}ms, schema rebuild cost: {}ms, " +
                             "tablet meta build cost: {}ms, total cost: {}ms",

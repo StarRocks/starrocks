@@ -50,6 +50,7 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TransactionStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -369,7 +370,34 @@ public class LoadManager implements Writable {
         return (currentTimeMs - job.getFinishTimestamp()) / 1000 > Config.label_keep_max_second;
     }
 
+    public void cleanResidualJob() {
+        // clean residual insert job
+        readLock();
+        List<LoadJob> insertJobs;
+        try {
+            insertJobs = idToLoadJob.values().stream().filter(job -> job.getJobType() == EtlJobType.INSERT).collect(
+                    Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+
+        insertJobs.forEach(job -> {
+            TransactionStatus st = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(
+                    job.getDbId(), job.getLabel());
+            if (st == TransactionStatus.UNKNOWN) {
+                try {
+                    recordFinishedOrCacnelledLoadJob(
+                            job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
+                    LOG.info("abort job: {} since transaction status unknown", job.getLabel());
+                } catch (UserException e) {
+                    LOG.warn("failed to abort job: {}", job.getLabel(), e);
+                }
+            }
+        });
+    }
+
     public void removeOldLoadJob() {
+        // clean expired load job
         long currentTimeMs = System.currentTimeMillis();
 
         writeLock();
@@ -552,7 +580,12 @@ public class LoadManager implements Writable {
     }
 
     public LoadJob getLoadJob(long jobId) {
-        return idToLoadJob.get(jobId);
+        readLock();
+        try {
+            return idToLoadJob.get(jobId);
+        } finally {
+            readUnlock();
+        }
     }
 
     public void prepareJobs() {
