@@ -75,12 +75,33 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 #### 数据样例
 
-1. 在 StarRocks 数据库 `test_db` 中创建 StarRocks 表。
+1. 在本地文件系统中创建 CSV 格式的数据文件。
+
+   a. 创建一个名为 `file1.csv` 的数据文件。文件一共包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
+
+      ```Plain
+      1,Lily,23
+      2,Rose,23
+      3,Alice,24
+      4,Julia,25
+      ```
+
+   b. 创建一个名为 `file2.csv` 的数据文件。文件一共包含两列，分别代表城市 ID 和城市名称，如下所示：
+
+      ```Plain
+      200,'北京'
+      ```
+
+2. 在 StarRocks 数据库 `test_db` 中创建 StarRocks 表。
+
+   > **说明**
+   >
+   > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
 
    a. 创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
-   ```SQL
-      MySQL [test_db]> CREATE TABLE `table1`
+      ```SQL
+      CREATE TABLE `table1`
       (
           `id` int(11) NOT NULL COMMENT "用户 ID",
           `name` varchar(65533) NULL DEFAULT "" COMMENT "用户姓名",
@@ -91,14 +112,10 @@ Broker Load 支持从如下外部存储系统导入数据：
           DISTRIBUTED BY HASH(`id`);
       ```
 
-    > **注意**
-    >
-    > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
-
    b. 创建一张名为 `table2` 的主键模型表。表包含 `id` 和 `city` 两列，分别代表城市 ID 和城市名称，主键为 `id` 列，如下所示：
 
-   ```SQL
-      MySQL [test_db]> CREATE TABLE `table2`
+      ```SQL
+      CREATE TABLE `table2`
       (
           `id` int(11) NOT NULL COMMENT "城市 ID",
           `city` varchar(65533) NULL DEFAULT "" COMMENT "城市名称"
@@ -106,23 +123,6 @@ Broker Load 支持从如下外部存储系统导入数据：
           ENGINE=OLAP
           PRIMARY KEY(`id`)
           DISTRIBUTED BY HASH(`id`);
-   ```
-
-2. 在本地文件系统中创建 CSV 格式的数据文件。
-
-   a. 创建一个名为 `file1.csv` 的数据文件。文件一共包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
-
-   ```Plain
-   1,Lily,23
-   2,Rose,23
-   3,Alice,24
-   4,Julia,25
-   ```
-
-   b. 创建一个名为 `file2.csv` 的数据文件。文件一共包含两列，分别代表城市 ID 和城市名称，如下所示：
-
-   ```Plain
-   200,'北京'
    ```
 
 3. 把创建好的数据文件 `file1.csv` 和 `file2.csv` 分别上传到 HDFS 集群的 `/user/starrocks/` 路径下、AWS S3 存储空间 `bucket_s3` 里的 `input` 文件夹下、 Google GCS 存储空间 `bucket_gcs` 里的 `input` 文件夹下、阿里云 OSS 存储空间 `bucket_oss` 里的 `input` 文件夹下、腾讯云 COS 存储空间 `bucket_cos` 里的 `input` 文件夹下、华为云 OBS 存储空间 `bucket_obs` 里的 `input` 文件夹下、以及其他兼容 S3 协议的对象存储空间（如 MinIO） `bucket_minio` 里的 `input` 文件夹下、以及 Azure Storage 的指定路径下。
@@ -361,30 +361,30 @@ WITH BROKER
 
 1. 查询 `table1` 表的数据，如下所示：
 
-      ```SQL
-      MySQL [test_db]> SELECT * FROM table1;
-      +------+-------+-------+
-      | id   | name  | score |
-      +------+-------+-------+
-      |    1 | Lily  |    23 |
-      |    2 | Rose  |    23 |
-      |    3 | Alice |    24 |
-      |    4 | Julia |    25 |
-      +------+-------+-------+
-      4 rows in set (0.00 sec)
-      ```
+   ```SQL
+   SELECT * FROM table1;
+   +------+-------+-------+
+   | id   | name  | score |
+   +------+-------+-------+
+   |    1 | Lily  |    23 |
+   |    2 | Rose  |    23 |
+   |    3 | Alice |    24 |
+   |    4 | Julia |    25 |
+   +------+-------+-------+
+   4 rows in set (0.00 sec)
+   ```
 
 2. 查询 `table2` 表的数据，如下所示：
 
-      ```SQL
-      MySQL [test_db]> SELECT * FROM table2;
-      +------+--------+
-      | id   | city   |
-      +------+--------+
-      | 200  | 北京    |
-      +------+--------+
-      4 rows in set (0.01 sec)
-      ```
+   ```SQL
+   SELECT * FROM table2;
+   +------+--------+
+   | id   | city   |
+   +------+--------+
+   | 200  | 北京    |
+   +------+--------+
+   4 rows in set (0.01 sec)
+   ```
 
 ### 创建单表导入 (Single-Table Load) 作业
 
