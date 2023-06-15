@@ -483,4 +483,48 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     return seg_iterators;
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const Schema& schema,
+                                                                          OlapReaderStatistics* stats) {
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    seg_options.stats = stats;
+    seg_options.tablet_id = rowset_meta()->tablet_id();
+    seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+
+    std::vector<ChunkIteratorPtr> seg_iterators(num_update_files());
+    TabletSegmentId tsid;
+    tsid.tablet_id = rowset_meta()->tablet_id();
+    for (int64_t i = 0; i < num_update_files(); i++) {
+        // open update file
+        std::string seg_path = segment_upt_file_path(_rowset_path, rowset_id(), i);
+        ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(seg_options.fs, seg_path, i, _schema));
+        if (seg_ptr->num_rows() == 0) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
+            continue;
+        }
+        // create iterator
+        auto res = seg_ptr->new_iterator(schema, seg_options);
+        if (res.status().is_end_of_file()) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
+            continue;
+        }
+        if (!res.ok()) {
+            return res.status();
+        }
+        seg_iterators[i] = std::move(res).value();
+    }
+    return seg_iterators;
+}
+
+Status Rowset::get_segment_sk_index(std::vector<std::string>* sk_index_values) {
+    RETURN_IF_ERROR(load());
+    for (auto& segment : _segments) {
+        RETURN_IF_ERROR(segment->get_short_key_index(sk_index_values));
+    }
+    return Status::OK();
+}
+
+>>>>>>> 0c71d3f17 ([BugFix] The short key index and segment data may not be consistent after vertical compaction of primary key table which sort key  and primary key are separated (#25286))
 } // namespace starrocks

@@ -374,4 +374,20 @@ Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** it
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg) {
+    return Segment::open(_fs, dcg.column_file(parent_name(_fname)), 0,
+                         TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()), nullptr);
+}
+
+Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
+    RETURN_IF_ERROR(load_index(false));
+    for (size_t i = 0; i < _sk_index_decoder->num_items(); i++) {
+        sk_index_values->emplace_back(_sk_index_decoder->key(i).to_string());
+    }
+    return Status::OK();
+}
+
+>>>>>>> 0c71d3f17 ([BugFix] The short key index and segment data may not be consistent after vertical compaction of primary key table which sort key  and primary key are separated (#25286))
 } // namespace starrocks
