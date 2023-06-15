@@ -25,6 +25,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -34,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -44,6 +46,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -120,7 +123,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 rewriteGroupByKeys(rewriteContext, columnRewriter, mvAggOp.getGroupingKeys(), true);
         List<ScalarOperator> queryGroupingKeys =
                 rewriteGroupByKeys(rewriteContext, columnRewriter, queryAggOp.getGroupingKeys(), false);
-        boolean isRollup = isRollupAggregate(mvGroupingKeys, queryGroupingKeys);
+        ScalarOperator queryRangePredicate = rewriteContext.getQueryPredicateSplit().getRangePredicates();
+        boolean isRollup = isRollupAggregate(mvGroupingKeys, queryGroupingKeys, queryRangePredicate);
 
         // Cannot ROLLUP distinct
         if (isRollup) {
@@ -242,7 +246,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     // - all matched group by keys bit is less than mvGroupByKeys
     // - if query contains one non-mv-existed agg, set it `rollup` and use `replaceExprWithTarget` to
     //    - check whether to rewrite later.
-    private boolean isRollupAggregate(List<ScalarOperator> mvGroupingKeys, List<ScalarOperator> queryGroupingKeys) {
+    private boolean isRollupAggregate(List<ScalarOperator> mvGroupingKeys, List<ScalarOperator> queryGroupingKeys,
+                                      ScalarOperator queryRangePredicate) {
         // after equivalence class rewrite, there may be same group keys, so here just get the distinct grouping keys
         List<ScalarOperator> distinctMvKeys = mvGroupingKeys.stream().distinct().collect(Collectors.toList());
         BitSet matchedGroupByKeySet = new BitSet(distinctMvKeys.size());
@@ -259,7 +264,29 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 return true;
             }
         }
-        return matchedGroupByKeySet.cardinality() < distinctMvKeys.size();
+        if (matchedGroupByKeySet.cardinality() >= distinctMvKeys.size()) {
+            return false;
+        }
+
+        Set<ScalarOperator> equalsPredicateColumns = new HashSet<>();
+        for (ScalarOperator operator : Utils.extractConjuncts(queryRangePredicate)) {
+            if (operator instanceof BinaryPredicateOperator &&
+                    ((BinaryPredicateOperator) operator).getBinaryType().isEqual() &&
+                    operator.getChild(0).isColumnRef() && operator.getChild(1).isConstantRef()) {
+                equalsPredicateColumns.add(operator.getChild(0));
+            }
+        }
+
+        for (int i = 0; i < distinctMvKeys.size(); i++) {
+            if (!matchedGroupByKeySet.get(i)) {
+                ScalarOperator missedKey = distinctMvKeys.get(i);
+                if (!equalsPredicateColumns.contains(missedKey)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private List<ScalarOperator> rewriteGroupByKeys(RewriteContext rewriteContext,
