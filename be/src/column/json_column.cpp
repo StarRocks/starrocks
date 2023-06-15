@@ -86,7 +86,7 @@ uint32_t JsonColumn::serialize(size_t idx, uint8_t* pos) {
 }
 
 void JsonColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                   uint32_t max_one_row_size) {
+                                 uint32_t max_one_row_size) {
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }

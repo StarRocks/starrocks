@@ -251,7 +251,7 @@ uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) {
         Tie tie(map_size, 1);
         std::pair<int, int> range{0, map_size};
         auto st = sort_and_tie_column(false, _keys, SortDesc(true, true), perm, tie, range, false);
-        DCHECK(st.ok());                                          
+        DCHECK(st.ok());
     }
 
     for (size_t i = 0; i < map_size; ++i) {
