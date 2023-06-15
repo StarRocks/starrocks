@@ -96,7 +96,7 @@ After you finish this, you need to configure a trust relationship between the as
 
 #### Configure a trust relationship
 
-First, create and attach a new IAM policy as shown below to your assumed role `s3_role_test`:
+First, edit the trust relationship as shown below to your assumed role `s3_role_test`:
 
 > **NOTICE**
 >
