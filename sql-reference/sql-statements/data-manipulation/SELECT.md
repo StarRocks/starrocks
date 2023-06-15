@@ -2,17 +2,60 @@
 
 ## 功能
 
-SELECT 语句由 SELECT，FROM，WHERE，GROUP BY，HAVING，ORDER BY，UNION 等部分组成。
+SELECT 语句用于从单个或多个表，视图，物化视图中读取数据。SELECT 语句一般由以下子句组成：
 
-StarRocks 的查询语句基本符合 SQL-92 标准。下面简要介绍支持的 SELECT 用法。
+- [WITH](#with)
+- [WHERE 与操作符](#where-与操作符)
+- [GROUP BY](#group-by)
+- [HAVING](#having)
+- [UNION](#union)
+- [INTERSECT](#intersect)
+- [EXCEPT/MINUS](#exceptminus)
+- [ORDER BY](#order-by)
+- [LIMIT](#limit)
+- [OFFSET](#offset)
+- [Joins](#连接-join)
+- [子查询](#子查询)
+- [DISTINCT](#distinct)
+- [别名](#别名-alias)
+
+SELECT 可以作为独立的语句也可以作为其他语句的子句，其查询结果可以作为另一个语句的输入值。
+
+StarRocks 的查询语句基本符合 SQL-92 标准。下面介绍支持的 SELECT 用法。
+
+> **说明**
+>
+> 如果要查询 StarRocks 表、视图、或物化视图内的数据，需要有对应对象的 SELECT 权限。如果要查询 External Catalog 里的数据，需要有对应 Catalog 的 USAGE 权限。
+
+### WITH
+
+可以在 SELECT 语句之前添加的子句，用于定义在 SELECT 内部多次引用的复杂表达式的别名。
+
+与 CREATE VIEW 类似，但在子句中定义的表和列名在查询结束后不会持久，也不会与实际表或 VIEW 中的名称冲突。
+
+使用 WITH 子句的好处：
+
+- 方便和易于维护，减少查询内部的重复。
+
+- 通过将查询中最复杂的部分抽象成单独的块，更易于阅读和理解 SQL 代码。
+
+示例：
+
+```sql
+-- Define one subquery at the outer level, and another at the inner level as part of the
+-- initial stage of the UNION ALL query.
+
+with t1 as (select 1),t2 as (select 2)
+select * from t1 union all select * from t2;
+```
 
 ### 连接 (Join)
 
-连接操作是合并 2 个或多个表的数据，然后返回其中某些表中的某些列的结果集。
+连接操作合并 2 个或多个表的数据，然后返回某些表中某些列的结果集。
 
-目前 StarRocks 支持 Self Join、Cross Join、Inner Join、Outer Join、Semi Join 和 Anti Join。其中， Outer Join 包括 Left Join、Right Join 和 Full Join。
+目前 StarRocks 支持 Self Join、Cross Join、Inner Join、Outer Join、Semi Join 和 Anti Join。其中，Outer Join 包括 Left Join、Right Join 和 Full Join。
 
-连接的语法定义如下：
+Join 的语法定义如下：
 
 ```sql
 SELECT select_list FROM
@@ -147,15 +190,15 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
-### Order by
+### ORDER BY
 
-Order by 通过比较一列或者多列的大小来对结果集进行排序。
+ORDER BY 通过比较一列或者多列的大小来对结果集进行排序。
 
-order by 是比较耗时耗资源的操作，因为所有数据都需要发送到 1 个节点后才能排序，排序操作相比不排序操作需要更多的内存。
+ORDER BY 是比较耗时耗资源的操作，因为所有数据都需要发送到 1 个节点后才能排序，需要更多的内存。
 
 如果需要返回前 N 个排序结果，需要使用 LIMIT 子句；为了限制内存的使用，如果您没有指定 LIMIT 子句，则默认返回前 65535 个排序结果。
 
-Order by 语法定义如下：
+ORDER BY 语法定义如下：
 
 ```sql
 ORDER BY col [ASC | DESC]
@@ -176,11 +219,11 @@ StarRocks 支持在 ORDER BY 后声明 null 值排在最前面还是最后面，
 select  *  from  sales_record  order by  employee_id  nulls first;
 ```
 
-### Group by
+### GROUP BY
 
-Group by 子句通常和聚合函数（例如 COUNT(), SUM(), AVG(), MIN()和 MAX()）一起使用。
+GROUP BY 子句通常和聚合函数（例如 COUNT(), SUM(), AVG(), MIN()和 MAX()）一起使用。
 
-Group by 指定的列不会参加聚合操作。Group by 子句可以加入 Having 子句来过滤聚合函数产出的结果。例如：
+GROUP BY 指定的列不会参加聚合操作。GROUP BY 子句可以加入 HAVING 子句来过滤聚合函数产出的结果。例如：
 
 ```sql
 select tiny_column, sum(short_column)
@@ -199,11 +242,11 @@ group by tiny_column;
 2 rows in set (0.07 sec)
 ```
 
-### Having
+### HAVING
 
-Having 子句不是过滤表中的行数据，而是过滤聚合函数产出的结果。
+HAVING 子句不过滤表中的行数据，而是过滤聚合函数产出的结果。
 
-通常来说 Having 要和聚合函数（例如 COUNT(), SUM(), AVG(), MIN(), MAX()）以及 group by 子句一起使用。
+通常来说 HAVING 要和聚合函数（例如 COUNT(), SUM(), AVG(), MIN(), MAX()）以及 group by 子句一起使用。
 
 示例：
 
@@ -241,21 +284,21 @@ having tiny_column > 1;
 1 row in set (0.07 sec)
 ```
 
-### Limit
+### LIMIT
 
-Limit 子句用于限制返回结果的最大行数。设置返回结果的最大行数可以帮助 StarRocks 优化内存的使用。
+LIMIT 子句用于限制返回结果的最大行数。设置返回结果的最大行数可以帮助 StarRocks 优化内存的使用。
 
 该子句主要应用如下场景：
 
-1.返回 top-N 的查询结果。
+1. 返回 top-N 的查询结果。
 
-2.简单查看表中包含的内容。
+2. 简单查看表中包含的内容。
 
-3.表中数据量大，或者 where 子句没有过滤太多的数据，需要限制查询结果集的大小。
+3. 表中数据量大，或者 where 子句没有过滤太多的数据，需要限制查询结果集的大小。
 
-使用说明：limit 子句的值必须是数字型字面常量。
+使用说明：LIMMIT 子句的值必须是数字型字面常量。
 
-举例：
+示例：
 
 ```sql
 mysql> select tiny_column from small_table limit 1;
@@ -282,13 +325,13 @@ mysql> select tiny_column from small_table limit 10000;
 2 rows in set (0.01 sec)
 ```
 
-#### Offset
+#### OFFSET
 
-Offset 子句使得结果集跳过前若干行结果后直接返回后续的结果。
+OFFSET 子句用于跳过结果集的前若干行结果，直接返回后续的结果。
 
-结果集默认起始行为第 0 行，因此 offset 0 和不带 offset 返回相同的结果。
+默认从第 0 行开始，因此 OFFSET 0 和不带 OFFSET 返回相同的结果。
 
-通常来说，offset 子句需要与 order by 子句和 limit 子句一起使用才有效。
+通常来说，OFFSET 子句需要与 ORDER BY 子句和 LIMIT 子句一起使用才有效。
 
 示例：
 
@@ -342,93 +385,232 @@ mysql> select varchar_column from big_table order by varchar_column limit 1 offs
 1 row in set (0.02 sec)
 ```
 
-注：在没有 order by 的情况下使用 offset 语法是允许的，但是此时 offset 无意义。
+> **注意**
+>
+> 在没有 ORDER BY 的情况下使用 OFFSET 语法是允许的，但是此时 OFFSET 无意义。这种情况只取 LIMIT 的值，忽略 OFFSET 的值。因此在没有 ORDER BY 的情况下，OFFSET 超过结果集的最大行数依然是有结果的。**建议使用 OFFSET 时一定带上 ORDER BY。**
 
-这种情况只取 limit 的值，忽略掉 offset 的值。因此在没有 order by 的情况下。
+### **UNION**
 
-offset 超过结果集的最大行数依然是有结果的。建议用户使用 offset 时一定要带上 order by。
+UNION 子句用于合并多个查询的结果，即获取并集。
 
-### Union
+**语法如下：**
 
-Union 子句用于合并多个查询的结果集。语法定义如下：
-
-```sql
+```SQL
 query_1 UNION [DISTINCT | ALL] query_2
 ```
 
-使用说明：
+- DISTINCT：默认值，返回不重复的结果。UNION 和 UNION DISTINCT 效果相同（见第二个示例）。
+- ALL: 返回所有结果的集合，不进行去重。由于去重工作比较耗费内存，因此使用 UNION ALL 查询速度会快一些，内存消耗也会少一些（见第一个示例）。
 
-只使用 union 关键词和使用 union distinct 的效果是相同的。由于去重工作是比较耗费内存的，
+> **说明**
+>
+> 每条 SELECT 查询返回的列数必须相同，且列类型必须能够兼容。
 
-因此使用 union all 操作查询速度会快些，耗费内存会少些。如果您想对返回结果集进行 order by 和 limit 操作，
+**示例：**
 
-需要将 union 操作放在子查询中，然后 select from subquery，最后把 subquery 和 order by 放在子查询外面。
-
-举例：
-
-```sql
-mysql> (select tiny_column from small_table) union all (select tiny_column from small_table);
-
-+-------------+
-|tiny_column  |
-+-------------+
-|      1      |
-|      2      |
-|      1      |
-|      2      |
-+-------------+
-
-4 rows in set (0.10 sec)
-```
-
-```sql
-mysql> (select tiny_column from small_table) union (select tiny_column from small_table);
-
-+-------------+
-|tiny_column  |
-+-------------+
-|      2      |
-|      1      |
-+-------------+
-
-2 rows in set (0.11 sec)
-```
-
-```sql
-mysql> select * from (select tiny_column from small_table union all
-
-select tiny_column from small_table) as t1 
-
-order by tiny_column limit 4;
-
-+-------------+
-| tiny_column |
-+-------------+
-|       1     |
-|       1     |
-|       2     |
-|       2     |
-+-------------+
-
-4 rows in set (0.11 sec)
-```
-
-### Distinct
-
-Distinct 操作符对结果集进行去重。示例：
+以表 `select1` 和 `select2` 示例说明。
 
 ```SQL
--- Returns the unique values from one column.
+CREATE TABLE select1(
+    id          INT,
+    price       INT
+    )
+DISTRIBUTED BY HASH(id);
+
+INSERT INTO select1 VALUES
+    (1,2),
+    (1,2),
+    (2,3),
+    (5,6),
+    (5,6);
+
+CREATE TABLE select2(
+    id          INT,
+    price       INT
+    )
+DISTRIBUTED BY HASH(id);
+
+INSERT INTO select2 VALUES
+    (2,3),
+    (3,4),
+    (5,6),
+    (7,8);
+```
+
+示例一：返回两张表中所有 `id` 的并集，不进行去重。
+
+```Plaintext
+mysql> (select id from select1) union all (select id from select2) order by id;
+
++------+
+| id   |
++------+
+|    1 |
+|    1 |
+|    2 |
+|    2 |
+|    3 |
+|    5 |
+|    5 |
+|    5 |
+|    7 |
++------+
+11 rows in set (0.02 sec)
+```
+
+示例二：返回两张表中 `id` 的并集，进行去重。下面两条查询在功能上对等。
+
+```Plaintext
+mysql> (select id from select1) union (select id from select2) order by id;
+
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
+|    5 |
+|    7 |
++------+
+6 rows in set (0.01 sec)
+
+mysql> (select id from select1) union distinct (select id from select2) order by id;
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
+|    5 |
+|    7 |
++------+
+5 rows in set (0.02 sec)
+```
+
+示例三：返回两张表中所有 `id` 的并集，进行去重，只返回 3 行结果。下面两条查询在功能上对等。
+
+```SQL
+mysql> (select id from select1) union distinct (select id from select2)
+order by id
+limit 3;
+++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
+4 rows in set (0.11 sec)
+
+mysql> select * from (select id from select1 union distinct select id from select2) as t1
+order by id
+limit 3;
++------+
+| id   |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
+3 rows in set (0.01 sec)
+```
+
+### **INTERSECT**
+
+INTERSECT 子句用于返回多个查询结果之间的交集，即每个结果中都有的数据，并对结果集进行去重。
+
+**语法如下：**
+
+```SQL
+query_1 INTERSECT [DISTINCT] query_2
+```
+
+> **说明**
+>
+> - INTERSECT 效果等同于 INTERSECT DISTINCT。不支持 ALL 关键字。
+> - 每条 SELECT 查询返回的列数必须相同，且列类型能够兼容。
+
+**示例：**
+
+继续使用 UNION 子句里的两张表。返回两张表中 `id` 和 `price` 组合的交集。下面两条查询在功能上对等。
+
+```Plaintext
+mysql> (select id, price from select1) intersect (select id, price from select2)
+order by id;
+
++------+-------+
+| id   | price |
++------+-------+
+|    2 |     3 |
+|    5 |     6 |
++------+-------+
+
+mysql> (select id, price from select1) intersect distinct (select id, price from select2)
+order by id;
+
++------+-------+
+| id   | price |
++------+-------+
+|    2 |     3 |
+|    5 |     6 |
++------+-------+
+```
+
+### **EXCEPT/MINUS**
+
+EXCEPT/MINUS 子句用于返回多个查询结果之间的补集，即返回左侧查询中在右侧查询中不存在的数据，并对结果集去重。EXCEPT 和 MINUS 功能对等。
+
+**语法如下：**
+
+```SQL
+query_1 {EXCEPT | MINUS} [DISTINCT] query_2
+```
+
+> **说明**
+>
+> - EXCEPT 效果等同于 EXCEPT DISTINCT。不支持 ALL 关键字。
+> - 每条 SELECT 查询返回的列数必须相同，且列类型能够兼容。
+
+**示例：**
+
+继续使用 UNION 子句里的两张表。返回表 `select1` 中不存在于表 `select2` 的 `(id,price)` 组合。
+
+可以看到在结果中对组合 `(1,2)` 进行了去重。
+
+```Plaintext
+mysql> (select id, price from select1) except (select id, price from select2)
+order by id;
++------+-------+
+| id   | price |
++------+-------+
+|    1 |     2 |
++------+-------+
+
+mysql> (select id, price from select1) minus (select id, price from select2)
+order by id;
++------+-------+
+| id   | price |
++------+-------+
+|    1 |     2 |
++------+-------+
+```
+
+### DISTINCT
+
+DISTINCT 关键字对结果集进行去重。示例：
+
+```SQL
+-- 返回一列中去重后的值。
 select distinct tiny_column from big_table limit 2;
 
--- Returns the unique combinations of values from multiple columns.
+-- 返回多列中去重后的组合。
 select distinct tiny_column, int_column from big_table limit 2;
 ```
 
-distinct 可以和聚合函数(通常是 count 函数)一同使用，count(distinct) 用于计算出一个列或多个列上包含多少不同的组合。
+DISTINCT 可以和聚合函数 (通常是 count) 一同使用，count(distinct) 用于计算出一个列或多个列上包含多少不同的组合。
 
 ```SQL
--- Counts the unique values from one column.
+-- 计算一列中不重复值的个数。
 select count(distinct tiny_column) from small_table;
 ```
 
@@ -442,26 +624,30 @@ select count(distinct tiny_column) from small_table;
 ```
 
 ```SQL
--- Counts the unique combinations of values from multiple columns.
+-- 计算多列中不重复组合的个数。
 select count(distinct tiny_column, int_column) from big_table limit 2;
 ```
 
 StarRocks 支持多个聚合函数同时使用 distinct。
 
 ```SQL
--- Count the unique value from multiple aggregation function separately.
+-- 单独返回多个聚合函数去重后的个数。
+
 select count(distinct tiny_column, int_column), count(distinct varchar_column) from big_table;
 ```
 
 ### 子查询
 
-子查询按相关性分为不相关子查询和相关子查询。
+子查询按相关性可以分为不相关子查询和相关子查询。
+
+- 不相关子查询（简单查询）不依赖外层查询的结果。
+- 相关子查询需要依赖外层查询的结果才能执行。
 
 #### 不相关子查询
 
 不相关子查询支持 [NOT] IN 和 EXISTS。
 
-举例：
+示例：
 
 ```sql
 SELECT x FROM t1 WHERE x [NOT] IN (SELECT y FROM t2);
@@ -477,7 +663,7 @@ SELECT x FROM t1 WHERE EXISTS (SELECT y FROM t2 WHERE y = 1);
 
 相关子查询支持 [NOT] IN 和 [NOT] EXISTS。
 
-举例：
+示例：
 
 ```sql
 SELECT * FROM t1 WHERE x [NOT] IN (SELECT a FROM t2 WHERE t1.y = t2.b);
@@ -487,57 +673,35 @@ SELECT * FROM t1 WHERE [NOT] EXISTS (SELECT a FROM t2 WHERE t1.y = t2.b);
 
 子查询还支持标量子查询。分为不相关标量子查询、相关标量子查询和标量子查询作为普通函数的参数。
 
-举例：
+示例：
 
-1.不相关标量子查询，谓词为 = 号。例如输出最高工资的人的信息。
+1. 不相关标量子查询，谓词为 = 号。例如输出最高工资的人的信息。
 
-```sql
-SELECT name FROM table WHERE salary = (SELECT MAX(salary) FROM table);
-```
+    ```sql
+    SELECT name FROM table WHERE salary = (SELECT MAX(salary) FROM table);
+    ```
 
-2.不相关标量子查询，谓词为 >,< 等。例如输出比平均工资高的人的信息。
+2. 不相关标量子查询，谓词为 >,< 等。例如输出比平均工资高的人的信息。
 
-```sql
-SELECT name FROM table WHERE salary > (SELECT AVG(salary) FROM table);
-```
+    ```sql
+    SELECT name FROM table WHERE salary > (SELECT AVG(salary) FROM table);
+    ```
 
-3.相关标量子查询。例如输出各个部门工资最高的信息。
+3. 相关标量子查询。例如输出各个部门工资最高的信息。
 
-```sql
-SELECT name FROM table a WHERE salary = （SELECT MAX(salary) FROM table b WHERE b.部门= a.部门）;
-```
+    ```sql
+    SELECT name FROM table a WHERE salary = （SELECT MAX(salary) FROM table b WHERE b.部门= a.部门）;
+    ```
 
-4.标量子查询作为普通函数的参数。
+4. 标量子查询作为普通函数的参数。
 
-```sql
-SELECT name FROM table WHERE salary = abs((SELECT MAX(salary) FROM table));
-```
+    ```sql
+    SELECT name FROM table WHERE salary = abs((SELECT MAX(salary) FROM table));
+    ```
 
-### With 子句
+### WHERE 与操作符
 
-可以在 SELECT 语句之前添加的子句，用于定义在 SELECT 内部多次引用的复杂表达式的别名。
-
-与 CREATE VIEW 类似，但在子句中定义的表和列名在查询结束后不会持久，也不会与实际表或 VIEW 中的名称冲突。
-
-用 WITH 子句的好处有：
-
-方便和易于维护，减少查询内部的重复。
-
-通过将查询中最复杂的部分抽象成单独的块，更易于阅读和理解 SQL 代码。
-
-举例：
-
-```sql
--- Define one subquery at the outer level, and another at the inner level as part of the
--- initial stage of the UNION ALL query.
-
-with t1 as (select 1),t2 as (select 2)
-select * from t1 union all select * from t2;
-```
-
-### Where 与操作符
-
-SQL 操作符是一系列用于比较的函数，这些操作符广泛地用于 select 语句的 where 子句中。
+SQL 操作符是一系列用于比较的函数，这些操作符广泛地用于 SELECT 语句的 WHERE 子句中。
 
 #### 算数操作符
 
@@ -571,7 +735,7 @@ SQL 操作符是一系列用于比较的函数，这些操作符广泛地用于 
 
 比如我们没有 MOD()函数来表示%操作符的功能。反过来，数学函数也没有对应的算术操作符。比如幂函数 POW()并没有相应的 **求幂操作符。
 
-#### Between 操作符
+#### BETWEEN 操作符
 
 在 where 子句中，表达式可能同时与上界和下界比较。如果表达式大于等于下界，同时小于等于上界，比较的结果是 true。语法定义如下：
 
@@ -585,7 +749,7 @@ expression BETWEEN lower_bound AND upper_bound
 
 如果需要确保表达式能够正常工作，可以使用一些函数，如 upper(), lower(), substr(), trim()。
 
-举例：
+示例：
 
 ```sql
 select c1 from t1 where month between 1 and 6;
@@ -597,13 +761,13 @@ select c1 from t1 where month between 1 and 6;
 
 其中 `<>` 符号是不等于的意思，与!= 的功能一致。IN 和 BETWEEN 操作符提供更简短的表达来描述相等、小于、大于等关系的比较。
 
-In 操作符
+#### In 操作符
 
 In 操作符会和 VALUE 集合进行比较，如果可以匹配该集合中任何一元素，则返回 TRUE。
 
 参数和 VALUE 集合必须是可比较的。所有使用 IN 操作符的表达式都可以写成用 OR 连接的等值比较，但是 IN 的语法更简单，更精准，更容易让 StarRocks 进行优化。
 
-举例：
+示例：
 
 ```sql
 select * from small_table where tiny_column in (1,2);
@@ -613,7 +777,7 @@ select * from small_table where tiny_column in (1,2);
 
 该操作符用于和字符串进行比较。"_"用来匹配单个字符，"%"用来匹配多个字符。参数必须要匹配完整的字符串。通常，把"%" 放在字符串的尾部更加符合实际用法。
 
-举例：
+示例：
 
 ```sql
 mysql> select varchar_column from small_table where varchar_column like 'm%';
@@ -649,7 +813,7 @@ OR: 2 元操作符，如果左侧和右侧的参数的计算结果有一个为 T
 
 NOT: 单元操作符，反转表达式的结果。如果参数为 TRUE，则该操作符返回 FALSE；如果参数为 FALSE，则该操作符返回 TRUE。
 
-举例：
+示例：
 
 ```sql
 mysql> select true and true;
@@ -709,7 +873,7 @@ mysql> select not true;
 
 "|" 操作符是个可选操作符，"|" 两侧的正则表达式只需满足 1 侧条件即可，"|" 操作符和两侧的正则表达式通常需要用()括起来。
 
-举例：
+示例：
 
 ```sql
 mysql> select varchar_column from small_table where varchar_column regexp '(mi|MI).*';
@@ -735,15 +899,13 @@ mysql> select varchar_column from small_table where varchar_column regexp 'm.*';
 1 row in set (0.01 sec)
 ```
 
-### 别名
+### 别名 (alias)
 
-当在查询中书写表、列，或者包含列的表达式的名字时，可以同时给它们分配一个别名。
+在查询中书写表名、列名，或者包含列的表达式的名字时，可以通过 AS 给它们分配一个别名。
 
-当需要使用表名、列名时，可以使用别名来访问。别名通常相对原名来说更简短更好记。当需要新建一个别名时，只需在 select list 或者 from list 中的表、列、表达式名称后面加上 AS alias 子句即可。
+当需要使用表名、列名时，可以使用别名来访问。别名通常相对原名来说更简短更容易记忆。当需要新建一个别名时，只需在 select list 或者 from list 中的表、列、表达式名称后面加上 AS alias 子句即可。AS 关键词是可选的，用户可以直接在原名后面指定别名。如果别名或者其他标志符和 [StarRocks 内部保留关键字](../keywords.md)同名时，需要在该名称加上反引号，比如 `rank`。**别名对大小写敏感**。
 
-AS 关键词是可选的，用户可以直接在原名后面指定别名。如果别名或者其他标志符和内部关键词同名时，需要在该名称加上``符号。别名对大小写是敏感的。
-
-举例：
+示例：
 
 ```sql
 select tiny_column as name, int_column as sex from big_table;
