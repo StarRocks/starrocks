@@ -34,8 +34,7 @@ jobs:
     if: >
       !contains(github.event.pull_request.title, '(sync #') &&
       !contains(github.event.pull_request.labels.*.name, 'sync') &&
-      !startsWith(github.head_ref, github.base_ref) &&
-      !startsWith(github.head_ref, '-sync-')
+      (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
     name: RUN CHECKER
     steps:
       - run: echo "success"
