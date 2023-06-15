@@ -85,8 +85,17 @@ public:
 
     virtual void close(RuntimeState* state) {
         if (_exec_queue_id != nullptr) {
-            bthread::execution_queue_stop(*_exec_queue_id);
-            bthread::execution_queue_join(*_exec_queue_id); // make sure the stop task has been executed
+            int ret = bthread::execution_queue_stop(*_exec_queue_id);
+            if (ret != 0) {
+                auto error_msg = fmt::format("Fail to stop execution queue: {}", std::strerror(errno));
+                LOG(WARNING) << error_msg;
+            }
+
+            ret = bthread::execution_queue_join(*_exec_queue_id); // make sure the stop task has been executed
+            if (ret != 0) {
+                auto error_msg = fmt::format("Fail to join execution queue: {}", std::strerror(errno));
+                LOG(WARNING) << error_msg;
+            }
             _exec_queue_id.reset();
         }
         _is_finished = true;
