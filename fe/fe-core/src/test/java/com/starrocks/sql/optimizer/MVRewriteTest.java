@@ -1431,11 +1431,10 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query = "select user_id, percentile_approx(tag_id % 100, 1) from user_tags group by user_id";
         starRocksAssert.query(query).explainContains(QUERY_USE_USER_TAG_MV,
-                "percentile_approx_raw(9: mv_agg1, 1.0)", FunctionSet.PERCENTILE_APPROX_RAW);
+                "percentile_union(9: mv_agg1)", FunctionSet.PERCENTILE_APPROX_RAW);
 
-        // TODO: support this later.
         query = "select user_id, round(percentile_approx(tag_id % 100, 1),0) from user_tags group by user_id";
-        starRocksAssert.query(query).explainWithout(QUERY_USE_USER_TAG_MV);
+        starRocksAssert.query(query).explainContains(QUERY_USE_USER_TAG_MV);
 
         query = "select user_id, percentile_approx(tag_id, 1) from user_tags group by user_id";
         starRocksAssert.query(query).explainWithout(QUERY_USE_USER_TAG_MV);
