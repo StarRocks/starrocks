@@ -135,7 +135,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private KeysType mvKeysType = KeysType.DUP_KEYS;
 
     // If the process is replaying log, isReplay is true, otherwise is false,
-    // avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
+    // avoid throwing error during replay process, only in Rollup or MaterializedIndexMeta is true.
     private boolean isReplay = false;
 
     public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties) {
@@ -263,7 +263,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     }
 
     public void analyze(ConnectContext context) {
-        QueryStatement queryStatement = this.getQueryStatement();
+        QueryStatement queryStatement = getQueryStatement();
         long originSelectLimit = context.getSessionVariable().getSqlSelectLimit();
         // ignore limit in creating mv
         context.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
@@ -273,7 +273,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
         // forbid explain query
         if (queryStatement.isExplain()) {
-            throw new IllegalArgumentException("Materialized view does not support explain query");
+            throw new IllegalArgumentException("Creating materialized view does not support explain query");
         }
 
         if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
@@ -292,8 +292,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             throw new SemanticException("The materialized view only support olap table.");
         }
         TableName tableName = entry.getKey();
-        this.setBaseIndexName(table.getName());
-        this.setDBName(tableName.getDb());
+        setBaseIndexName(table.getName());
+        setDBName(tableName.getDb());
 
         SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
         if (!(selectRelation.getRelation() instanceof TableRelation)) {
@@ -301,7 +301,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
         int beginIndexOfAggregation = genColumnAndSetIntoStmt(table, selectRelation);
         if (selectRelation.isDistinct() || selectRelation.hasAggregation()) {
-            this.setMvKeysType(KeysType.AGG_KEYS);
+            setMvKeysType(KeysType.AGG_KEYS);
         }
         if (selectRelation.hasWhereClause()) {
             throw new SemanticException("The where clause is not supported in add materialized view clause, expr:"
@@ -375,7 +375,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         CreateMaterializedViewStmt.FN_NAME_TO_PATTERN.get(functionName.toLowerCase());
                 if (mvColumnPattern == null) {
                     throw new SemanticException(
-                            "Materialized view does not support this function:%s, supported functions are: %s",
+                            "Materialized view does not support function:%s, supported functions are: %s",
                             functionCallExpr.toSqlImpl(), FN_NAME_TO_PATTERN.keySet());
                 }
                 // current version not support count(distinct) function in creating materialized view
@@ -426,7 +426,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             throw new SemanticException("Only %s found in the select list. " +
                     "Please add group by clause and at least one group by column in the select list", joiner);
         }
-        this.setMvColumnItemList(mvColumnItemList);
+        setMvColumnItemList(mvColumnItemList);
         return beginIndexOfAggregation;
     }
 
@@ -590,21 +590,21 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     This function is used to supply order by columns and calculate short key count
     */
     private void supplyOrderColumn() {
-        List<MVColumnItem> mvColumnItemList = this.getMVColumnItemList();
+        List<MVColumnItem> mvColumnItemList = getMVColumnItemList();
 
         /*
          * The keys type of Materialized view is aggregation.
          * All of group by columns are keys of materialized view.
          */
-        if (this.getMVKeysType() == KeysType.AGG_KEYS) {
-            for (MVColumnItem mvColumnItem : this.getMVColumnItemList()) {
+        if (getMVKeysType() == KeysType.AGG_KEYS) {
+            for (MVColumnItem mvColumnItem : getMVColumnItemList()) {
                 if (mvColumnItem.getAggregationType() != null) {
                     break;
                 }
                 Preconditions.checkArgument(mvColumnItem.getType().isScalarType(), "non scalar type");
                 mvColumnItem.setIsKey(true);
             }
-        } else if (this.getMVKeysType() == KeysType.DUP_KEYS) {
+        } else if (getMVKeysType() == KeysType.DUP_KEYS) {
             /*
              * There is no aggregation function in materialized view.
              * Supplement key of MV columns

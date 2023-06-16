@@ -158,7 +158,7 @@ public class MvRewritePreprocessor {
                             new MaterializedView.MvRefreshScheme(MaterializedView.RefreshType.SYNC);
                     MaterializedView mv = new MaterializedView(db, mvName, indexMeta, olapTable,
                             mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
-                    mv.setViewDefineSql(" " + viewDefineSql);
+                    mv.setViewDefineSql(viewDefineSql);
                     mv.setBaseIndexId(indexId);
                     relatedMvs.add(mv);
                 } catch (Exception e) {
