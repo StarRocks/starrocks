@@ -56,7 +56,7 @@ void RoaringBitmapMemTest::do_bench(benchmark::State& state) {
     _bitmap.resize(100);
     size_t size = _end - _start;
     for (size_t i = 0; i < _value_count; i++) {
-        uint32_t v = static_cast<uint32_t>(_rand.Next64() % size) + _start;
+        uint64_t v = _rand.Next64() % size + _start;
         for (size_t j = 0; j < 100; j++) {
             _bitmap[j].add(v);
         }
@@ -78,6 +78,10 @@ static void bench_func(benchmark::State& state) {
 }
 
 static void process_args(benchmark::internal::Benchmark* b) {
+    b->Args({10000, 1, 5000000000})->Iterations(1);
+    b->Args({100000, 1, 5000000000})->Iterations(1);
+    b->Args({1000000, 1, 5000000000})->Iterations(1);
+
     b->Args({10000, 1, 200000000})->Iterations(1);
     b->Args({100000, 1, 200000000})->Iterations(1);
     b->Args({1000000, 1, 200000000})->Iterations(1);
