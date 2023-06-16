@@ -152,7 +152,6 @@ import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.events.MetastoreEventsProcessor;
 import com.starrocks.external.iceberg.IcebergRepository;
-import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -301,7 +300,6 @@ public class GlobalStateMgr {
     private HiveRepository hiveRepository;
     private IcebergRepository icebergRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
-    private IcebergRepository icebergRepository;
 
     // set to true after finished replay all meta and ready to serve
     // set to false when globalStateMgr is not ready.
