@@ -1119,6 +1119,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         for (Pair<Long, Long> partition : partitions) {
             PartitionStat pStat = partitionStats.get(partition);
             // skew <= 1 means partition is balanced
+            // break all partitions because they are sorted by skew in desc order.
             if (pStat.skew <= 1) {
                 break;
             }
@@ -1131,6 +1132,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             } else {
                 tablets = getPartitionTablets(pStat.dbId, pStat.tableId, partition.first, partition.second, null,
                         Pair.create(beId, paths));
+            }
+
+            // partition may be dropped or materializedIndex may be replaced.
+            if (tablets.size() <= 1) {
+                continue;
             }
             boolean tabletFound = false;
             do {
