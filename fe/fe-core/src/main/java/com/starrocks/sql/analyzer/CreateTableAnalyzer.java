@@ -24,6 +24,11 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.RunMode;
+>>>>>>> 9a0fe2303 ([BugFix] prevent external table has not null column)
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -113,6 +118,8 @@ public class CreateTableAnalyzer {
         } catch (AnalysisException e) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
         }
+
+        String catalogName = tableNameObject.getCatalog();
 
         final String engineName = analyzeEngineName(statement.getEngineName()).toLowerCase();
         statement.setEngineName(engineName);
@@ -239,7 +246,11 @@ public class CreateTableAnalyzer {
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
+<<<<<<< HEAD
                 columnDef.analyze(statement.isOlapOrLakeEngine());
+=======
+                columnDef.analyze(statement.isOlapEngine(), CatalogMgr.isInternalCatalog(catalogName), engineName);
+>>>>>>> 9a0fe2303 ([BugFix] prevent external table has not null column)
             } catch (AnalysisException e) {
                 LOGGER.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
