@@ -209,6 +209,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_TABLE: {
+                case OperationType.OP_CREATE_TABLE_V2: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
                     LOG.info("Begin to unprotect create table. db = "
                             + info.getDbName() + " table = " + info.getTable().getId());
