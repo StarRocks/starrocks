@@ -25,48 +25,52 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON、Avro (自 v3.0.1
 
 ### 概念
 
-- **导入作业**
+- **导入作业（Load job）**
 
   导入作业会常驻运行，当导入作业的状态为 **RUNNING** 时，会持续不断生成一个或多个并行的导入任务，不断消费 Kafka 集群中一个 Topic 的消息，并导入至 StarRocks 中。
 
-- **导入任务**
+- **导入任务（Load task）**
 
   导入作业会按照一定规则拆分成若干个导入任务。导入任务是执行导入的基本单位，作为一个独立的事务，通过 [Stream Load](../loading/StreamLoad.md) 导入机制实现。若干个导入任务并行消费一个 Topic 中不同分区的消息，并导入至 StarRocks 中。
 
 ### 作业流程
 
-- **创建常驻的导入作业**
+1. **创建常驻的导入作业**
 
-  您需要向 StarRocks 提交创建导入作业的 SQL 语句。 FE 会解析 SQL 语句，并创建一个常驻的导入作业。
+    您需要向 StarRocks 提交创建导入作业的 SQL 语句。 FE 会解析 SQL 语句，并创建一个常驻的导入作业。
 
-- **拆分导入作业为多个导入任务**
+2. **拆分导入作业为多个导入任务**
 
-  FE 将导入作业按照一定规则拆分成若干个导入任务。一个导入任务作为一个独立的事务。
+    FE 将导入作业按照一定规则拆分成若干个导入任务。一个导入任务作为一个独立的事务。
 
-  拆分规则如下：
-  - FE 根据期望任务并行度`desired_concurrent_number`、Kafka Topic 的分区数量、存活 BE 数量等，计算得出实际任务并行度。
-  - FE 根据实际任务并行度将导入作业分为若干导入任务，放入任务执行队列中。
+    拆分规则如下：
+    - FE 根据期望任务并行度`desired_concurrent_number`、Kafka Topic 的分区数量、存活 BE 数量等，计算得出实际任务并行度。
+    - FE 根据实际任务并行度将导入作业分为若干导入任务，放入任务执行队列中。
 
-  每个 Topic 会有多个分区，分区与导入任务之间的对应关系为：
-  - 每个分区的消息只能由一个对应的导入任务消费。
-  - 一个导入任务可能会消费一个或多个分区。
-  - 分区会尽可能均匀地分配给导入任务。
+    每个 Topic 会有多个分区，分区与导入任务之间的对应关系为：
+    - 每个分区的消息只能由一个对应的导入任务消费。
+    - 一个导入任务可能会消费一个或多个分区。
+    - 分区会尽可能均匀地分配给导入任务。
 
-- **多个导入任务并行进行，消费 Kafka 多个分区的消息，导入至 StarRocks**
+3. **多个导入任务并行进行，消费 Kafka 多个分区的消息，导入至 StarRocks**
 
-  - **调度和提交导入任务**：FE 定时调度任务执行队列中的导入任务，分配给选定的 Coordinator BE。调度导入任务的时间间隔由 `max_batch_interval` 参数，并且 FE 会尽可能均匀地向所有 BE 分配导入任务。有关 `max_batch_interval` 参数的详细介绍，请参见  [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#job_properties)。
+    1. **调度和提交导入任务**：FE 定时调度任务执行队列中的导入任务，分配给选定的 Coordinator BE。调度导入任务的时间间隔由 `max_batch_interval` 参数，并且 FE 会尽可能均匀地向所有 BE 分配导入任务。有关 `max_batch_interval` 参数的详细介绍，请参见  [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#job_properties)。
 
-  - **执行导入任务**：Coordinator BE 执行导入任务，消费分区的消息，解析并过滤数据。导入任务需要消费足够多的消息，或者消费足够长时间。消费时间和消费的数据量由 FE 配置项 `max_routine_load_batch_size`、`routine_load_task_consume_second`决定，有关该配置项的更多说明，请参见 [配置参数](../administration/Configuration.md#导入和导出)。然后，Coordinator BE 将消息分发至相关 Executor BE 节点， Executor BE 节点将消息写入磁盘。
+    2. **执行导入任务**：Coordinator BE 执行导入任务，消费分区的消息，解析并过滤数据。导入任务需要消费足够多的消息，或者消费足够长时间。消费时间和消费的数据量由 FE 配置项 `max_routine_load_batch_size`、`routine_load_task_consume_second`决定，有关该配置项的更多说明，请参见 [配置参数](../administration/Configuration.md#导入和导出)。然后，Coordinator BE 将消息分发至相关 Executor BE 节点， Executor BE 节点将消息写入磁盘。
 
-    > **说明**
-    >
-    > StarRocks 可以通过无认证、SSL 认证、SASL 认证机制连接 Kafka。
+      > **说明**
+      >
+      > StarRocks 可以通过安全认证机制，包括 SASL_SSL 认证、SASL 认证和 SSL 认证，以及无认证的方式连接 Kafka。本文以无认证的方式连接 Kafka 为例进行说明，如果您需要通过安全认证机制连接 Kafka，请参见[CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
 
-- **持续生成新的导入任务，不间断地导入数据**
+4. **持续生成新的导入任务，不间断地导入数据**
 
-  Executor BE 节点成功写入数据后， Coordonator BE 会向 FE 汇报导入结果。
-  
-  FE 根据汇报结果，继续生成新的导入任务，或者对失败的导入任务进行重试，连续地导入数据，并且能够保证导入数据不丢不重。
+    Executor BE 节点成功写入数据后， Coordonator BE 会向 FE 汇报导入结果。
+
+    FE 根据汇报结果，继续生成新的导入任务，或者对失败的导入任务进行重试，连续地导入数据，并且能够保证导入数据不丢不重。
+
+## 准备工作
+
+下载并安装 Kafka。创建 Topic 并且上传数据。操作步骤，请参见[Apache Kafka quickstart](https://kafka.apache.org/quickstart)。
 
 ## 创建导入作业
 
@@ -143,11 +147,11 @@ FROM KAFKA
 
 - **消费分区和起始消费位点**
 
-  如果需要指定分区、起始消费位点，则可以配置参数 `kafka_partitions`、`kafka_offsets`。例如待消费分区为`"0,1,2,3,4"`，并且从每个分区的起始位点开始消费，则可以指定如下配置：
+  如果需要指定分区、起始消费位点，则可以配置参数 `kafka_partitions`、`kafka_offsets`。例如待消费分区为`"0,1,2,3,4"`，并且为每个分区单独指定起始消费位点，则可以指定如下配置：
 
   ```SQL
     "kafka_partitions" ="0,1,2,3,4",
-    "kafka_offsets" = "OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_END,OFFSET_END"
+    "kafka_offsets" = "OFFSET_BEGINNING, OFFSET_END, 1000, 2000, 3000"
   ```
 
   您也可以使用 `property.kafka_default_offsets` 来设置全部分区的默认消费位点。
@@ -287,7 +291,7 @@ FROM KAFKA
       }
       ```
 
-2. 注册该 Avro schema 至 [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html)。
+2. 注册该 Avro schema 至 [Schema Registry](https://docs.confluent.io/cloud/current/get-started/schema-registry.html#create-a-schema)。
 
 **Avro 数据**
 
@@ -298,7 +302,7 @@ FROM KAFKA
 根据 Avro 数据中需要导入的字段，在 StarRocks 集群的目标数据库 `sensor` 中创建表 `sensor_log`。表的列名与 Avro 数据的字段名保持一致。两者的数据类型映射关系，请参见[数据类型映射](#数据类型映射)。
 
 ```SQL
-CREATE TABLE sensor.sensor_log ( 
+CREATE TABLE  example_db.sensor_log ( 
     `id` bigint NOT NULL COMMENT "sensor id",
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
@@ -319,7 +323,7 @@ DISTRIBUTED BY HASH(`id`);
 提交一个导入作业 `sensor_log_load_job`，持续消费 Kafka 集群中 Topic `topic_0` 的 Avro 消息，并将其导入到数据库 `sensor` 中的表 `sensor_log`。并且导入作业会从此 Topic 所指定分区的最早位点开始消费。
 
 ```sql
-CREATE ROUTINE LOAD example_db.sensor_log_load_job ON sensor_log1  
+CREATE ROUTINE LOAD example_db.sensor_log_load_job ON sensor_log 
 PROPERTIES  
 (  
     "format" = "avro"  
