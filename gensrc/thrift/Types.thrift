@@ -515,6 +515,12 @@ enum TPartialUpdateMode {
     AUTO_MODE = 3;
 }
 
+enum TRunMode {
+    SHARED_NOTHING = 0;
+    SHARED_DATA = 1;
+    HYBRID = 2;
+}
+
 struct TIcebergColumnStats {
     1: optional map<i32, i64> column_sizes
     2: optional map<i32, i64> value_counts

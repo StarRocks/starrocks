@@ -77,8 +77,15 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     LOG_EVERY_N(INFO, 12) << "get heartbeat from FE."
                           << "host:" << master_info.network_address.hostname
                           << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id
-                          << ", counter:" << google::COUNTER;
+                          << ", run_mode:" << master_info.run_mode << ", counter:" << google::COUNTER;
 
+#ifndef USE_STAROS
+    if (master_info.run_mode == TRunMode::SHARED_DATA) {
+        // TODO: log fatal?
+        LOG_EVERY_N(ERROR, 12)
+                << "This program is not compiled with SHARED_DATA support, but FE is running in SHARED_DATA mode!";
+    }
+#endif
     // do heartbeat
     StatusOr<CmpResult> res = compare_master_info(master_info);
     res.status().to_thrift(&heartbeat_result.status);

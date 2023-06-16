@@ -33,7 +33,7 @@ public class HeartbeatFlags {
         return "alpha".equalsIgnoreCase(rowsetType) || "beta".equalsIgnoreCase(rowsetType);
     }
 
-    public long getHeartbeatFlags() {
+    public static long getHeartbeatFlags() {
         long heartbeatFlags = 0;
         if ("beta".equalsIgnoreCase(GlobalVariable.defaultRowsetType)) {
             heartbeatFlags |= HeartbeatServiceConstants.IS_SET_DEFAULT_ROWSET_TO_BETA_BIT;
