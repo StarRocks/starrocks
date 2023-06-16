@@ -1730,8 +1730,7 @@ TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
 TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/array_struct_map.csv";
 
-    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                        {""}};
+    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
 
     auto* tuple_desc = _create_tuple_desc(csv_descs);
     auto* common_range = _create_scan_range(small_file, 0, 0);
