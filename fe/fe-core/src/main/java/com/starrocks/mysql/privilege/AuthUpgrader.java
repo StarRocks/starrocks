@@ -32,11 +32,12 @@ import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeCollection;
+import com.starrocks.privilege.PrivilegeCollectionV2;
+import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.RolePrivilegeCollection;
-import com.starrocks.privilege.UserPrivilegeCollection;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
+import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
@@ -185,7 +186,7 @@ public class AuthUpgrader {
 
                 LOG.info("upgrade auth for user '{}'", userIdentity);
 
-                UserPrivilegeCollection collection = new UserPrivilegeCollection();
+                UserPrivilegeCollectionV2 collection = new UserPrivilegeCollectionV2();
                 // mark all the old grant pattern, will be used in lower level
                 Set<Pair<String, String>> grantPatterns = new HashSet<>();
 
@@ -225,7 +226,7 @@ public class AuthUpgrader {
             try {
                 for (String hostname : whiteList.getAllDomains()) {
                     UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain(userName, hostname);
-                    UserPrivilegeCollection collection = new UserPrivilegeCollection();
+                    UserPrivilegeCollectionV2 collection = new UserPrivilegeCollectionV2();
                     // mark all the old grant pattern, will be used in lower level
                     Set<Pair<String, String>> grantPatterns = new HashSet<>();
 
@@ -262,7 +263,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeUserGlobalPrivileges(
-            GlobalPrivEntry entry, UserPrivilegeCollection collection)
+            GlobalPrivEntry entry, UserPrivilegeCollectionV2 collection)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         PrivBitSet bitSet = entry.getPrivSet();
         for (Privilege privilege : bitSet.toPrivilegeList()) {
@@ -308,7 +309,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeUserDbPrivileges(
-            DbPrivTable table, UserIdentity user, UserPrivilegeCollection collection,
+            DbPrivTable table, UserIdentity user, UserPrivilegeCollectionV2 collection,
             Set<Pair<String, String>> grantPatterns)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         Iterator<PrivEntry> iterator;
@@ -367,7 +368,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeUserTablePrivileges(
-            TablePrivTable table, UserIdentity user, UserPrivilegeCollection collection,
+            TablePrivTable table, UserIdentity user, UserPrivilegeCollectionV2 collection,
             Set<Pair<String, String>> grantPatterns)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         // loop twice, the first one is for GRANT_PRIV
@@ -428,7 +429,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeUserResourcePrivileges(ResourcePrivTable table, UserIdentity user,
-                                                 UserPrivilegeCollection collection)
+                                                 UserPrivilegeCollectionV2 collection)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
 
         Set<String> grantPatterns = new HashSet<>();
@@ -469,7 +470,7 @@ public class AuthUpgrader {
         }
     }
 
-    protected void upgradeUserImpersonate(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection)
+    protected void upgradeUserImpersonate(Iterator<PrivEntry> iterator, UserPrivilegeCollectionV2 collection)
             throws PrivilegeException {
         while (iterator.hasNext()) {
             ImpersonateUserPrivEntry entry = (ImpersonateUserPrivEntry) iterator.next();
@@ -510,9 +511,9 @@ public class AuthUpgrader {
                 LOG.info("upgrade auth for role '{}'", roleName);
 
                 // create new role
-                RolePrivilegeCollection collection = new RolePrivilegeCollection(
-                        roleName, RolePrivilegeCollection.RoleFlags.MUTABLE,
-                        RolePrivilegeCollection.RoleFlags.REMOVABLE);
+                RolePrivilegeCollectionV2 collection = new RolePrivilegeCollectionV2(
+                        roleName, RolePrivilegeCollectionV2.RoleFlags.MUTABLE,
+                        RolePrivilegeCollectionV2.RoleFlags.REMOVABLE);
 
                 // 1. table privileges(including global+db)
                 upgradeRoleTablePrivileges(role.getTblPatternToPrivs(), collection);
@@ -536,7 +537,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeRoleTablePrivileges(
-            Map<TablePattern, PrivBitSet> tblPatternToPrivs, RolePrivilegeCollection collection)
+            Map<TablePattern, PrivBitSet> tblPatternToPrivs, RolePrivilegeCollectionV2 collection)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         Iterator<Map.Entry<TablePattern, PrivBitSet>> iterator;
         Set<Pair<String, String>> grantPatterns = new HashSet<>();
@@ -656,7 +657,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeRoleResourcePrivileges(
-            Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs, RolePrivilegeCollection collection)
+            Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs, RolePrivilegeCollectionV2 collection)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         Iterator<Map.Entry<ResourcePattern, PrivBitSet>> iterator;
         Set<String> grantPatterns = new HashSet<>();
@@ -735,7 +736,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeRoleImpersonatePrivileges(Set<UserIdentity> impersonateUsers,
-                                                    RolePrivilegeCollection collection)
+                                                    RolePrivilegeCollectionV2 collection)
             throws PrivilegeException {
         Iterator<UserIdentity> iterator = impersonateUsers.iterator();
         while (iterator.hasNext()) {
@@ -749,7 +750,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeDbPrivileges(
-            String db, Privilege privilege, PrivilegeCollection collection,
+            String db, Privilege privilege, PrivilegeCollectionV2 collection,
             Set<Pair<String, String>> grantPatterns)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
 
@@ -816,7 +817,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeViewPrivileges(
-            String db, String view, Privilege privilege, PrivilegeCollection collection,
+            String db, String view, Privilege privilege, PrivilegeCollectionV2 collection,
             Set<Pair<String, String>> grantPatterns)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
 
@@ -873,7 +874,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeTablePrivileges(
-            String db, String table, Privilege privilege, PrivilegeCollection collection,
+            String db, String table, Privilege privilege, PrivilegeCollectionV2 collection,
             Set<Pair<String, String>> grantPatterns)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
 
@@ -936,7 +937,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeMaterializedViewPrivileges(
-            String db, String mv, Privilege privilege, PrivilegeCollection collection,
+            String db, String mv, Privilege privilege, PrivilegeCollectionV2 collection,
             Set<Pair<String, String>> grantPatterns) throws PrivilegeException, AuthUpgradeUnrecoverableException {
 
         // actionSet
@@ -992,7 +993,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeFunctionPrivileges(
-            String db, String function, Privilege privilege, PrivilegeCollection collection,
+            String db, String function, Privilege privilege, PrivilegeCollectionV2 collection,
             Set<Pair<String, String>> grantPatterns)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         // action
@@ -1043,7 +1044,7 @@ public class AuthUpgrader {
         return grantPattern.contains(Pair.create(db, objectName)) || grantPattern.contains(Pair.create(db, STAR));
     }
 
-    protected void upgradeImpersonatePrivileges(UserIdentity user, PrivilegeCollection collection)
+    protected void upgradeImpersonatePrivileges(UserIdentity user, PrivilegeCollectionV2 collection)
             throws PrivilegeException {
         List<PEntryObject> objects;
         try {
@@ -1057,7 +1058,7 @@ public class AuthUpgrader {
     }
 
     protected void upgradeResourcePrivileges(
-            String name, Privilege privilege, PrivilegeCollection collection, boolean isGrant)
+            String name, Privilege privilege, PrivilegeCollectionV2 collection, boolean isGrant)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         switch (privilege) {
             case USAGE_PRIV: {
@@ -1084,7 +1085,7 @@ public class AuthUpgrader {
         }
     }
 
-    protected void upgradeBuiltInRoles(Privilege privilege, PrivilegeCollection collection)
+    protected void upgradeBuiltInRoles(Privilege privilege, PrivilegeCollectionV2 collection)
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         switch (privilege) {
             case ADMIN_PRIV:   // ADMIN_PRIV -> db_admin + user_admin
@@ -1103,14 +1104,14 @@ public class AuthUpgrader {
         }
     }
 
-    private void grantRoleToCollection(PrivilegeCollection collection, Long... parentRoleIds)
+    private void grantRoleToCollection(PrivilegeCollectionV2 collection, Long... parentRoleIds)
             throws PrivilegeException {
         for (long parentRoleId : parentRoleIds) {
-            RolePrivilegeCollection rolePrivilegeCollection =
+            RolePrivilegeCollectionV2 rolePrivilegeCollection =
                     authorizationManager.getRolePrivilegeCollectionUnlocked(parentRoleId, true);
-            for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> entry :
+            for (Map.Entry<ObjectType, List<PrivilegeEntry>> entry :
                     rolePrivilegeCollection.getTypeToPrivilegeEntryList().entrySet()) {
-                for (PrivilegeCollection.PrivilegeEntry privEntry : entry.getValue()) {
+                for (PrivilegeEntry privEntry : entry.getValue()) {
                     collection.grant(entry.getKey(),
                             authorizationManager.analyzeActionSet(entry.getKey(), privEntry.getActionSet()),
                             Collections.singletonList(privEntry.getObject()),

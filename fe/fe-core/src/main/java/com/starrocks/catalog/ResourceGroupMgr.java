@@ -32,7 +32,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.RolePrivilegeCollection;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -178,7 +178,7 @@ public class ResourceGroupMgr implements Writable {
             }
 
             for (Long roleId : activeRoles) {
-                RolePrivilegeCollection rolePrivilegeCollection =
+                RolePrivilegeCollectionV2 rolePrivilegeCollection =
                         manager.getRolePrivilegeCollectionUnlocked(roleId, false);
                 if (rolePrivilegeCollection != null) {
                     validRoles.add(rolePrivilegeCollection.getName());
