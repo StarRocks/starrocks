@@ -226,19 +226,7 @@ public class TaskManager {
                     if (schedule == null) {
                         throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
                     }
-                    LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
-                    Duration duration = Duration.between(LocalDateTime.now(), startTime);
-                    long initialDelay = duration.getSeconds();
-                    // if startTime < now, start scheduling now
-                    if (initialDelay < 0) {
-                        initialDelay = 0;
-                    }
-                    // this operation should only run in master
-                    ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                                    executeTask(task.getName()), initialDelay,
-                            TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit()),
-                            TimeUnit.SECONDS);
-                    periodFutureMap.put(task.getId(), future);
+                    registerScheduler(task);
                 }
             }
             nameToTaskMap.put(task.getName(), task);
@@ -402,6 +390,71 @@ public class TaskManager {
         return taskList;
     }
 
+    public void alterTask(Task currentTask, Task changedTask, boolean isReplay) {
+        Constants.TaskType currentType = currentTask.getType();
+        Constants.TaskType changedType = changedTask.getType();
+        boolean hasChanged = false;
+        if (currentType == Constants.TaskType.MANUAL) {
+            if (changedType == Constants.TaskType.EVENT_TRIGGERED) {
+                hasChanged = true;
+            }
+        } else if (currentTask.getType() == Constants.TaskType.EVENT_TRIGGERED) {
+            if (changedType == Constants.TaskType.MANUAL) {
+                hasChanged = true;
+            }
+        } else if (currentTask.getType() == Constants.TaskType.PERIODICAL) {
+            if (!isReplay) {
+                boolean isCancel = stopScheduler(currentTask.getName());
+                if (!isCancel) {
+                    throw new RuntimeException("stop scheduler failed");
+                }
+            }
+            periodFutureMap.remove(currentTask.getId());
+            currentTask.setState(Constants.TaskState.UNKNOWN);
+            currentTask.setSchedule(null);
+            hasChanged = true;
+        }
+
+        if (changedType == Constants.TaskType.PERIODICAL) {
+            currentTask.setState(Constants.TaskState.ACTIVE);
+            TaskSchedule schedule = changedTask.getSchedule();
+            currentTask.setSchedule(schedule);
+            if (!isReplay) {
+                registerScheduler(currentTask);
+            }
+            hasChanged = true;
+        }
+
+        if (hasChanged) {
+            currentTask.setType(changedTask.getType());
+            if (!isReplay) {
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(changedTask);
+            }
+        }
+    }
+
+    private void registerScheduler(Task task) {
+        TaskSchedule schedule = task.getSchedule();
+        LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
+        Duration duration = Duration.between(LocalDateTime.now(), startTime);
+        long initialDelay = duration.getSeconds();
+        // if startTime < now, start scheduling now
+        if (initialDelay < 0) {
+            initialDelay = 0;
+        }
+        // this operation should only run in master
+        ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
+                        executeTask(task.getName()), initialDelay,
+                TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit()),
+                TimeUnit.SECONDS);
+        periodFutureMap.put(task.getId(), future);
+    }
+
+    public void replayAlterTask(Task task) {
+        Task currentTask = getTask(task.getName());
+        alterTask(currentTask, task, true);
+    }
+
     private boolean tryTaskLock() {
         try {
             if (!taskLock.tryLock(5, TimeUnit.SECONDS)) {
@@ -461,7 +514,7 @@ public class TaskManager {
             if (ex.getMessage().contains("Failed to get task lock")) {
                 submitResult = new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
             } else {
-                LOG.warn("Failed to create Task [{}]" + taskName, ex);
+                LOG.warn("Failed to create Task [{}]", taskName, ex);
                 throw ex;
             }
         }
