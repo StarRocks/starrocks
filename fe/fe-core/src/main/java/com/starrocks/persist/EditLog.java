@@ -208,7 +208,7 @@ public class EditLog {
                     globalStateMgr.replayRenameDatabase(dbName, dbInfo.getNewDbName());
                     break;
                 }
-                case OperationType.OP_CREATE_TABLE: {
+                case OperationType.OP_CREATE_TABLE:
                 case OperationType.OP_CREATE_TABLE_V2: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
                     LOG.info("Begin to unprotect create table. db = "
