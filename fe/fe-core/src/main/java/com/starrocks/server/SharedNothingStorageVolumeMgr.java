@@ -16,7 +16,7 @@ package com.starrocks.server;
 
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
-import com.starrocks.persist.StringLog;
+import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -79,7 +79,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
 
     @Override
     protected void removeInternalNoLock(StorageVolume sv) {
-        StringLog log = new StringLog(sv.getId());
+        DropStorageVolumeLog log = new DropStorageVolumeLog(sv.getId());
         GlobalStateMgr.getCurrentState().getEditLog().logDropStorageVolume(log);
         idToSV.remove(sv.getId());
     }
@@ -111,9 +111,9 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public void replayDropStorageVolume(StringLog log) {
+    public void replayDropStorageVolume(DropStorageVolumeLog log) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            idToSV.remove(log.getValue());
+            idToSV.remove(log.getId());
         }
     }
 }

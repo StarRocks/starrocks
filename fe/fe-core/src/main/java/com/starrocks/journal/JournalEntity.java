@@ -91,6 +91,7 @@ import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropResourceOperationLog;
+import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.persist.ImpersonatePrivInfo;
@@ -112,9 +113,9 @@ import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SecurityIntegrationInfo;
+import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
-import com.starrocks.persist.StringLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
@@ -1019,14 +1020,14 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME:
-                data = StringLog.read(in);
+                data = SetDefaultStorageVolumeLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_DROP_STORAGE_VOLUME:
+                data = DropStorageVolumeLog.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_CREATE_STORAGE_VOLUME:
-            case OperationType.OP_DROP_STORAGE_VOLUME:
-                data = StorageVolume.read(in);
-                isRead = true;
-                break;
             case OperationType.OP_UPDATE_STORAGE_VOLUME:
                 data = StorageVolume.read(in);
                 isRead = true;

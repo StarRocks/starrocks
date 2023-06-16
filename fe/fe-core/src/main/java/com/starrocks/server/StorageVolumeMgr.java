@@ -20,7 +20,8 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.persist.StringLog;
+import com.starrocks.persist.DropStorageVolumeLog;
+import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -151,7 +152,7 @@ public abstract class StorageVolumeMgr {
             StorageVolume sv = getStorageVolumeByName(svKey);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svKey);
             Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svKey);
-            StringLog log = new StringLog(sv.getId());
+            SetDefaultStorageVolumeLog log = new SetDefaultStorageVolumeLog(sv.getId());
             GlobalStateMgr.getCurrentState().getEditLog().logSetDefaultStorageVolume(log);
             this.defaultStorageVolumeId = sv.getId();
         }
@@ -240,9 +241,9 @@ public abstract class StorageVolumeMgr {
         }
     }
 
-    public void replaySetDefaultStorageVolume(StringLog log) {
+    public void replaySetDefaultStorageVolume(SetDefaultStorageVolumeLog log) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            defaultStorageVolumeId = log.getValue();
+            defaultStorageVolumeId = log.getId();
         }
     }
 
@@ -250,7 +251,7 @@ public abstract class StorageVolumeMgr {
 
     public void replayUpdateStorageVolume(StorageVolume sv) {}
 
-    public void replayDropStorageVolume(StringLog log) {}
+    public void replayDropStorageVolume(DropStorageVolumeLog log) {}
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STORAGE_VOLUME_MGR, 1);

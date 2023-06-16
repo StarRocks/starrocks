@@ -1049,7 +1049,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
-                    StringLog log = (StringLog) journal.getData();
+                    SetDefaultStorageVolumeLog log = (SetDefaultStorageVolumeLog) journal.getData();
                     globalStateMgr.getStorageVolumeMgr().replaySetDefaultStorageVolume(log);
                     break;
                 }
@@ -1064,11 +1064,10 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_DROP_STORAGE_VOLUME: {
-                    StringLog log = (StringLog) journal.getData();
+                    DropStorageVolumeLog log = (DropStorageVolumeLog) journal.getData();
                     globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(log);
                     break;
                 }
-
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -2037,7 +2036,7 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_TASK, changedTask);
     }
 
-    public void logSetDefaultStorageVolume(StringLog log) {
+    public void logSetDefaultStorageVolume(SetDefaultStorageVolumeLog log) {
         logEdit(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, log);
     }
 
@@ -2049,7 +2048,7 @@ public class EditLog {
         logEdit(OperationType.OP_UPDATE_STORAGE_VOLUME, storageVolume);
     }
 
-    public void logDropStorageVolume(StringLog log) {
+    public void logDropStorageVolume(DropStorageVolumeLog log) {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
     }
 }

@@ -19,8 +19,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
+import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.StringLog;
+import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.storagevolume.StorageVolume;
 import mockit.Expectations;
 import mockit.Mock;
@@ -55,10 +56,10 @@ public class SharedNothingStorageVolumeMgrTest {
 
         new Expectations() {
             {
-                editLog.logSetDefaultStorageVolume((StringLog) any);
+                editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
                 editLog.logCreateStorageVolume((StorageVolume) any);
                 editLog.logUpdateStorageVolume((StorageVolume) any);
-                editLog.logDropStorageVolume((StringLog) any);
+                editLog.logDropStorageVolume((DropStorageVolumeLog) any);
             }
         };
 
