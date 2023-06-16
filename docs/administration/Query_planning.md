@@ -247,6 +247,8 @@ For multi-table join queries, the optimizer usually automatically selects the op
 >
 > Join Hint is case-insensitive.
 
+#### Examples
+
 - Shuffle Join
 
   If you need to shuffle the data rows with the same bucket key values from tables A and B onto the same machine before a Join operation is performed, you can hint the join execution method as Shuffle Join.
