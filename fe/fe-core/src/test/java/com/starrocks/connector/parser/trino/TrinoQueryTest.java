@@ -347,6 +347,16 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testLambdaFunction() throws Exception {
+        // trino do not support array_map function, just test the lambda function
+        String sql = "select array_map(array['a1_a2','a1_a2'], x->split(x, '_'));";
+        assertPlanContains(sql, "array_map(<slot 2> -> split(<slot 2>, '_'), ['a1_a2','a1_a2'])");
+
+        sql = "select transform(split('a1_a2,b1_b2', ','), x->split(x, '_'));";
+        assertPlanContains(sql, "array_map(<slot 2> -> split(<slot 2>, '_'), split('a1_a2,b1_b2', ','))");
+    }
+
+    @Test
     public void testSelectStruct() throws Exception {
         String sql = "select c0, c1.a from test_struct";
         assertPlanContains(sql, "1:Project\n" +
