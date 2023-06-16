@@ -19,7 +19,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.RolePrivilegeCollection;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -33,10 +33,10 @@ public class RolePrivilegeCollectionInfo implements Writable {
     @SerializedName(value = "v")
     private short pluginVersion;
     @SerializedName(value = "r")
-    private Map<Long, RolePrivilegeCollection> rolePrivCollectionModified;
+    private Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified;
 
     public RolePrivilegeCollectionInfo(
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified,
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
         this.rolePrivCollectionModified = rolePrivCollectionModified;
@@ -44,7 +44,7 @@ public class RolePrivilegeCollectionInfo implements Writable {
         this.pluginVersion = pluginVersion;
     }
 
-    public Map<Long, RolePrivilegeCollection> getRolePrivCollectionModified() {
+    public Map<Long, RolePrivilegeCollectionV2> getRolePrivCollectionModified() {
         return rolePrivCollectionModified;
     }
 
