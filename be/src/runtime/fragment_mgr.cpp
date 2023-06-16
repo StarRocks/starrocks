@@ -208,11 +208,12 @@ Status FragmentExecState::execute() {
 
 Status FragmentExecState::cancel(const PPlanFragmentCancelReason& reason) {
     std::lock_guard<std::mutex> l(_status_lock);
-    RETURN_IF_ERROR(_exec_status);
     if (reason == PPlanFragmentCancelReason::LIMIT_REACH) {
         _executor.set_is_report_on_cancel(false);
     }
     _executor.cancel();
+    _executor.close();
+    RETURN_IF_ERROR(_exec_status);
     return Status::OK();
 }
 
@@ -328,8 +329,8 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 
             if (!rpc_status.ok()) {
                 // we need to cancel the execution of this fragment
-                update_status(rpc_status);
                 _executor.cancel();
+                update_status(rpc_status);
                 return;
             }
             coord->reportExecStatus(res, params);
@@ -373,6 +374,7 @@ FragmentMgr::~FragmentMgr() {
     _cancel_thread.join();
     // Stop all the worker, should wait for a while?
     // _thread_pool->wait_for();
+    cancel_all();
     _thread_pool->shutdown();
 
     // Only me can delete
@@ -528,6 +530,20 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
                     params.filter_id(), shared_rf);
             exec_state.reset();
         }
+    }
+}
+
+void FragmentMgr::cancel_all() {
+    std::vector<TUniqueId> to_delete;
+    {
+        std::lock_guard<std::mutex> lock(_lock);
+        for (auto& it : _fragment_map) {
+            to_delete.push_back(it.second->fragment_instance_id());
+        }
+    }
+    for (auto& id : to_delete) {
+        LOG(ERROR) << "cancel_all: " << id;
+        cancel(id, PPlanFragmentCancelReason::USER_CANCEL);
     }
 }
 

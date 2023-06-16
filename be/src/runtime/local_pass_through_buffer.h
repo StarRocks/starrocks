@@ -81,6 +81,13 @@ public:
     void close_fragment_instance(const TUniqueId& query_id);
     PassThroughChunkBuffer* get(const TUniqueId& query_id);
 
+    virtual ~PassThroughChunkBufferManager() {
+        std::unique_lock lock(_mutex);
+        for (auto& item : _query_id_to_buffer) {
+            delete item.second;
+        }
+    }
+
 private:
     std::mutex _mutex;
     std::unordered_map<TUniqueId, PassThroughChunkBuffer*> _query_id_to_buffer;

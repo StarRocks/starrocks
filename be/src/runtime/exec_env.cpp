@@ -478,6 +478,8 @@ void ExecEnv::_stop() {
     // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
     // so when the ThreadPool is destroyed, it will crash.
     _load_channel_mgr->clear();
+    _pipeline_sink_io_pool->shutdown();
+    _wg_driver_executor->cancel_all();
 }
 
 void ExecEnv::_destroy() {
@@ -494,14 +496,14 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_stream_context_mgr);
     SAFE_DELETE(_routine_load_task_executor);
     SAFE_DELETE(_stream_load_executor);
-    SAFE_DELETE(_brpc_stub_cache);
+    SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
     SAFE_DELETE(_bfd_parser);
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_wg_driver_executor);
-    SAFE_DELETE(_fragment_mgr);
+    SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);

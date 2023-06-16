@@ -269,6 +269,10 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
     }
 }
 
+void GlobalDriverExecutor::cancel_all() {
+    _driver_queue->close();
+}
+
 void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
                                              const Status& status, bool done, bool attach_profile) {
     auto* profile = fragment_ctx->runtime_state()->runtime_profile();

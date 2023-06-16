@@ -20,6 +20,9 @@
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/thrift_server.h"
+#include "runtime/data_stream_mgr.h"
+#include "runtime/load_channel_mgr.h"
+#include "runtime/stream_load/load_stream_mgr.h"
 
 namespace brpc {
 
@@ -86,8 +89,18 @@ void start_be() {
 
     http_service.reset();
 
+    std::cout << "STEP 1" << std::endl;
+    LOG(ERROR) << "STEP 1" << std::endl;
     brpc_server.Stop(0);
+    std::cout << "STEP 2" << std::endl;
+    LOG(ERROR) << "STEP 2" << std::endl;
+    exec_env->stream_mgr()->cancel_all();
+    exec_env->load_stream_mgr()->close_all();
+    std::cout << "STEP 3" << std::endl;
+    LOG(ERROR) << "STEP 3" << std::endl;
     brpc_server.Join();
+    std::cout << "STEP 4" << std::endl;
+    LOG(ERROR) << "STEP 4" << std::endl;
 
     thrift_server->stop();
     thrift_server->join();

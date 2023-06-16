@@ -87,6 +87,8 @@ public:
     S3ClientFactory(S3ClientFactory&&) = delete;
     void operator=(S3ClientFactory&&) = delete;
 
+    void clear();
+
     S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration);
     S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
 
@@ -125,6 +127,9 @@ private:
     S3ClientPtr _clients[kMaxItems];
     Random _rand;
 };
+void clean_s3_client() {
+    S3ClientFactory::instance().clear();
+}
 
 S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
@@ -156,6 +161,13 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
         }
     }
     return credential_provider;
+}
+
+void S3ClientFactory::clear() {
+    std::lock_guard l(_lock);
+    for (auto& item : _clients) {
+        item.reset();
+    }
 }
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {

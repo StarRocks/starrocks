@@ -156,7 +156,6 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
         status = status.clone_and_prepend("add chunk to file writer failed, error");
         LOG(WARNING) << status;
         _fragment_ctx->cancel(status);
-        close(_state);
         return;
     }
 }

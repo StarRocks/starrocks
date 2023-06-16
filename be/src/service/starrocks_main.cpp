@@ -36,6 +36,7 @@
 #include <gperftools/malloc_extension.h>
 #include <sys/file.h>
 #include <unistd.h>
+#include "fs/fs_s3.h"
 
 #include "block_cache/block_cache.h"
 
@@ -377,6 +378,7 @@ int main(int argc, char** argv) {
     }
 #endif
 
+    starrocks::clean_s3_client();
     Aws::ShutdownAPI(aws_sdk_options);
 
     heartbeat_thrift_server->stop();
@@ -386,8 +388,8 @@ int main(int argc, char** argv) {
 
     starrocks::ExecEnv::stop(exec_env);
     engine->stop();
-    delete engine;
     starrocks::ExecEnv::destroy(exec_env);
+    delete engine;
 
     return 0;
 }
