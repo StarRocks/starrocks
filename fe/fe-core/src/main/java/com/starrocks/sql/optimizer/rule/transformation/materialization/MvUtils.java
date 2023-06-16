@@ -874,4 +874,11 @@ public class MvUtils {
                     map(Map.Entry::getValue).collect(Collectors.toList());
         }
     }
+
+    public static String toString(Object o) {
+        if (o == null) {
+            return "";
+        }
+        return o.toString();
+    }
 }
