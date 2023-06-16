@@ -526,21 +526,20 @@ public class AlterJobMgr {
         MaterializedView.RefreshType newRefreshType = refreshSchemeDesc.getType();
         MaterializedView.RefreshType oldRefreshType = materializedView.getRefreshScheme().getType();
 
-        // TODO: The exact same refresh type does not need to drop and rebuild the task
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        // drop task
-        Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+        Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         Task task;
-        if (refreshTask != null) {
-            taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
-            task = TaskBuilder.rebuildMvTask(materializedView, dbName, refreshTask.getProperties());
-        } else {
+        if (currentTask == null) {
             task = TaskBuilder.buildMvTask(materializedView, dbName);
+            TaskBuilder.updateTaskInfo(task, refreshSchemeDesc, materializedView);
+            taskManager.createTask(task, false);
+        } else {
+            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties());
+            TaskBuilder.updateTaskInfo(changedTask, refreshSchemeDesc, materializedView);
+            taskManager.alterTask(currentTask, changedTask, false);
+            task = currentTask;
         }
 
-        TaskBuilder.updateTaskInfo(task, refreshSchemeDesc, materializedView);
-
-        taskManager.createTask(task, false);
         // for event triggered type, run task
         if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
             taskManager.executeTask(task.getName());

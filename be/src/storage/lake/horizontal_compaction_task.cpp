@@ -50,6 +50,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
+    reader_params.fill_data_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
 
     ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kHorizontal, _txn_id))
@@ -79,7 +80,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
         chunk->reset();
 
         progress->update(100 * reader.stats().raw_rows_read / total_num_rows);
-        VLOG_EVERY_N(3, 1000) << "Compaction progress: " << progress->value();
+        VLOG_EVERY_N(3, 1000) << "Tablet: << " << _tablet->id() << ", compaction progress: " << progress->value();
     }
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"

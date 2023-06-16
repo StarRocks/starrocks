@@ -160,12 +160,6 @@ under the License.
             <artifactId>jackson-core</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.codehaus.jackson/jackson-mapper-asl -->
-        <dependency>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-mapper-asl</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/com.starrocks/starrocks-bdb-je -->
         <dependency>
             <groupId>com.starrocks</groupId>
@@ -783,6 +777,12 @@ under the License.
             <groupId>io.trino</groupId>
             <artifactId>trino-parser</artifactId>
             <version>385</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.threeten</groupId>
+            <artifactId>threeten-extra</artifactId>
+            <version>1.7.2</version>
         </dependency>
     </dependencies>
 

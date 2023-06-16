@@ -72,6 +72,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
@@ -100,6 +101,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -618,6 +620,7 @@ public class OlapTable extends Table {
                 baseIndexId = newIdxId;
             }
             indexIdToMeta.put(newIdxId, indexIdToMeta.remove(entry.getKey()));
+            indexIdToMeta.get(newIdxId).setIndexIdForRestore(newIdxId);
             indexNameToId.put(entry.getValue(), newIdxId);
         }
 
@@ -1977,6 +1980,15 @@ public class OlapTable extends Table {
             return;
         }
         tableProperty.setHasDelete(true);
+    }
+
+    public void setDataCachePartitionDuration(PeriodDuration duration) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION,
+                TimeUtils.toHumanReadableString(duration));
+        tableProperty.buildDataCachePartitionDuration();
     }
 
     public boolean hasForbitGlobalDict() {

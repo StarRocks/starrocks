@@ -1,6 +1,6 @@
 # Load data using Stream Load transaction interface
 
-StarRocks provides a Stream Load transaction interface to implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Apache Flink® and Apache Kafka®. The Stream Load transaction interface helps improve the performance of highly concurrent stream loads.
+From v2.4 onwards, StarRocks provides a Stream Load transaction interface to implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Apache Flink® and Apache Kafka®. The Stream Load transaction interface helps improve the performance of highly concurrent stream loads.
 
 This topic describes the Stream Load transaction interface and how to load data into StarRocks by using this interface.
 
@@ -60,32 +60,81 @@ The Stream Load transaction interface has the following limits:
 
 - Only **single-database single-table** transactions are supported. Support for **multi-database multi-table** transactions is in development.
 
-- Only **concurrent data** **writes** **from one client** are supported. Support for **concurrent data writes from multiple clients** is in development.
+- Only **concurrent data writes from one client** are supported. Support for **concurrent data writes from multiple clients** is in development.
 
 - The `/api/transaction/load` operation can be called multiple times within one transaction. In this case, the parameter settings specified for all of the `/api/transaction/load` operations that are called must be the same.
 
-- When you load CSV-formatted data by using the Stream Load transaction interface, make sure that each data record ends with a row delimiter.
+- When you load CSV-formatted data by using the Stream Load transaction interface, make sure that each data record in your data file ends with a row delimiter.
+
+## Precautions
+
+- If the `/api/transaction/begin`, `/api/transaction/load`, or `/api/transaction/prepare` operation that you have called returns errors, the transaction fails and is automatically rolled back.
+- When calling the `/api/transaction/begin` operation to start a new transaction, you have the option to specify a label. If you do not specify a label, StarRocks will generate a label for the transaction. Note that the subsequent `/api/transaction/load`, `/api/transaction/prepare`, and `/api/transaction/commit` operations must use the same label as the `/api/transaction/begin` operation.
+- If you the label of a previous transaction to call the `/api/transaction/begin` operation to start a new transaction, the previous transaction will fail and be rolled back.
+- The default column separator and row delimiter that StarRocks supports for CSV-formatted data are `\t` and `\n`. If your data file does not use the default column separator or row delimiter, you must use `"column_separator: <column_separator>"` or `"row_delimiter: <row_delimiter>"` to specify the column separator or row delimiter that is actually used in your data file when calling the `/api/transaction/load` operation.
 
 ## Basic operations
+
+### Prepare sample data
+
+This topic uses CSV-formatted data as an example.
+
+1. In the `/home/disk1/` path of your local file system, create a CSV file named `example1.csv`. The file consists of three columns, which represent the user ID, user name, and user score in sequence.
+
+   ```Plain
+   1,Lily,23
+   2,Rose,23
+   3,Alice,24
+   4,Julia,25
+   ```
+
+2. In your StarRocks database `test_db`, create a Primary Key table named `table1`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+
+   ```SQL
+   CREATE TABLE `table1`
+   (
+       `id` int(11) NOT NULL COMMENT "user ID",
+       `name` varchar(65533) NULL COMMENT "user name",
+       `score` int(11) NOT NULL COMMENT "user score"
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   ```
 
 ### Start a transaction
 
 #### Syntax
 
-```PowerShell
-curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
+```Bash
+curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
+    -H "Expect:100-continue" \
+    -H "db:<database_name>" -H "table:<table_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/begin
 ```
+
+#### Example
+
+```Bash
+curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
+    -H "Expect:100-continue" \
+    -H "db:test_db" -H "table:table1" \
+    -XPOST http://<fe_host>:<fe_http_port>/api/transaction/begin
+```
+
+> **NOTE**
+>
+> For this example, `streamload_txn_example1_table1` is specified as the label of the transaction.
 
 #### Return result
 
 - If the transaction is successfully started, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "Status": "OK",
       "Message": "",
-      "Label": "xxx",
+      "Label": "streamload_txn_example1_table1",
       "TxnId": 9032,
       "BeginTxnTimeMs": 0
   }
@@ -93,17 +142,17 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 - If the transaction is bound to a duplicate label, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "Status": "LABEL_ALREADY_EXISTS",
       "ExistingJobStatus": "RUNNING",
-      "Message": "Label [xxx] has already been used."
+      "Message": "Label [streamload_txn_example1_table1] has already been used."
   }
   ```
 
 - If errors other than duplicate label occur, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "Status": "FAILED",
       "Message": ""
@@ -114,21 +163,42 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 #### Syntax
 
-```PowerShell
-curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
-    -T /path/to/data.csv
+```Bash
+curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
+    -H "Expect:100-continue" \
+    -H "db:<database_name>" -H "table:<table_name>" \
+    -T <file_path> \
     -XPUT http://<fe_host>:<fe_http_port>/api/transaction/load
 ```
+
+> **NOTE**
+>
+> When calling the `/api/transaction/load` operation, you must use `<file_path>` to specify the save path of the data file you want to load.
+
+#### Example
+
+```Bash
+curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
+    -H "Expect:100-continue" \
+    -H "db:test_db" -H "table:table1" \
+    -T /home/disk1/example1.csv \
+    -H "column_separator: ," \
+    -XPUT http://<fe_host>:<fe_http_port>/api/transaction/load
+```
+
+> **NOTE**
+>
+> For this example, the column separator used in the data file `example1.csv` is commas (`,`) instead of StarRocks‘s default column separator (`\t`). Therefore, when calling the `/api/transaction/load` operation, you must use `"column_separator: <column_separator>"` to specify commas (`,`) as the column separator.
 
 #### Return result
 
 - If the data write is successful, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Seq": 0,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "OK",
       "Message": "",
       "NumberTotalRows": 5265644,
@@ -144,10 +214,10 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 - If the transaction is considered unknown, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": "TXN_NOT_EXISTS"
   }
@@ -155,10 +225,10 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 - If the transaction is considered in an invalid state, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": "Transcation State Invalid"
   }
@@ -166,10 +236,10 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 - If errors other than unknown transaction and invalid status occur, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": ""
   }
@@ -179,8 +249,19 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 #### Syntax
 
-```PowerShell
- curl -H "label:<label_name>" -H "db:<database_name>"
+```Bash
+curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
+    -H "Expect:100-continue" \
+    -H "db:<database_name>" \
+    -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
+```
+
+#### Example
+
+```Bash
+curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
+    -H "Expect:100-continue" \
+    -H "db:test_db" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
 
@@ -188,10 +269,10 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 - If the pre-commit is successful, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "OK",
       "Message": "",
       "NumberTotalRows": 5265644,
@@ -209,10 +290,10 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 - If the transaction is considered not existent, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": "Transcation Not Exist"
   }
@@ -220,10 +301,10 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 - If the pre-commit times out, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": "commit timeout",
   }
@@ -231,10 +312,10 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 - If errors other than non-existent transaction and pre-commit timeout occur, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": "publish timeout"
   }
@@ -244,8 +325,19 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
 #### Syntax
 
-```PowerShell
-curl -H "label:<label_name>" -H "db:<database_name>"
+```Bash
+curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
+    -H "Expect:100-continue" \
+    -H "db:<database_name>" \
+    -XPOST http://<fe_host>:<fe_http_port>/api/transaction/commit
+```
+
+#### Example
+
+```Bash
+curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
+    -H "Expect:100-continue" \
+    -H "db:test_db" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/commit
 ```
 
@@ -253,10 +345,10 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 - If the commit is successful, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "OK",
       "Message": "",
       "NumberTotalRows": 5265644,
@@ -274,10 +366,10 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 - If the transaction has already been committed, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "OK",
       "Message": "Transaction already commited",
   }
@@ -285,10 +377,10 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 - If the transaction is considered not existent, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": "Transcation Not Exist"
   }
@@ -296,10 +388,10 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 - If the commit times out, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": "commit timeout",
   }
@@ -307,10 +399,10 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 - If the data publish times out, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": "publish timeout",
       "CommitAndPublishTimeMs": 1393
@@ -319,10 +411,10 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 - If errors other than non-existent transaction and timeout occur, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": ""
   }
@@ -332,8 +424,19 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 #### Syntax
 
-```PowerShell
-curl -H "label:<label_name>" -H "db:<database_name>"
+```Bash
+curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
+    -H "Expect:100-continue" \
+    -H "db:<database_name>" \
+    -XPOST http://<fe_host>:<fe_http_port>/api/transaction/rollback
+```
+
+#### Example
+
+```Bash
+curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
+    -H "Expect:100-continue" \
+    -H "db:test_db" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/rollback
 ```
 
@@ -341,10 +444,10 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 - If the rollback is successful, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "OK",
       "Message": ""
   }
@@ -352,10 +455,10 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 - If the transaction is considered not existent, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": "Transcation Not Exist"
   }
@@ -363,10 +466,10 @@ curl -H "label:<label_name>" -H "db:<database_name>"
 
 - If errors other than not existent transaction occur, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
-      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Label": "streamload_txn_example1_table1",
       "Status": "FAILED",
       "Message": ""
   }

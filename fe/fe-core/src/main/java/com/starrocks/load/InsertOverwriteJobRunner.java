@@ -18,12 +18,15 @@ package com.starrocks.load;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
@@ -31,6 +34,9 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.common.DmlException;
@@ -39,6 +45,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -55,14 +62,14 @@ import static com.starrocks.load.InsertOverwriteJobState.OVERWRITE_FAILED;
 public class InsertOverwriteJobRunner {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobRunner.class);
 
-    private InsertOverwriteJob job;
+    private final InsertOverwriteJob job;
 
     private InsertStmt insertStmt;
     private StmtExecutor stmtExecutor;
     private ConnectContext context;
-    private long dbId;
-    private long tableId;
-    private String postfix;
+    private final long dbId;
+    private final long tableId;
+    private final String postfix;
 
     private long createPartitionElapse;
     private long insertElapse;
@@ -97,7 +104,8 @@ public class InsertOverwriteJobRunner {
     // there is no concurrent problem here
     public void cancel() {
         if (isFinished()) {
-            LOG.warn("cancel failed. insert overwrite job:{} already finished. state:{}", job.getJobState());
+            LOG.warn("cancel failed. insert overwrite job:{} already finished. state:{}", job.getJobId(),
+                    job.getJobState());
             return;
         }
         try {
@@ -189,7 +197,9 @@ public class InsertOverwriteJobRunner {
 
     private void prepare() throws Exception {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_PENDING);
-        // get tmpPartitionIds first because they are used to drop created partitions when restart.
+        // support automatic partition
+        createPartitionByValue(insertStmt);
+        // get tmpPartitionIds first because they are used to drop created partitions when restarted.
         List<Long> tmpPartitionIds = Lists.newArrayList();
         for (int i = 0; i < job.getSourcePartitionIds().size(); ++i) {
             tmpPartitionIds.add(GlobalStateMgr.getCurrentState().getNextId());
@@ -207,10 +217,50 @@ public class InsertOverwriteJobRunner {
         transferTo(InsertOverwriteJobState.OVERWRITE_RUNNING);
     }
 
+    private void createPartitionByValue(InsertStmt insertStmt) {
+        Map<String, AddPartitionClause> addPartitionClauseMap;
+        if (insertStmt.getTargetPartitionNames() == null) {
+            return;
+        }
+        OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
+        if (!olapTable.getPartitionInfo().isAutomaticPartition()) {
+            return;
+        }
+        List<Expr> partitionColValues = insertStmt.getTargetPartitionNames().getPartitionColValues();
+        List<List<String>> partitionValues = Lists.newArrayList();
+        for (Expr expr : partitionColValues) {
+            if (expr instanceof LiteralExpr) {
+                partitionValues.add(Lists.newArrayList(((LiteralExpr) expr).getStringValue()));
+            } else {
+                throw new SemanticException("Only support literal value for partition column.");
+            }
+        }
+        try {
+            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
+        } catch (AnalysisException ex) {
+            LOG.warn(ex);
+            throw new RuntimeException(ex);
+        }
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        String targetDb = insertStmt.getTableName().getDb();
+        Database db = state.getDb(targetDb);
+        List<Long> sourcePartitionIds = job.getSourcePartitionIds();
+        for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
+            try {
+                state.addPartitions(db, olapTable.getName(), addPartitionClause);
+                Partition partition = olapTable.getPartition(addPartitionClause.getPartitionDesc().getPartitionName());
+                sourcePartitionIds.add(partition.getId());
+            } catch (Exception ex) {
+                LOG.warn(ex);
+                throw new RuntimeException(ex);
+            }
+        }
+    }
+
     private void executeInsert() throws Exception {
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
-        ExecPlan newPlan = new StatementPlanner().plan(insertStmt, context);
+        ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
         stmtExecutor.handleDMLStmt(newPlan, insertStmt);
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
@@ -343,8 +393,14 @@ public class InsertOverwriteJobRunner {
             PartitionNames partitionNames = new PartitionNames(true, tmpPartitionNames);
             // change the TargetPartitionNames from source partitions to new tmp partitions
             // should replan when load data
+            if (insertStmt.getTargetPartitionNames() == null) {
+                insertStmt.setPartitionNotSpecifiedInOverwrite(true);
+            }
             insertStmt.setTargetPartitionNames(partitionNames);
             insertStmt.setTargetPartitionIds(job.getTmpPartitionIds());
+            insertStmt.setOverwrite(false);
+            insertStmt.setSystem(true);
+
         } catch (Exception e) {
             throw new DmlException("prepareInsert exception", e);
         } finally {

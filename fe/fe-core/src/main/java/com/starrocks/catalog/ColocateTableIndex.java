@@ -155,9 +155,9 @@ public class ColocateTableIndex implements Writable {
     @SerializedName("ug")
     private Set<GroupId> unstableGroups = Sets.newHashSet();
     // lake group, in memory
-    private Set<GroupId> lakeGroups = Sets.newHashSet();
+    private final Set<GroupId> lakeGroups = Sets.newHashSet();
 
-    private transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public ColocateTableIndex() {
 
@@ -222,7 +222,7 @@ public class ColocateTableIndex implements Writable {
         writeLock();
         try {
             boolean groupAlreadyExist = true;
-            GroupId groupId = null;
+            GroupId groupId;
             String fullGroupName = dbId + "_" + groupName;
 
             if (groupName2Id.containsKey(fullGroupName)) {
@@ -676,7 +676,7 @@ public class ColocateTableIndex implements Writable {
                 info.add(String.valueOf(groupSchema.getBucketsNum()));
                 info.add(String.valueOf(groupSchema.getReplicationNum()));
                 List<String> cols = groupSchema.getDistributionColTypes().stream().map(
-                        e -> e.toSql()).collect(Collectors.toList());
+                        Type::toSql).collect(Collectors.toList());
                 info.add(Joiner.on(", ").join(cols));
                 info.add(String.valueOf(!isGroupUnstable(groupId)));
                 infos.add(info);
@@ -808,7 +808,9 @@ public class ColocateTableIndex implements Writable {
     private List<GroupId> getOtherGroupsWithSameOrigNameUnlocked(String origName, long dbId) {
         List<GroupId> groupIds = new ArrayList<>();
         for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
-            if (entry.getKey().split("_")[1].equals(origName) &&
+            // Get existed group original name
+            String existedGroupOrigName = entry.getKey().split("_", 2)[1];
+            if (existedGroupOrigName.equals(origName) &&
                     entry.getValue().dbId != dbId) {
                 groupIds.add(entry.getValue());
             }

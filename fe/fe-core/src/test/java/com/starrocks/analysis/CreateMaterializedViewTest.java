@@ -2977,5 +2977,23 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(mv.getColumn("total").getType().isDecimalOfAnyVersion());
         Assert.assertFalse(mv.getColumn("segment").isAllowNull());
     }
+
+    @Test
+    public void testCreateMvWithTypes() throws Exception {
+        String sql = "create materialized view mv_test_types \n" +
+                "distributed by hash(k1) buckets 10\n" +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'" +
+                ")\n" +
+                "as " +
+                "select tb1.k1, k2, " +
+                "array<int>[1,2,3] as type_array, " +
+                "map<int, int>{1:2} as type_map, " +
+                "parse_json('{\"a\": 1}') as type_json, " +
+                "row('c') as type_struct, " +
+                "array<json>[parse_json('{}')] as type_array_json " +
+                "from tbl1 tb1;";
+        starRocksAssert.withMaterializedView(sql);
+    }
 }
 

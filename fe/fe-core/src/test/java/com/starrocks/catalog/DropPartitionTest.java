@@ -132,7 +132,7 @@ public class DropPartitionTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
-            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };

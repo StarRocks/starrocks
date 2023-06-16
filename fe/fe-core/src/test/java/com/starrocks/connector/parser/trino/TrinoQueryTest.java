@@ -347,6 +347,16 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testLambdaFunction() throws Exception {
+        // trino do not support array_map function, just test the lambda function
+        String sql = "select array_map(array['a1_a2','a1_a2'], x->split(x, '_'));";
+        assertPlanContains(sql, "array_map(<slot 2> -> split(<slot 2>, '_'), ['a1_a2','a1_a2'])");
+
+        sql = "select transform(split('a1_a2,b1_b2', ','), x->split(x, '_'));";
+        assertPlanContains(sql, "array_map(<slot 2> -> split(<slot 2>, '_'), split('a1_a2,b1_b2', ','))");
+    }
+
+    @Test
     public void testSelectStruct() throws Exception {
         String sql = "select c0, c1.a from test_struct";
         assertPlanContains(sql, "1:Project\n" +
@@ -948,5 +958,17 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "    )\n" +
                 "  );";
         assertPlanContains(sql, "-1 * CAST(if(3: dayofweek = 7, 0, 3: dayofweek) AS BIGINT)");
+    }
+
+    @Test
+    public void testJsonArray() throws Exception {
+        String sql = "select json_array(1, true, 'starrocks',1.1);";
+        assertPlanContains(sql, "json_array(CAST(1 AS JSON), CAST(TRUE AS JSON), CAST('starrocks' AS JSON), CAST(1.1 AS JSON))");
+
+        sql = "select json_array()";
+        assertPlanContains(sql, "json_array()");
+
+        sql = "select json_array(ta, tb, tc, tg) from tall;";
+        assertPlanContains(sql, "json_array(CAST(1: ta AS JSON), CAST(2: tb AS JSON), CAST(3: tc AS JSON), CAST(7: tg AS JSON))");
     }
 }

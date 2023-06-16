@@ -75,7 +75,7 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<std::int64_t>* need_skip_rowids,
+    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
                 int64_t row_group_first_row);
     ~GroupReader() = default;
 
@@ -133,14 +133,17 @@ private:
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-    void _collect_field_io_range(const ParquetField& field, std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                 int64_t* end_offset);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                 const TIcebergSchemaField* iceberg_schema_field,
+                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
 
     // row group meta
     std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
-    std::int64_t _row_group_first_row = 0;
-    const std::set<std::int64_t>* _need_skip_rowids;
-    std::int64_t _raw_rows_read = 0;
+    int64_t _row_group_first_row = 0;
+    const std::set<int64_t>* _need_skip_rowids;
+    int64_t _raw_rows_read = 0;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
