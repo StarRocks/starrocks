@@ -56,8 +56,7 @@ Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
                                 _tnode.analytic_node.__isset.use_hash_based_partition &&
                                 _tnode.analytic_node.use_hash_based_partition;
     if (_use_hash_based_partition) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.analytic_node.partition_exprs, &_hash_partition_exprs, state));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.analytic_node.partition_exprs, &_hash_partition_exprs));
     }
     DCHECK(_conjunct_ctxs.empty());
 
