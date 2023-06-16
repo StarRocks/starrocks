@@ -861,7 +861,6 @@ public class AuthorizationMgr {
                 roleIds = getRoleIdsByUser(pair.first);
             }
 
-            // TODO(yiming): modify for ephemeral user
             for (long badRoleId : badRoles) {
                 if (roleIds.contains(badRoleId)) {
                     badKeys.add(pair);

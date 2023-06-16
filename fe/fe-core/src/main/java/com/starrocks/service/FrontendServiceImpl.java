@@ -339,7 +339,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             for (String tableName : db.getTableNamesViewWithLock()) {
                 LOG.debug("get table: {}, wait to check", tableName);
                 Table tbl = db.getTable(tableName);
-                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, tbl)) {
+                if (tbl != null && !PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser,
+                        null, params.db, tbl)) {
                     continue;
                 }
 
@@ -368,8 +369,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        // database privs should be checked in analysis phrase
-
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         UserIdentity currentUser = null;
@@ -383,8 +382,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
+                OUTER:
                 for (Table table : tables) {
-                    // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
                     if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
                         continue;
                     }
@@ -413,17 +412,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(queryStatement);
                             for (TableName tableName : allTables.keySet()) {
                                 Table tbl = db.getTable(tableName.getTbl());
-                                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
-                                        tableName.getDb(), tbl)) {
-                                    break;
+                                if (tbl != null && !PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser,
+                                        null, tableName.getDb(), tbl)) {
+                                    continue OUTER;
                                 }
                             }
                         } catch (SemanticException e) {
-                            // ignore semantic exception because view may be is invalid
+                            // ignore semantic exception because view maybe invalid
                         }
-
                         status.setDdl_sql(ddlSql);
                     }
+
                     tablesResult.add(status);
                     // if user set limit, then only return limit size result
                     if (limit > 0 && tablesResult.size() >= limit) {
@@ -832,14 +831,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         if (db != null) {
-            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db,
-                    db.getTable(params.getTable_name()))) {
-                return result;
-            }
-
             try {
                 db.readLock();
                 Table table = db.getTable(params.getTable_name());
+                if (table == null) {
+                    return result;
+                }
+                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
+                    return result;
+                }
                 setColumnDesc(columns, table, limit, false, params.db, params.getTable_name());
             } finally {
                 db.readUnlock();
@@ -861,15 +861,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
                 for (String tableName : db.getTableNamesViewWithLock()) {
-                    LOG.debug("get table: {}, wait to check", tableName);
-                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
-                            fullName, db.getTable(tableName))) {
-                        continue;
-                    }
-
                     try {
                         db.readLock();
                         Table table = db.getTable(tableName);
+                        if (table == null) {
+                            continue;
+                        }
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                fullName, table)) {
+                            continue;
+                        }
                         reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
                         db.readUnlock();
@@ -884,50 +885,49 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private boolean setColumnDesc(List<TColumnDef> columns, Table table, long limit,
                                   boolean needSetDbAndTable, String db, String tbl) {
-        if (table != null) {
-            String tableKeysType = "";
-            if (TableType.OLAP.equals(table.getType())) {
-                OlapTable olapTable = (OlapTable) table;
-                tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
+        String tableKeysType = "";
+        if (TableType.OLAP.equals(table.getType())) {
+            OlapTable olapTable = (OlapTable) table;
+            tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
+        }
+        for (Column column : table.getBaseSchema()) {
+            final TColumnDesc desc =
+                    new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
+            final Integer precision = column.getType().getPrecision();
+            if (precision != null) {
+                desc.setColumnPrecision(precision);
             }
-            for (Column column : table.getBaseSchema()) {
-                final TColumnDesc desc =
-                        new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
-                final Integer precision = column.getType().getPrecision();
-                if (precision != null) {
-                    desc.setColumnPrecision(precision);
-                }
-                final Integer columnLength = column.getType().getColumnSize();
-                if (columnLength != null) {
-                    desc.setColumnLength(columnLength);
-                }
-                final Integer decimalDigits = column.getType().getDecimalDigits();
-                if (decimalDigits != null) {
-                    desc.setColumnScale(decimalDigits);
-                }
-                if (column.isKey()) {
-                    // COLUMN_KEY (UNI, AGG, DUP, PRI)
-                    desc.setColumnKey(tableKeysType);
-                } else {
-                    desc.setColumnKey("");
-                }
-                final TColumnDef colDef = new TColumnDef(desc);
-                final String comment = column.getComment();
-                if (comment != null) {
-                    colDef.setComment(comment);
-                }
-                columns.add(colDef);
-                // add db_name and table_name values to TColumnDesc if needed
-                if (needSetDbAndTable) {
-                    columns.get(columns.size() - 1).columnDesc.setDbName(db);
-                    columns.get(columns.size() - 1).columnDesc.setTableName(tbl);
-                }
-                // if user set limit, then only return limit size result
-                if (limit > 0 && columns.size() >= limit) {
-                    return true;
-                }
+            final Integer columnLength = column.getType().getColumnSize();
+            if (columnLength != null) {
+                desc.setColumnLength(columnLength);
+            }
+            final Integer decimalDigits = column.getType().getDecimalDigits();
+            if (decimalDigits != null) {
+                desc.setColumnScale(decimalDigits);
+            }
+            if (column.isKey()) {
+                // COLUMN_KEY (UNI, AGG, DUP, PRI)
+                desc.setColumnKey(tableKeysType);
+            } else {
+                desc.setColumnKey("");
+            }
+            final TColumnDef colDef = new TColumnDef(desc);
+            final String comment = column.getComment();
+            if (comment != null) {
+                colDef.setComment(comment);
+            }
+            columns.add(colDef);
+            // add db_name and table_name values to TColumnDesc if needed
+            if (needSetDbAndTable) {
+                columns.get(columns.size() - 1).columnDesc.setDbName(db);
+                columns.get(columns.size() - 1).columnDesc.setTableName(tbl);
+            }
+            // if user set limit, then only return limit size result
+            if (limit > 0 && columns.size() >= limit) {
+                return true;
             }
         }
+
         return false;
     }
 
@@ -1029,7 +1029,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
         }
         // check INSERT action on table
-        // TODO(yiming): set role ids for ephemeral user
         if (!PrivilegeActions.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT)) {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
@@ -1592,7 +1591,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
-                // TODO(yiming): set role ids for ephemeral user
                 if (!PrivilegeActions.checkTableAction(userIdentity, null, dbName,
                         tableName, PrivilegeType.INSERT)) {
                     throw new UnauthorizedException(String.format(
