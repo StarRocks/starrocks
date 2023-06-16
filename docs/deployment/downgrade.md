@@ -53,7 +53,7 @@ Before downgrading all nodes in your cluster in production, you are strongly adv
 
 Follow these steps to perform the FE downgrade availability test:
 
-1. In your development environment, deploy a test FE node of the version you want to downgrade to. See [Deploy StarRocks - Start FE service](../deployment/deploy_manually.md#step-1-start-the-fe-service) for detailed instructions.
+1. In your development environment, deploy a test FE node of the version you want to downgrade to. See [Deploy StarRocks - Start the Leader FE node](../deployment/deploy_manually.md#step-1-start-the-leader-fe-node) for detailed instructions.
 2. Modify the FE configuration file **fe.conf** of the test FE node:
 
    - Assign different `http_port`, `rpc_port`, `query_port`, and `edit_log_port` from those of the production cluster.
@@ -251,7 +251,7 @@ Having downgraded the FE nodes, you can then downgrade the BE nodes in the clust
 4. Check if the CN node is started successfully.
 
    ```Bash
-   ps aux | grep 
+   ps aux | grep  starrocks_be
    ```
 
 5. Repeat the above procedures to downgrade other CN nodes.
