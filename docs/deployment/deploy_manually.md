@@ -4,7 +4,7 @@ This topic describes how to manually deploy StarRocks. For other modes of instal
 
 ## Step 1: Start the Leader FE node
 
-The following procedures are performed on the FE instances.
+The following procedures are performed on an FE instance.
 
 1. Create a dedicated directory for metadata storage. We recommend storing metadata in a separate directory from the FE deployment files. Make sure that this directory exists and that you have write access to it.
 
