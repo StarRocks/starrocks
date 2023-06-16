@@ -151,7 +151,7 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     // Even if the user has not set it, there will be a default value.
     if (text_file_desc.field_delim.empty() || text_file_desc.line_delim.empty() ||
         text_file_desc.collection_delim.empty() || text_file_desc.mapkey_delim.empty()) {
-        return Status::InternalError("Hive TEXTFILE's delimiters is missing");
+        return Status::Corruption("Hive TEXTFILE's delimiters is missing");
     }
 
     // _field_delimiter and _record_delimiter should use std::string,
