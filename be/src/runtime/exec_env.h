@@ -173,10 +173,8 @@ public:
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
-    workgroup::ScanExecutor* scan_executor_with_workgroup() { return _scan_executor_with_workgroup; }
-    workgroup::ScanExecutor* connector_scan_executor_with_workgroup() {
-        return _connector_scan_executor_with_workgroup;
-    }
+    workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
+    workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
@@ -309,8 +307,8 @@ private:
 
     PriorityThreadPool* _thread_pool = nullptr;
 
-    workgroup::ScanExecutor* _scan_executor_with_workgroup = nullptr;
-    workgroup::ScanExecutor* _connector_scan_executor_with_workgroup = nullptr;
+    workgroup::ScanExecutor* _scan_executor = nullptr;
+    workgroup::ScanExecutor* _connector_scan_executor = nullptr;
 
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
