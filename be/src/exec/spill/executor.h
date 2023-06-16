@@ -21,6 +21,7 @@
 #include "common/compiler_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/workgroup/scan_executor.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
@@ -86,12 +87,15 @@ private:
 };
 
 struct IOTaskExecutor {
-    IOTaskExecutor(PriorityThreadPool* pool_) : pool(pool_) {}
-    PriorityThreadPool* pool;
+    workgroup::ScanExecutor* pool;
+    workgroup::WorkGroupPtr wg;
+
+    IOTaskExecutor(workgroup::ScanExecutor* pool_, workgroup::WorkGroupPtr wg_) : pool(pool_), wg(wg_) {}
+
     template <class Func>
     Status submit(Func&& func) {
-        PriorityThreadPool::WorkFunction wf = std::move(func);
-        if (pool->offer(wf)) {
+        workgroup::ScanTask task(wg.get(), func);
+        if (pool->submit(std::move(task))) {
             return Status::OK();
         } else {
             return Status::InternalError("offer task failed");

@@ -243,11 +243,11 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&connector_scan_worker_thread_pool_with_workgroup));
-    _connector_scan_executor_with_workgroup =
+    _connector_scan_executor =
             new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
                                         std::make_unique<workgroup::WorkGroupScanTaskQueue>(
                                                 workgroup::WorkGroupScanTaskQueue::SchedEntityType::CONNECTOR));
-    _connector_scan_executor_with_workgroup->initialize(connector_num_io_threads);
+    _connector_scan_executor->initialize(connector_num_io_threads);
 
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
@@ -283,11 +283,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&scan_worker_thread_pool_with_workgroup));
-    _scan_executor_with_workgroup =
-            new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
-                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>(
-                                                workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
-    _scan_executor_with_workgroup->initialize(num_io_threads);
+    _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
+                                                 std::make_unique<workgroup::WorkGroupScanTaskQueue>(
+                                                         workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
+    _scan_executor->initialize(num_io_threads);
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     if (!store_paths.empty()) {
         Status status = _load_path_mgr->init();
@@ -498,8 +497,8 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
-    SAFE_DELETE(_scan_executor_with_workgroup);
-    SAFE_DELETE(_connector_scan_executor_with_workgroup);
+    SAFE_DELETE(_scan_executor);
+    SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);
 
     if (_lake_tablet_manager != nullptr) {
