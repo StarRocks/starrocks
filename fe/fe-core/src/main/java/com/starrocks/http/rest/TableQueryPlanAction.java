@@ -153,12 +153,11 @@ public class TableQueryPlanAction extends RestBaseAction {
                     throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                             "Table [" + tableName + "] " + "does not exists");
                 }
-                // just only support OlapTable, ignore others such as ESTable
-                if (table.getType() != Table.TableType.OLAP) {
+                // just only support OlapTable, CloudNativeTable and MaterializedView, ignore others such as ESTable
+                if (!table.isNativeTableOrMaterializedView()) {
                     // Forbidden
                     throw new StarRocksHttpException(HttpResponseStatus.FORBIDDEN,
-                            "only support OlapTable currently, but Table [" + tableName + "] "
-                                    + "is not a OlapTable");
+                            "Only support OlapTable, CloudNativeTable and MaterializedView currently");
                 }
                 // parse/analysis/plan the sql and acquire tablet distributions
                 handleQuery(ConnectContext.get(), db.getFullName(), tableName, sql, resultMap);
