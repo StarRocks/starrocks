@@ -28,7 +28,7 @@ public class QueryDumpInfo implements DumpInfo {
     private final Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();
     private SessionVariable sessionVariable;
     // tableName->createTableStmt
-    private final Map<String, String> createTableStmtMap = new HashMap<>();
+    private final Map<String, String> createTableStmtMap = new LinkedHashMap<>();
     // viewName->createViewStmt
     private final Map<String, String> createViewStmtMap = new LinkedHashMap<>();
     private final List<String> exceptionList = new ArrayList<>();
