@@ -201,13 +201,15 @@ public class MaterializedViewRewriter {
 
             LogicalJoinOperator mvJoin = (LogicalJoinOperator) mvExpr.getOp();
             JoinOperator mvJoinType = mvJoin.getJoinType();
-            if (queryJoin.equals(mvJoin)) {
+
+            if (!ScalarOperator.isEqual(queryJoin.getOnPredicate(), mvJoin.getOnPredicate())) {
+                return false;
+            }
+            if (queryJoinType.equals(mvJoinType)) {
+                // it means both joins' type and onPredicate are equal
                 return true;
             }
 
-            if (!MvUtils.isEqual(queryJoin.getOnPredicate(), mvJoin.getOnPredicate())) {
-                return false;
-            }
             if (!JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
                 return false;
             }
@@ -386,7 +388,7 @@ public class MaterializedViewRewriter {
             ScalarOperator onPredicate, ColumnRefFactory columnRefFactory, Map<Integer, ColumnRefSet> joinColumns) {
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicate);
         List<ScalarOperator> binaryPredicates = conjuncts.stream()
-                .filter(conjunct -> Utils.isColumnEqualBinaryPredicate(conjunct)).collect(Collectors.toList());
+                .filter(conjunct -> ScalarOperator.isColumnEqualBinaryPredicate(conjunct)).collect(Collectors.toList());
         if (binaryPredicates.isEmpty()) {
             return false;
         }
@@ -935,10 +937,7 @@ public class MaterializedViewRewriter {
             // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
             // order for now.
             // Use traverse order to check whether all joins' order and operator are exactly matched.
-            List<JoinOperator> queryJoinOperators = MvUtils.getAllJoinOperators(queryExpression);
-            List<JoinOperator> mvJoinOperators = MvUtils.getAllJoinOperators(mvExpression);
-            return (queryTables.equals(mvTables) && queryJoinOperators.equals(mvJoinOperators))
-                    || computeCompatibility(queryExpression, mvExpression);
+            return computeCompatibility(queryExpression, mvExpression);
         }
     }
 
@@ -1163,7 +1162,7 @@ public class MaterializedViewRewriter {
             if (joinDeriveContext.getMvJoinType().isInnerJoin() && joinDeriveContext.getQueryJoinType().isSemiJoin()) {
                 continue;
             }
-            Optional<ScalarOperator> derivedPredicateOpt = null; 
+            Optional<ScalarOperator> derivedPredicateOpt = Optional.empty();
             if (joinDeriveContext.getMvJoinType().isLeftOuterJoin() && joinDeriveContext.getQueryJoinType().isInnerJoin()) {
                 List<ColumnRefOperator> rightJoinColumns = joinDeriveContext.getRightJoinColumns();
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
@@ -1522,7 +1521,7 @@ public class MaterializedViewRewriter {
                 return queryCompensationPredicate;
             }
             ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
-            partitionColumnRef = columnRewriter.rewriteColumnViewToQuery(partitionColumnRef).cast();
+            partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
             IsNullPredicateOperator isNullPredicateOperator = new IsNullPredicateOperator(partitionColumnRef);
             IsNullPredicateOperator isNotNullPredicateOperator = new IsNullPredicateOperator(true, partitionColumnRef);
             List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
@@ -1716,8 +1715,8 @@ public class MaterializedViewRewriter {
             ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
             Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
             ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
-            ColumnRefOperator leftTarget = columnRewriter.rewriteColumnViewToQuery(left);
-            ColumnRefOperator rightTarget = columnRewriter.rewriteColumnViewToQuery(right);
+            ColumnRefOperator leftTarget = columnRewriter.rewriteViewToQuery(left).cast();
+            ColumnRefOperator rightTarget = columnRewriter.rewriteViewToQuery(right).cast();
             if (leftTarget == null || rightTarget == null) {
                 return null;
             }
@@ -1737,8 +1736,8 @@ public class MaterializedViewRewriter {
         for (final Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : compensationJoinColumns.entries()) {
             final ColumnRefOperator left = entry.getKey();
             final ColumnRefOperator right = entry.getValue();
-            ColumnRefOperator newKey = columnRewriter.rewriteColumnViewToQuery(left);
-            ColumnRefOperator newValue = columnRewriter.rewriteColumnViewToQuery(right);
+            ColumnRefOperator newKey = columnRewriter.rewriteViewToQuery(left).cast();
+            ColumnRefOperator newValue = columnRewriter.rewriteViewToQuery(right).cast();
             if (newKey == null || newValue == null) {
                 return false;
             }

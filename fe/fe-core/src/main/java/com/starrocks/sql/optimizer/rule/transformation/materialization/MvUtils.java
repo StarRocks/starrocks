@@ -60,7 +60,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -886,31 +885,5 @@ public class MvUtils {
             return "";
         }
         return o.toString();
-    }
-
-    // whether ScalarOperator are equals without id
-    public static boolean isEqual(ScalarOperator left, ScalarOperator right) {
-        if (!left.getOpType().equals(right.getOpType())) {
-            return false;
-        }
-        if (left.getOpType().equals(OperatorType.VARIABLE)) {
-            ColumnRefOperator leftColumn = (ColumnRefOperator) left;
-            ColumnRefOperator rightColumn = (ColumnRefOperator) right;
-            return leftColumn.getName().equals(rightColumn.getName())
-                    && leftColumn.getType().equals(rightColumn.getType())
-                    && leftColumn.isNullable() == rightColumn.isNullable();
-        } else {
-            boolean ret = left.equals(right);
-            if (!ret) {
-                return false;
-            }
-            Preconditions.checkState(left.getChildren().size() == right.getChildren().size());
-            for (int i = 0; i < left.getChildren().size(); i++) {
-                if (!isEqual(left.getChild(i), right.getChild(i))) {
-                    return false;
-                }
-            }
-            return true;
-        }
     }
 }
