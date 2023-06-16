@@ -145,9 +145,9 @@ public class LoadManagerTest {
 
     @Test
     public void testDeserializationWithJobRemoved(@Mocked MetaContext metaContext,
-                                                @Mocked GlobalStateMgr globalStateMgr,
-                                                @Injectable Database database,
-                                                @Injectable Table table) throws Exception {
+                                                  @Mocked GlobalStateMgr globalStateMgr,
+                                                  @Injectable Database database,
+                                                  @Injectable Table table) throws Exception {
         new Expectations() {
             {
                 globalStateMgr.getDb(anyLong);
