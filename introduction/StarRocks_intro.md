@@ -8,7 +8,7 @@
 
 - [产品优势和应用场景](../introduction/what_is_starrocks.md)
 - [系统架构](../introduction/Architecture.md)
-- [存算分离](../administration/deploy_shared_data.md)
+- [存算分离](../deployment/deploy_shared_data.md)
 - [产品特性](../introduction/Features.md)
 - [视频资源](../faq/Video.md)
 

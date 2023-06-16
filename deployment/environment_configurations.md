@@ -24,7 +24,7 @@ netstat -tunlp | grep 9030
 netstat -tunlp | grep 9010
 ```
 
-如果上述任何端口被占用，您必须在部署 FE 节点时指定可用于替换的端口。详细说明参见 [部署 StarRocks - 启动 FE 服务](../deployment/deploy_manually.md#第一步启动-fe-服务)。
+如果上述任何端口被占用，您必须在部署 FE 节点时指定可用于替换的端口。详细说明参见 [手动部署 StarRocks - 启动 Leader FE 节点](../deployment/deploy_manually.md#第一步启动-leader-fe-节点)。
 
 ### BE 端口
 
@@ -44,7 +44,7 @@ netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
 ```
 
-如果上述任何端口被占用，您必须在部署 BE 节点时指定可用于替换的端口。详细说明参见 [部署 StarRocks - 启动 BE 服务](../deployment/deploy_manually.md#第三步启动-be-服务)。
+如果上述任何端口被占用，您必须在部署 BE 节点时指定可用于替换的端口。详细说明参见 [部署 StarRocks - 启动 BE 服务](../deployment/deploy_manually.md#第二步启动-be-服务)。
 
 ### CN 端口
 
@@ -64,7 +64,7 @@ netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
 ```
 
-如果上述任何端口被占用，您必须在部署 CN 节点时指定可用于替换的端口。详细说明参见 [部署 StarRocks - 启动 CN 服务](../deployment/deploy_manually.md#第四步可选启动-cn-服务)。
+如果上述任何端口被占用，您必须在部署 CN 节点时指定可用于替换的端口。详细说明参见 [部署 StarRocks - 启动 CN 服务](../deployment/deploy_manually.md#第三步可选启动-cn-服务)。
 
 ## 主机名
 

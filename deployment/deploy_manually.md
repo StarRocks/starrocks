@@ -2,7 +2,7 @@
 
 本文介绍如何手动部署 StarRocks。其他安装方式请参考[部署概览](../deployment/deployment_overview.md)。
 
-## 第一步：启动 FE 服务
+## 第一步：启动 Leader FE 节点
 
 以下操作在 FE 实例上执行。
 
@@ -84,35 +84,7 @@
 
    "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020."
 
-## 第二步：（可选）部署高可用 FE 集群
-
-高可用的 FE 集群需要在 StarRocks 集群中部署至少三个 Follower FE 节点。如需部署高可用的 FE 集群，您需要额外再启动两个新的 FE 节点。
-
-**除用于启动 FE 节点的命令外**，您可以重复第一步中的过程启动新的 FE 节点。当向集群中添加新的 FE 节点时，您必须为新的 FE 节点分配一个 helper 节点（本质上是一个现有的 FE 节点）以同步所有 FE 节点的元数据信息。
-
-- 如已为集群启用 IP 地址访问，请运行以下命令启动 FE 节点：
-
-  ```Bash
-  # Replace <helper_fe_ip> with the IP address (priority_networks) 
-  # of the helper node, and replace <helper_edit_log_port> with 
-  # the helper node's edit_log_port.
-  ./fe/bin/start_fe.sh --helper <helper_fe_ip>:<helper_edit_log_port> --daemon
-  ```
-
-  您只需在第一次启动节点时指定参数 `--helper`。
-
-- 如已为集群启用 FQDN 访问，请运行以下命令启动 FE 节点：
-
-  ```Bash
-  # Replace <helper_fqdn> with the FQDN of the helper node, 
-  # and replace <helper_edit_log_port> with the helper node's edit_log_port.
-  ./fe/bin/start_fe.sh --helper <helper_fqdn>:<helper_edit_log_port> \
-      --host_type FQDN --daemon
-  ```
-
-  您只需在第一次启动节点时指定参数 `--helper` 和 `--host_type`。
-
-## 第三步：启动 BE 服务
+## 第二步：启动 BE 服务
 
 以下操作在 BE 实例上执行。
 
@@ -179,7 +151,7 @@
 
    如果日志打印以下内容，则说明该 BE 节点启动成功：
 
-   "I0810 16:18:44.487284 3310141 task_worker_pool.cpp:1387] Waiting to receive first heartbeat from frontend"
+   "I0614 17:41:39.782819 3717531 thrift_server.cpp:388] heartbeat has started listening port on 9050"
 
 5. 在其他 BE 实例上重复以上步骤，即可启动新的 BE 节点。
 
@@ -187,7 +159,7 @@
 >
 > 在一个 StarRocks 集群中部署并添加至少 3 个 BE 节点后，这些节点将自动形成一个 BE 高可用集群。
 
-## 第四步：（可选）启动 CN 服务
+## 第三步：（可选）启动 CN 服务
 
 Compute Node（CN）是一种无状态的计算服务，本身不存储数据。您可以通过添加 CN 节点为查询提供额外的计算资源。您可以使用 BE 部署文件部署 CN 节点。CN 节点自 v2.4 版本起支持。
 
@@ -244,7 +216,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 
 4. 在其他实例上重复以上步骤，即可启动新的 CN 节点。
 
-## 第五步：搭建集群
+## 第四步：搭建集群
 
 当所有 FE、BE、CN 节点启动成功后，即可搭建 StarRocks 集群。
 
@@ -253,25 +225,12 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 1. 通过 MySQL 客户端连接到 StarRocks。您需要使用初始用户 `root` 登录，密码默认为空。
 
    ```Bash
-   # 将 <fe_address> 替换为您连接的 FE 节点的 IP 地址（priority_networks）或 FQDN，
+   # 将 <fe_address> 替换为 Leader FE 节点的 IP 地址（priority_networks）或 FQDN，
    # 并将 <query_port>（默认：9030）替换为您在 fe.conf 中指定的 query_port。
    mysql -h <fe_address> -P<query_port> -uroot
    ```
 
-2. （可选）如果您部署了多个 Follower FE 节点，您可以通过执行以下 SQL 将额外的两个 Follower FE 节点添加至集群。
-
-   ```SQL
-   -- 将 <fe_address> 替换为您连接的 FE 节点的 IP 地址（priority_networks）或 FQDN，
-   -- 并将 <edit_log_port>（默认：9010）替换为您在 fe.conf 中指定的 edit_log_port。
-   ALTER SYSTEM ADD FOLLOWER "<fe2_address>:<edit_log_port>", "<fe3_address>:<edit_log_port>";
-   ```
-
-   > **说明**
-   >
-   > - 您可以通过一条 SQL 添加多个 Follower FE 节点。每对 `<fe_address>:<edit_log_port>` 代表一个 FE 节点。
-   > - 如需添加更多的 Observer FE 节点，请执行 `ALTER SYSTEM ADD OBSERVER "<fe2_address>:<edit_log_port>"[, ...]`。有关详细说明，请参考 [ALTER SYSTEM - FE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md)。
-
-3. 执行以下 SQL 查看 FE 节点状态。
+2. 执行以下 SQL 查看 Leader FE 节点状态。
 
    ```SQL
    SHOW PROC '/frontends'\G
@@ -282,23 +241,22 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    ```Plain
    MySQL [(none)]> SHOW PROC '/frontends'\G
    *************************** 1. row ***************************
-                 Name: x.x.x.x_9010_1660119137253
-                   IP: x.x.x.x
-          EditLogPort: 9010
-             HttpPort: 8030
-            QueryPort: 9030
-              RpcPort: 9020
-                 Role: FOLLOWER
-             IsMaster: true
-            ClusterId: 58958864
-                 Join: true
-                Alive: true
-    ReplayedJournalId: 30602
-        LastHeartbeat: 2022-08-11 20:34:26
-             IsHelper: true
-               ErrMsg: 
-            StartTime: 2022-08-10 16:12:29
-              Version: 2.3.0-a9bdb09
+                Name: x.x.x.x_9010_1686810741121
+                  IP: x.x.x.x
+         EditLogPort: 9010
+            HttpPort: 8030
+           QueryPort: 9030
+             RpcPort: 9020
+                Role: LEADER
+           ClusterId: 919351034
+                Join: true
+               Alive: true
+   ReplayedJournalId: 1220
+       LastHeartbeat: 2023-06-15 15:39:04
+            IsHelper: true
+              ErrMsg: 
+           StartTime: 2023-06-15 14:32:28
+             Version: 3.0.0-48f4d81
    1 row in set (0.01 sec)
    ```
 
@@ -306,7 +264,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    - 如果字段 `Role` 为 `FOLLOWER`，说明该 FE 节点有资格被选为 Leader FE 节点。
    - 如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。
 
-4. 添加 BE 节点至集群。
+3. 添加 BE 节点至集群。
 
    ```SQL
    -- 将 <be_address> 替换为 BE 节点的 IP 地址（priority_networks）或 FQDN，
@@ -318,7 +276,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    >
    > 您可以通过一条 SQL 添加多个 BE 节点。每对 `<be_address>:<heartbeat_service_port>` 代表一个 BE 节点。
 
-5. 执行以下 SQL 查看 BE 节点状态。
+4. 执行以下 SQL 查看 BE 节点状态。
 
    ```SQL
    SHOW PROC '/backends'\G
@@ -329,35 +287,37 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    ```Plain
    MySQL [(none)]> SHOW PROC '/backends'\G
    *************************** 1. row ***************************
-               BackendId: 10036
-                 Cluster: default_cluster
-                      IP: x.x.x.x
+               BackendId: 10007
+                      IP: 172.26.195.67
            HeartbeatPort: 9050
                   BePort: 9060
                 HttpPort: 8040
                 BrpcPort: 8060
-           LastStartTime: 2022-08-10 17:39:01
-           LastHeartbeat: 2022-08-11 20:34:31
+           LastStartTime: 2023-06-15 15:23:08
+           LastHeartbeat: 2023-06-15 15:57:30
                    Alive: true
     SystemDecommissioned: false
    ClusterDecommissioned: false
-               TabletNum: 0
-        DataUsedCapacity: .000 
-           AvailCapacity: 1.000 B
-           TotalCapacity: .000 
-                 UsedPct: 0.00 %
-          MaxDiskUsedPct: 0.00 %
+               TabletNum: 30
+        DataUsedCapacity: 0.000 
+           AvailCapacity: 341.965 GB
+           TotalCapacity: 1.968 TB
+                 UsedPct: 83.04 %
+          MaxDiskUsedPct: 83.04 %
                   ErrMsg: 
-                 Version: 2.3.0-a9bdb09
-                  Status: {"lastSuccessReportTabletsTime":"N/A"}
-       DataTotalCapacity: .000 
+                 Version: 3.0.0-48f4d81
+                  Status: {"lastSuccessReportTabletsTime":"2023-06-15 15:57:08"}
+       DataTotalCapacity: 341.965 GB
              DataUsedPct: 0.00 %
                 CpuCores: 16
+       NumRunningQueries: 0
+              MemUsedPct: 0.01 %
+              CpuUsedPct: 0.0 %
    ```
 
    如果字段 `Alive` 为 `true`，说明该 BE 节点正常启动并加入集群。
 
-6. （可选）添加 CN 节点至集群。
+5. （可选）添加 CN 节点至集群。
 
    ```SQL
    -- 将 <cn_address> 替换为 CN 节点的 IP 地址（priority_networks）或 FQDN，
@@ -369,7 +329,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    >
    > 您可以通过一条 SQL 添加多个 CN 节点。每对 `<cn_address>:<heartbeat_service_port>` 代表一个 CN 节点。
 
-7. （可选）执行以下 SQL 查看 CN 节点状态。
+6. （可选）执行以下 SQL 查看 CN 节点状态。
 
    ```SQL
    SHOW PROC '/compute_nodes'\G
@@ -382,10 +342,10 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    *************************** 1. row ***************************
            ComputeNodeId: 10003
                       IP: x.x.x.x
-           HeartbeatPort: 9550
+           HeartbeatPort: 9050
                   BePort: 9060
-                HttpPort: 8540
-                BrpcPort: 8560
+                HttpPort: 8040
+                BrpcPort: 8060
            LastStartTime: 2023-03-13 15:11:13
            LastHeartbeat: 2023-03-13 15:11:13
                    Alive: true
@@ -397,6 +357,138 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    ```
 
    如果字段 `Alive` 为 `true`，说明该 CN 节点正常启动并加入集群。
+
+## 第五步：（可选）部署高可用 FE 集群
+
+高可用的 FE 集群需要在 StarRocks 集群中部署至少三个 Follower FE 节点。如需部署高可用的 FE 集群，您需要额外再启动两个新的 FE 节点。
+
+1. 通过 MySQL 客户端连接到 StarRocks。您需要使用初始用户 `root` 登录，密码默认为空。
+
+   ```Bash
+   # 将 <fe_address> 替换为 Leader FE 节点的 IP 地址（priority_networks）或 FQDN，
+   # 并将 <query_port>（默认：9030）替换为您在 fe.conf 中指定的 query_port。
+   mysql -h <fe_address> -P<query_port> -uroot
+   ```
+
+2. 执行以下 SQL 将额外的 FE 节点添加至集群。
+
+   ```SQL
+   -- 将 <new_fe_address> 替换为您需要添加的新 FE 节点的 IP 地址（priority_networks）或 FQDN，
+   -- 并将 <edit_log_port>（默认：9010）替换为您在新 FE 节点的 fe.conf 中指定的 edit_log_port。
+   ALTER SYSTEM ADD FOLLOWER "<new_fe_address>:<edit_log_port>";
+   ```
+
+   > **说明**
+   >
+   > - 您只能通过一条 SQL 添加一个 Follower FE 节点。
+   > - 如需添加更多的 Observer FE 节点，请执行 `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"`。有关详细说明，请参考 [ALTER SYSTEM - FE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md)。
+
+3. 在新的 FE 示例上启动终端，创建元数据存储路径，进入 StarRocks 部署目录，并修改 FE 配置文件 **fe/conf/fe.conf**。详细信息，请参考 [第一步：启动 Leader FE 节点](#第一步启动-leader-fe-节点)。
+
+   配置完成后，通过以下命令为新 Follower FE 节点分配 helper 节点，并启动新 FE 节点：
+
+   > **说明**
+   >
+   > 向集群中添加新的 Follower FE 节点时，您必须在首次启动新 FE 节点时为其分配一个 helper 节点（本质上是一个现有的 Follower FE 节点）以同步所有 FE 元数据信息。
+
+   - 如已为集群启用 IP 地址访问，请运行以下命令启动 FE 节点：
+
+   ```Bash
+   # 将 <helper_fe_ip> 替换为 Leader FE 节点的 IP 地址（priority_networks），
+   # 并将 <helper_edit_log_port>（默认：9010）替换为 Leader FE 节点的 edit_log_port。
+   ./fe/bin/start_fe.sh --helper <helper_fe_ip>:<helper_edit_log_port> --daemon
+   ```
+
+   您只需在第一次启动节点时指定参数 `--helper`。
+
+   - 如已为集群启用 FQDN 访问，请运行以下命令启动 FE 节点：
+
+   ```Bash
+   # 将 <helper_fqdn> 替换为 Leader FE 节点的 FQDN，
+   # 并将 <helper_edit_log_port>（默认：9010）替换为 Leader FE 节点的 edit_log_port。
+   ./fe/bin/start_fe.sh --helper <helper_fqdn>:<helper_edit_log_port> \
+         --host_type FQDN --daemon
+   ```
+
+   您只需在第一次启动节点时指定参数 `--helper` 和 `--host_type`。
+
+4. 查看 FE 日志，检查 FE 节点是否启动成功。
+
+   ```Bash
+   cat fe/log/fe.log | grep thrift
+   ```
+
+   如果日志打印以下内容，则说明该 FE 节点启动成功：
+
+   "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020."
+
+5. 重复上述步骤 2、3 和 4 直至启动所有 Follower FE 节点后，通过 MySQL 客户端查看 FE 节点状态。
+
+   ```SQL
+   SHOW PROC '/frontends'\G
+   ```
+
+   示例：
+
+   ```Plain
+   MySQL [(none)]> SHOW PROC '/frontends'\G
+   *************************** 1. row ***************************
+                Name: x.x.x.x_9010_1686810741121
+                  IP: x.x.x.x
+         EditLogPort: 9010
+            HttpPort: 8030
+           QueryPort: 9030
+             RpcPort: 9020
+                Role: LEADER
+           ClusterId: 919351034
+                Join: true
+               Alive: true
+   ReplayedJournalId: 1220
+       LastHeartbeat: 2023-06-15 15:39:04
+            IsHelper: true
+              ErrMsg: 
+           StartTime: 2023-06-15 14:32:28
+             Version: 3.0.0-48f4d81
+   *************************** 2. row ***************************
+                Name: x.x.x.x_9010_1686814080597
+                  IP: x.x.x.x
+         EditLogPort: 9010
+            HttpPort: 8030
+           QueryPort: 9030
+             RpcPort: 9020
+                Role: FOLLOWER
+           ClusterId: 919351034
+                Join: true
+               Alive: true
+   ReplayedJournalId: 1219
+       LastHeartbeat: 2023-06-15 15:39:04
+            IsHelper: true
+              ErrMsg: 
+           StartTime: 2023-06-15 15:38:53
+             Version: 3.0.0-48f4d81
+   *************************** 3. row ***************************
+                Name: x.x.x.x_9010_1686814090833
+                  IP: x.x.x.x
+         EditLogPort: 9010
+            HttpPort: 8030
+           QueryPort: 9030
+             RpcPort: 9020
+                Role: FOLLOWER
+           ClusterId: 919351034
+                Join: true
+               Alive: true
+   ReplayedJournalId: 1219
+       LastHeartbeat: 2023-06-15 15:39:04
+            IsHelper: true
+              ErrMsg: 
+           StartTime: 2023-06-15 15:37:52
+             Version: 3.0.0-48f4d81
+   3 rows in set (0.02 sec)
+   ```
+
+   - 如果字段 `Alive` 为 `true`，说明该 FE 节点正常启动并加入集群。
+   - 如果字段 `Role` 为 `FOLLOWER`，说明该 FE 节点有资格被选为 Leader FE 节点。
+   - 如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。
 
 ## 停止 StarRocks 集群
 
