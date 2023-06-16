@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.starrocks.common.Config;
+import com.starrocks.thrift.TRunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,6 +45,16 @@ public abstract class RunMode {
         } else {
             LOG.error("Invalid run_mode \"{}\". The candidates are \"{}\" and \"{}\"", runMode, SHARED_NOTHING, SHARED_DATA);
             System.exit(-1);
+        }
+    }
+
+    public static TRunMode toTRunMode(RunMode mode) {
+        if (mode == SHARED_DATA) {
+            return TRunMode.SHARED_DATA;
+        } else if (mode == HYBRID) {
+            return TRunMode.HYBRID;
+        } else {
+            return TRunMode.SHARED_NOTHING;
         }
     }
 
