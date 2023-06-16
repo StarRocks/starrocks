@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getMvPartialPartitionPredicates;
 
 public class MvRewritePreprocessor {
@@ -74,7 +75,106 @@ public class MvRewritePreprocessor {
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
+<<<<<<< HEAD
 
+=======
+        if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related Async MVs for plan");
+            return;
+        }
+        prepareRelatedMVs(queryTables, relatedMvs);
+    }
+
+    public void prepareSyncMvCandidatesForPlan() {
+        Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
+
+        Set<MaterializedView> relatedMvs = Sets.newHashSet();
+        // get all related materialized views, include nested mvs
+        for (Table table : queryTables) {
+            if (!(table instanceof OlapTable)) {
+                continue;
+            }
+            OlapTable olapTable = (OlapTable) table;
+            for (MaterializedIndexMeta indexMeta : olapTable.getVisibleIndexMetas()) {
+                long indexId = indexMeta.getIndexId();
+                if (indexMeta.getIndexId() == olapTable.getBaseIndexId()) {
+                    continue;
+                }
+                // Old sync mv may not contain the index define sql.
+                if (Strings.isNullOrEmpty(indexMeta.getViewDefineSql())) {
+                    continue;
+                }
+
+                // TODO: open this later when sync mv supports complex expression.
+                // // To avoid adding optimization times, only put the mv with complex expressions into materialized views.
+                // if (!MVUtils.containComplexExpresses(indexMeta)) {
+                //    continue;
+                // }
+
+                try {
+                    long dbId = indexMeta.getDbId();
+                    String viewDefineSql = indexMeta.getViewDefineSql();
+                    String mvName = olapTable.getIndexNameById(indexId);
+                    Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+
+                    // distribution info
+                    DistributionInfo baseTableDistributionInfo = olapTable.getDefaultDistributionInfo();
+                    DistributionInfo mvDistributionInfo = baseTableDistributionInfo.copy();
+                    Set<String> mvColumnNames =
+                            indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toSet());
+                    if (baseTableDistributionInfo.getType() == DistributionInfoType.HASH) {
+                        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) baseTableDistributionInfo;
+                        Set<String> distributedColumns =
+                                hashDistributionInfo.getDistributionColumns().stream().map(Column::getName)
+                                .collect(Collectors.toSet());
+                        // NOTE: SyncMV's column may not be equal to base table's exactly.
+                        List<Column> newDistributionColumns = Lists.newArrayList();
+                        for (Column mvColumn : indexMeta.getSchema()) {
+                            if (distributedColumns.contains(mvColumn.getName())) {
+                                newDistributionColumns.add(mvColumn);
+                            }
+                        }
+                        // Set random distribution info if sync mv' columns may not contain distribution keys,
+                        if (newDistributionColumns.size() != distributedColumns.size()) {
+                            mvDistributionInfo = new RandomDistributionInfo();
+                        } else {
+                            ((HashDistributionInfo) mvDistributionInfo).setDistributionColumns(newDistributionColumns);
+                        }
+                    }
+                    // partition info
+                    PartitionInfo basePartitionInfo = olapTable.getPartitionInfo();
+                    PartitionInfo mvPartitionInfo = basePartitionInfo;
+                    // Set single partition if sync mv' columns do not contain partition by columns.
+                    if (basePartitionInfo.isPartitioned()) {
+                        if (basePartitionInfo.getPartitionColumns().stream()
+                                .anyMatch(x -> !mvColumnNames.contains(x.getName())) ||
+                                !(basePartitionInfo instanceof ExpressionRangePartitionInfo)) {
+                            mvPartitionInfo = new SinglePartitionInfo();
+                        }
+                    }
+                    // refresh schema
+                    MaterializedView.MvRefreshScheme mvRefreshScheme =
+                            new MaterializedView.MvRefreshScheme(MaterializedView.RefreshType.SYNC);
+                    MaterializedView mv = new MaterializedView(db, mvName, indexMeta, olapTable,
+                            mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                    mv.setViewDefineSql(viewDefineSql);
+                    mv.setBaseIndexId(indexId);
+                    relatedMvs.add(mv);
+                } catch (Exception e) {
+                    LOG.warn("error happens when parsing create sync materialized view stmt [{}] use new parser",
+                            indexId, e);
+                }
+            }
+        }
+        if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related Sync MVs");
+            return;
+        }
+        prepareRelatedMVs(queryTables, relatedMvs);
+    }
+
+    private void prepareRelatedMVs(Set<Table> queryTables, Set<MaterializedView> relatedMvs) {
+>>>>>>> 4a7c241f6 ([Enhancement] Add trace log for MV Rewrite to better debug (#25444))
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
             try {
@@ -84,17 +184,22 @@ public class MvRewritePreprocessor {
                 LOG.warn("preprocess mv {} failed for query tables:{}", mv.getName(), tableNames, e);
             }
         }
+        if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related MVs after process");
+            return;
+        }
         // all base table related mvs
         List<String> relatedMvNames = relatedMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList());
         // all mvs that match SPJG pattern and can ben used to try mv rewrite
         List<String> candidateMvNames = context.getCandidateMvs().stream()
                 .map(materializationContext -> materializationContext.getMv().getName()).collect(Collectors.toList());
-        String mvInfo = String.format("relatedMvNames: %s, candidateMvNames: %s", relatedMvNames, candidateMvNames);
-        OptimizerTraceUtil.log(connectContext, mvInfo);
+
+        logMVPrepare(connectContext, "RelatedMVs: %s, CandidateMVs: %s", relatedMvNames, candidateMvNames);
     }
 
     private void preprocessMv(MaterializedView mv, List<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
         if (!mv.isActive()) {
+            logMVPrepare(connectContext, "MV is not active: %s", mv.getName());
             return;
         }
 
@@ -105,7 +210,13 @@ public class MvRewritePreprocessor {
             mvRewriteContext = mvOptimizer.optimize(mv, connectContext);
             mv.setPlanContext(mvRewriteContext);
         }
+<<<<<<< HEAD
         if (!mvRewriteContext.isValidMvPlan()) {
+=======
+        if (!mvRewriteContextCache.isValidMvPlan()) {
+            logMVPrepare(connectContext, "MV plan is not valid: %s, plan:\n %s",
+                    mv.getName(), mvRewriteContextCache.getLogicalPlan().explain());
+>>>>>>> 4a7c241f6 ([Enhancement] Add trace log for MV Rewrite to better debug (#25444))
             return;
         }
 
@@ -113,12 +224,16 @@ public class MvRewritePreprocessor {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             if (!partitionNamesToRefresh.isEmpty()) {
+                logMVPrepare(connectContext, "MV %s is outdated, partitionNamesToRefresh:%s",
+                        mv.getName(), partitionNamesToRefresh);
                 return;
             }
         } else if (!mv.getPartitionNames().isEmpty() &&
                 partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
             // if the mv is partitioned, and all partitions need refresh,
-            // then it can not be an candidate
+            // then it can not be a candidate
+            logMVPrepare(connectContext, "Partitioned MV %s is outdated and all its partitions need to be " +
+                            "refreshed: %s", mv.getName(), partitionNamesToRefresh);
             return;
         }
 
@@ -126,9 +241,11 @@ public class MvRewritePreprocessor {
         ScalarOperator mvPartialPartitionPredicates = null;
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
             // when mv is partitioned and there are some refreshed partitions,
-            // when should calculate latest partition range predicates for partition-by base table
+            // when should calculate the latest partition range predicates for partition-by base table
             mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
             if (mvPartialPartitionPredicates == null) {
+                logMVPrepare(connectContext, "Partitioned MV %s is outdated which contains some partitions " +
+                        "to be refreshed:%s", mv.getName(), partitionNamesToRefresh);
                 return;
             }
         }
@@ -164,6 +281,7 @@ public class MvRewritePreprocessor {
         }
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
+        logMVPrepare(connectContext, "Add MV %s as a candidate", mv.getName());
     }
 
     /**

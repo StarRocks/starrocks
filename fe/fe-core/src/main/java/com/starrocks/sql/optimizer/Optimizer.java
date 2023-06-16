@@ -221,6 +221,16 @@ public class Optimizer {
                         new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
                 preprocessor.prepareMvCandidatesForPlan();
             }
+<<<<<<< HEAD
+=======
+            if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
+                try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessSyncMvs")) {
+                    preprocessor.prepareSyncMvCandidatesForPlan();
+                }
+            }
+            OptimizerTraceUtil.logMVPrepare(connectContext, "There are %d candidate MVs after prepare phase",
+                    context.getCandidateMvs().size());
+>>>>>>> 4a7c241f6 ([Enhancement] Add trace log for MV Rewrite to better debug (#25444))
         }
     }
 
