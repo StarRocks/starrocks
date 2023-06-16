@@ -53,7 +53,7 @@ StarRocks 的降级流程与 [升级流程](../deployment/upgrade.md#升级流�
 
 按照以下步骤执行 FE 降级正确性测试：
 
-1. 在开发环境中部署一个要降级的目标版本的测试 FE 节点。有关详细说明，请参考 [手动部署 StarRocks - 启动 FE 服务](../deployment/deploy_manually.md#第一步启动-fe-服务)。
+1. 在开发环境中部署一个要降级的目标版本的测试 FE 节点。有关详细说明，请参考 [手动部署 StarRocks - 启动 Leader FE 节点](../deployment/deploy_manually.md#第一步启动-leader-fe-节点)。
 2. 修改测试 FE 节点的配置文件 **fe.conf**：
 
    - 为测试 FE 节点设置与生产集群不同的 `http_port`、`rpc_port`、`query_port` 以及 `edit_log_port`。
@@ -251,7 +251,7 @@ StarRocks 的降级流程与 [升级流程](../deployment/upgrade.md#升级流�
 4. 查看节点是否启动成功。
 
    ```Bash
-   ps aux | grep 
+   ps aux | grep starrocks_be
    ```
 
 5. 重复以上步骤降级其他 CN 节点。

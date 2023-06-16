@@ -66,7 +66,7 @@ Docker 会自动识别机器的 CPU 架构，并下载对应的镜像。 其中 
   2. 启动容器。
 
      ```Bash
-     # 将 <code_dir> 替换为存储 StarRocks 源代码的目录。
+     # 将 <code_dir> 替换为 StarRocks 源代码目录的上级目录。
      # 将 <branch_name> 替换为镜像名称对应的分支名称。
      # 将 <image_name> 替换为您下载的镜像的名称。
      docker run -it -v <code_dir>/.m2:/root/.m2 \

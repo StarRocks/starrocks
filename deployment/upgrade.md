@@ -145,7 +145,7 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 
 按照以下步骤执行 FE 升级正确性测试：
 
-1. 在开发环境中部署一个新版本的测试 FE 节点。有关详细说明，请参考 [手动部署 StarRocks - 启动 FE 服务](../deployment/deploy_manually.md#第一步启动-fe-服务)。
+1. 在开发环境中部署一个新版本的测试 FE 节点。有关详细说明，请参考 [手动部署 StarRocks - 启动 Leader FE 节点](../deployment/deploy_manually.md#第一步启动-leader-fe-节点)。
 2. 修改测试 FE 节点的配置文件 **fe.conf**：
 
    - 为测试 FE 节点设置与生产集群不同的 `http_port`、`rpc_port`、`query_port` 以及 `edit_log_port`。

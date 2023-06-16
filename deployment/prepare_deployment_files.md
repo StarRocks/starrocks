@@ -4,7 +4,7 @@
 
 目前 [镜舟官网](https://www.mirrorship.cn/zh-CN/download/community)提供的 StarRocks 软件包仅支持在 x86 架构 CPU 的 CentOS 7.9 平台上部署。如需在 ARM 架构 CPU 或 Ubuntu 22.04 操作系统上部署 StarRocks，您需要通过 StarRocks Docker 镜像获取部署文件。
 
-## 为 x86 CentOS 7.9 平台准备部署文件
+## 为 x86 架构 CentOS 7.9 平台准备部署文件
 
 StarRocks 二进制包的名称格式为 **StarRocks-version.tar.gz**，其中 **version** 是一个数字（例如 **2.5.2**），表示二进制包的版本信息。请确保您选择了正确版本的二进制包。
 
@@ -46,18 +46,37 @@ StarRocks 二进制包的名称格式为 **StarRocks-version.tar.gz**，其中 *
 
 1. 从 [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/artifacts-ubuntu/tags) 下载 StarRocks Docker 镜像。 您可以根据 Tag 选择特定版本的镜像。
 
-   ```Bash
-   # 将 <image_tag> 替换为您要下载的镜像的 Tag，例如 2.5.4。
-   docker pull starrocks/artifacts-ubuntu:<image_tag>
-   ```
+   - 如果您使用 Ubuntu 22.04 平台：
+
+     ```Bash
+     # 将 <image_tag> 替换为您要下载的镜像的 Tag，例如 2.5.4。
+     docker pull starrocks/artifacts-ubuntu:<image_tag>
+     ```
+
+   - 如果您使用 ARM 架构 CentOS 7.9 平台：
+
+     ```Bash
+     # 将 <image_tag> 替换为您要下载的镜像的 Tag，例如 2.5.4。
+     docker pull starrocks/artifacts-centos7:<image_tag>
+     ```
 
 2. 运行以下命令将 StarRocks 部署文件从 Docker 镜像复制到您的主机：
 
-   ```Bash
-   # 将 <image_tag> 替换为您下载的镜像的 Tag，例如 2.5.4。
-   docker run --rm starrocks/artifacts-ubuntu:<image_tag> \
-       tar -cf - -C /release . | tar -xvf -
-   ```
+   - 如果您使用 Ubuntu 22.04 平台：
+
+     ```Bash
+     # 将 <image_tag> 替换为您下载的镜像的 Tag，例如 2.5.4。
+     docker run --rm starrocks/artifacts-ubuntu:<image_tag> \
+         tar -cf - -C /release . | tar -xvf -
+     ```
+
+   - 如果您使用 ARM 架构 CentOS 7.9 平台：
+
+     ```Bash
+     # 将 <image_tag> 替换为您下载的镜像的 Tag，例如 2.5.4。
+     docker run --rm starrocks/artifacts-centos7:<image_tag> \
+         tar -cf - -C /release . | tar -xvf -
+     ```
 
    部署文件包括以下路径：
 
