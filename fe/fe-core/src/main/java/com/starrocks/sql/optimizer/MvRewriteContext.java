@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
@@ -43,20 +44,22 @@ public class MvRewriteContext {
     private ScalarOperator mvPruneConjunct;
 
     private final List<ScalarOperator> onPredicates;
+    private final Rule rule;
 
-    public MvRewriteContext(
-            MaterializationContext materializationContext,
-            List<Table> queryTables,
-            OptExpression queryExpression,
-            ReplaceColumnRefRewriter queryColumnRefRewriter,
-            PredicateSplit queryPredicateSplit,
-            List<ScalarOperator> onPredicates) {
+    public MvRewriteContext(MaterializationContext materializationContext,
+                            List<Table> queryTables,
+                            OptExpression queryExpression,
+                            ReplaceColumnRefRewriter queryColumnRefRewriter,
+                            PredicateSplit queryPredicateSplit,
+                            List<ScalarOperator> onPredicates,
+                            Rule rule) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
         this.queryColumnRefRewriter = queryColumnRefRewriter;
         this.queryPredicateSplit = queryPredicateSplit;
         this.onPredicates = onPredicates;
+        this.rule = rule;
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -104,5 +107,9 @@ public class MvRewriteContext {
 
     public List<ScalarOperator> getOnPredicates() {
         return onPredicates;
+    }
+
+    public Rule getRule() {
+        return rule;
     }
 }
