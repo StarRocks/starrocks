@@ -207,6 +207,7 @@ public class AuthenticationManager {
     }
 
     public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/authentication/AuthenticationManager.java
         Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
                 getBestMatchedUserIdentity(remoteUser, remoteHost);
         if (matchedUserIdentity == null) {
@@ -220,6 +221,57 @@ public class AuthenticationManager {
                 return matchedUserIdentity.getKey();
             } catch (AuthenticationException e) {
                 LOG.debug("failed to authenticate, ", e);
+=======
+        String[] authChain = Config.authentication_chain;
+        UserIdentity authenticatedUser = null;
+        for (String authMechanism : authChain) {
+            if (authenticatedUser != null) {
+                break;
+            }
+
+            if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                        getBestMatchedUserIdentity(remoteUser, remoteHost);
+                if (matchedUserIdentity == null) {
+                    LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
+                } else {
+                    try {
+                        AuthenticationProvider provider =
+                                AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
+                        provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
+                                matchedUserIdentity.getValue());
+                        authenticatedUser = matchedUserIdentity.getKey();
+                    } catch (AuthenticationException e) {
+                        LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
+                                remoteUser, remoteHost, e.getMessage());
+                    }
+                }
+            } else {
+                SecurityIntegration securityIntegration =
+                        nameToSecurityIntegrationMap.getOrDefault(authMechanism, null);
+                if (securityIntegration == null) {
+                    LOG.info("'{}' authentication mechanism not found", authMechanism);
+                } else {
+                    try {
+                        AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
+                        UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
+                        userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
+                                securityIntegration);
+                        provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
+                                userAuthenticationInfo);
+                        // the ephemeral user is identified as 'username'@'auth_mechanism'
+                        authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
+                        ConnectContext currentContext = ConnectContext.get();
+                        if (currentContext != null) {
+                            currentContext.setCurrentRoleIds(new HashSet<>(
+                                    Collections.singletonList(PrivilegeBuiltinConstants.ROOT_ROLE_ID)));
+                        }
+                    } catch (AuthenticationException e) {
+                        LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
+                                remoteUser, remoteHost, securityIntegration, e.getMessage());
+                    }
+                }
+>>>>>>> d894c5ce7 ([BugFix] Fix listTableSatus() NPE when base table is dropped (#25472)):fe/fe-core/src/main/java/com/starrocks/authentication/AuthenticationMgr.java
             }
         }
 

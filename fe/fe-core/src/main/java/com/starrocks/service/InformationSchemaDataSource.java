@@ -141,6 +141,7 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
+<<<<<<< HEAD
 
                         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                             // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
@@ -149,6 +150,9 @@ public class InformationSchemaDataSource {
                             }
                         } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
                                 table.getName(), PrivPredicate.SHOW)) {
+=======
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
+>>>>>>> d894c5ce7 ([BugFix] Fix listTableSatus() NPE when base table is dropped (#25472))
                             continue;
                         }
 
@@ -319,6 +323,7 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
+<<<<<<< HEAD
 
                         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                             // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
@@ -327,6 +332,9 @@ public class InformationSchemaDataSource {
                             }
                         } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
                                 table.getName(), PrivPredicate.SHOW)) {
+=======
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
+>>>>>>> d894c5ce7 ([BugFix] Fix listTableSatus() NPE when base table is dropped (#25472))
                             continue;
                         }
 
