@@ -56,4 +56,6 @@ using MasterInfoPtr = butil::DoublyBufferedData<TMasterInfo>::ScopedPtr;
 
 [[nodiscard]] std::optional<int64_t> get_backend_id();
 
+// Returns the value of current FE's run mode
+[[nodiscard]] std::optional<TRunMode::type> get_master_run_mode();
 } // namespace starrocks
