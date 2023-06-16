@@ -115,6 +115,9 @@ public class CurrentQueryInfoProvider {
                     statistics.updateScanBytes(queryStatistics.scanBytes);
                     statistics.updateScanRows(queryStatistics.scanRows);
                     statistics.updateMemUsageBytes(queryStatistics.memUsageBytes);
+                    if (queryStatistics.spillBytes != null) {
+                        statistics.updateSpillBytes(queryStatistics.spillBytes);
+                    }
                     final Request request = pair.first;
                     String host = String.format("%s:%d",
                             request.getAddress().getHostname(), request.getAddress().getPort());
@@ -199,6 +202,9 @@ public class CurrentQueryInfoProvider {
                         statistics.updateScanBytes(queryStatistics.scanBytes);
                         statistics.updateScanRows(queryStatistics.scanRows);
                         statistics.updateMemUsageBytes(queryStatistics.memUsageBytes);
+                        if (queryStatistics.spillBytes != null) {
+                            statistics.updateSpillBytes(queryStatistics.spillBytes);
+                        }
                     }
                 }
             } catch (InterruptedException e) {
@@ -217,6 +223,7 @@ public class CurrentQueryInfoProvider {
         long scanBytes = 0;
         long scanRows = 0;
         long memUsageBytes = 0;
+        long spillBytes = 0;
 
         public QueryStatistics() {
 
@@ -253,6 +260,10 @@ public class CurrentQueryInfoProvider {
         public void updateMemUsageBytes(long value) {
             memUsageBytes += value;
         }
+
+        public void updateSpillBytes(long value) { spillBytes += value; }
+
+        public long getSpillBytes() { return spillBytes; }
     }
 
     private static class Request {

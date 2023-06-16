@@ -180,7 +180,7 @@ public:
 
         dummy_rt_st.set_chunk_size(config::vector_chunk_size);
 
-        metrics = SpillProcessMetrics(&dummy_profile);
+        metrics = SpillProcessMetrics(&dummy_profile, &spill_bytes);
     }
     void TearDown() override {}
     std::unique_ptr<spill::DirManager> dummy_dir_mgr;
@@ -188,6 +188,7 @@ public:
     RuntimeState dummy_rt_st;
     RuntimeProfile dummy_profile{"dummy"};
     std::vector<std::string> clean_up;
+    std::atomic_int64_t spill_bytes;
     SpillProcessMetrics metrics;
 };
 
@@ -297,6 +298,7 @@ TEST_F(SpillTest, unsorted_process) {
     spill_options.block_manager = dummy_block_mgr.get();
 
     auto chunk_empty = chunk_builder.gen(tuple, nullables);
+    std::atomic_int64_t spill_bytes;
 
     auto spiller = factory->create(spill_options);
     spiller->set_metrics(metrics);
