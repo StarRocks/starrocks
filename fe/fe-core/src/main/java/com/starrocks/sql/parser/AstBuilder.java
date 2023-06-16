@@ -3575,20 +3575,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAddColumnsClause(StarRocksParser.AddColumnsClauseContext context) {
         List<ColumnDef> columnDefs = getColumnDefs(context.columnDesc());
+        Map<String, String> properties = new HashMap<>();
+        properties = getProperties(context.properties());
+        String rollupName = null;
+        if (context.rollupName != null) {
+            rollupName = getIdentifierName(context.rollupName);
+        }
         for (ColumnDef columnDef : columnDefs) {
             if (columnDef.isAutoIncrement()) {
                 throw new ParsingException(PARSER_ERROR_MSG.autoIncrementForbid(columnDef.getName(), "ADD"),
                         columnDef.getPos());
             }
             if (columnDef.isMaterializedColumn()) {
-                throw new ParsingException(
-                        PARSER_ERROR_MSG.materializedColumnForbid(columnDef.getName(), "ADD COLUMNS"),
-                        columnDef.getPos());
+                if (rollupName != null) {
+                    throw new ParsingException(
+                            PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
+                            columnDef.getPos());
+                }
+    
+                if (properties.size() != 0) {
+                    throw new ParsingException(
+                            PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
+                            columnDef.getPos());
+                }
             }
-        }
-        String rollupName = null;
-        if (context.rollupName != null) {
-            rollupName = getIdentifierName(context.rollupName);
         }
         return new AddColumnsClause(columnDefs, rollupName, getProperties(context.properties()), createPos(context));
     }
