@@ -326,6 +326,7 @@ public class StatisticExecutor {
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
+        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
