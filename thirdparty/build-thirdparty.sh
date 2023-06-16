@@ -252,9 +252,9 @@ build_protobuf() {
     check_if_source_exist $PROTOBUF_SOURCE
     cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
     rm -fr gmock
-    mkdir gmock 
-    cd gmock 
-    tar xf ${TP_SOURCE_DIR}/$GTEST_NAME 
+    mkdir gmock
+    cd gmock
+    tar xf ${TP_SOURCE_DIR}/$GTEST_NAME
     mv $GTEST_SOURCE gtest
     cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
     ./autogen.sh
@@ -289,7 +289,7 @@ build_glog() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-frame-pointers --disable-shared --enable-static
-    make -j$PARALLEL 
+    make -j$PARALLEL
     make install
 }
 
@@ -303,7 +303,7 @@ build_gtest() {
     rm -rf CMakeCache.txt CMakeFiles/
     $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_POSITION_INDEPENDENT_CODE=On ../
-    make -j$PARALLEL 
+    make -j$PARALLEL
     make install
 }
 
@@ -344,7 +344,7 @@ build_snappy() {
     -DCMAKE_POSITION_INDEPENDENT_CODE=On \
     -DCMAKE_INSTALL_INCLUDEDIR=$TP_INCLUDE_DIR/snappy \
     -DSNAPPY_BUILD_TESTS=0 ../
-    make -j$PARALLEL 
+    make -j$PARALLEL
     make install
     if [ -f $TP_INSTALL_DIR/lib64/libsnappy.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib
@@ -363,7 +363,7 @@ build_snappy() {
 build_gperftools() {
     check_if_source_exist $GPERFTOOLS_SOURCE
     cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
-    
+
     OLD_FLAGS=$CFLAGS
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
 
@@ -375,7 +375,7 @@ build_gperftools() {
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
-    
+
     CFLAGS=$OLD_FLAGS
 }
 
@@ -386,7 +386,7 @@ build_zlib() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --static
-    make -j$PARALLEL 
+    make -j$PARALLEL
     make install
 }
 
@@ -463,7 +463,7 @@ build_brpc() {
     make -j$PARALLEL
     make install
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
-        mkdir -p $TP_INSTALL_DIR/lib64 
+        mkdir -p $TP_INSTALL_DIR/lib64
         cp $TP_INSTALL_DIR/lib/libbrpc.a $TP_INSTALL_DIR/lib64/libbrpc.a
     fi
 }
@@ -483,7 +483,7 @@ build_rocksdb() {
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
     PORTABLE=1 make USE_RTTI=1 -j$PARALLEL static_lib
 
-    cp librocksdb.a ../../installed/lib/librocksdb.a 
+    cp librocksdb.a ../../installed/lib/librocksdb.a
     cp -r include/rocksdb ../../installed/include/
 
     export CFLAGS=$OLD_FLAGS
@@ -538,9 +538,15 @@ build_arrow() {
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
 
+    # https://github.com/apache/arrow/blob/apache-arrow-5.0.0/cpp/src/arrow/memory_pool.cc#L286
+    #
+    # JemallocAllocator use mallocx and rallocx to allocate new memory, but mallocx and rallocx are Non-standard APIs,
+    # and can not be hooked in BE, the memory used by arrow can not be counted by BE,
+    # so disable jemalloc here and use SystemAllocator.
     ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_SHARED=OFF \
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
+    -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
@@ -554,7 +560,6 @@ build_arrow() {
     make -j$PARALLEL
     make install
     #copy dep libs
-    cp -rf ./jemalloc_ep-prefix/src/jemalloc_ep/dist/lib/libjemalloc_pic.a $TP_INSTALL_DIR/lib64/libjemalloc.a
     cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
     cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlidec-static.a $TP_INSTALL_DIR/lib64/libbrotlidec.a
     cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlicommon-static.a $TP_INSTALL_DIR/lib64/libbrotlicommon.a
@@ -564,7 +569,7 @@ build_arrow() {
         cp -rf ./zstd_ep-install/lib/libzstd.a $TP_INSTALL_DIR/lib64/libzstd.a
     fi
     # copy zstd headers
-    mkdir -p ${TP_INSTALL_DIR}/include/zstd 
+    mkdir -p ${TP_INSTALL_DIR}/include/zstd
     cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
 
     export CXXFLAGS=$OLD_FLAGS
@@ -576,7 +581,7 @@ build_arrow() {
 build_s2() {
     check_if_source_exist $S2_SOURCE
     cd $TP_SOURCE_DIR/$S2_SOURCE
-    mkdir -p $BUILD_DIR 
+    mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
@@ -588,7 +593,7 @@ build_s2() {
     -DGLOG_ROOT_DIR="$TP_INSTALL_DIR/include" \
     -DWITH_GLOG=ON \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
-    make -j$PARALLEL 
+    make -j$PARALLEL
     make install
 }
 
@@ -664,7 +669,7 @@ build_croaringbitmap() {
     -DROARING_DISABLE_NATIVE=ON \
     -DFORCE_AVX=$FORCE_AVX \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
-    make -j$PARALLEL 
+    make -j$PARALLEL
     make install
 }
 #orc
@@ -694,7 +699,7 @@ build_cctz() {
     check_if_source_exist $CCTZ_SOURCE
     cd $TP_SOURCE_DIR/$CCTZ_SOURCE
 
-    make -j$PARALLEL 
+    make -j$PARALLEL
     PREFIX=${TP_INSTALL_DIR} make install
 }
 
