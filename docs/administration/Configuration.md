@@ -246,9 +246,10 @@ This section provides an overview of the static parameters that you can configur
 #### Query engine
 
 | Parameter                   | Default | Description                                                  |
-| --------------------------- | ------- | ------------------------------------------------------------ |
+| --------------------------- |---------| ------------------------------------------------------------ |
 | publish_version_interval_ms | 10      | The time interval at which release validation tasks are issued. Unit: ms. |
 | statistic_cache_columns     | 100000  | The number of rows that can be cached for the statistics table. |
+| statistic_cache_thread_pool_size     | 10      | The size of the thread-pool which will be used to refresh statistic caches. |
 
 #### Loading and unloading
 

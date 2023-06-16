@@ -906,8 +906,11 @@ public class EditLog {
                     globalStateMgr.getAnalyzeMgr().replayAddBasicStatsMeta(basicStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should refresh cache here.
-                    globalStateMgr.getAnalyzeMgr().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
-                            basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
+                                basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
+                    }
                     break;
                 }
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
@@ -920,9 +923,12 @@ public class EditLog {
                     globalStateMgr.getAnalyzeMgr().replayAddHistogramStatsMeta(histogramStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should expire cache here.
-                    globalStateMgr.getAnalyzeMgr().refreshHistogramStatisticsCache(
-                            histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
-                            Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().refreshHistogramStatisticsCache(
+                                histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                                Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                    }
                     break;
                 }
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
