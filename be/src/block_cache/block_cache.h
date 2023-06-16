@@ -37,6 +37,8 @@ public:
 
     size_t block_size() const { return _block_size; }
 
+    static const size_t MAX_BLOCK_SIZE;
+
 private:
 #ifndef BE_TEST
     BlockCache() = default;
