@@ -1375,18 +1375,19 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_list_array) {
     ASSERT_EQ(column->size(), 10);
 }
 
-static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_elements, ssize_t& counter) {
-    int fix_size = 5;
-    int fix_size1 = 10;
+static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_parents, int64_t num_children,
+                                                            int64_t num_child_values, ssize_t& counter) {
     auto value_builder = std::make_shared<arrow::UInt64Builder>();
-    auto builder = std::make_shared<arrow::FixedSizeListBuilder>(arrow::default_memory_pool(), value_builder, fix_size);
-    arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder1(arrow::default_memory_pool(), builder, fix_size1);
+    auto builder = std::make_shared<arrow::FixedSizeListBuilder>(arrow::default_memory_pool(), value_builder,
+                                                                 num_child_values);
+    arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder1(arrow::default_memory_pool(), builder,
+                                                                      num_children);
 
-    for (auto num1 = 0; num1 < num_elements; num1 += fix_size1) {
+    for (auto num1 = 0; num1 < num_parents; ++num1) {
         builder1.Append();
-        for (auto num = 0; num < fix_size1; num += fix_size) {
+        for (auto num = 0; num < num_children; ++num) {
             builder->Append();
-            for (int i = 0; i < fix_size; i++) {
+            for (int i = 0; i < num_child_values; ++i) {
                 value_builder->Append(counter);
                 counter += 1;
             }
@@ -1404,11 +1405,10 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
     auto column = ColumnHelper::create_column(array_type, false);
     column->reserve(4096);
     ssize_t counter = 0;
-    int num = 100;
-    auto array = create_nest_list_array(num, counter);
+    auto array = create_nest_list_array(10, 2, 5, counter);
     auto conv_func = get_arrow_converter(ArrowTypeId::LIST, TYPE_ARRAY, false, false);
     ASSERT_TRUE(conv_func != nullptr);
-    ASSERT_EQ(num, counter);
+    ASSERT_EQ(10 * 2 * 5, counter);
     Filter filter;
     filter.resize(array->length() + column->size(), 1);
     ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr,
