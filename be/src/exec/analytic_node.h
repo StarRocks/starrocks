@@ -44,6 +44,8 @@ private:
     // Tuple descriptor for storing results of analytic fn evaluation.
     const TupleDescriptor* _result_tuple_desc;
     AnalytorPtr _analytor = nullptr;
+    bool _use_hash_based_partition = false;
+    std::vector<ExprContext*> _hash_partition_exprs;
 
     Status _get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
     Status _get_next_for_unbounded_preceding_range_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
