@@ -313,6 +313,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
             "enable_multicolumn_global_runtime_filter";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
+    public static final String ENABLE_MV_OPTIMIZER_TRACE_LOG = "enable_mv_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
@@ -896,6 +897,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_MV_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
+    private boolean enableMVOptimizerTraceLog = false;
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryDebugTrace = false;
@@ -1819,6 +1823,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableOptimizerTraceLog(boolean val) {
         this.enableOptimizerTraceLog = val;
+    }
+
+    public boolean isEnableMVOptimizerTraceLog() {
+        return enableMVOptimizerTraceLog || enableOptimizerTraceLog;
+    }
+
+    public void setEnableMVOptimizerTraceLog(boolean val) {
+        this.enableMVOptimizerTraceLog = val;
     }
 
     public boolean isRuntimeFilterOnExchangeNode() {

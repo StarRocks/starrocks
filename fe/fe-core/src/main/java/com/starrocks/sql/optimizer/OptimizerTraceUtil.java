@@ -136,7 +136,32 @@ public class OptimizerTraceUtil {
     }
 
     public static void logMVPrepare(ConnectContext ctx, String format, Object... object) {
-        logMVPrepare(ctx, null, format, object);
+        if (ctx.getSessionVariable().isEnableMVOptimizerTraceLog()) {
+            LOG.info("[MV TRACE] [PREPARE {}] {}", ctx.getQueryId(), String.format(format, object));
+        }
+    }
+
+    public static void logMVRewrite(MvRewriteContext mvRewriteContext, String format, Object... object) {
+        MaterializationContext mvContext = mvRewriteContext.getMaterializationContext();
+        if (mvContext.getOptimizerContext().getSessionVariable().isEnableMVOptimizerTraceLog()) {
+            // QueryID-Rule-MVName log
+            LOG.info("[MV TRACE] [REWRITE {} {} {}] {}",
+                    mvContext.getOptimizerContext().getTraceInfo().getQueryId(),
+                    mvRewriteContext.getRule().type().name(),
+                    mvContext.getMv().getName(),
+                    String.format(format, object));
+        }
+    }
+
+    public static void logMVRewrite(OptimizerContext optimizerContext, Rule rule,
+                                     String format, Object... object) {
+        if (optimizerContext.getSessionVariable().isEnableMVOptimizerTraceLog()) {
+            // QueryID-Rule log
+            LOG.info("[MV TRACE] [REWRITE {} {}] {}",
+                    optimizerContext.getTraceInfo().getQueryId(),
+                    rule.type().name(),
+                    String.format(format, object));
+        }
     }
 
     private static void log(ConnectContext ctx, String message) {
