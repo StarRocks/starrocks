@@ -141,9 +141,7 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
-
                         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                            // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
                             if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                                 continue;
                             }
@@ -319,9 +317,7 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
-
                         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                            // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
                             if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                                 continue;
                             }
