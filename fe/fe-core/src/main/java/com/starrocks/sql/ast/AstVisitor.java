@@ -45,6 +45,11 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
+import com.starrocks.epack.sql.ast.AlterPolicyStmt;
+import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.DropPolicyStmt;
+import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
+import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -643,6 +648,28 @@ public abstract class AstVisitor<R, C> {
 
     public R visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    // ---------------------------------------- Security Policy Statement ---------------------------------------------------
+
+    public R visitCreatePolicyStatement(CreatePolicyStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitDropPolicyStatement(DropPolicyStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitAlterPolicyStatement(AlterPolicyStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitShowPolicyStatement(ShowPolicyStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowCreatePolicyStatement(ShowCreatePolicyStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ---------------------------------------- Backup Restore Statement -----------------------------------------------

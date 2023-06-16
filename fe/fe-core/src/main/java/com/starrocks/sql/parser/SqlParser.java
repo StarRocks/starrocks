@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.Config;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
+import com.starrocks.epack.sql.parser.AstBuilderEPack;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -83,7 +84,7 @@ public class SqlParser {
         List<StarRocksParser.SingleStatementContext> singleStatementContexts =
                 parser.sqlStatements().singleStatement();
         for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
-            StatementBase statement = (StatementBase) new AstBuilder(sessionVariable.getSqlMode())
+            StatementBase statement = (StatementBase) new AstBuilderEPack(sessionVariable.getSqlMode())
                     .visitSingleStatement(singleStatementContexts.get(idx));
             statement.setOrigStmt(new OriginStatement(sql, idx));
             statements.add(statement);
@@ -117,7 +118,7 @@ public class SqlParser {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setSqlMode(sqlMode);
 
-        return (Expr) new AstBuilder(sqlMode)
+        return (Expr) new AstBuilderEPack(sqlMode)
                 .visit(parserBuilder(expressionSql, sessionVariable).expressionSingleton().expression());
     }
 
@@ -125,7 +126,7 @@ public class SqlParser {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setSqlMode(sqlMode);
 
-        return (ImportColumnsStmt) new AstBuilder(sqlMode)
+        return (ImportColumnsStmt) new AstBuilderEPack(sqlMode)
                 .visit(parserBuilder(expressionSql, sessionVariable).importColumns());
     }
 

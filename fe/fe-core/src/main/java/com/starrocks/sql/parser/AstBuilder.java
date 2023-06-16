@@ -6414,7 +6414,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return ((Identifier) visit(context)).getValue();
     }
 
-    private QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {
+    protected QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {
         List<String> parts = new ArrayList<>();
         NodePosition pos = createPos(context);
         for (ParseTree c : context.children) {
@@ -6713,7 +6713,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    private NodePosition createPos(ParserRuleContext context) {
+    protected NodePosition createPos(ParserRuleContext context) {
         return createPos(context.start, context.stop);
     }
 
