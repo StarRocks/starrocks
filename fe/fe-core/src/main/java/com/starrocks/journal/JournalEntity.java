@@ -745,6 +745,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_CREATE_TASK:
+            case OperationType.OP_ALTER_TASK:
                 data = Task.read(in);
                 isRead = true;
                 break;
