@@ -516,3 +516,85 @@ DROP TABLE t;
 DROP DATABASE test_normal_column_schema_change;
 -- result:
 -- !result
+-- name: test_add_multiple_column
+CREATE DATABASE test_add_multiple_column;
+-- result:
+-- !result
+USE test_add_multiple_column;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1), (2), (3);
+-- result:
+-- !result
+ALTER TABLE t ADD COLUMN (newcol1 BIGINT AS id * 10, newcol2 BIGINT AS id * 100);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	10	100
+2	20	200
+3	30	300
+-- !result
+SHOW CREATE TABLE t;
+-- result:
+t	CREATE TABLE `t` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `newcol1` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 100 COMMENT ""
+) ENGINE=OLAP 
+UNIQUE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 7 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+ALTER TABLE t ADD COLUMN (newcol3 BIGINT DEFAULT "0", newcol4 BIGINT DEFAULT "0");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	0	0	10	100
+2	0	0	20	200
+3	0	0	30	300
+-- !result
+SHOW CREATE TABLE t;
+-- result:
+t	CREATE TABLE `t` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `newcol3` bigint(20) NULL DEFAULT "0" COMMENT "",
+  `newcol4` bigint(20) NULL DEFAULT "0" COMMENT "",
+  `newcol1` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 100 COMMENT ""
+) ENGINE=OLAP 
+UNIQUE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 7 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+ALTER TABLE t ADD COLUMN (newcol5 BIGINT DEFAULT "0", newcol6 BIGINT AS id * 1000);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Can not add normal column and Materialized Column in the same time.')
+-- !result
+DROP DATABASE test_add_multiple_column
+-- result:
+-- !result

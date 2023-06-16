@@ -393,6 +393,8 @@ public class AlterTableStatementAnalyzer {
             if (columnDefs == null || columnDefs.isEmpty()) {
                 throw new SemanticException("Columns is empty in add columns clause.");
             }
+            boolean hasMaterializedColumn = false;
+            boolean hasNormalColumn = false;
             for (ColumnDef colDef : columnDefs) {
                 try {
                     colDef.analyze(true);
@@ -401,6 +403,72 @@ public class AlterTableStatementAnalyzer {
                 }
                 if (!colDef.isAllowNull() && colDef.defaultValueIsNull()) {
                     throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(colDef.getName()), colDef.getPos());
+                }
+
+                if (colDef.isMaterializedColumn()) {
+                    hasMaterializedColumn = true;
+
+                    if (!table.isOlapTable()) {
+                        throw new SemanticException("Materialized Column only support olap table");
+                    }
+    
+                    Expr expr = colDef.materializedColumnExpr();
+                    TableName tableName = new TableName(context.getDatabase(), table.getName());
+    
+                    ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                            new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
+                                                tableName, null))
+                                    .collect(Collectors.toList()))), context);
+        
+                    // check if contain aggregation
+                    List<FunctionCallExpr> funcs = Lists.newArrayList();
+                    expr.collect(FunctionCallExpr.class, funcs);
+                    for (FunctionCallExpr fn : funcs) {
+                        if (fn.isAggregateFunction()) {
+                            throw new SemanticException("Materialized Column don't support aggregation function");
+                        }
+                    }
+                    
+                    // check if the expression refers to other materialized columns
+                    List<SlotRef> slots = Lists.newArrayList();
+                    expr.collect(SlotRef.class, slots);
+                    if (slots.size() != 0) {
+                        for (SlotRef slot : slots) {
+                            Column refColumn = table.getColumn(slot.getColumnName());
+                            if (refColumn.isMaterializedColumn()) {
+                                throw new SemanticException("Expression can not refers to other materialized columns");
+                            }
+                            if (refColumn.isAutoIncrement()) {
+                                throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                            }
+                        }
+                    }
+        
+                    if (!colDef.getType().matchesType(expr.getType())) {
+                        throw new SemanticException("Illege expression type for Materialized Column " +
+                                                    "Column Type: " + colDef.getType().toString() +
+                                                    ", Expression Type: " + expr.getType().toString());
+                    }
+                } else {
+                    hasNormalColumn = true;
+                }
+            }
+
+            if (hasMaterializedColumn && hasNormalColumn) {
+                throw new SemanticException("Can not add normal column and Materialized Column in the same time");
+            }
+
+            if (hasNormalColumn && table instanceof OlapTable && ((OlapTable) table).hasMaterializedColumn()) {
+                List<Column> baseSchema = ((OlapTable) table).getBaseSchema();
+                if (baseSchema.size() > 1) {
+                    for (int columnIdx = 0; columnIdx < baseSchema.size() - 1; ++columnIdx) {
+                        if (!baseSchema.get(columnIdx).isMaterializedColumn() &&
+                                baseSchema.get(columnIdx + 1).isMaterializedColumn()) {
+                            ColumnPosition pos = new ColumnPosition(baseSchema.get(columnIdx).getName());
+                            clause.setMaterializedColumnPos(pos);
+                            break;
+                        }
+                    }
                 }
             }
 

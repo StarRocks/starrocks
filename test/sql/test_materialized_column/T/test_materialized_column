@@ -175,3 +175,22 @@ SELECT * FROM t ORDER BY id;
 DROP TABLE t;
 
 DROP DATABASE test_materialized_column_alter_table_with_concurrent_insert;
+
+-- name: test_add_multiple_column
+CREATE DATABASE test_add_multiple_column;
+USE test_add_multiple_column;
+
+CREATE TABLE t ( id BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+INSERT INTO t VALUES (1), (2), (3);
+ALTER TABLE t ADD COLUMN (newcol1 BIGINT AS id * 10, newcol2 BIGINT AS id * 100);
+function: wait_alter_table_finish()
+SELECT * FROM t ORDER BY id;
+SHOW CREATE TABLE t;
+ALTER TABLE t ADD COLUMN (newcol3 BIGINT DEFAULT "0", newcol4 BIGINT DEFAULT "0");
+function: wait_alter_table_finish()
+SELECT * FROM t ORDER BY id;
+SHOW CREATE TABLE t;
+
+ALTER TABLE t ADD COLUMN (newcol5 BIGINT DEFAULT "0", newcol6 BIGINT AS id * 1000);
+
+DROP DATABASE test_add_multiple_column
