@@ -1042,7 +1042,7 @@ public class AuthorizationMgrTest {
         oldValue = Config.privilege_max_total_roles_per_user;
         Config.privilege_max_total_roles_per_user = 3;
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_role_inheritance", "%");
-        UserPrivilegeCollection collection = manager.getUserPrivilegeCollectionUnlocked(user);
+        UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to user_test_role_inheritance", ctx), ctx);
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
@@ -1141,7 +1141,7 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("create user user_test_drop_role_inheritance"), ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_drop_role_inheritance", "%");
-        UserPrivilegeCollection collection = manager.getUserPrivilegeCollectionUnlocked(user);
+        UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
 
         // role0 -> role1[user] -> role2
         // role3[user]

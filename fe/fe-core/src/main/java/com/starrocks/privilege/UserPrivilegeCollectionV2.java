@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
@@ -18,14 +20,14 @@ import com.google.gson.annotations.SerializedName;
 import java.util.HashSet;
 import java.util.Set;
 
-public class UserPrivilegeCollection extends PrivilegeCollection {
+public class UserPrivilegeCollectionV2 extends PrivilegeCollectionV2 {
     @SerializedName(value = "r")
     private Set<Long> roleIds;
 
     @SerializedName(value = "d")
     private Set<Long> defaultRoleIds;
 
-    public UserPrivilegeCollection() {
+    public UserPrivilegeCollectionV2() {
         super();
         roleIds = new HashSet<>();
         defaultRoleIds = new HashSet<>();

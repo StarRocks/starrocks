@@ -35,7 +35,7 @@ import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeCollection;
+import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
@@ -102,7 +102,7 @@ public class GrantsTo {
                     continue;
                 }
 
-                Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> privileges =
+                Map<ObjectType, List<PrivilegeEntry>> privileges =
                         authorizationManager.getMergedTypeToPrivilegeEntryListByUser(userIdentity);
                 Set<TGetGrantsToRolesOrUserItem> items =
                         getGrantItems(authorizationManager, userIdentity.toString(), privileges);
@@ -115,7 +115,7 @@ public class GrantsTo {
                     continue;
                 }
 
-                Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> privileges =
+                Map<ObjectType, List<PrivilegeEntry>> privileges =
                         authorizationManager.getTypeToPrivilegeEntryListByRole(grantee);
                 Set<TGetGrantsToRolesOrUserItem> items = getGrantItems(authorizationManager, grantee, privileges);
                 items.forEach(tGetGrantsToRolesOrUserResponse::addToGrants_to);
@@ -127,271 +127,246 @@ public class GrantsTo {
 
     private static Set<TGetGrantsToRolesOrUserItem> getGrantItems(
             AuthorizationMgr authorizationManager, String grantee,
-            Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> privileges) {
+            Map<ObjectType, List<PrivilegeEntry>> privileges) {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Set<TGetGrantsToRolesOrUserItem> items = new HashSet<>();
-        for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> privEntry : privileges.entrySet()) {
-            for (PrivilegeCollection.PrivilegeEntry privilegeEntry : privEntry.getValue()) {
+        for (Map.Entry<ObjectType, List<PrivilegeEntry>> privEntry : privileges.entrySet()) {
+            for (PrivilegeEntry privilegeEntry : privEntry.getValue()) {
                 Set<List<String>> objects = new HashSet<>();
-                switch (privEntry.getKey()) {
-                    case CATALOG: {
-                        CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
-                        if (catalogPEntryObject.getId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                            List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
-                                    .stream().filter(catalogName ->
-                                            !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
-                                    ).collect(Collectors.toList());
-                            catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-                            for (String catalogName : catalogs) {
-                                objects.add(Lists.newArrayList(catalogName, null, null));
-                            }
-                        } else {
-                            String catalogName = getCatalogName(catalogPEntryObject.getId());
-                            if (catalogName == null) {
-                                continue;
-                            }
+                if (ObjectType.CATALOG.equals(privEntry.getKey())) {
+                    CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
+                    if (catalogPEntryObject.getId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
+                        List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                .stream().filter(catalogName ->
+                                        !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                                ).collect(Collectors.toList());
+                        catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                        for (String catalogName : catalogs) {
                             objects.add(Lists.newArrayList(catalogName, null, null));
                         }
-                        break;
+                    } else {
+                        String catalogName = getCatalogName(catalogPEntryObject.getId());
+                        if (catalogName == null) {
+                            continue;
+                        }
+                        objects.add(Lists.newArrayList(catalogName, null, null));
                     }
+                } else if (ObjectType.DATABASE.equals(privEntry.getKey())) {
+                    DbPEntryObject dbPEntryObject = (DbPEntryObject) privilegeEntry.getObject();
+                    if (dbPEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
+                        List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                .stream().filter(catalogName ->
+                                        !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                                ).collect(Collectors.toList());
+                        catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
 
-                    case DATABASE: {
-                        DbPEntryObject dbPEntryObject = (DbPEntryObject) privilegeEntry.getObject();
-                        if (dbPEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                            List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
-                                    .stream().filter(catalogName ->
-                                            !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
-                                    ).collect(Collectors.toList());
-                            catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                        for (String catalogName : catalogs) {
+                            objects.addAll(expandAllDatabases(metadataMgr, catalogName));
+                        }
+                    } else {
+                        String catalogName = getCatalogName(dbPEntryObject.getCatalogId());
+                        if (catalogName == null) {
+                            continue;
+                        }
 
-                            for (String catalogName : catalogs) {
-                                objects.addAll(expandAllDatabases(metadataMgr, catalogName));
-                            }
+                        if (dbPEntryObject.getUUID().equalsIgnoreCase(PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
+                            objects.addAll(expandAllDatabases(metadataMgr, catalogName));
                         } else {
-                            String catalogName = getCatalogName(dbPEntryObject.getCatalogId());
-                            if (catalogName == null) {
-                                continue;
-                            }
-
-                            if (dbPEntryObject.getUUID().equalsIgnoreCase(PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
-                                objects.addAll(expandAllDatabases(metadataMgr, catalogName));
+                            Database database;
+                            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                                database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(dbPEntryObject.getUUID()));
                             } else {
-                                Database database;
-                                if (CatalogMgr.isInternalCatalog(catalogName)) {
-                                    database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(dbPEntryObject.getUUID()));
-                                } else {
-                                    String dbName = ExternalCatalog.getDbNameFromUUID(dbPEntryObject.getUUID());
-                                    database = metadataMgr.getDb(catalogName, dbName);
-                                }
-                                if (database == null) {
-                                    continue;
-                                }
-                                if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
-                                    continue;
-                                }
-
-                                objects.add(Lists.newArrayList(catalogName, database.getFullName(), null));
+                                String dbName = ExternalCatalog.getDbNameFromUUID(dbPEntryObject.getUUID());
+                                database = metadataMgr.getDb(catalogName, dbName);
                             }
-                        }
-                        break;
-                    }
-
-                    case TABLE:
-                    case VIEW:
-                    case MATERIALIZED_VIEW: {
-                        TablePEntryObject tablePEntryObject = (TablePEntryObject) privilegeEntry.getObject();
-                        if (tablePEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                            List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
-                                    .stream().filter(catalogName ->
-                                            !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
-                                    ).collect(Collectors.toList());
-                            catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-
-                            for (String catalogName : catalogs) {
-                                objects.addAll(expandAllDatabaseAndTables(metadataMgr, catalogName, privEntry.getKey()));
-                            }
-                        } else {
-                            String catalogName = getCatalogName(tablePEntryObject.getCatalogId());
-                            if (catalogName == null) {
-                                continue;
-                            }
-
-                            if (tablePEntryObject.getDatabaseUUID().equalsIgnoreCase(
-                                    PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
-                                objects.addAll(expandAllDatabaseAndTables(metadataMgr, catalogName, privEntry.getKey()));
-                            } else {
-                                Database database;
-                                if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
-                                    database = GlobalStateMgr.getCurrentState()
-                                            .getDb(Long.parseLong(tablePEntryObject.getDatabaseUUID()));
-                                } else {
-                                    String dbName = ExternalCatalog.getDbNameFromUUID(tablePEntryObject.getDatabaseUUID());
-                                    database = metadataMgr.getDb(catalogName, dbName);
-                                }
-                                if (database == null) {
-                                    continue;
-                                }
-
-                                if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
-                                    continue;
-                                }
-
-                                String dbName = database.getFullName();
-                                if (tablePEntryObject.getTableUUID().equalsIgnoreCase(
-                                        PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
-                                    objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
-                                } else {
-                                    if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
-                                        Table table = database.getTable((Long.parseLong(tablePEntryObject.getTableUUID())));
-                                        if (table == null) {
-                                            continue;
-                                        }
-                                        objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
-                                    } else {
-                                        String tableName = ExternalCatalog.getTableNameFromUUID(tablePEntryObject.getTableUUID());
-                                        objects.add(Lists.newArrayList(catalogName, dbName, tableName));
-                                    }
-                                }
-                            }
-                        }
-                        break;
-                    }
-                    case USER: {
-                        UserPEntryObject tablePEntryObject = (UserPEntryObject) privilegeEntry.getObject();
-                        UserIdentity userIdentity = tablePEntryObject.getUserIdentity();
-                        if (userIdentity == null) {
-                            List<String> allUsers = authorizationManager.getAllUsers();
-                            for (String user : allUsers) {
-                                objects.add(Lists.newArrayList(null, null, user));
-                            }
-                        } else {
-                            objects.add(Lists.newArrayList(null, null, userIdentity.toString()));
-                        }
-                        break;
-                    }
-
-                    case RESOURCE: {
-                        ResourcePEntryObject resourcePEntryObject = (ResourcePEntryObject) privilegeEntry.getObject();
-                        String resourceName = resourcePEntryObject.getName();
-                        if (resourceName == null) {
-                            Set<String> allResources = GlobalStateMgr.getCurrentState().getResourceMgr().getAllResourceName();
-                            for (String resource : allResources) {
-                                objects.add(Lists.newArrayList(null, null, resource));
-                            }
-                        } else {
-                            objects.add(Lists.newArrayList(null, null, resourceName));
-                        }
-                        break;
-                    }
-
-                    case RESOURCE_GROUP: {
-                        ResourceGroupPEntryObject resourceGroupPEntryObject =
-                                (ResourceGroupPEntryObject) privilegeEntry.getObject();
-                        long resourceGroupId = resourceGroupPEntryObject.getId();
-                        if (resourceGroupId == PrivilegeBuiltinConstants.ALL_RESOURCE_GROUP_ID) {
-                            Set<String> allResourceGroupNames = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
-                                    .getAllResourceGroupNames();
-                            for (String resource : allResourceGroupNames) {
-                                objects.add(Lists.newArrayList(null, null, resource));
-                            }
-                        } else {
-                            ResourceGroup resourceGroup =
-                                    GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroupId);
-                            if (resourceGroup == null) {
-                                continue;
-                            }
-                            objects.add(Lists.newArrayList(null, null, resourceGroup.getName()));
-                        }
-                        break;
-                    }
-                    case FUNCTION: {
-                        FunctionPEntryObject functionPEntryObject = (FunctionPEntryObject) privilegeEntry.getObject();
-                        long databaseId = functionPEntryObject.getDatabaseId();
-                        if (databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID) {
-                            List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-                            for (String dbName : dbNames) {
-                                Database database = GlobalStateMgr.getCurrentState().getDb(dbName);
-                                if (database == null) {
-                                    continue;
-                                }
-                                if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
-                                    continue;
-                                }
-                                List<Function> functions = database.getFunctions();
-                                for (Function function : functions) {
-                                    objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                            database.getFullName(), function.signatureString()));
-                                }
-                            }
-                        } else {
-                            Database database = GlobalStateMgr.getCurrentState().getDb(databaseId);
                             if (database == null) {
                                 continue;
                             }
-                            if (functionPEntryObject.getFunctionId().equals(PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID)) {
-                                List<Function> functions = database.getFunctions();
-                                for (Function function : functions) {
-                                    objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                            database.getFullName(), function.signatureString()));
-                                }
+                            if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
+                                continue;
+                            }
+
+                            objects.add(Lists.newArrayList(catalogName, database.getFullName(), null));
+                        }
+                    }
+                } else if (ObjectType.TABLE.equals(privEntry.getKey())
+                        || ObjectType.VIEW.equals(privEntry.getKey())
+                        || ObjectType.MATERIALIZED_VIEW.equals(privEntry.getKey())) {
+                    TablePEntryObject tablePEntryObject = (TablePEntryObject) privilegeEntry.getObject();
+                    if (tablePEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
+                        List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                .stream().filter(catalogName ->
+                                        !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                                ).collect(Collectors.toList());
+                        catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+                        for (String catalogName : catalogs) {
+                            objects.addAll(expandAllDatabaseAndTables(metadataMgr, catalogName, privEntry.getKey()));
+                        }
+                    } else {
+                        String catalogName = getCatalogName(tablePEntryObject.getCatalogId());
+                        if (catalogName == null) {
+                            continue;
+                        }
+
+                        if (tablePEntryObject.getDatabaseUUID().equalsIgnoreCase(
+                                PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
+                            objects.addAll(expandAllDatabaseAndTables(metadataMgr, catalogName, privEntry.getKey()));
+                        } else {
+                            Database database;
+                            if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
+                                database = GlobalStateMgr.getCurrentState()
+                                        .getDb(Long.parseLong(tablePEntryObject.getDatabaseUUID()));
                             } else {
-                                for (Function f : database.getFunctions()) {
-                                    if (f.getFunctionId() == functionPEntryObject.getFunctionId()) {
-                                        objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                                database.getFullName(), f.signatureString()));
-                                        break;
+                                String dbName = ExternalCatalog.getDbNameFromUUID(tablePEntryObject.getDatabaseUUID());
+                                database = metadataMgr.getDb(catalogName, dbName);
+                            }
+                            if (database == null) {
+                                continue;
+                            }
+
+                            if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
+                                continue;
+                            }
+
+                            String dbName = database.getFullName();
+                            if (tablePEntryObject.getTableUUID().equalsIgnoreCase(
+                                    PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
+                                objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
+                            } else {
+                                if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
+                                    Table table = database.getTable((Long.parseLong(tablePEntryObject.getTableUUID())));
+                                    if (table == null) {
+                                        continue;
                                     }
+                                    objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+                                } else {
+                                    String tableName = ExternalCatalog.getTableNameFromUUID(tablePEntryObject.getTableUUID());
+                                    objects.add(Lists.newArrayList(catalogName, dbName, tableName));
                                 }
                             }
                         }
-                        break;
                     }
-                    case GLOBAL_FUNCTION: {
-                        FunctionPEntryObject globalFunctionPEntryObject =
-                                (FunctionPEntryObject) privilegeEntry.getObject();
-                        GlobalFunctionMgr globalFunctionMgr = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr();
-
-                        if (globalFunctionPEntryObject.getFunctionId() == PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID) {
-                            for (Function function : globalFunctionMgr.getFunctions()) {
-                                objects.add(Lists.newArrayList(null, null, function.signatureString()));
+                } else if (ObjectType.USER.equals(privEntry.getKey())) {
+                    UserPEntryObject tablePEntryObject = (UserPEntryObject) privilegeEntry.getObject();
+                    UserIdentity userIdentity = tablePEntryObject.getUserIdentity();
+                    if (userIdentity == null) {
+                        List<String> allUsers = authorizationManager.getAllUsers();
+                        for (String user : allUsers) {
+                            objects.add(Lists.newArrayList(null, null, user));
+                        }
+                    } else {
+                        objects.add(Lists.newArrayList(null, null, userIdentity.toString()));
+                    }
+                } else if (ObjectType.RESOURCE.equals(privEntry.getKey())) {
+                    ResourcePEntryObject resourcePEntryObject = (ResourcePEntryObject) privilegeEntry.getObject();
+                    String resourceName = resourcePEntryObject.getName();
+                    if (resourceName == null) {
+                        Set<String> allResources = GlobalStateMgr.getCurrentState().getResourceMgr().getAllResourceName();
+                        for (String resource : allResources) {
+                            objects.add(Lists.newArrayList(null, null, resource));
+                        }
+                    } else {
+                        objects.add(Lists.newArrayList(null, null, resourceName));
+                    }
+                } else if (ObjectType.RESOURCE_GROUP.equals(privEntry.getKey())) {
+                    ResourceGroupPEntryObject resourceGroupPEntryObject =
+                            (ResourceGroupPEntryObject) privilegeEntry.getObject();
+                    long resourceGroupId = resourceGroupPEntryObject.getId();
+                    if (resourceGroupId == PrivilegeBuiltinConstants.ALL_RESOURCE_GROUP_ID) {
+                        Set<String> allResourceGroupNames = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
+                                .getAllResourceGroupNames();
+                        for (String resource : allResourceGroupNames) {
+                            objects.add(Lists.newArrayList(null, null, resource));
+                        }
+                    } else {
+                        ResourceGroup resourceGroup =
+                                GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroupId);
+                        if (resourceGroup == null) {
+                            continue;
+                        }
+                        objects.add(Lists.newArrayList(null, null, resourceGroup.getName()));
+                    }
+                } else if (ObjectType.FUNCTION.equals(privEntry.getKey())) {
+                    FunctionPEntryObject functionPEntryObject = (FunctionPEntryObject) privilegeEntry.getObject();
+                    long databaseId = functionPEntryObject.getDatabaseId();
+                    if (databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID) {
+                        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                        for (String dbName : dbNames) {
+                            Database database = GlobalStateMgr.getCurrentState().getDb(dbName);
+                            if (database == null) {
+                                continue;
+                            }
+                            if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
+                                continue;
+                            }
+                            List<Function> functions = database.getFunctions();
+                            for (Function function : functions) {
+                                objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                        database.getFullName(), function.signatureString()));
+                            }
+                        }
+                    } else {
+                        Database database = GlobalStateMgr.getCurrentState().getDb(databaseId);
+                        if (database == null) {
+                            continue;
+                        }
+                        if (functionPEntryObject.getFunctionId().equals(PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID)) {
+                            List<Function> functions = database.getFunctions();
+                            for (Function function : functions) {
+                                objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                        database.getFullName(), function.signatureString()));
                             }
                         } else {
-                            for (Function f : globalFunctionMgr.getFunctions()) {
-                                if (f.getFunctionId() == globalFunctionPEntryObject.getFunctionId()) {
-                                    objects.add(Lists.newArrayList(null, null, f.signatureString()));
+                            for (Function f : database.getFunctions()) {
+                                if (f.getFunctionId() == functionPEntryObject.getFunctionId()) {
+                                    objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                            database.getFullName(), f.signatureString()));
                                     break;
                                 }
                             }
                         }
-                        break;
                     }
-                    case SYSTEM: {
-                        objects.add(Lists.newArrayList(null, null, null));
-                        break;
-                    }
-                    case STORAGE_VOLUME: {
-                        StorageVolumePEntryObject storageVolumePEntryObject =
-                                (StorageVolumePEntryObject) privilegeEntry.getObject();
-                        String storageVolumeId = storageVolumePEntryObject.getId();
-                        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-                        if (storageVolumeId.equals(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID)) {
-                            try {
-                                List<String> storageVolumeNames = storageVolumeMgr.listStorageVolumeNames();
-                                for (String storageVolumeName : storageVolumeNames) {
-                                    objects.add(Lists.newArrayList(null, null, storageVolumeName));
-                                }
-                            } catch (DdlException e) {
-                                continue;
-                            }
-                        } else {
-                            String storageVolumeName = storageVolumeMgr.getStorageVolume(storageVolumeId).getName();
-                            if (storageVolumeName == null) {
-                                continue;
-                            }
-                            objects.add(Lists.newArrayList(null, null, storageVolumeName));
+                } else if (ObjectType.GLOBAL_FUNCTION.equals(privEntry.getKey())) {
+                    FunctionPEntryObject globalFunctionPEntryObject =
+                            (FunctionPEntryObject) privilegeEntry.getObject();
+                    GlobalFunctionMgr globalFunctionMgr = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr();
+
+                    if (globalFunctionPEntryObject.getFunctionId() == PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID) {
+                        for (Function function : globalFunctionMgr.getFunctions()) {
+                            objects.add(Lists.newArrayList(null, null, function.signatureString()));
                         }
-                        break;
+                    } else {
+                        for (Function f : globalFunctionMgr.getFunctions()) {
+                            if (f.getFunctionId() == globalFunctionPEntryObject.getFunctionId()) {
+                                objects.add(Lists.newArrayList(null, null, f.signatureString()));
+                                break;
+                            }
+                        }
+                    }
+                } else if (ObjectType.SYSTEM.equals(privEntry.getKey())) {
+                    objects.add(Lists.newArrayList(null, null, null));
+                } else if (ObjectType.STORAGE_VOLUME.equals(privEntry.getKey())) {
+                    StorageVolumePEntryObject storageVolumePEntryObject =
+                            (StorageVolumePEntryObject) privilegeEntry.getObject();
+                    String storageVolumeId = storageVolumePEntryObject.getId();
+                    StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                    if (storageVolumeId.equals(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID)) {
+                        try {
+                            List<String> storageVolumeNames = storageVolumeMgr.listStorageVolumeNames();
+                            for (String storageVolumeName : storageVolumeNames) {
+                                objects.add(Lists.newArrayList(null, null, storageVolumeName));
+                            }
+                        } catch (DdlException e) {
+                            continue;
+                        }
+                    } else {
+                        String storageVolumeName = storageVolumeMgr.getStorageVolume(storageVolumeId).getName();
+                        if (storageVolumeName == null) {
+                            continue;
+                        }
+                        objects.add(Lists.newArrayList(null, null, storageVolumeName));
                     }
                 }
 

@@ -22,7 +22,7 @@ import com.starrocks.authentication.UserProperty;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.UserPrivilegeCollection;
+import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
@@ -37,7 +37,7 @@ public class CreateUserInfo implements Writable {
     @SerializedName(value = "p")
     UserProperty userProperty;
     @SerializedName(value = "c")
-    UserPrivilegeCollection userPrivilegeCollection;
+    UserPrivilegeCollectionV2 userPrivilegeCollection;
 
     @SerializedName(value = "i")
     short pluginId;
@@ -49,7 +49,7 @@ public class CreateUserInfo implements Writable {
             UserIdentity userIdentity,
             UserAuthenticationInfo authenticationInfo,
             UserProperty userProperty,
-            UserPrivilegeCollection privilegeCollection,
+            UserPrivilegeCollectionV2 privilegeCollection,
             short pluginId,
             short pluginVersion) {
         this.userIdentity = userIdentity;
@@ -72,7 +72,7 @@ public class CreateUserInfo implements Writable {
         return userProperty;
     }
 
-    public UserPrivilegeCollection getUserPrivilegeCollection() {
+    public UserPrivilegeCollectionV2 getUserPrivilegeCollection() {
         return userPrivilegeCollection;
     }
 

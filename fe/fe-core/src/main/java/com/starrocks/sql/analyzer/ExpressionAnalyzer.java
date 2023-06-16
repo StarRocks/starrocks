@@ -70,7 +70,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.RolePrivilegeCollection;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
@@ -1512,7 +1512,7 @@ public class ExpressionAnalyzer {
 
                 try {
                     for (Long roleId : session.getCurrentRoleIds()) {
-                        RolePrivilegeCollection rolePrivilegeCollection =
+                        RolePrivilegeCollectionV2 rolePrivilegeCollection =
                                 manager.getRolePrivilegeCollectionUnlocked(roleId, false);
                         if (rolePrivilegeCollection != null) {
                             roleName.add(rolePrivilegeCollection.getName());
