@@ -754,6 +754,11 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayDropTasks(dropTasksLog.getTaskIdList());
                     break;
                 }
+                case OperationType.OP_ALTER_TASK: {
+                    final Task task = (Task) journal.getData();
+                    globalStateMgr.getTaskManager().replayAlterTask(task);
+                    break;
+                }
                 case OperationType.OP_CREATE_TASK_RUN: {
                     final TaskRunStatus status = (TaskRunStatus) journal.getData();
                     globalStateMgr.getTaskManager().replayCreateTaskRun(status);
@@ -1761,4 +1766,9 @@ public class EditLog {
     public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
     }
+
+    public void logAlterTask(Task changedTask) {
+        logEdit(OperationType.OP_ALTER_TASK, changedTask);
+    }
+
 }
