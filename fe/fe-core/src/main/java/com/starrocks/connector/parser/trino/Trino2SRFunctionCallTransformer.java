@@ -117,19 +117,20 @@ public class Trino2SRFunctionCallTransformer {
     }
 
     private static void registerArrayFunctionTransformer() {
-        // 1. array_union -> array_distinct(array_concat(x, y))
+        // array_union -> array_distinct(array_concat(x, y))
         registerFunctionTransformer("array_union", 2, new FunctionCallExpr("array_distinct",
                 ImmutableList.of(new FunctionCallExpr("array_concat", ImmutableList.of(
                         new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class)
                 )))));
-
-        // 3. contains -> array_contains
+        // contains -> array_contains
         registerFunctionTransformer("contains", 2, "array_contains",
                 ImmutableList.of(Expr.class, Expr.class));
-
-        // 4. slice -> array_slice
+        // slice -> array_slice
         registerFunctionTransformer("slice", 3, "array_slice",
                 ImmutableList.of(Expr.class, Expr.class, Expr.class));
+        // filter(array, lambda) -> array_filter(array, lambda)
+        registerFunctionTransformer("filter", 2, "array_filter",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerDateFunctionTransformer() {
