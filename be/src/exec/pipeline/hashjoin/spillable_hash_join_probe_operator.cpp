@@ -43,7 +43,8 @@ Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     _probe_spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
     metrics.hash_partitions = ADD_COUNTER(_unique_metrics.get(), "SpillPartitions", TUnit::UNIT);
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
-    _executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
+    auto wg = state->fragment_ctx()->workgroup();
+    _executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), wg);
     return Status::OK();
 }
 
