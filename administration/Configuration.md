@@ -145,7 +145,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |catalog_trash_expire_second|86400|删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复，单位为秒。|
 |alter_table_timeout_second|86400|Schema change 超时时间，单位为秒。|
 |recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，使用空的 tablet 代替它。这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。|
-|tablet_create_timeout_second|1|建表超时时长，单位为秒。|
+|tablet_create_timeout_second|10|建表超时时长，单位为秒。|
 |tablet_delete_timeout_second|2|删除表的超时时间，单位为秒。|
 |consistency_check_start_time|23|FE 发起副本一致性检测的起始时间。|
 |consistency_check_end_time|4|FE 发起副本一致性检测的终止时间。|
