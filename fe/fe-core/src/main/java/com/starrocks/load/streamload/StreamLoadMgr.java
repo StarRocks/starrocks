@@ -30,9 +30,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -460,17 +458,6 @@ public class StreamLoadMgr {
             streamLoadManager.addLoadTask(loadTask);
         }
         return streamLoadManager;
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        int numJson = 1 + idToStreamLoadTask.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STREAM_LOAD_MGR, numJson);
-        writer.writeJson(idToStreamLoadTask.size());
-        for (StreamLoadTask streamLoadTask : idToStreamLoadTask.values()) {
-            writer.writeJson(streamLoadTask);
-        }
-
-        writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

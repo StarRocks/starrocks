@@ -60,9 +60,7 @@ import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
@@ -1228,12 +1226,6 @@ public class NodeMgr {
         dos.writeInt(leaderHttpPort);
 
         return checksum;
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.NODE_MGR, 1);
-        writer.writeJson(this);
-        writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

@@ -81,9 +81,7 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -134,7 +132,6 @@ import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
@@ -1124,26 +1121,6 @@ public class AlterJobMgr {
 
     public AlterHandler getClusterHandler() {
         return this.clusterHandler;
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        Map<Long, AlterJobV2> schemaChangeAlterJobs = schemaChangeHandler.getAlterJobsV2();
-        Map<Long, AlterJobV2> materializedViewAlterJobs = materializedViewHandler.getAlterJobsV2();
-
-        int cnt = 1 + schemaChangeAlterJobs.size() + 1 + materializedViewAlterJobs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ALTER_MGR, cnt);
-
-        writer.writeJson(schemaChangeAlterJobs.size());
-        for (AlterJobV2 alterJobV2 : schemaChangeAlterJobs.values()) {
-            writer.writeJson(alterJobV2);
-        }
-
-        writer.writeJson(materializedViewAlterJobs.size());
-        for (AlterJobV2 alterJobV2 : materializedViewAlterJobs.values()) {
-            writer.writeJson(alterJobV2);
-        }
-
-        writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

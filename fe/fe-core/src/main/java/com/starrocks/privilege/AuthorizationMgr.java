@@ -28,7 +28,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
@@ -1723,39 +1722,6 @@ public class AuthorizationMgr {
             roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
         } catch (PrivilegeException e) {
             throw new IOException("failed to load AuthorizationManager!", e);
-        }
-    }
-
-    public void saveV2(DataOutputStream dos) throws IOException {
-        try {
-            // 1 json for myself,1 json for number of users, 2 json for each user(kv)
-            // 1 json for number of roles, 2 json for each role(kv)
-            final int cnt = 1 + 1 + userToPrivilegeCollection.size() * 2
-                    + 1 + roleIdToPrivilegeCollection.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.AUTHORIZATION_MGR, cnt);
-            // 1 json for myself
-            writer.writeJson(this);
-            // 1 json for num user
-            writer.writeJson(userToPrivilegeCollection.size());
-            Iterator<Map.Entry<UserIdentity, UserPrivilegeCollection>> iterator =
-                    userToPrivilegeCollection.entrySet().iterator();
-            while (iterator.hasNext()) {
-                Map.Entry<UserIdentity, UserPrivilegeCollection> entry = iterator.next();
-                writer.writeJson(entry.getKey());
-                writer.writeJson(entry.getValue());
-            }
-            // 1 json for num roles
-            writer.writeJson(roleIdToPrivilegeCollection.size());
-            Iterator<Map.Entry<Long, RolePrivilegeCollection>> roleIter =
-                    roleIdToPrivilegeCollection.entrySet().iterator();
-            while (roleIter.hasNext()) {
-                Map.Entry<Long, RolePrivilegeCollection> entry = roleIter.next();
-                writer.writeJson(entry.getKey());
-                writer.writeJson(entry.getValue());
-            }
-            writer.close();
-        } catch (SRMetaBlockException e) {
-            throw new IOException("failed to save AuthenticationManager!", e);
         }
     }
 }

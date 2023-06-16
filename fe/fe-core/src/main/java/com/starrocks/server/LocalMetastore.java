@@ -154,9 +154,7 @@ import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
@@ -5320,34 +5318,6 @@ public class LocalMetastore implements ConnectorMetadata {
         if (oldId != null) {
             tableIdToIncrementId.replace(tableId, id);
         }
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        // Don't write system db meta
-        Map<Long, Database> idToDbNormal = idToDb.entrySet().stream().filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        int totalTableNum = 0;
-        for (Database database : idToDbNormal.values()) {
-            totalTableNum += database.getTableNumber();
-        }
-        int cnt = 1 + idToDbNormal.size() + idToDbNormal.size() /* record database table size */ + totalTableNum + 1;
-
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.LOCAL_META_STORE, cnt);
-
-        writer.writeJson(idToDbNormal.size());
-        for (Database database : idToDbNormal.values()) {
-            writer.writeJson(database);
-            writer.writeJson(database.getTables().size());
-            List<Table> tables = database.getTables();
-            for (Table table : tables) {
-                writer.writeJson(table);
-            }
-        }
-
-        AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
-        writer.writeJson(info);
-
-        writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

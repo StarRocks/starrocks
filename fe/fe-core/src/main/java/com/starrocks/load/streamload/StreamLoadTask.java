@@ -32,6 +32,8 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
@@ -66,8 +68,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Writable {
-    private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
+public class StreamLoadTask extends AbstractTxnStateChangeCallback
+        implements Writable, GsonPostProcessable, GsonPreProcessable {
+    private static final Logger LOG = LogManager.getLogger(StreamLoadTask.class);
 
     public enum State {
         BEGIN,
@@ -83,6 +86,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     @SerializedName(value = "id")
     private long id;
     private TUniqueId loadId;
+    @SerializedName("loadIdHi")
+    private long loadIdHi;
+    @SerializedName("loadIdLo")
+    private long loadIdLo;
     @SerializedName(value = "label")
     private String label;
     @SerializedName(value = "dbId")
@@ -1242,5 +1249,16 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         task.init();
         task.setTUniqueId(loadId);
         return task;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        loadId = new TUniqueId(loadIdHi, loadIdLo);
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        loadIdHi = loadId.getHi();
+        loadIdLo = loadId.getLo();
     }
 }

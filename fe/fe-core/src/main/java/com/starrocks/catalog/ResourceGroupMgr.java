@@ -27,9 +27,7 @@ import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
@@ -564,17 +562,6 @@ public class ResourceGroupMgr implements Writable {
     private static class SerializeData {
         @SerializedName("WorkGroups")
         public List<ResourceGroup> resourceGroups;
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        int numJson = 1 + resourceGroupMap.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.RESOURCE_GROUP_MGR, numJson);
-        writer.writeJson(resourceGroupMap.size());
-        for (ResourceGroup resourceGroup : resourceGroupMap.values()) {
-            writer.writeJson(resourceGroup);
-        }
-
-        writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

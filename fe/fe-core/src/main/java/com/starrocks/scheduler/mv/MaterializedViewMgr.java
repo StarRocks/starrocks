@@ -24,9 +24,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.server.GlobalStateMgr;
@@ -292,17 +290,6 @@ public class MaterializedViewMgr {
     static class SerializedJobs {
         @SerializedName("jobList")
         List<MVMaintenanceJob> jobList;
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        int numJson = 1 + jobMap.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.MATERIALIZED_VIEW_MGR, numJson);
-        writer.writeJson(jobMap.size());
-        for (MVMaintenanceJob mvMaintenanceJob : jobMap.values()) {
-            writer.writeJson(mvMaintenanceJob);
-        }
-
-        writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

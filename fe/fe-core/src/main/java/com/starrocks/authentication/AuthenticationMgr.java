@@ -25,7 +25,6 @@ import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -620,29 +619,6 @@ public class AuthenticationMgr {
 
     public Class<?> getAuthClazz() {
         return authClazz;
-    }
-
-    public void saveV2(DataOutputStream dos) throws IOException {
-        try {
-            // 1 json for myself,1 json for number of users, 2 json for each user(kv)
-            final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.AUTHENTICATION_MGR, cnt);
-            // 1 json for myself
-            writer.writeJson(this);
-            // 1 json for num user
-            writer.writeJson(userToAuthenticationInfo.size());
-            for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : userToAuthenticationInfo.entrySet()) {
-                // 2 json for each user(kv)
-                writer.writeJson(entry.getKey());
-                writer.writeJson(entry.getValue());
-            }
-            LOG.info("saved {} users", userToAuthenticationInfo.size());
-            writer.close();
-        } catch (SRMetaBlockException e) {
-            IOException exception = new IOException("failed to save AuthenticationManager!");
-            exception.initCause(e);
-            throw exception;
-        }
     }
 
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

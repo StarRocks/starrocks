@@ -60,9 +60,7 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -1199,42 +1197,6 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     public long saveRecycleBin(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        int numJson = 1 + idToDatabase.size() + 1 + idToTableInfo.size()
-                + 1 + idToPartition.size() + 1;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
-
-        writer.writeJson(idToDatabase.size());
-        for (RecycleDatabaseInfo recycleDatabaseInfo : idToDatabase.values()) {
-            writer.writeJson(recycleDatabaseInfo);
-        }
-
-        writer.writeJson(idToTableInfo.size());
-        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
-            for (RecycleTableInfo recycleTableInfo : tableEntry.values()) {
-                writer.writeJson(recycleTableInfo);
-            }
-        }
-
-        writer.writeJson(idToPartition.size());
-        for (RecyclePartitionInfo recyclePartitionInfo : idToPartition.values()) {
-            if (recyclePartitionInfo instanceof RecyclePartitionInfoV1) {
-                RecyclePartitionInfoV1 recyclePartitionInfoV1 = (RecyclePartitionInfoV1) recyclePartitionInfo;
-                RecycleRangePartitionInfo recycleRangePartitionInfo = new RecycleRangePartitionInfo(
-                        recyclePartitionInfoV1.dbId, recyclePartitionInfoV1.tableId, recyclePartitionInfoV1.partition,
-                        recyclePartitionInfoV1.range, recyclePartitionInfoV1.dataProperty, recyclePartitionInfoV1.replicationNum,
-                        recyclePartitionInfoV1.isInMemory, null);
-                writer.writeJson(recycleRangePartitionInfo);
-            } else {
-                writer.writeJson(recyclePartitionInfo);
-            }
-        }
-
-        writer.writeJson(idToRecycleTime);
-
-        writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

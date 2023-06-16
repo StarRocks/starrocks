@@ -82,9 +82,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.qe.ConnectContext;
@@ -823,18 +821,6 @@ public class DeleteMgr implements Writable {
                 lock.writeLock().unlock();
             }
         }
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        int numJson = 1 + dbToDeleteInfos.size() * 2;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.DELETE_MGR, numJson);
-
-        writer.writeJson(dbToDeleteInfos.size());
-        for (Map.Entry<Long, List<MultiDeleteInfo>> deleteInfoEntry : dbToDeleteInfos.entrySet()) {
-            writer.writeJson(deleteInfoEntry.getKey());
-            writer.writeJson(deleteInfoEntry.getValue());
-        }
-        writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

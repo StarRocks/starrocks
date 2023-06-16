@@ -21,16 +21,13 @@ import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
@@ -182,12 +179,6 @@ public class CompactionMgr {
             throw new RuntimeException(e);
         }
         return compactionManager;
-    }
-
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COMPACTION_MGR, 1);
-        writer.writeJson(this);
-        writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {

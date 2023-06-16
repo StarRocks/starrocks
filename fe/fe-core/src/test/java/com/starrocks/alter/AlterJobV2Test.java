@@ -39,7 +39,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -57,7 +56,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.Map;
 
 public class AlterJobV2Test {
@@ -361,31 +359,5 @@ public class AlterJobV2Test {
             System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
             Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
-    }
-
-    @Test
-    public void test() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE test.schema_change_test_load(k1 int, k2 int, k3 int) " +
-                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
-
-        String alterStmtStr = "alter table test.schema_change_test_load add column k4 int default '1'";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
-        waitForSchemaChangeAlterJobFinish();
-
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
-        AlterJobV2 alterJobV2Old = new ArrayList<>(alterJobs.values()).get(0);
-
-        UtFrameUtils.PseudoImage alterImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().save(alterImage.getDataOutputStream());
-
-        SRMetaBlockReader reader = new SRMetaBlockReader(alterImage.getDataInputStream());
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().load(reader);
-        reader.close();
-
-        AlterJobV2 alterJobV2New =
-                GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().get(alterJobV2Old.jobId);
-
-        Assert.assertEquals(alterJobV2Old.jobId, alterJobV2New.jobId);
     }
 }

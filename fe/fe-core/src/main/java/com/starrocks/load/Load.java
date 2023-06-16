@@ -300,8 +300,10 @@ public class Load {
         if (!specifyFileFieldNames) {
             List<Column> columns = tbl.getBaseSchema();
             for (Column column : columns) {
-                ImportColumnDesc columnDesc = new ImportColumnDesc(column.getName());
-                copiedColumnExprs.add(columnDesc);
+                if (!column.isAutoIncrement()) {
+                    ImportColumnDesc columnDesc = new ImportColumnDesc(column.getName());
+                    copiedColumnExprs.add(columnDesc);
+                }
             }
         }
 

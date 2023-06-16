@@ -81,6 +81,7 @@ public class OperationType {
     public static final short OP_FINISH_SCHEMA_CHANGE = 26;
     @Deprecated
     public static final short OP_CANCEL_SCHEMA_CHANGE = 27;
+    @Deprecated
     public static final short OP_CLEAR_ROLLUP_INFO = 28;
     public static final short OP_FINISH_CONSISTENCY_CHECK = 29;
     public static final short OP_RENAME_ROLLUP = 120;
@@ -98,6 +99,7 @@ public class OperationType {
 
     @Deprecated
     public static final short OP_FINISH_SYNC_DELETE = 40;
+    @Deprecated
     public static final short OP_FINISH_DELETE = 41;
     public static final short OP_ADD_REPLICA = 42;
     public static final short OP_DELETE_REPLICA = 43;
@@ -118,6 +120,7 @@ public class OperationType {
     public static final short OP_ADD_FIRST_FRONTEND = 56;
     public static final short OP_REMOVE_FRONTEND = 57;
     public static final short OP_SET_LOAD_ERROR_HUB = 58;
+    @Deprecated
     public static final short OP_HEARTBEAT = 59;
     public static final short OP_CREATE_USER = 62;
     public static final short OP_NEW_DROP_USER = 63;
@@ -130,9 +133,8 @@ public class OperationType {
 
     public static final short OP_TIMESTAMP = 70;
     public static final short OP_LEADER_INFO_CHANGE = 71;
-    public static final short OP_META_VERSION = 72;
     @Deprecated
-    // replaced by OP_GLOBAL_VARIABLE_V2
+    public static final short OP_META_VERSION = 72;
     public static final short OP_GLOBAL_VARIABLE = 73;
 
     public static final short OP_CREATE_CLUSTER = 74;
@@ -141,12 +143,14 @@ public class OperationType {
     public static final short OP_ADD_BROKER = 85;
     public static final short OP_DROP_BROKER = 86;
     public static final short OP_DROP_ALL_BROKER = 87;
+    @Deprecated
     public static final short OP_UPDATE_CLUSTER_AND_BACKENDS = 88;
     public static final short OP_CREATE_REPOSITORY = 89;
     public static final short OP_DROP_REPOSITORY = 90;
 
     //colocate table
     public static final short OP_COLOCATE_ADD_TABLE = 94;
+    @Deprecated
     public static final short OP_COLOCATE_REMOVE_TABLE = 95;
     public static final short OP_COLOCATE_BACKENDS_PER_BUCKETSEQ = 96;
     public static final short OP_COLOCATE_MARK_UNSTABLE = 97;
@@ -155,6 +159,7 @@ public class OperationType {
 
     //real time load 100 -108
     public static final short OP_UPSERT_TRANSACTION_STATE = 100;
+    @Deprecated
     public static final short OP_DELETE_TRANSACTION_STATE = 101;
     @Deprecated
     public static final short OP_FINISHING_ROLLUP = 102;
@@ -165,6 +170,7 @@ public class OperationType {
     public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
 
     // routine load 110~120
+    @Deprecated
     public static final short OP_ROUTINE_LOAD_JOB = 110;
     public static final short OP_ALTER_ROUTINE_LOAD_JOB = 111;
 
@@ -175,6 +181,7 @@ public class OperationType {
     // routine load 200
     public static final short OP_CREATE_ROUTINE_LOAD_JOB = 200;
     public static final short OP_CHANGE_ROUTINE_LOAD_JOB = 201;
+    @Deprecated
     public static final short OP_REMOVE_ROUTINE_LOAD_JOB = 202;
 
     // load job v2 for broker load 230~250
@@ -256,6 +263,7 @@ public class OperationType {
     public static final short OP_DROP_TASKS = 10072;
     public static final short OP_CREATE_TASK_RUN = 10081;
     public static final short OP_UPDATE_TASK_RUN = 10082;
+    @Deprecated
     public static final short OP_DROP_TASK_RUNS = 10083;
     public static final short OP_UPDATE_TASK_RUN_STATE = 10084;
 
@@ -282,11 +290,9 @@ public class OperationType {
     public static final short OP_DELETE_UNUSED_SHARD = 10222;
 
     // new operator for add partition 10241 ~ 10260
-    // only used in list partition currently
     public static final short OP_ADD_PARTITION_V2 = 10241;
-
-    // only used in lake table currently
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
+    public static final short OP_MODIFY_PARTITION_V2 = 10243;
 
     // new privilege, all ends with V2
     public static final short OP_CREATE_USER_V2 = 10261;
@@ -316,8 +322,11 @@ public class OperationType {
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
 
-    //Database and Table DDL
+    //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;
+    public static final short OP_ALTER_DB_V2 = 12002;
+    public static final short OP_RECOVER_DB_V2 = 12003;
+    public static final short OP_RENAME_DB_V2 = 12004;
 
     //Load Job json format log
     public static final short OP_CREATE_LOAD_JOB_V2 = 12100;
@@ -347,4 +356,45 @@ public class OperationType {
     //Backup/Restore json format log
     public static final short OP_BACKUP_JOB_V2 = 12150;
     public static final short OP_RESTORE_JOB_V2 = 12151;
+    public static final short OP_CREATE_REPOSITORY_V2 = 12152;
+
+    //Table/Partition json format log
+    public static final short OP_CREATE_TABLE_V2 = 13000;
+    public static final short OP_DROP_TABLE_V2 = 13001;
+    public static final short OP_RECOVER_TABLE_V2 = 13002;
+    public static final short OP_RECOVER_PARTITION_V2 = 13003;
+    public static final short OP_RENAME_TABLE_V2 = 13004;
+    public static final short OP_RENAME_PARTITION_V2 = 13005;
+    public static final short OP_CREATE_MATERIALIZED_VIEW_V2 = 13006;
+
+    public static final short OP_DROP_ROLLUP_V2 = 13010;
+    public static final short OP_FINISH_CONSISTENCY_CHECK_V2 = 13011;
+    public static final short OP_RENAME_ROLLUP_V2 = 13012;
+    public static final short OP_MODIFY_DISTRIBUTION_TYPE_V2 = 13014;
+    public static final short OP_BATCH_ADD_ROLLUP_V2 = 13015;
+
+    public static final short OP_ADD_REPLICA_V2 = 13020;
+    public static final short OP_DELETE_REPLICA_V2 = 13021;
+    public static final short OP_UPDATE_REPLICA_V2 = 13022;
+    public static final short OP_BACKEND_TABLETS_INFO_V2 = 13023;
+    public static final short OP_ADD_BACKEND_V2 = 13024;
+    public static final short OP_DROP_BACKEND_V2 = 13025;
+    public static final short OP_BACKEND_STATE_CHANGE_V2 = 13026;
+    public static final short OP_ADD_FRONTEND_V2 = 13027;
+    public static final short OP_ADD_FIRST_FRONTEND_V2 = 13028;
+    public static final short OP_REMOVE_FRONTEND_V2 = 13029;
+    public static final short OP_UPDATE_FRONTEND_V2 = 13030;
+    public static final short OP_ADD_BROKER_V2 = 13031;
+    public static final short OP_DROP_BROKER_V2 = 13032;
+
+    public static final short OP_TIMESTAMP_V2 = 13040;
+    public static final short OP_LEADER_INFO_CHANGE_V2 = 13041;
+
+    public static final short OP_ADD_FUNCTION_V2 = 13050;
+    public static final short OP_DROP_FUNCTION_V2 = 13051;
+
+    public static final short OP_DROP_USER_V3 = 13060;
+    public static final short OP_UPDATE_USER_PROP_V3 = 13061;
+
+    public static final short OP_CREATE_STREAM_LOAD_TASK_V2 = 13070;
 }

@@ -175,7 +175,8 @@ public class GlobalStateMgrTest {
 
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
         globalStateMgr = GlobalStateMgr.getCurrentState();
-        long checksum2 = globalStateMgr.loadHeader(dis, 0);
+        long checksum2 = globalStateMgr.loadVersion(dis, 0);
+        checksum2 = globalStateMgr.loadHeaderV1(dis, checksum2);
         Assert.assertEquals(checksum1, checksum2);
         dis.close();
 
