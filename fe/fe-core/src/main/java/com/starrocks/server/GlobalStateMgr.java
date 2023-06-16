@@ -1260,16 +1260,7 @@ public class GlobalStateMgr {
         }
 
         if (RunMode.allowCreateLakeTable()) {
-            try {
-                ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
-                String builtinStorageVolumeId = storageVolumeMgr
-                        .getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
-                authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
-            } catch (DdlException | AnalysisException | AlreadyExistsException e) {
-                LOG.warn("Failed to create or update builtin storage volume", e);
-            } catch (PrivilegeException e) {
-                LOG.warn("Failed to grant builtin storage volume usage to public role", e);
-            }
+            createOrUpdateBuiltinStorageVolume();
         }
     }
 
@@ -3977,5 +3968,18 @@ public class GlobalStateMgr {
 
     public MetaContext getMetaContext() {
         return metaContext;
+    }
+
+    public void createOrUpdateBuiltinStorageVolume() {
+        try {
+            ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
+            String builtinStorageVolumeId = storageVolumeMgr
+                    .getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
+            authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
+        } catch (DdlException | AnalysisException | AlreadyExistsException e) {
+            LOG.warn("Failed to create or update builtin storage volume", e);
+        } catch (PrivilegeException e) {
+            LOG.warn("Failed to grant builtin storage volume usage to public role", e);
+        }
     }
 }

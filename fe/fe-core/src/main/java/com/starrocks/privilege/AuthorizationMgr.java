@@ -1828,7 +1828,7 @@ public class AuthorizationMgr {
     public void grantStorageVolumeUsageToPublicRole(String storageVolumeId) throws PrivilegeException {
         roleWriteLock();
         try {
-            RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(PrivilegeBuiltinConstants.PUBLIC_ROLE_ID,
+            RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(PrivilegeBuiltinConstants.PUBLIC_ROLE_ID,
                     true);
             List<PEntryObject> object = Collections.singletonList(new StorageVolumePEntryObject(storageVolumeId));
             collection.grant(ObjectType.STORAGE_VOLUME, Collections.singletonList(PrivilegeType.USAGE), object, false);
