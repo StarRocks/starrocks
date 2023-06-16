@@ -15,6 +15,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -602,13 +603,11 @@ public class MaterializedViewTest {
                         "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 24\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\");");
-        String createMvSql = "create materialized view mv1 as select p_partkey, p_name, length(p_brand) from part_with_mv;";
+        String createMvSql = "create materialized view mv1 as select p_partkey, p_name, length(p_brand) as v1 " +
+                "from part_with_mv;";
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, createMvSql);
         stmtExecutor.execute();
-        Assert.assertEquals("Getting analyzing error. Detail message: Materialized view does not support " +
-                        "this function:length(`test`.`part_with_mv`.`p_brand`), supported functions are: " +
-                        "[min, max, hll_union, percentile_union, count, sum, bitmap_union].",
-                connectContext.getState().getErrorMessage());
+        Assert.assertTrue(Strings.isNullOrEmpty(connectContext.getState().getErrorMessage()));
     }
 
     @Test(expected = DdlException.class)

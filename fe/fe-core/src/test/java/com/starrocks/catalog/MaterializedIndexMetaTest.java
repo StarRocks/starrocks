@@ -62,6 +62,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
+
 public class MaterializedIndexMetaTest {
 
     private static String fileName = "./MaterializedIndexMetaSerializeTest";
@@ -95,7 +97,7 @@ public class MaterializedIndexMetaTest {
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
         String mvColumnName =
-                CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX + FunctionSet.BITMAP_UNION + "_" + "k1";
+                MATERIALIZED_VIEW_NAME_PREFIX + FunctionSet.BITMAP_UNION + "_" + "k1";
         List<Column> schema = Lists.newArrayList();
         ColumnDef.DefaultValueDef defaultValue1 = new ColumnDef.DefaultValueDef(true, new StringLiteral("1"));
         schema.add(new Column("K1", Type.TINYINT, true, null, true, defaultValue1, "abc"));
