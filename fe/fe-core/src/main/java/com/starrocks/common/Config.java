@@ -1614,6 +1614,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static long statistic_cache_columns = 100000;
 
+    /**
+     * The size of the thread-pool which will be used to refresh statistic caches
+     */
+    @ConfField
+    public static int statistic_cache_thread_pool_size = 10;
+
     @ConfField
     public static long statistic_dict_columns = 100000;
 
