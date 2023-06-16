@@ -115,7 +115,7 @@ import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeCollection;
+import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.TablePEntryObject;
@@ -2083,7 +2083,7 @@ public class ShowExecutor {
         return catalogOptional.get().getName();
     }
 
-    private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeCollection.PrivilegeEntry privilegeEntry)
+    private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeEntry privilegeEntry)
             throws MetaNotFoundException {
         if (objectType.equals(ObjectType.CATALOG)) {
             CatalogPEntryObject catalogPEntryObject =
@@ -2111,12 +2111,12 @@ public class ShowExecutor {
     }
 
     private List<List<String>> privilegeToRowString(AuthorizationMgr authorizationManager, GrantRevokeClause userOrRoleName,
-                                                    Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>>
-                                                            typeToPrivilegeEntryList) throws PrivilegeException {
+                                                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList)
+            throws PrivilegeException {
         List<List<String>> infos = new ArrayList<>();
-        for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
+        for (Map.Entry<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntry
                 : typeToPrivilegeEntryList.entrySet()) {
-            for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
+            for (PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
                 ObjectType objectType = typeToPrivilegeEntry.getKey();
                 String catalogName;
                 try {
@@ -2163,7 +2163,7 @@ public class ShowExecutor {
                     infos.add(granteeRole);
                 }
 
-                Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
+                Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
                         authorizationManager.getTypeToPrivilegeEntryListByRole(showStmt.getRole());
                 infos.addAll(privilegeToRowString(authorizationManager,
                         new GrantRevokeClause(null, showStmt.getRole()), typeToPrivilegeEntryList));
@@ -2173,7 +2173,7 @@ public class ShowExecutor {
                     infos.add(granteeRole);
                 }
 
-                Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
+                Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
                         authorizationManager.getTypeToPrivilegeEntryListByUser(showStmt.getUserIdent());
                 infos.addAll(privilegeToRowString(authorizationManager,
                         new GrantRevokeClause(showStmt.getUserIdent(), null), typeToPrivilegeEntryList));

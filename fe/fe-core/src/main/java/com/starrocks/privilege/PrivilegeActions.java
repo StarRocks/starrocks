@@ -41,7 +41,7 @@ public class PrivilegeActions {
                                                  ObjectType objectType, List<String> objectTokens) {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(userIdentity, roleIds);
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(userIdentity, roleIds);
             return manager.checkAction(collection, objectType, privilegeType, objectTokens);
         } catch (PrivObjNotFoundException e) {
             LOG.info("Object not found when checking action[{}] on {} {}, message: {}",
@@ -133,7 +133,7 @@ public class PrivilegeActions {
     public static boolean checkActionInDb(ConnectContext context, String db, PrivilegeType privilegeType) {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds());
             // 1. check for specified action on any table in this db
             if (manager.provider.isAvailablePrivType(ObjectType.TABLE, privilegeType)) {
@@ -189,7 +189,7 @@ public class PrivilegeActions {
                                                   List<String> objectTokens) {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(currentUser, roleIds);
             PEntryObject pEntryObject = manager.provider.generateObject(
                     objectType, objectTokens, GlobalStateMgr.getCurrentState());
             return manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
@@ -374,7 +374,7 @@ public class PrivilegeActions {
                                                long databaseId, Function function, PrivilegeType privilegeType) {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(connectContext.getCurrentUserIdentity(),
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(connectContext.getCurrentUserIdentity(),
                     connectContext.getCurrentRoleIds());
             PEntryObject object = manager.provider.generateFunctionObject(objectType, databaseId, function.getFunctionId(),
                     GlobalStateMgr.getCurrentState());
@@ -408,7 +408,7 @@ public class PrivilegeActions {
                                                           long databaseId, long functionId) {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(currentUser, roleIds);
             PEntryObject pEntryObject = manager.provider.generateFunctionObject(
                     objectType, databaseId, functionId, GlobalStateMgr.getCurrentState());
             return manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);

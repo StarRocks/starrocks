@@ -81,29 +81,28 @@ public class AuthorizationMgr {
 
     private GlobalStateMgr globalStateMgr;
 
-    protected Map<UserIdentity, UserPrivilegeCollection> userToPrivilegeCollection;
+    protected Map<UserIdentity, UserPrivilegeCollectionV2> userToPrivilegeCollection;
+    protected Map<Long, RolePrivilegeCollectionV2> roleIdToPrivilegeCollection;
 
     private static final int MAX_NUM_CACHED_MERGED_PRIVILEGE_COLLECTION = 1000;
     private static final int CACHED_MERGED_PRIVILEGE_COLLECTION_EXPIRE_MIN = 60;
-    protected LoadingCache<Pair<UserIdentity, Set<Long>>, PrivilegeCollection> ctxToMergedPrivilegeCollections =
+    protected LoadingCache<Pair<UserIdentity, Set<Long>>, PrivilegeCollectionV2> ctxToMergedPrivilegeCollections =
             CacheBuilder.newBuilder()
                     .maximumSize(MAX_NUM_CACHED_MERGED_PRIVILEGE_COLLECTION)
                     .expireAfterAccess(CACHED_MERGED_PRIVILEGE_COLLECTION_EXPIRE_MIN, TimeUnit.MINUTES)
-                    .build(new CacheLoader<Pair<UserIdentity, Set<Long>>, PrivilegeCollection>() {
+                    .build(new CacheLoader<Pair<UserIdentity, Set<Long>>, PrivilegeCollectionV2>() {
                         @Override
-                        public PrivilegeCollection load(@NotNull Pair<UserIdentity, Set<Long>> userIdentitySetPair)
+                        public PrivilegeCollectionV2 load(@NotNull Pair<UserIdentity, Set<Long>> userIdentitySetPair)
                                 throws Exception {
                             return loadPrivilegeCollection(userIdentitySetPair.first, userIdentitySetPair.second);
                         }
                     });
 
     private final ReentrantReadWriteLock userLock;
+    private final ReentrantReadWriteLock roleLock;
 
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
-
-    protected Map<Long, RolePrivilegeCollection> roleIdToPrivilegeCollection;
-    private final ReentrantReadWriteLock roleLock;
 
     // only used in deserialization
     protected AuthorizationMgr() {
@@ -136,7 +135,7 @@ public class AuthorizationMgr {
             // built-in role ids are hard-coded negative numbers
             // because globalStateMgr.getNextId() cannot be called by a follower
             // 1. builtin root role
-            RolePrivilegeCollection rolePrivilegeCollection =
+            RolePrivilegeCollectionV2 rolePrivilegeCollection =
                     initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.ROOT_ROLE_ID,
                             PrivilegeBuiltinConstants.ROOT_ROLE_NAME,
                             "built-in root role which has all privileges on all objects");
@@ -207,7 +206,7 @@ public class AuthorizationMgr {
                     false);
 
             // 6. builtin user root
-            UserPrivilegeCollection rootCollection = new UserPrivilegeCollection();
+            UserPrivilegeCollectionV2 rootCollection = new UserPrivilegeCollectionV2();
             rootCollection.grantRole(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
             rootCollection.setDefaultRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
             userToPrivilegeCollection.put(UserIdentity.ROOT, rootCollection);
@@ -218,7 +217,7 @@ public class AuthorizationMgr {
     }
 
     // called by initBuiltinRolesAndUsers()
-    private void initPrivilegeCollections(PrivilegeCollection collection, ObjectType objectType,
+    private void initPrivilegeCollections(PrivilegeCollectionV2 collection, ObjectType objectType,
                                           List<PrivilegeType> actionList,
                                           List<String> tokens, boolean isGrant) throws PrivilegeException {
         List<PEntryObject> object;
@@ -232,71 +231,56 @@ public class AuthorizationMgr {
 
     // called by initBuiltinRolesAndUsers()
     private void initPrivilegeCollectionAllObjects(
-            PrivilegeCollection collection, ObjectType objectType, List<PrivilegeType> actionList)
+            PrivilegeCollectionV2 collection, ObjectType objectType, List<PrivilegeType> actionList)
             throws PrivilegeException {
         List<PEntryObject> objects = new ArrayList<>();
-        switch (objectType) {
-            case TABLE:
-                objects.add(provider.generateObject(objectType,
-                        Lists.newArrayList("*", "*", "*"), globalStateMgr));
-                collection.grant(objectType, actionList, objects, false);
-                break;
-            case VIEW:
-            case MATERIALIZED_VIEW:
-
-            case DATABASE:
-                objects.add(provider.generateObject(objectType,
-                        Lists.newArrayList("*", "*"), globalStateMgr));
-                collection.grant(objectType, actionList, objects, false);
-                break;
-
-            case USER:
-                objects.add(provider.generateUserObject(objectType, null, globalStateMgr));
-                collection.grant(objectType, actionList, objects, false);
-                break;
-
-            case RESOURCE:
-            case CATALOG:
-            case RESOURCE_GROUP:
-            case STORAGE_VOLUME:
-                objects.add(provider.generateObject(objectType,
-                        Lists.newArrayList("*"), globalStateMgr));
-                collection.grant(objectType, actionList, objects, false);
-                break;
-
-            case FUNCTION:
-                objects.add(provider.generateFunctionObject(objectType,
-                        PrivilegeBuiltinConstants.ALL_DATABASE_ID,
-                        PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID,
-                        globalStateMgr));
-                collection.grant(objectType, actionList, objects, false);
-                break;
-
-            case GLOBAL_FUNCTION:
-                objects.add(provider.generateFunctionObject(objectType,
-                        PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
-                        PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID,
-                        globalStateMgr));
-                collection.grant(objectType, actionList, objects, false);
-                break;
-
-            case SYSTEM:
-                collection.grant(objectType, actionList, Arrays.asList(new PEntryObject[] {null}), false);
-                break;
-
-            default:
-                throw new PrivilegeException("unsupported type " + objectType);
+        if (ObjectType.TABLE.equals(objectType)) {
+            objects.add(provider.generateObject(objectType,
+                    Lists.newArrayList("*", "*", "*"), globalStateMgr));
+            collection.grant(objectType, actionList, objects, false);
+        } else if (ObjectType.VIEW.equals(objectType)
+                || ObjectType.MATERIALIZED_VIEW.equals(objectType)
+                || ObjectType.DATABASE.equals(objectType)) {
+            objects.add(provider.generateObject(objectType,
+                    Lists.newArrayList("*", "*"), globalStateMgr));
+            collection.grant(objectType, actionList, objects, false);
+        } else if (ObjectType.USER.equals(objectType)) {
+            objects.add(provider.generateUserObject(objectType, null, globalStateMgr));
+            collection.grant(objectType, actionList, objects, false);
+        } else if (ObjectType.RESOURCE.equals(objectType)
+                || ObjectType.CATALOG.equals(objectType)
+                || ObjectType.RESOURCE_GROUP.equals(objectType)
+                || ObjectType.STORAGE_VOLUME.equals(objectType)) {
+            objects.add(provider.generateObject(objectType,
+                    Lists.newArrayList("*"), globalStateMgr));
+            collection.grant(objectType, actionList, objects, false);
+        } else if (ObjectType.FUNCTION.equals(objectType)) {
+            objects.add(provider.generateFunctionObject(objectType,
+                    PrivilegeBuiltinConstants.ALL_DATABASE_ID,
+                    PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID,
+                    globalStateMgr));
+            collection.grant(objectType, actionList, objects, false);
+        } else if (ObjectType.GLOBAL_FUNCTION.equals(objectType)) {
+            objects.add(provider.generateFunctionObject(objectType,
+                    PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
+                    PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID,
+                    globalStateMgr));
+            collection.grant(objectType, actionList, objects, false);
+        } else if (ObjectType.SYSTEM.equals(objectType)) {
+            collection.grant(objectType, actionList, Arrays.asList(new PEntryObject[] {null}), false);
+        } else {
+            throw new PrivilegeException("unsupported type " + objectType);
         }
     }
 
     // called by initBuiltinRolesAndUsers()
-    private RolePrivilegeCollection initBuiltinRoleUnlocked(long roleId, String name) {
+    private RolePrivilegeCollectionV2 initBuiltinRoleUnlocked(long roleId, String name) {
         return initBuiltinRoleUnlocked(roleId, name, null);
     }
 
-    private RolePrivilegeCollection initBuiltinRoleUnlocked(long roleId, String name, String comment) {
-        RolePrivilegeCollection collection = new RolePrivilegeCollection(
-                name, comment, RolePrivilegeCollection.RoleFlags.MUTABLE);
+    private RolePrivilegeCollectionV2 initBuiltinRoleUnlocked(long roleId, String name, String comment) {
+        RolePrivilegeCollectionV2 collection = new RolePrivilegeCollectionV2(
+                name, comment, RolePrivilegeCollectionV2.RoleFlags.MUTABLE);
         roleIdToPrivilegeCollection.put(roleId, collection);
         roleNameToId.put(name, roleId);
         LOG.info("create built-in role {}[{}]", name, roleId);
@@ -365,7 +349,7 @@ public class AuthorizationMgr {
             UserIdentity userIdentity) throws PrivilegeException {
         userWriteLock();
         try {
-            UserPrivilegeCollection collection = getUserPrivilegeCollectionUnlocked(userIdentity);
+            UserPrivilegeCollectionV2 collection = getUserPrivilegeCollectionUnlocked(userIdentity);
             collection.grant(type, privilegeTypes, objects, isGrant);
             globalStateMgr.getEditLog().logUpdateUserPrivilege(
                     userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
@@ -385,10 +369,10 @@ public class AuthorizationMgr {
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
             invalidateRolesInCacheRoleUnlocked(roleId);
-            RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
+            RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, true);
             collection.grant(objectType, privilegeTypes, objects, isGrant);
 
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             rolePrivCollectionModified.put(roleId, collection);
 
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
@@ -425,7 +409,7 @@ public class AuthorizationMgr {
             UserIdentity userIdentity) throws PrivilegeException {
         userWriteLock();
         try {
-            UserPrivilegeCollection collection = getUserPrivilegeCollectionUnlocked(userIdentity);
+            UserPrivilegeCollectionV2 collection = getUserPrivilegeCollectionUnlocked(userIdentity);
             collection.revoke(objectType, privilegeTypes, objects);
             globalStateMgr.getEditLog().logUpdateUserPrivilege(
                     userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
@@ -443,11 +427,11 @@ public class AuthorizationMgr {
         roleWriteLock();
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
-            RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
+            RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, true);
             collection.revoke(objectType, privilegeTypes, objects);
             invalidateRolesInCacheRoleUnlocked(roleId);
 
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             rolePrivCollectionModified.put(roleId, collection);
 
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
@@ -472,7 +456,7 @@ public class AuthorizationMgr {
     protected void grantRoleToUser(List<String> parentRoleName, UserIdentity user) throws PrivilegeException {
         userWriteLock();
         try {
-            UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(user);
+            UserPrivilegeCollectionV2 userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(user);
 
             roleReadLock();
             try {
@@ -520,9 +504,9 @@ public class AuthorizationMgr {
         roleWriteLock();
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
-            RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
+            RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, true);
 
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             rolePrivCollectionModified.put(roleId, collection);
             for (String parentRole : parentRoleName) {
                 long parentRoleId = getRoleIdByNameNoLock(parentRole);
@@ -532,7 +516,7 @@ public class AuthorizationMgr {
                             "Every user and role has role PUBLIC implicitly granted.");
                 }
 
-                RolePrivilegeCollection parentCollection =
+                RolePrivilegeCollectionV2 parentCollection =
                         getRolePrivilegeCollectionUnlocked(parentRoleId, true);
 
                 // to avoid circle, verify roleName is not predecessor role of parentRoleName
@@ -598,7 +582,7 @@ public class AuthorizationMgr {
     protected void revokeRoleFromUser(List<String> roleNameList, UserIdentity user) throws PrivilegeException {
         userWriteLock();
         try {
-            UserPrivilegeCollection collection = getUserPrivilegeCollectionUnlocked(user);
+            UserPrivilegeCollectionV2 collection = getUserPrivilegeCollectionUnlocked(user);
             roleReadLock();
             try {
                 for (String roleName : roleNameList) {
@@ -626,7 +610,7 @@ public class AuthorizationMgr {
         roleWriteLock();
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
-            RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
+            RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, true);
 
             for (String parentRoleName : parentRoleNameList) {
                 long parentRoleId = getRoleIdByNameNoLock(parentRoleName);
@@ -636,19 +620,19 @@ public class AuthorizationMgr {
                             "Every user and role has role PUBLIC implicitly granted.");
                 }
 
-                RolePrivilegeCollection parentCollection =
+                RolePrivilegeCollectionV2 parentCollection =
                         getRolePrivilegeCollectionUnlocked(parentRoleId, true);
                 parentCollection.removeSubRole(roleId);
                 collection.removeParentRole(parentRoleId);
             }
 
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             rolePrivCollectionModified.put(roleId, collection);
 
             List<Long> parentRoleIdList = new ArrayList<>();
             for (String parentRoleName : parentRoleNameList) {
                 long parentRoleId = getRoleIdByNameNoLock(parentRoleName);
-                RolePrivilegeCollection parentCollection =
+                RolePrivilegeCollectionV2 parentCollection =
                         getRolePrivilegeCollectionUnlocked(parentRoleId, true);
                 parentRoleIdList.add(parentRoleId);
                 rolePrivCollectionModified.put(parentRoleId, parentCollection);
@@ -676,7 +660,7 @@ public class AuthorizationMgr {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             manager.userReadLock();
-            UserPrivilegeCollection userCollection = manager.getUserPrivilegeCollectionUnlocked(userIdentity);
+            UserPrivilegeCollectionV2 userCollection = manager.getUserPrivilegeCollectionUnlocked(userIdentity);
             return userCollection.getAllRoles();
         } finally {
             manager.userReadUnlock();
@@ -684,7 +668,7 @@ public class AuthorizationMgr {
     }
 
     protected boolean checkAction(
-            PrivilegeCollection collection, ObjectType objectType, PrivilegeType privilegeType, List<String> objectNames)
+            PrivilegeCollectionV2 collection, ObjectType objectType, PrivilegeType privilegeType, List<String> objectNames)
             throws PrivilegeException {
         if (objectNames == null) {
             return provider.check(objectType, privilegeType, null, collection);
@@ -697,7 +681,7 @@ public class AuthorizationMgr {
 
     public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {
         try {
-            PrivilegeCollection collection = mergePrivilegeCollection(context.getCurrentUserIdentity(),
+            PrivilegeCollectionV2 collection = mergePrivilegeCollection(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds());
             PEntryObject object = provider.generateUserObject(ObjectType.USER, impersonateUser, globalStateMgr);
             return provider.check(ObjectType.USER, PrivilegeType.IMPERSONATE, object, collection);
@@ -710,7 +694,7 @@ public class AuthorizationMgr {
     public boolean allowGrant(ConnectContext context, ObjectType type,
                               List<PrivilegeType> wants, List<PEntryObject> objects) {
         try {
-            PrivilegeCollection collection = mergePrivilegeCollection(context.getCurrentUserIdentity(),
+            PrivilegeCollectionV2 collection = mergePrivilegeCollection(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds());
             // check for GRANT or WITH GRANT OPTION in the specific type
             return checkAction(collection, ObjectType.SYSTEM, PrivilegeType.GRANT, null)
@@ -723,7 +707,7 @@ public class AuthorizationMgr {
 
     public void replayUpdateUserPrivilegeCollection(
             UserIdentity user,
-            UserPrivilegeCollection privilegeCollection,
+            UserPrivilegeCollectionV2 privilegeCollection,
             short pluginId,
             short pluginVersion) throws PrivilegeException {
         userWriteLock();
@@ -740,11 +724,11 @@ public class AuthorizationMgr {
     /**
      * init all builtin privilege when a user is created, called by AuthenticationManager
      */
-    public UserPrivilegeCollection onCreateUser(UserIdentity user,
-                                                List<String> defaultRoleName) throws PrivilegeException {
+    public UserPrivilegeCollectionV2 onCreateUser(UserIdentity user,
+                                                  List<String> defaultRoleName) throws PrivilegeException {
         userWriteLock();
         try {
-            UserPrivilegeCollection privilegeCollection = new UserPrivilegeCollection();
+            UserPrivilegeCollectionV2 privilegeCollection = new UserPrivilegeCollectionV2();
 
             if (!defaultRoleName.isEmpty()) {
                 Set<Long> roleIds = new HashSet<>();
@@ -789,7 +773,7 @@ public class AuthorizationMgr {
     /**
      * read from cache
      */
-    protected PrivilegeCollection mergePrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
+    protected PrivilegeCollectionV2 mergePrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
             throws PrivilegeException {
         try {
             return ctxToMergedPrivilegeCollections.get(new Pair<>(userIdentity, roleIds));
@@ -804,9 +788,9 @@ public class AuthorizationMgr {
     /**
      * used for cache to do the actual merge job
      */
-    protected PrivilegeCollection loadPrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIdsSpecified)
+    protected PrivilegeCollectionV2 loadPrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIdsSpecified)
             throws PrivilegeException {
-        PrivilegeCollection collection = new PrivilegeCollection();
+        PrivilegeCollectionV2 collection = new PrivilegeCollectionV2();
         try {
             userReadLock();
             Set<Long> validRoleIds;
@@ -816,7 +800,7 @@ public class AuthorizationMgr {
                 validRoleIds = roleIdsSpecified;
             } else {
                 // Merge privileges directly granted to user first.
-                UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
+                UserPrivilegeCollectionV2 userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
                 collection.merge(userPrivilegeCollection);
                 // 1. Get all parent roles by default, but we support user to activate only part
                 // of the owned roles by `SET ROLE` statement, in this case we restrict
@@ -842,14 +826,14 @@ public class AuthorizationMgr {
                 for (long roleId : validRoleIds) {
                     // Because the drop role is an asynchronous behavior, the parentRole may not exist.
                     // Here, for the role that does not exist, choose to ignore it directly
-                    RolePrivilegeCollection rolePrivilegeCollection =
+                    RolePrivilegeCollectionV2 rolePrivilegeCollection =
                             getRolePrivilegeCollectionUnlocked(roleId, false);
                     if (rolePrivilegeCollection != null) {
                         collection.merge(rolePrivilegeCollection);
                     }
                 }
 
-                RolePrivilegeCollection rolePrivilegeCollection =
+                RolePrivilegeCollectionV2 rolePrivilegeCollection =
                         getRolePrivilegeCollectionUnlocked(PrivilegeBuiltinConstants.PUBLIC_ROLE_ID, false);
                 if (rolePrivilegeCollection != null) {
                     collection.merge(rolePrivilegeCollection);
@@ -906,7 +890,7 @@ public class AuthorizationMgr {
         }
     }
 
-    public UserPrivilegeCollection getUserPrivilegeCollection(UserIdentity userIdentity) {
+    public UserPrivilegeCollectionV2 getUserPrivilegeCollection(UserIdentity userIdentity) {
         userReadLock();
         try {
             return userToPrivilegeCollection.get(userIdentity);
@@ -915,9 +899,9 @@ public class AuthorizationMgr {
         }
     }
 
-    public UserPrivilegeCollection getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity)
+    public UserPrivilegeCollectionV2 getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity)
             throws PrivilegeException {
-        UserPrivilegeCollection userCollection = userToPrivilegeCollection.get(userIdentity);
+        UserPrivilegeCollectionV2 userCollection = userToPrivilegeCollection.get(userIdentity);
         if (userCollection == null) {
             throw new PrivilegeException("cannot find user " + (userIdentity == null ? "null" :
                     userIdentity.toString()));
@@ -951,11 +935,11 @@ public class AuthorizationMgr {
     }
 
     // return null if not exists
-    protected UserPrivilegeCollection getUserPrivilegeCollectionUnlockedAllowNull(UserIdentity userIdentity) {
+    protected UserPrivilegeCollectionV2 getUserPrivilegeCollectionUnlockedAllowNull(UserIdentity userIdentity) {
         return userToPrivilegeCollection.get(userIdentity);
     }
 
-    public RolePrivilegeCollection getRolePrivilegeCollection(String roleName) {
+    public RolePrivilegeCollectionV2 getRolePrivilegeCollection(String roleName) {
         roleReadLock();
         try {
             Long roleId = roleNameToId.get(roleName);
@@ -968,7 +952,7 @@ public class AuthorizationMgr {
         }
     }
 
-    public RolePrivilegeCollection getRolePrivilegeCollection(long roleId) {
+    public RolePrivilegeCollectionV2 getRolePrivilegeCollection(long roleId) {
         roleReadLock();
         try {
             return roleIdToPrivilegeCollection.get(roleId);
@@ -977,9 +961,9 @@ public class AuthorizationMgr {
         }
     }
 
-    public RolePrivilegeCollection getRolePrivilegeCollectionUnlocked(long roleId, boolean exceptionIfNotExists)
+    public RolePrivilegeCollectionV2 getRolePrivilegeCollectionUnlocked(long roleId, boolean exceptionIfNotExists)
             throws PrivilegeException {
-        RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
+        RolePrivilegeCollectionV2 collection = roleIdToPrivilegeCollection.get(roleId);
         if (collection == null) {
             if (exceptionIfNotExists) {
                 throw new PrivilegeException("cannot find role" + roleId);
@@ -998,14 +982,14 @@ public class AuthorizationMgr {
                 throw new SemanticException("cannot find role " + roleName);
             }
 
-            RolePrivilegeCollection rolePrivilegeCollection =
+            RolePrivilegeCollectionV2 rolePrivilegeCollection =
                     getRolePrivilegeCollectionUnlocked(roleId, true);
 
             List<String> parentRoleNameList = new ArrayList<>();
             for (Long parentRoleId : rolePrivilegeCollection.getParentRoleIds()) {
                 // Because the drop role is an asynchronous behavior, the parentRole may not exist.
                 // Here, for the role that does not exist, choose to ignore it directly
-                RolePrivilegeCollection parentRolePriv =
+                RolePrivilegeCollectionV2 parentRolePriv =
                         getRolePrivilegeCollectionUnlocked(parentRoleId, false);
                 if (parentRolePriv != null) {
                     parentRoleNameList.add(parentRolePriv.getName());
@@ -1024,7 +1008,7 @@ public class AuthorizationMgr {
         }
     }
 
-    public Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> getTypeToPrivilegeEntryListByRole(String roleName) {
+    public Map<ObjectType, List<PrivilegeEntry>> getTypeToPrivilegeEntryListByRole(String roleName) {
         roleReadLock();
         try {
             Long roleId = getRoleIdByNameAllowNull(roleName);
@@ -1032,7 +1016,7 @@ public class AuthorizationMgr {
                 throw new SemanticException("cannot find role " + roleName);
             }
 
-            RolePrivilegeCollection rolePrivilegeCollection =
+            RolePrivilegeCollectionV2 rolePrivilegeCollection =
                     getRolePrivilegeCollectionUnlocked(roleId, true);
             return rolePrivilegeCollection.getTypeToPrivilegeEntryList();
         } catch (PrivilegeException e) {
@@ -1045,7 +1029,7 @@ public class AuthorizationMgr {
     public List<String> getGranteeRoleDetailsForUser(UserIdentity userIdentity) {
         userReadLock();
         try {
-            UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
+            UserPrivilegeCollectionV2 userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
             Set<Long> allRoles = userPrivilegeCollection.getAllRoles();
 
             roleReadLock();
@@ -1054,7 +1038,7 @@ public class AuthorizationMgr {
                 for (Long roleId : allRoles) {
                     // Because the drop role is an asynchronous behavior, the parentRole may not exist.
                     // Here, for the role that does not exist, choose to ignore it directly
-                    RolePrivilegeCollection parentRolePriv =
+                    RolePrivilegeCollectionV2 parentRolePriv =
                             getRolePrivilegeCollectionUnlocked(roleId, false);
                     if (parentRolePriv != null) {
                         parentRoleNameList.add(parentRolePriv.getName());
@@ -1076,11 +1060,11 @@ public class AuthorizationMgr {
         }
     }
 
-    public Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> getTypeToPrivilegeEntryListByUser(
+    public Map<ObjectType, List<PrivilegeEntry>> getTypeToPrivilegeEntryListByUser(
             UserIdentity userIdentity) {
         userReadLock();
         try {
-            UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
+            UserPrivilegeCollectionV2 userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
             return userPrivilegeCollection.getTypeToPrivilegeEntryList();
         } catch (PrivilegeException e) {
             throw new SemanticException(e.getMessage());
@@ -1089,12 +1073,12 @@ public class AuthorizationMgr {
         }
     }
 
-    public Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> getMergedTypeToPrivilegeEntryListByUser(
+    public Map<ObjectType, List<PrivilegeEntry>> getMergedTypeToPrivilegeEntryListByUser(
             UserIdentity userIdentity) {
         userReadLock();
         try {
-            UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
-            PrivilegeCollection collection = mergePrivilegeCollection(userIdentity, userPrivilegeCollection.getAllRoles());
+            UserPrivilegeCollectionV2 userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
+            PrivilegeCollectionV2 collection = mergePrivilegeCollection(userIdentity, userPrivilegeCollection.getAllRoles());
             return collection.getTypeToPrivilegeEntryList();
         } catch (PrivilegeException e) {
             throw new SemanticException(e.getMessage());
@@ -1107,7 +1091,7 @@ public class AuthorizationMgr {
         roleReadLock();
         try {
             List<String> roles = new ArrayList<>();
-            for (RolePrivilegeCollection rolePrivilegeCollection : roleIdToPrivilegeCollection.values()) {
+            for (RolePrivilegeCollectionV2 rolePrivilegeCollection : roleIdToPrivilegeCollection.values()) {
                 roles.add(rolePrivilegeCollection.getName());
             }
             return roles;
@@ -1139,7 +1123,7 @@ public class AuthorizationMgr {
         roleWriteLock();
         try {
             Map<String, Long> roleNameToBeCreated = new HashMap<>();
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             for (String roleName : stmt.getRoles()) {
                 if (roleNameToId.containsKey(roleName)) {
                     // Existence verification has been performed in the Analyzer stage. If it exists here,
@@ -1150,9 +1134,9 @@ public class AuthorizationMgr {
 
 
                 long roleId = globalStateMgr.getNextId();
-                RolePrivilegeCollection collection = new RolePrivilegeCollection(
+                RolePrivilegeCollectionV2 collection = new RolePrivilegeCollectionV2(
                         roleName, stmt.getComment(),
-                        RolePrivilegeCollection.RoleFlags.REMOVABLE, RolePrivilegeCollection.RoleFlags.MUTABLE);
+                        RolePrivilegeCollectionV2.RoleFlags.REMOVABLE, RolePrivilegeCollectionV2.RoleFlags.MUTABLE);
                 rolePrivCollectionModified.put(roleId, collection);
 
                 roleNameToBeCreated.put(roleName, roleId);
@@ -1174,13 +1158,13 @@ public class AuthorizationMgr {
             roleWriteLock();
             // The RolePrivilegeCollections to be modified, for atomicity reason, we do the modification
             // after all checks passed.
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             for (String roleName : stmt.getRoles()) {
                 if (!roleNameToId.containsKey(roleName)) {
                     throw new DdlException(roleName + " doesn't exist");
                 }
                 long roleId = roleNameToId.get(roleName);
-                RolePrivilegeCollection rolePrivilegeCollection =
+                RolePrivilegeCollectionV2 rolePrivilegeCollection =
                         roleIdToPrivilegeCollection.get(roleId);
                 Preconditions.checkNotNull(rolePrivilegeCollection);
                 if (!rolePrivilegeCollection.isMutable()) {
@@ -1204,10 +1188,10 @@ public class AuthorizationMgr {
             RolePrivilegeCollectionInfo info) throws PrivilegeException {
         roleWriteLock();
         try {
-            for (Map.Entry<Long, RolePrivilegeCollection> entry : info.getRolePrivCollectionModified().entrySet()) {
+            for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : info.getRolePrivCollectionModified().entrySet()) {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
-                RolePrivilegeCollection privilegeCollection = entry.getValue();
+                RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
                 provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
                 roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
                 if (!roleNameToId.containsKey(privilegeCollection.getName())) {
@@ -1224,7 +1208,7 @@ public class AuthorizationMgr {
         roleWriteLock();
         try {
             List<String> roleNameToBeDropped = new ArrayList<>();
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             for (String roleName : stmt.getRoles()) {
                 if (!roleNameToId.containsKey(roleName)) {
                     // Existence verification has been performed in the Analyzer stage. If it not exists here,
@@ -1235,7 +1219,7 @@ public class AuthorizationMgr {
                 }
 
                 long roleId = getRoleIdByNameNoLock(roleName);
-                RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
+                RolePrivilegeCollectionV2 collection = roleIdToPrivilegeCollection.get(roleId);
                 if (!collection.isRemovable()) {
                     throw new DdlException("role " + roleName + " cannot be dropped!");
                 }
@@ -1263,10 +1247,10 @@ public class AuthorizationMgr {
             RolePrivilegeCollectionInfo info) throws PrivilegeException {
         roleWriteLock();
         try {
-            for (Map.Entry<Long, RolePrivilegeCollection> entry : info.getRolePrivCollectionModified().entrySet()) {
+            for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : info.getRolePrivCollectionModified().entrySet()) {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
-                RolePrivilegeCollection privilegeCollection = entry.getValue();
+                RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
                 // Actually privilege collection is useless here, but we still record it for further usage
                 provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
                 roleIdToPrivilegeCollection.remove(roleId);
@@ -1354,7 +1338,7 @@ public class AuthorizationMgr {
     public void setUserDefaultRole(Set<Long> roleName, UserIdentity user) throws PrivilegeException {
         userWriteLock();
         try {
-            UserPrivilegeCollection collection = getUserPrivilegeCollectionUnlocked(user);
+            UserPrivilegeCollectionV2 collection = getUserPrivilegeCollectionUnlocked(user);
 
             roleReadLock();
             try {
@@ -1378,7 +1362,7 @@ public class AuthorizationMgr {
             try {
                 roleReadLock();
                 for (long roleId : getUserPrivilegeCollectionUnlocked(user).getAllRoles()) {
-                    RolePrivilegeCollection rolePrivilegeCollection =
+                    RolePrivilegeCollectionV2 rolePrivilegeCollection =
                             getRolePrivilegeCollectionUnlocked(roleId, false);
                     // role may be removed
                     if (rolePrivilegeCollection != null) {
@@ -1438,14 +1422,14 @@ public class AuthorizationMgr {
         userWriteLock();
         try {
             // 1. remove invalidate object of users
-            for (Map.Entry<UserIdentity, UserPrivilegeCollection> userPrivEntry : userToPrivilegeCollection.entrySet()) {
+            for (Map.Entry<UserIdentity, UserPrivilegeCollectionV2> userPrivEntry : userToPrivilegeCollection.entrySet()) {
                 userPrivEntry.getValue().removeInvalidObject(globalStateMgr);
             }
 
             // 2. remove invalidate roles of users
             roleReadLock();
             try {
-                for (Map.Entry<UserIdentity, UserPrivilegeCollection> userPrivEntry : userToPrivilegeCollection.entrySet()) {
+                for (Map.Entry<UserIdentity, UserPrivilegeCollectionV2> userPrivEntry : userToPrivilegeCollection.entrySet()) {
                     removeInvalidRolesUnlocked(userPrivEntry.getValue().getAllRoles());
                     removeInvalidRolesUnlocked(userPrivEntry.getValue().getDefaultRoleIds());
                 }
@@ -1462,7 +1446,7 @@ public class AuthorizationMgr {
         try {
             roleWriteLock();
             try {
-                for (Map.Entry<Long, RolePrivilegeCollection> rolePrivEntry : roleIdToPrivilegeCollection.entrySet()) {
+                for (Map.Entry<Long, RolePrivilegeCollectionV2> rolePrivEntry : roleIdToPrivilegeCollection.entrySet()) {
                     rolePrivEntry.getValue().removeInvalidObject(globalStateMgr);
                 }
             } finally {
@@ -1475,8 +1459,8 @@ public class AuthorizationMgr {
         // 4. remove invalidate parent roles & sub roles
         roleWriteLock();
         try {
-            for (Map.Entry<Long, RolePrivilegeCollection> rolePrivEntry : roleIdToPrivilegeCollection.entrySet()) {
-                RolePrivilegeCollection collection = rolePrivEntry.getValue();
+            for (Map.Entry<Long, RolePrivilegeCollectionV2> rolePrivEntry : roleIdToPrivilegeCollection.entrySet()) {
+                RolePrivilegeCollectionV2 collection = rolePrivEntry.getValue();
                 removeInvalidRolesUnlocked(collection.getParentRoleIds());
                 removeInvalidRolesUnlocked(collection.getSubRoleIds());
             }
@@ -1496,7 +1480,7 @@ public class AuthorizationMgr {
      * the role inheritance depth for role_a would be 2, for role_b would be 1, for role_c would be 0
      */
     protected long getMaxRoleInheritanceDepthInner(long currentDepth, long roleId) throws PrivilegeException {
-        RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, false);
+        RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, false);
         if (collection == null) {  // this role has been dropped
             return currentDepth - 1;
         }
@@ -1527,7 +1511,7 @@ public class AuthorizationMgr {
     }
 
     protected void getAllDescendantsUnlockedInner(long roleId, Set<Long> resultSet) throws PrivilegeException {
-        RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, false);
+        RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, false);
         // this role has been dropped, but we still count it as descendants
         if (collection == null) {
             return;
@@ -1547,7 +1531,7 @@ public class AuthorizationMgr {
      * then the inheritance graph would be role_a -> role_b -> role_c
      * then all parent roles of role_c would be [role_a, role_b]
      */
-    protected Set<Long> getAllPredecessorsUnlocked(UserPrivilegeCollection collection) throws PrivilegeException {
+    protected Set<Long> getAllPredecessorsUnlocked(UserPrivilegeCollectionV2 collection) throws PrivilegeException {
         return getAllPredecessorsUnlocked(collection.getAllRoles());
     }
 
@@ -1566,7 +1550,7 @@ public class AuthorizationMgr {
     }
 
     protected void getAllPredecessorsInner(long roleId, Set<Long> resultSet) throws PrivilegeException {
-        RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, false);
+        RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, false);
         if (collection == null) { // this role has been dropped
             resultSet.remove(roleId);
             return;
@@ -1626,27 +1610,77 @@ public class AuthorizationMgr {
             SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "com.starrocks.privilege.AuthorizationManager", cnt);
             // 1 json for myself
             writer.writeJson(this);
+
             // 1 json for num user
             writer.writeJson(userToPrivilegeCollection.size());
-            Iterator<Map.Entry<UserIdentity, UserPrivilegeCollection>> iterator =
+            Iterator<Map.Entry<UserIdentity, UserPrivilegeCollectionV2>> iterator =
                     userToPrivilegeCollection.entrySet().iterator();
             while (iterator.hasNext()) {
-                Map.Entry<UserIdentity, UserPrivilegeCollection> entry = iterator.next();
+                Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry = iterator.next();
                 writer.writeJson(entry.getKey());
-                writer.writeJson(entry.getValue());
+
+                UserPrivilegeCollectionV2 userPrivilegeCollection = entry.getValue();
+                UserPrivilegeCollection userPrivilegeCollectionDeprecate = new UserPrivilegeCollection();
+                userPrivilegeCollectionDeprecate.grantRoles(userPrivilegeCollection.getAllRoles());
+                userPrivilegeCollectionDeprecate.setDefaultRoleIds(userPrivilegeCollection.getDefaultRoleIds());
+                Map<ObjectType, List<PrivilegeEntry>> m = userPrivilegeCollection.getTypeToPrivilegeEntryList();
+                for (Map.Entry<ObjectType, List<PrivilegeEntry>> e : m.entrySet()) {
+                    userPrivilegeCollectionDeprecate.getTypeToPrivilegeEntryList()
+                            .put(ObjectTypeDeprecate.toObjectTypeDeprecate(e.getKey()), e.getValue());
+                }
+
+                writer.writeJson(userPrivilegeCollectionDeprecate);
             }
             // 1 json for num roles
             writer.writeJson(roleIdToPrivilegeCollection.size());
-            Iterator<Map.Entry<Long, RolePrivilegeCollection>> roleIter =
+            Iterator<Map.Entry<Long, RolePrivilegeCollectionV2>> roleIter =
                     roleIdToPrivilegeCollection.entrySet().iterator();
             while (roleIter.hasNext()) {
-                Map.Entry<Long, RolePrivilegeCollection> entry = roleIter.next();
+                Map.Entry<Long, RolePrivilegeCollectionV2> entry = roleIter.next();
                 writer.writeJson(entry.getKey());
-                writer.writeJson(entry.getValue());
+
+                RolePrivilegeCollectionV2 rolePrivilegeCollection = entry.getValue();
+                RolePrivilegeCollection rolePrivilegeCollectionDeprecate;
+
+                if (rolePrivilegeCollection.isRemovable() && rolePrivilegeCollection.isMutable()) {
+                    rolePrivilegeCollectionDeprecate = new RolePrivilegeCollection(rolePrivilegeCollection.getName(),
+                            rolePrivilegeCollection.getComment(),
+                            RolePrivilegeCollection.RoleFlags.REMOVABLE,
+                            RolePrivilegeCollection.RoleFlags.MUTABLE);
+                } else if (rolePrivilegeCollection.isRemovable()) {
+                    rolePrivilegeCollectionDeprecate = new RolePrivilegeCollection(rolePrivilegeCollection.getName(),
+                            rolePrivilegeCollection.getComment(),
+                            RolePrivilegeCollection.RoleFlags.REMOVABLE);
+                } else if (rolePrivilegeCollection.isMutable()) {
+                    rolePrivilegeCollectionDeprecate = new RolePrivilegeCollection(rolePrivilegeCollection.getName(),
+                            rolePrivilegeCollection.getComment(),
+                            RolePrivilegeCollection.RoleFlags.MUTABLE);
+                } else {
+                    rolePrivilegeCollectionDeprecate = new RolePrivilegeCollection(rolePrivilegeCollection.getName(),
+                            rolePrivilegeCollection.getComment());
+                }
+
+                for (Long r : rolePrivilegeCollection.getParentRoleIds()) {
+                    rolePrivilegeCollectionDeprecate.addParentRole(r);
+                }
+
+                for (Long r : rolePrivilegeCollection.getSubRoleIds()) {
+                    rolePrivilegeCollectionDeprecate.addSubRole(r);
+                }
+
+                Map<ObjectType, List<PrivilegeEntry>> m = rolePrivilegeCollection.getTypeToPrivilegeEntryList();
+                for (Map.Entry<ObjectType, List<PrivilegeEntry>> e : m.entrySet()) {
+                    rolePrivilegeCollectionDeprecate.getTypeToPrivilegeEntryList()
+                            .put(ObjectTypeDeprecate.toObjectTypeDeprecate(e.getKey()), e.getValue());
+                }
+
+                writer.writeJson(rolePrivilegeCollectionDeprecate);
             }
             writer.close();
         } catch (SRMetaBlockException e) {
             throw new IOException("failed to save AuthenticationManager!", e);
+        } catch (PrivilegeException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -1673,10 +1707,20 @@ public class AuthorizationMgr {
                 for (int i = 0; i != numUser; ++i) {
                     // 2 json for each user(kv)
                     UserIdentity userIdentity = reader.readJson(UserIdentity.class);
-                    UserPrivilegeCollection collection = reader.readJson(UserPrivilegeCollection.class);
+                    UserPrivilegeCollection collectionDeprecate
+                            = reader.readJson(UserPrivilegeCollection.class);
+
+                    UserPrivilegeCollectionV2 collection = new UserPrivilegeCollectionV2();
+                    collection.grantRoles(collectionDeprecate.getAllRoles());
+                    collection.setDefaultRoleIds(collectionDeprecate.getDefaultRoleIds());
+
+                    Map<ObjectTypeDeprecate, List<PrivilegeEntry>> m = collectionDeprecate.getTypeToPrivilegeEntryList();
+                    for (Map.Entry<ObjectTypeDeprecate, List<PrivilegeEntry>> e : m.entrySet()) {
+                        collection.getTypeToPrivilegeEntryList().put(e.getKey().toObjectType(), e.getValue());
+                    }
 
                     if (userIdentity.equals(UserIdentity.ROOT)) {
-                        UserPrivilegeCollection rootUserPrivCollection =
+                        UserPrivilegeCollectionV2 rootUserPrivCollection =
                                 ret.getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
                         collection.grantRoles(rootUserPrivCollection.getAllRoles());
                         collection.setDefaultRoleIds(rootUserPrivCollection.getDefaultRoleIds());
@@ -1693,19 +1737,55 @@ public class AuthorizationMgr {
                 for (int i = 0; i != numRole; ++i) {
                     // 2 json for each role(kv)
                     Long roleId = reader.readJson(Long.class);
-                    RolePrivilegeCollection collection = reader.readJson(RolePrivilegeCollection.class);
+                    RolePrivilegeCollection collectionDeprecate
+                            = reader.readJson(RolePrivilegeCollection.class);
+
+                    RolePrivilegeCollectionV2 rolePrivilegeCollection = null;
+                    if (collectionDeprecate.isRemovable() && collectionDeprecate.isMutable()) {
+                        rolePrivilegeCollection = new RolePrivilegeCollectionV2(collectionDeprecate.getName(),
+                                collectionDeprecate.getComment(),
+                                RolePrivilegeCollectionV2.RoleFlags.REMOVABLE,
+                                RolePrivilegeCollectionV2.RoleFlags.MUTABLE);
+                    } else if (collectionDeprecate.isRemovable()) {
+                        rolePrivilegeCollection = new RolePrivilegeCollectionV2(collectionDeprecate.getName(),
+                                collectionDeprecate.getComment(),
+                                RolePrivilegeCollectionV2.RoleFlags.REMOVABLE);
+                    } else if (collectionDeprecate.isMutable()) {
+                        rolePrivilegeCollection = new RolePrivilegeCollectionV2(collectionDeprecate.getName(),
+                                collectionDeprecate.getComment(),
+                                RolePrivilegeCollectionV2.RoleFlags.MUTABLE);
+                    } else {
+                        rolePrivilegeCollection = new RolePrivilegeCollectionV2(collectionDeprecate.getName(),
+                                collectionDeprecate.getComment());
+                    }
+
+                    for (Long r : collectionDeprecate.getParentRoleIds()) {
+                        rolePrivilegeCollection.addParentRole(r);
+                    }
+
+                    for (Long r : collectionDeprecate.getSubRoleIds()) {
+                        rolePrivilegeCollection.addSubRole(r);
+                    }
 
                     // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
                     // The reason why need to replay from the image here
                     // is because the associated information of the role-id is stored in the image.
                     if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                        RolePrivilegeCollection builtInRolePrivilegeCollection =
+                        RolePrivilegeCollectionV2 builtInRolePrivilegeCollection =
                                 ret.roleIdToPrivilegeCollection.get(roleId);
-                        collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
+                        rolePrivilegeCollection.typeToPrivilegeEntryList
+                                = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
+                    } else {
+
+                        Map<ObjectTypeDeprecate, List<PrivilegeEntry>> m = collectionDeprecate.getTypeToPrivilegeEntryList();
+                        for (Map.Entry<ObjectTypeDeprecate, List<PrivilegeEntry>> e : m.entrySet()) {
+                            rolePrivilegeCollection.getTypeToPrivilegeEntryList().put(e.getKey().toObjectType(), e.getValue());
+                        }
                     }
+
                     // upgrade meta to current version
-                    ret.provider.upgradePrivilegeCollection(collection, ret.pluginId, ret.pluginVersion);
-                    ret.roleIdToPrivilegeCollection.put(roleId, collection);
+                    ret.provider.upgradePrivilegeCollection(rolePrivilegeCollection, ret.pluginId, ret.pluginVersion);
+                    ret.roleIdToPrivilegeCollection.put(roleId, rolePrivilegeCollection);
                 }
             } catch (SRMetaBlockEOFException eofException) {
                 LOG.warn("got EOF exception, ignore, ", eofException);
@@ -1735,12 +1815,12 @@ public class AuthorizationMgr {
     /**
      * these public interfaces are for AuthUpgrader to upgrade from 2.x
      */
-    public void upgradeUserInitPrivilegeUnlock(UserIdentity userIdentity, UserPrivilegeCollection collection) {
+    public void upgradeUserInitPrivilegeUnlock(UserIdentity userIdentity, UserPrivilegeCollectionV2 collection) {
         userToPrivilegeCollection.put(userIdentity, collection);
         LOG.info("upgrade user {}", userIdentity);
     }
 
-    public void upgradeRoleInitPrivilegeUnlock(long roleId, RolePrivilegeCollection collection) {
+    public void upgradeRoleInitPrivilegeUnlock(long roleId, RolePrivilegeCollectionV2 collection) {
         roleIdToPrivilegeCollection.put(roleId, collection);
         roleNameToId.put(collection.getName(), roleId);
         LOG.info("upgrade role {}[{}]", collection.getName(), roleId);
@@ -1766,10 +1846,10 @@ public class AuthorizationMgr {
             for (int i = 0; i != numUser; ++i) {
                 // 2 json for each user(kv)
                 UserIdentity userIdentity = reader.readJson(UserIdentity.class);
-                UserPrivilegeCollection collection = reader.readJson(UserPrivilegeCollection.class);
+                UserPrivilegeCollectionV2 collection = reader.readJson(UserPrivilegeCollectionV2.class);
 
                 if (userIdentity.equals(UserIdentity.ROOT)) {
-                    UserPrivilegeCollection rootUserPrivCollection =
+                    UserPrivilegeCollectionV2 rootUserPrivCollection =
                             ret.getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
                     collection.grantRoles(rootUserPrivCollection.getAllRoles());
                     collection.setDefaultRoleIds(rootUserPrivCollection.getDefaultRoleIds());
@@ -1784,13 +1864,13 @@ public class AuthorizationMgr {
             for (int i = 0; i != numRole; ++i) {
                 // 2 json for each role(kv)
                 Long roleId = reader.readJson(Long.class);
-                RolePrivilegeCollection collection = reader.readJson(RolePrivilegeCollection.class);
+                RolePrivilegeCollectionV2 collection = reader.readJson(RolePrivilegeCollectionV2.class);
 
                 // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
                 // The reason why need to replay from the image here
                 // is because the associated information of the role-id is stored in the image.
                 if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                    RolePrivilegeCollection builtInRolePrivilegeCollection =
+                    RolePrivilegeCollectionV2 builtInRolePrivilegeCollection =
                             ret.roleIdToPrivilegeCollection.get(roleId);
                     collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
                 }
@@ -1821,19 +1901,19 @@ public class AuthorizationMgr {
             writer.writeJson(this);
             // 1 json for num user
             writer.writeJson(userToPrivilegeCollection.size());
-            Iterator<Map.Entry<UserIdentity, UserPrivilegeCollection>> iterator =
+            Iterator<Map.Entry<UserIdentity, UserPrivilegeCollectionV2>> iterator =
                     userToPrivilegeCollection.entrySet().iterator();
             while (iterator.hasNext()) {
-                Map.Entry<UserIdentity, UserPrivilegeCollection> entry = iterator.next();
+                Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry = iterator.next();
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());
             }
             // 1 json for num roles
             writer.writeJson(roleIdToPrivilegeCollection.size());
-            Iterator<Map.Entry<Long, RolePrivilegeCollection>> roleIter =
+            Iterator<Map.Entry<Long, RolePrivilegeCollectionV2>> roleIter =
                     roleIdToPrivilegeCollection.entrySet().iterator();
             while (roleIter.hasNext()) {
-                Map.Entry<Long, RolePrivilegeCollection> entry = roleIter.next();
+                Map.Entry<Long, RolePrivilegeCollectionV2> entry = roleIter.next();
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());
             }

@@ -18,8 +18,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.RolePrivilegeCollection;
-import com.starrocks.privilege.UserPrivilegeCollection;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
+import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetRoleEdgesItem;
@@ -50,14 +50,14 @@ public class RoleEdges {
 
         List<String> allRoles = authorizationManager.getAllRoles();
         for (String roleName : allRoles) {
-            RolePrivilegeCollection rolePrivilegeCollection =
+            RolePrivilegeCollectionV2 rolePrivilegeCollection =
                     authorizationManager.getRolePrivilegeCollection(roleName);
             if (rolePrivilegeCollection == null) {
                 continue;
             }
             Set<Long> parentRoleIds = rolePrivilegeCollection.getParentRoleIds();
             for (Long parentRoleId : parentRoleIds) {
-                RolePrivilegeCollection parentRoleCollection =
+                RolePrivilegeCollectionV2 parentRoleCollection =
                         authorizationManager.getRolePrivilegeCollection(parentRoleId);
                 if (parentRoleCollection == null) {
                     continue;
@@ -71,14 +71,14 @@ public class RoleEdges {
 
         Set<UserIdentity> allUsers = authorizationManager.getAllUserIdentities();
         for (UserIdentity userIdentity : allUsers) {
-            UserPrivilegeCollection userPrivilegeCollection =
+            UserPrivilegeCollectionV2 userPrivilegeCollection =
                     authorizationManager.getUserPrivilegeCollection(userIdentity);
             if (userPrivilegeCollection == null) {
                 continue;
             }
             Set<Long> parentRoleIds = userPrivilegeCollection.getAllRoles();
             for (Long parentRoleId : parentRoleIds) {
-                RolePrivilegeCollection parentRoleCollection =
+                RolePrivilegeCollectionV2 parentRoleCollection =
                         authorizationManager.getRolePrivilegeCollection(parentRoleId);
                 if (parentRoleCollection == null) {
                     continue;
