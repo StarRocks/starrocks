@@ -17,6 +17,9 @@ package com.starrocks.planner;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.sql.plan.PlanTestNoneDBBase;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -35,6 +38,13 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         PlanTestBase.beforeClass();
         MaterializedViewTestBase.setUp();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+
+        new MockUp<PlanTestNoneDBBase>() {
+            @Mock
+            boolean isIgnoreExplicitColRefIds() {
+                return true;
+            }
+        };
 
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv1.sql");
