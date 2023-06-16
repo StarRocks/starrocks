@@ -213,9 +213,9 @@ public class SqlParser {
 
                 Iterator<Interval> iter = expecting.getIntervals().iterator();
                 while (iter.hasNext()) {
-                    Interval I = iter.next();
-                    int a = I.a;
-                    int b = I.b;
+                    Interval interval = iter.next();
+                    int a = interval.a;
+                    int b = interval.b;
                     if (a == b) {
                         addToken(vocabulary, a, symbols, words);
                     } else {
