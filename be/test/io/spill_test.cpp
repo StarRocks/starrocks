@@ -298,7 +298,6 @@ TEST_F(SpillTest, unsorted_process) {
     spill_options.block_manager = dummy_block_mgr.get();
 
     auto chunk_empty = chunk_builder.gen(tuple, nullables);
-    std::atomic_int64_t spill_bytes;
 
     auto spiller = factory->create(spill_options);
     spiller->set_metrics(metrics);
