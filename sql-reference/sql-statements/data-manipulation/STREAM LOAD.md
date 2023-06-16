@@ -180,11 +180,11 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
     "NumberUnselectedRows": 0,
     "LoadBytes": 40888898,
     "LoadTimeMs": 2144,
-    BeginTxnTimeMs: 0,
-    StreamLoadPutTimeMS: 1,
-    ReadDataTimeMs: 0,
-    WriteDataTimeMs: 11,
-    CommitAndPublishTimeMs: 16,
+    "BeginTxnTimeMs": 0,
+    "StreamLoadPutTimeMS": 1,
+    "ReadDataTimeMs": 0,
+    "WriteDataTimeMs": 11,
+    "CommitAndPublishTimeMs": 16,
 }
 ```
 
