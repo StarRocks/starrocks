@@ -55,6 +55,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getMvPartialPartitionPredicates;
 
 public class MvRewritePreprocessor {
@@ -81,12 +82,13 @@ public class MvRewritePreprocessor {
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
         if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related Async MVs for plan");
             return;
         }
         prepareRelatedMVs(queryTables, relatedMvs);
     }
 
-    public void prepareSyncMvCandidatesForPlan(ConnectContext connectContext) {
+    public void prepareSyncMvCandidatesForPlan() {
         Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
 
         Set<MaterializedView> relatedMvs = Sets.newHashSet();
@@ -168,6 +170,7 @@ public class MvRewritePreprocessor {
             }
         }
         if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related Sync MVs");
             return;
         }
         prepareRelatedMVs(queryTables, relatedMvs);
@@ -183,17 +186,22 @@ public class MvRewritePreprocessor {
                 LOG.warn("preprocess mv {} failed for query tables:{}", mv.getName(), tableNames, e);
             }
         }
+        if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related MVs after process");
+            return;
+        }
         // all base table related mvs
         List<String> relatedMvNames = relatedMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList());
         // all mvs that match SPJG pattern and can ben used to try mv rewrite
         List<String> candidateMvNames = context.getCandidateMvs().stream()
                 .map(materializationContext -> materializationContext.getMv().getName()).collect(Collectors.toList());
-        String mvInfo = String.format("relatedMvNames: %s, candidateMvNames: %s", relatedMvNames, candidateMvNames);
-        OptimizerTraceUtil.log(connectContext, mvInfo);
+
+        logMVPrepare(connectContext, "RelatedMVs: %s, CandidateMVs: %s", relatedMvNames, candidateMvNames);
     }
 
     private void preprocessMv(MaterializedView mv, Set<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
         if (!mv.isActive()) {
+            logMVPrepare(connectContext, "MV is not active: %s", mv.getName());
             return;
         }
 
@@ -205,6 +213,8 @@ public class MvRewritePreprocessor {
             mv.setPlanContext(mvRewriteContextCache);
         }
         if (!mvRewriteContextCache.isValidMvPlan()) {
+            logMVPrepare(connectContext, "MV plan is not valid: %s, plan:\n %s",
+                    mv.getName(), mvRewriteContextCache.getLogicalPlan().explain());
             return;
         }
 
@@ -212,12 +222,16 @@ public class MvRewritePreprocessor {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             if (!partitionNamesToRefresh.isEmpty()) {
+                logMVPrepare(connectContext, "MV %s is outdated, partitionNamesToRefresh:%s",
+                        mv.getName(), partitionNamesToRefresh);
                 return;
             }
         } else if (!mv.getPartitionNames().isEmpty() &&
                 partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
             // if the mv is partitioned, and all partitions need refresh,
-            // then it can not be an candidate
+            // then it can not be a candidate
+            logMVPrepare(connectContext, "Partitioned MV %s is outdated and all its partitions need to be " +
+                            "refreshed: %s", mv.getName(), partitionNamesToRefresh);
             return;
         }
 
@@ -225,9 +239,11 @@ public class MvRewritePreprocessor {
         ScalarOperator mvPartialPartitionPredicates = null;
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
             // when mv is partitioned and there are some refreshed partitions,
-            // when should calculate latest partition range predicates for partition-by base table
+            // when should calculate the latest partition range predicates for partition-by base table
             mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
             if (mvPartialPartitionPredicates == null) {
+                logMVPrepare(connectContext, "Partitioned MV %s is outdated which contains some partitions " +
+                        "to be refreshed:%s", mv.getName(), partitionNamesToRefresh);
                 return;
             }
         }
@@ -263,6 +279,7 @@ public class MvRewritePreprocessor {
         }
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
+        logMVPrepare(connectContext, "Add MV %s as a candidate", mv.getName());
     }
 
     /**
