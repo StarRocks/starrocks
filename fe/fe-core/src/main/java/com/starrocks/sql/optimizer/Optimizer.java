@@ -229,9 +229,11 @@ public class Optimizer {
             }
             if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
                 try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessSyncMvs")) {
-                    preprocessor.prepareSyncMvCandidatesForPlan(connectContext);
+                    preprocessor.prepareSyncMvCandidatesForPlan();
                 }
             }
+            OptimizerTraceUtil.logMVPrepare(connectContext, "There are %d candidate MVs after prepare phase",
+                    context.getCandidateMvs().size());
         }
     }
 

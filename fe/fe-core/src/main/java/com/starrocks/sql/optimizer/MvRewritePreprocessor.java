@@ -88,7 +88,7 @@ public class MvRewritePreprocessor {
         prepareRelatedMVs(queryTables, relatedMvs);
     }
 
-    public void prepareSyncMvCandidatesForPlan(ConnectContext connectContext) {
+    public void prepareSyncMvCandidatesForPlan() {
         Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
 
         Set<MaterializedView> relatedMvs = Sets.newHashSet();
@@ -170,6 +170,7 @@ public class MvRewritePreprocessor {
             }
         }
         if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related Sync MVs");
             return;
         }
         prepareRelatedMVs(queryTables, relatedMvs);
