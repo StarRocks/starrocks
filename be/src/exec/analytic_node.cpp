@@ -340,6 +340,8 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
         // prepend local shuffle to PartitionSortSinkOperator
         ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
                                                                           _hash_partition_exprs);
+        upstream_source_op = context->source_operator(ops_with_sink);
+
         ops_with_sink.emplace_back(std::make_shared<HashPartitionSinkOperatorFactory>(
                 context->next_operator_id(), pseudo_plan_node_id, hash_partition_ctx_factory));
         context->add_pipeline(ops_with_sink);
