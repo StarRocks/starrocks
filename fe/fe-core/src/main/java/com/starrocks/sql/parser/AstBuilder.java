@@ -4916,7 +4916,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public String extendPrivilegeType(boolean isGlobal, String type) {
         if (isGlobal) {
             if (type.equals("FUNCTIONS") || type.equals("FUNCTION")) {
-                return "GLOBAL_" + type;
+                return "GLOBAL " + type;
             }
         }
         return type;

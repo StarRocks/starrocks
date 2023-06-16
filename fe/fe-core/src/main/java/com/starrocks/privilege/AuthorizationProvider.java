@@ -62,7 +62,7 @@ public interface AuthorizationProvider {
             ObjectType objectType,
             PrivilegeType want,
             PEntryObject object,
-            PrivilegeCollection currentPrivilegeCollection);
+            PrivilegeCollectionV2 currentPrivilegeCollection);
 
     /**
      * Search if any object in collection matches the specified object, any action is ok.
@@ -72,7 +72,7 @@ public interface AuthorizationProvider {
     boolean searchAnyActionOnObject(
             ObjectType objectType,
             PEntryObject object,
-            PrivilegeCollection currentPrivilegeCollection);
+            PrivilegeCollectionV2 currentPrivilegeCollection);
 
     /**
      * Search if any object in collection matches the specified object with required action.
@@ -80,18 +80,18 @@ public interface AuthorizationProvider {
     boolean searchActionOnObject(
             ObjectType objectType,
             PEntryObject object,
-            PrivilegeCollection currentPrivilegeCollection,
+            PrivilegeCollectionV2 currentPrivilegeCollection,
             PrivilegeType want);
 
     boolean allowGrant(
             ObjectType objectType,
             List<PrivilegeType> wants,
             List<PEntryObject> objects,
-            PrivilegeCollection currentPrivilegeCollection);
+            PrivilegeCollectionV2 currentPrivilegeCollection);
 
     /**
      * Used for metadata upgrade
      */
     void upgradePrivilegeCollection(
-            PrivilegeCollection info, short pluginId, short metaVersion) throws PrivilegeException;
+            PrivilegeCollectionV2 info, short pluginId, short metaVersion) throws PrivilegeException;
 }
