@@ -263,7 +263,6 @@ public class AuthenticationMgr {
                         authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
                         ConnectContext currentContext = ConnectContext.get();
                         if (currentContext != null) {
-                            // TODO(yiming): set role ids for ephemeral user in connection context
                             currentContext.setCurrentRoleIds(new HashSet<>(
                                     Collections.singletonList(PrivilegeBuiltinConstants.ROOT_ROLE_ID)));
                         }

@@ -40,6 +40,7 @@ import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
+import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
@@ -57,6 +58,7 @@ import org.junit.Test;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class FrontendServiceImplTest {
 
@@ -426,9 +428,7 @@ public class FrontendServiceImplTest {
         Config.max_automatic_partition_number = 4096;
     }
 
-    @Test
-    public void testListTableStatus() throws TException {
-        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+    private TGetTablesParams buildListTableStatusParam() {
         TGetTablesParams request = new TGetTablesParams();
         request.setDb("test");
         TUserIdentity tUserIdentity = new TUserIdentity();
@@ -437,8 +437,41 @@ public class FrontendServiceImplTest {
         tUserIdentity.setIs_domain(false);
         request.setCurrent_user_ident(tUserIdentity);
         request.setType(TTableType.VIEW);
-        TListTableStatusResult result = impl.listTableStatus(request);
+
+        return request;
+    }
+
+    @Test
+    public void testListTableStatus() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TListTableStatusResult result = impl.listTableStatus(buildListTableStatusParam());
         Assert.assertEquals(7, result.tables.size());
+    }
+
+    @Test
+    public void testListViewStatusWithBaseTableDropped() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE site_access_empty_for_view (\n" +
+                        "    event_day DATETIME NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('day', event_day)\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
+        starRocksAssert.withView("create view test.view11 as select * from test.site_access_empty_for_view");
+        // drop the base table referenced by test.view11
+        starRocksAssert.dropTable("test.site_access_empty_for_view");
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TListTableStatusResult result = impl.listTableStatus(buildListTableStatusParam());
+        System.out.println(result.tables.stream().map(TTableStatus::getName).collect(Collectors.toList()));
+        Assert.assertEquals(8, result.tables.size());
+        starRocksAssert.dropView("test.view11");
     }
 
     @Test
