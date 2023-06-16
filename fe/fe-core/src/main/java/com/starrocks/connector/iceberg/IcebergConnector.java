@@ -46,7 +46,7 @@ public class IcebergConnector implements Connector {
     @Deprecated
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
-    public static final String ICEBERG_REST_CATALOG_PREFIX = "iceberg.rest-catalog.";
+    public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
     public static final String ICEBERG_IMPL = "iceberg.catalog-impl";
 
     private final Map<String, String> properties;
@@ -86,10 +86,9 @@ public class IcebergConnector implements Connector {
                 Map<String, String> newProperties = new HashMap<>();
                 properties.forEach((key, value) -> {
                     String newKey = key.toLowerCase();
-                    String newValue = value.toLowerCase();
-                    if (newKey.startsWith(ICEBERG_REST_CATALOG_PREFIX)) {
-                        newKey = newKey.substring(ICEBERG_REST_CATALOG_PREFIX.length());
-                        newProperties.put(newKey, newValue);
+                    if (newKey.startsWith(ICEBERG_CUSTOM_PROPERTIES_PREFIX)) {
+                        newKey = newKey.substring(ICEBERG_CUSTOM_PROPERTIES_PREFIX.length());
+                        newProperties.put(newKey, value);
                     }
                 });
                 properties.putAll(newProperties);
