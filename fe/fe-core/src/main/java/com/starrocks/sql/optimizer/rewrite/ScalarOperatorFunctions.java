@@ -323,11 +323,7 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "timestamp", argTypes = {DATETIME}, returnType = DATETIME)
     public static ConstantOperator timestamp(ConstantOperator arg) throws AnalysisException {
-        ZonedDateTime zdt = ZonedDateTime.of(arg.getDatetime(), TimeUtils.getTimeZone().toZoneId());
-        long date = zdt.toInstant().toEpochMilli();
-
-        LocalDateTime time = Instant.ofEpochMilli(date).atZone(ZoneOffset.UTC).toLocalDateTime();
-        return ConstantOperator.createDatetime(time);
+        return arg;
     }
 
     @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = BIGINT)
