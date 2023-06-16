@@ -988,7 +988,7 @@ public class MaterializedViewRewriter {
         }
         if (mvEqualPreds == null || mvOtherPreds == null) {
             logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot rewrite compensations from view to query, " +
-                    "mvEqualPreds:%d, mvOtherPreds:%d", (mvEqualPreds == null), (mvOtherPreds == null));
+                    "mvEqualPreds:%s, mvOtherPreds:%s", (mvEqualPreds == null), (mvOtherPreds == null));
             return null;
         }
         final ScalarOperator mvCompensationPredicates = Utils.compoundAnd(mvEqualPreds, mvOtherPreds);
