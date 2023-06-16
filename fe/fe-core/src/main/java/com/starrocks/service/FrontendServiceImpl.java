@@ -336,10 +336,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         if (db != null) {
             for (String tableName : db.getTableNamesViewWithLock()) {
-                LOG.debug("get table: {}, wait to check", tableName);
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     Table tbl = db.getTable(tableName);
-                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, tbl)) {
+                    if (tbl != null && !PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser,
+                            null, params.db, tbl)) {
                         continue;
                     }
                 } else {
@@ -374,8 +374,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        // database privs should be checked in analysis phrase
-
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         UserIdentity currentUser = null;
@@ -389,6 +387,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             try {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
+                OUTER:
                 for (Table table : tables) {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                         if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
@@ -424,9 +423,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             for (TableName tableName : allTables.keySet()) {
                                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                                     Table tbl = db.getTable(tableName.getTbl());
-                                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
-                                            tableName.getDb(), tbl)) {
-                                        break;
+                                    if (tbl != null && !PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser,
+                                            null, tableName.getDb(), tbl)) {
+                                        continue OUTER;
                                     }
                                 } else {
                                     if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
@@ -437,11 +436,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 }
                             }
                         } catch (SemanticException e) {
-                            // ignore semantic exception because view may be is invalid
+                            // ignore semantic exception because view maybe invalid
                         }
-
                         status.setDdl_sql(ddlSql);
                     }
+
                     tablesResult.add(status);
                     // if user set limit, then only return limit size result
                     if (limit > 0 && tablesResult.size() >= limit) {
@@ -864,19 +863,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         if (db != null) {
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db,
-                        db.getTable(params.getTable_name()))) {
-                    return result;
-                }
-            } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
-                    params.getTable_name(), PrivPredicate.SHOW)) {
-                return result;
-            }
-
             try {
                 db.readLock();
                 Table table = db.getTable(params.getTable_name());
+                if (table == null) {
+                    return result;
+                }
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
+                        return result;
+                    }
+                } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
+                        params.getTable_name(), PrivPredicate.SHOW)) {
+                    return result;
+                }
                 setColumnDesc(columns, table, limit, false, params.db, params.getTable_name());
             } finally {
                 db.readUnlock();
@@ -906,22 +906,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
                 for (String tableName : db.getTableNamesViewWithLock()) {
-                    LOG.debug("get table: {}, wait to check", tableName);
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
-                                fullName, db.getTable(tableName))) {
-                            continue;
-                        }
-                    } else {
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
-                                tableName, PrivPredicate.SHOW)) {
-                            continue;
-                        }
-                    }
-
                     try {
                         db.readLock();
                         Table table = db.getTable(tableName);
+                        if (table == null) {
+                            continue;
+                        }
+                        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                    fullName, table)) {
+                                continue;
+                            }
+                        } else {
+                            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
+                                    tableName, PrivPredicate.SHOW)) {
+                                continue;
+                            }
+                        }
                         reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
                         db.readUnlock();
@@ -936,50 +937,49 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private boolean setColumnDesc(List<TColumnDef> columns, Table table, long limit,
                                   boolean needSetDbAndTable, String db, String tbl) {
-        if (table != null) {
-            String tableKeysType = "";
-            if (TableType.OLAP.equals(table.getType())) {
-                OlapTable olapTable = (OlapTable) table;
-                tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
+        String tableKeysType = "";
+        if (TableType.OLAP.equals(table.getType())) {
+            OlapTable olapTable = (OlapTable) table;
+            tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
+        }
+        for (Column column : table.getBaseSchema()) {
+            final TColumnDesc desc =
+                    new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
+            final Integer precision = column.getType().getPrecision();
+            if (precision != null) {
+                desc.setColumnPrecision(precision);
             }
-            for (Column column : table.getBaseSchema()) {
-                final TColumnDesc desc =
-                        new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
-                final Integer precision = column.getType().getPrecision();
-                if (precision != null) {
-                    desc.setColumnPrecision(precision);
-                }
-                final Integer columnLength = column.getType().getColumnSize();
-                if (columnLength != null) {
-                    desc.setColumnLength(columnLength);
-                }
-                final Integer decimalDigits = column.getType().getDecimalDigits();
-                if (decimalDigits != null) {
-                    desc.setColumnScale(decimalDigits);
-                }
-                if (column.isKey()) {
-                    // COLUMN_KEY (UNI, AGG, DUP, PRI)
-                    desc.setColumnKey(tableKeysType);
-                } else {
-                    desc.setColumnKey("");
-                }
-                final TColumnDef colDef = new TColumnDef(desc);
-                final String comment = column.getComment();
-                if (comment != null) {
-                    colDef.setComment(comment);
-                }
-                columns.add(colDef);
-                // add db_name and table_name values to TColumnDesc if needed
-                if (needSetDbAndTable) {
-                    columns.get(columns.size() - 1).columnDesc.setDbName(db);
-                    columns.get(columns.size() - 1).columnDesc.setTableName(tbl);
-                }
-                // if user set limit, then only return limit size result
-                if (limit > 0 && columns.size() >= limit) {
-                    return true;
-                }
+            final Integer columnLength = column.getType().getColumnSize();
+            if (columnLength != null) {
+                desc.setColumnLength(columnLength);
+            }
+            final Integer decimalDigits = column.getType().getDecimalDigits();
+            if (decimalDigits != null) {
+                desc.setColumnScale(decimalDigits);
+            }
+            if (column.isKey()) {
+                // COLUMN_KEY (UNI, AGG, DUP, PRI)
+                desc.setColumnKey(tableKeysType);
+            } else {
+                desc.setColumnKey("");
+            }
+            final TColumnDef colDef = new TColumnDef(desc);
+            final String comment = column.getComment();
+            if (comment != null) {
+                colDef.setComment(comment);
+            }
+            columns.add(colDef);
+            // add db_name and table_name values to TColumnDesc if needed
+            if (needSetDbAndTable) {
+                columns.get(columns.size() - 1).columnDesc.setDbName(db);
+                columns.get(columns.size() - 1).columnDesc.setTableName(tbl);
+            }
+            // if user set limit, then only return limit size result
+            if (limit > 0 && columns.size() >= limit) {
+                return true;
             }
         }
+
         return false;
     }
 
