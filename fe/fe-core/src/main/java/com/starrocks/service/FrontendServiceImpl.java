@@ -507,10 +507,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.warn("Ignore the task status because db information is incorrect: " + status);
                 continue;
             }
-            if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!globalStateMgr.getAuth().checkDbPriv(currentUser, status.getDbName(), PrivPredicate.SHOW)) {
-                    continue;
-                }
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, status.getDbName(), PrivPredicate.SHOW)) {
+                continue;
             }
 
             TTaskRunInfo info = new TTaskRunInfo();
