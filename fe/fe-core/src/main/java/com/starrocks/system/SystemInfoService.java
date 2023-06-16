@@ -860,7 +860,7 @@ public class SystemInfoService implements GsonPostProcessable {
         this.idToReportVersionRef = ImmutableMap.of();
     }
 
-    public static Pair<String, Integer> validateHostAndPort(String hostPort) throws AnalysisException {
+    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) throws AnalysisException {
         hostPort = hostPort.replaceAll("\\s+", "");
         if (hostPort.isEmpty()) {
             throw new AnalysisException("Invalid host port: " + hostPort);
@@ -879,7 +879,7 @@ public class SystemInfoService implements GsonPostProcessable {
         int heartbeatPort = -1;
         try {
             // validate host
-            if (!InetAddressValidator.getInstance().isValid(host) && !FrontendOptions.isUseFqdn()) {
+            if (resolveHost && !InetAddressValidator.getInstance().isValid(host)) {
                 // maybe this is a hostname
                 // if no IP address for the host could be found, 'getByName'
                 // will throw
