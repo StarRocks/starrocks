@@ -26,9 +26,11 @@ Routine Load now supports consuming CSV, JSON, and Avro (supported since v3.0.1)
 ### Terminology
 
 - **Load job**
-   A Routine Load job is a long-running job. As long as its status is RUNNING, a load job continuously generates one or multiple concurrent load tasks to consume the messages in a topic of a Kafka cluster, and load the data into StarRocks.
+
+   A Routine Load job is a long-running job. As long as its status is RUNNING, a load job continuously generates one or multiple concurrent load tasks which consume the messages in a topic of a Kafka cluster and load the data into StarRocks.
 
 - **Load task**
+
   A load job is split into multiple load tasks by certain rules. A load task is the basic unit of data loading. As an individual event, a load task implements the load mechanism based on [Stream Load](../loading/StreamLoad.md). Multiple load tasks concurrently consume the messages from different partitions of a topic, and load the data into StarRocks.
 
 ### Workflow
