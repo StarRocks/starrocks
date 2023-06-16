@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getMvPartialPartitionPredicates;
 
 public class MvRewritePreprocessor {
@@ -58,11 +59,32 @@ public class MvRewritePreprocessor {
     }
 
     public void prepareMvCandidatesForPlan() {
-        List<Table> queryTables = MvUtils.getAllTables(logicOperatorTree);
+        Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
 
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
+        if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related Async MVs for plan");
+            return;
+        }
+        prepareRelatedMVs(queryTables, relatedMvs);
+    }
+
+    private void prepareRelatedMVs(Set<Table> queryTables, Set<MaterializedView> relatedMvs) {
+        String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
+        String queryIncludingMVNames = connectContext.getSessionVariable().getQueryincludingMVNames();
+        if (!Strings.isNullOrEmpty(queryExcludingMVNames) || !Strings.isNullOrEmpty(queryIncludingMVNames)) {
+            Set<String> queryExcludingMVNamesSet = Sets.newHashSet(queryExcludingMVNames.split(","));
+            Set<String> queryIncludingMVNamesSet = Sets.newHashSet(queryIncludingMVNames.split(","));
+            relatedMvs = relatedMvs.stream()
+                    .filter(mv -> queryIncludingMVNamesSet.contains(mv.getName()))
+                    .filter(mv -> !queryExcludingMVNamesSet.contains(mv.getName()))
+                    .collect(Collectors.toSet());
+        }
+        if (relatedMvs.isEmpty()) {
+            return;
+        }
 
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
@@ -73,17 +95,22 @@ public class MvRewritePreprocessor {
                 LOG.warn("preprocess mv {} failed for query tables:{}", mv.getName(), tableNames, e);
             }
         }
+        if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related MVs after process");
+            return;
+        }
         // all base table related mvs
         List<String> relatedMvNames = relatedMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList());
         // all mvs that match SPJG pattern and can ben used to try mv rewrite
         List<String> candidateMvNames = context.getCandidateMvs().stream()
                 .map(materializationContext -> materializationContext.getMv().getName()).collect(Collectors.toList());
-        String mvInfo = String.format("relatedMvNames: %s, candidateMvNames: %s", relatedMvNames, candidateMvNames);
-        OptimizerTraceUtil.log(connectContext, mvInfo);
+
+        logMVPrepare(connectContext, "RelatedMVs: %s, CandidateMVs: %s", relatedMvNames, candidateMvNames);
     }
 
-    private void preprocessMv(MaterializedView mv, List<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
+    private void preprocessMv(MaterializedView mv, Set<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
         if (!mv.isActive()) {
+            logMVPrepare(connectContext, "MV is not active: %s", mv.getName());
             return;
         }
 
@@ -95,6 +122,8 @@ public class MvRewritePreprocessor {
             mv.setPlanContext(mvRewriteContext);
         }
         if (!mvRewriteContext.isValidMvPlan()) {
+            logMVPrepare(connectContext, "MV plan is not valid: %s, plan:\n %s",
+                    mv.getName(), mvRewriteContextCache.getLogicalPlan().explain());
             return;
         }
 
@@ -107,7 +136,7 @@ public class MvRewritePreprocessor {
                     String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
                     sb.append(String.format("base table %s version: %s; ", base, versionInfo));
                 }
-                LOG.info("[MV PREPARE] MV {} is outdated, stale partitions {}, detailed version info: {}",
+                logMVPrepare("[MV PREPARE] MV %s is outdated, stale partitions %, detailed version info: %s",
                         mv.getName(), partitionNamesToRefresh, sb.toString());
                 return;
             }
@@ -120,8 +149,8 @@ public class MvRewritePreprocessor {
                 String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
                 sb.append(String.format("base table %s version: %s; ", base, versionInfo));
             }
-            LOG.info("[MV PREPARE] MV {} is outdated and all its partitions need to be " +
-                    "refreshed: {}, detailed info: {}", mv.getName(), partitionNamesToRefresh, sb.toString());
+            logMVPrepare("[MV PREPARE] MV %s is outdated and all its partitions need to be " +
+                    "refreshed: %s, detailed info: %s", mv.getName(), partitionNamesToRefresh, sb.toString());
             return;
         }
 
@@ -129,9 +158,11 @@ public class MvRewritePreprocessor {
         ScalarOperator mvPartialPartitionPredicates = null;
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
             // when mv is partitioned and there are some refreshed partitions,
-            // when should calculate latest partition range predicates for partition-by base table
+            // when should calculate the latest partition range predicates for partition-by base table
             mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
             if (mvPartialPartitionPredicates == null) {
+                logMVPrepare(connectContext, "Partitioned MV %s is outdated which contains some partitions " +
+                        "to be refreshed:%s", mv.getName(), partitionNamesToRefresh);
                 return;
             }
         }
@@ -167,6 +198,7 @@ public class MvRewritePreprocessor {
         }
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
+        logMVPrepare(connectContext, "Add MV %s as a candidate", mv.getName());
     }
 
     /**
