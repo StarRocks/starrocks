@@ -176,9 +176,17 @@ public class SchemaChangeHandler extends AlterHandler {
             targetIndexId = olapTable.getIndexIdByName(targetIndexName);
         }
 
-        for (Column column : columns) {
-            addColumnInternal(olapTable, column, null, targetIndexId, baseIndexId,
-                    indexSchemaMap, newColNameSet);
+        if (alterClause.getMaterializedColumnPos() == null) {
+            for (Column column : columns) {
+                addColumnInternal(olapTable, column, null, targetIndexId, baseIndexId,
+                        indexSchemaMap, newColNameSet);
+            }
+        } else {
+            for (int i = columns.size() - 1; i >= 0; --i) {
+                Column column = columns.get(i);
+                addColumnInternal(olapTable, column, alterClause.getMaterializedColumnPos(),
+                        targetIndexId, baseIndexId, indexSchemaMap, newColNameSet);
+            }
         }
     }
 
