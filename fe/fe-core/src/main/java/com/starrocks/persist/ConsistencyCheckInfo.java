@@ -34,6 +34,7 @@
 
 package com.starrocks.persist;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
@@ -42,16 +43,21 @@ import java.io.IOException;
 
 public class ConsistencyCheckInfo implements Writable {
 
+    @SerializedName("db")
     private long dbId;
+    @SerializedName("tb")
     private long tableId;
+    @SerializedName("pt")
     private long partitionId;
+    @SerializedName("idx")
     private long indexId;
+    @SerializedName("tt")
     private long tabletId;
-
+    @SerializedName("lc")
     private long lastCheckTime;
-
+    @SerializedName("cv")
     private long checkedVersion;
-
+    @SerializedName("ic")
     private boolean isConsistent;
 
     public ConsistencyCheckInfo() {

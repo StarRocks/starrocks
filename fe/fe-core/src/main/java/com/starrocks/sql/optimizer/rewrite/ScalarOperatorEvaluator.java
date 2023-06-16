@@ -26,6 +26,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -103,6 +104,11 @@ public enum ScalarOperatorEvaluator {
      * @return ConstantOperator if the CallOperator is effect (All child constant/FE builtin function support/....)
      */
     public ScalarOperator evaluation(CallOperator root) {
+        if (ConnectContext.get() != null
+                && ConnectContext.get().getSessionVariable().isDisableFunctionFoldConstants()) {
+            return root;
+        }
+
         for (ScalarOperator child : root.getChildren()) {
             if (!OperatorType.CONSTANT.equals(child.getOpType())) {
                 return root;

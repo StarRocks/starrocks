@@ -79,7 +79,8 @@ Status HiveDataSource::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
     _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
     if (_hive_table == nullptr) {
-        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake/file table are supported");
+        return Status::RuntimeError(
+                "Invalid table type. Only hive/iceberg/hudi/delta lake/file/paimon table are supported");
     }
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
@@ -406,6 +407,35 @@ HdfsScanner* HiveDataSource::_create_hudi_jni_scanner() {
     return scanner;
 }
 
+HdfsScanner* HiveDataSource::_create_paimon_jni_scanner() {
+    const auto* paimon_table = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
+
+    std::string required_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        required_fields.append(slot->col_name());
+        required_fields.append(",");
+    }
+    required_fields = required_fields.substr(0, required_fields.size() - 1);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["catalog_type"] = paimon_table->get_catalog_type();
+    jni_scanner_params["metastore_uri"] = paimon_table->get_metastore_uri();
+    jni_scanner_params["warehouse_path"] = paimon_table->get_warehouse_path();
+    jni_scanner_params["database_name"] = paimon_table->get_database_name();
+    jni_scanner_params["table_name"] = paimon_table->get_table_name();
+    jni_scanner_params["required_fields"] = required_fields;
+    jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
+
+#ifndef NDEBUG
+    for (const auto& it : jni_scanner_params) {
+        VLOG_FILE << "jni scanner params. key = " << it.first << ", value = " << it.second;
+    }
+#endif
+    std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
+    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
+    return scanner;
+}
+
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     const auto& scan_range = _scan_range;
     std::string native_file_path = scan_range.full_path;
@@ -470,8 +500,14 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_hudi_jni_reader) {
         use_hudi_jni_reader = scan_range.use_hudi_jni_reader;
     }
+    bool use_paimon_jni_reader = false;
+    if (scan_range.__isset.use_paimon_jni_reader) {
+        use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
+    }
 
-    if (use_hudi_jni_reader) {
+    if (use_paimon_jni_reader) {
+        scanner = _create_paimon_jni_scanner();
+    } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner();
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool.add(new HdfsParquetScanner());

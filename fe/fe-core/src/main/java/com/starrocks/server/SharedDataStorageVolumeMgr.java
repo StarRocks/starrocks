@@ -129,7 +129,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 locations.add("s3://" + Config.aws_s3_path);
                 break;
             case "hdfs":
-                locations.add("hdfs://" + Config.cloud_native_hdfs_url);
+                locations.add(Config.cloud_native_hdfs_url);
                 break;
             case "azblob":
                 // TODO

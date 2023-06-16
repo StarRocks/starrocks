@@ -813,7 +813,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             TExecPlanFragmentParams planParams = planner.plan(loadId);
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             if (planParams.query_options.enable_profile) {
-                planParams.query_options.setEnable_profile(true);
                 StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
                 StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,

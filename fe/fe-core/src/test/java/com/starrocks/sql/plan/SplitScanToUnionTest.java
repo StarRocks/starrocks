@@ -20,6 +20,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -28,6 +32,7 @@ import java.util.List;
 import java.util.StringJoiner;
 import java.util.stream.Stream;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
 
     @BeforeAll
@@ -44,6 +49,7 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
 
     @ParameterizedTest
     @MethodSource("testSplitUnionSqls")
+    @Order(1)
     void testSplitUnion(String sql, List<String> patterns) throws Exception {
         String plan = getFragmentPlan(sql);
         assertContains(plan, patterns);
@@ -51,9 +57,19 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
 
     @ParameterizedTest
     @MethodSource("testNotSplitUnionSqls")
+    @Order(2)
     void testNotSplitUnion(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertNotContains(plan, "UNION");
+    }
+
+    @Test
+    @Order(3)
+    void testForceSplit() throws Exception {
+        String sql = "select * from t0 where v1 = 1 or v2 = 2";
+        connectContext.getSessionVariable().setScanOrToUnionThreshold(1);
+        connectContext.getSessionVariable().setSelectRatioThreshold(100000);
+        assertContains(getFragmentPlan(sql), "UNION");
     }
 
     private static Stream<Arguments> testSplitUnionSqls() {
@@ -122,6 +138,8 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
     @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setScanOrToUnionThreshold(50000000);
+        connectContext.getSessionVariable().setSelectRatioThreshold(0.15);
     }
 
 

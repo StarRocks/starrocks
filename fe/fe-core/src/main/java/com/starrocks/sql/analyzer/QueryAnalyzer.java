@@ -33,6 +33,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
@@ -289,11 +290,19 @@ public class QueryAnalyzer {
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
                     return viewRelation;
+                } else if (table instanceof HiveView) {
+                    HiveView hiveView = (HiveView) table;
+                    QueryStatement queryStatement = hiveView.getQueryStatement();
+                    View view = new View(hiveView.getId(), hiveView.getName(), hiveView.getFullSchema());
+                    view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
+                    ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+                    viewRelation.setAlias(tableRelation.getAlias());
+                    return viewRelation;
                 } else {
                     if (tableRelation.getTemporalClause() != null) {
                         if (table.getType() != Table.TableType.MYSQL) {
                             throw unsupportedException(
-                                    "unsupported table type for temporal clauses: " + table.getType() +
+                                    "Unsupported table type for temporal clauses: " + table.getType() +
                                             "; only external MYSQL tables support temporal clauses");
                         }
                     }
@@ -302,7 +311,7 @@ public class QueryAnalyzer {
                         tableRelation.setTable(table);
                         return tableRelation;
                     } else {
-                        throw unsupportedException("unsupported scan table type: " + table.getType());
+                        throw unsupportedException("Unsupported scan table type: " + table.getType());
                     }
                 }
             } else {
