@@ -783,7 +783,7 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Materialized view does not support explain query", e.getMessage());
+            Assert.assertEquals("Creating materialized view does not support explain query", e.getMessage());
         } finally {
             starRocksAssert.useDatabase("test");
         }

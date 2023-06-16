@@ -63,12 +63,6 @@ public class MVColumnHLLUnionPattern implements MVColumnPattern {
             if (!child0FnExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.HLL_HASH)) {
                 return false;
             }
-            SlotRef slotRef = child0FnExpr.getChild(0).unwrapSlotRef();
-            if (slotRef == null) {
-                return false;
-            } else if (slotRef.getType().isDecimalOfAnyVersion()) {
-                return false;
-            }
             return true;
         } else {
             return false;

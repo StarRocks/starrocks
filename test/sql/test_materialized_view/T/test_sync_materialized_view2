@@ -1,0 +1,74 @@
+-- name: test_sync_materialized_view
+
+create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
+
+-- complex expression.
+create materialized view user_tags_mv2
+as select user_id, time, bitmap_union(to_bitmap(tag_id * 100)) as agg1 from user_tags group by user_id, time;
+function: wait_materialized_view_finish()
+
+create materialized view user_tags_hll_mv2
+as select user_id * 2 as col1, time, hll_union(hll_hash(abs(tag_id))) as agg2 from user_tags group by col1, time;
+function: wait_materialized_view_finish()
+
+create materialized view user_tags_percential_mv2
+as select user_id + 1 as col2, time, percentile_union(percentile_hash(cast(tag_id * 10 as double))) as agg3 from user_tags group by col2, time;
+function: wait_materialized_view_finish()
+
+create materialized view same_column_ref_mv1 
+as select user_id + 1 as col2, time, sum(tag_id* 10) as sum1 , sum(tag_id* 100) as sum2, count(tag_id* 10) as count1 from user_tags group by col2, time;
+function: wait_materialized_view_finish()
+
+insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
+
+-- complex expression mv rewrite
+
+-- user_tags_mv2
+select user_id, time, bitmap_union(to_bitmap(tag_id * 100)) as agg1 from user_tags group by user_id, time;
+select user_id, time, count(distinct tag_id * 100) as agg1 from user_tags group by user_id, time;
+select time, count(distinct tag_id * 100) as agg1 from user_tags group by time;
+
+-- user_tags_hll_mv2
+select user_id * 2 as col1, time, hll_union(hll_hash(abs(tag_id))) as agg2 from user_tags group by col1, time;
+select time, hll_union(hll_hash(abs(tag_id))) as agg2 from user_tags group by time;
+select user_id * 2 as col1, time, ndv(abs(tag_id)) as agg2 from user_tags group by col1, time;
+select time, approx_count_distinct(abs(tag_id)) as agg2 from user_tags group by time;
+
+-- user_tags_percential_mv2
+select user_id + 1 as col1, time, percentile_union(percentile_hash(cast(tag_id * 10 as double))) as agg1 from user_tags group by col1, time;
+
+-- same_column_ref_mv1
+select user_id + 1 as col1, time, sum(tag_id* 10) as sum1 , sum(tag_id* 100) as sum2, count(tag_id* 10) as count1 from user_tags group by col1, time;
+
+drop materialized view user_tags_mv2;
+drop materialized view user_tags_hll_mv2;
+drop materialized view user_tags_percential_mv2;
+drop materialized view same_column_ref_mv1;
+
+-- TODO: unsupported yet
+create materialized view user_tags_percential_mv2
+as select case when user_id != 0 then user_id + 1 else 0 end as col1, time, percentile_union(percentile_hash(cast(tag_id as bigint))) from user_tags group by col1, time;
+
+-- user case
+drop table if exists tbl1;
+CREATE TABLE `tbl1` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1;
+
+insert into tbl1 values (1, 'a', 1, 'aa'), (2, 'b', 1, NULL), (3, NULL, NULL, NULL);
+CREATE MATERIALIZED VIEW test_ce_mv1
+as
+select k1 * 2 as k1_2, k2, sum(k3) as k4_2, hll_union(hll_hash(k4)) as k5_2 from tbl1 group by k1, k2;
+
+function: wait_materialized_view_finish()
+
+insert into tbl1 values (1, 'a', 1, 'aa'), (2, 'b', 1, NULL), (3, NULL, NULL, NULL);
+select * from tbl1 order by k1;
+select * from test_ce_mv1 [_SYNC_MV_] order by mv_k1_2; 
+drop materialized view test_ce_mv1;

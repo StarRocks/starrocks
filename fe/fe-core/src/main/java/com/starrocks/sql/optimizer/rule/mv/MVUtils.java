@@ -31,6 +31,8 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public class MVUtils {
+    public static final String MATERIALIZED_VIEW_NAME_PREFIX = "mv_";
+
     public static boolean isEquivalencePredicate(ScalarOperator predicate) {
         if (predicate instanceof InPredicateOperator) {
             return true;
@@ -76,14 +78,13 @@ public class MVUtils {
         return operator.isColumnRef();
     }
 
+    public static String getMVAggColumnName(String functionName, String baseColumnName) {
+        return new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX)
+                .append(functionName).append("_").append(baseColumnName).toString();
+    }
 
-    public static String getMVColumnName(Column mvColumn, String functionName, String queryColumn) {
-        // Support count(column) MV
-        // The origin MV design is bad !!!
-        if (mvColumn.getDefineExpr() instanceof CaseExpr && functionName.equals(FunctionSet.COUNT)) {
-            return "mv_" + FunctionSet.COUNT + "_" + queryColumn;
-        }
-        return "mv_" + mvColumn.getAggregationType().name().toLowerCase() + "_" + queryColumn;
+    public static String getMVColumnName(String baseColumName) {
+        return new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX).append(baseColumName).toString();
     }
 
     // NOTE:
