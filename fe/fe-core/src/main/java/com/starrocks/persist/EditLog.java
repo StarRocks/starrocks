@@ -911,8 +911,16 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should refresh cache here.
+<<<<<<< HEAD
                     globalStateMgr.getAnalyzeManager().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
                             basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
+=======
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
+                                basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
+                    }
+>>>>>>> e364b03bd ([BugFix] Don't refresh stats cache when checkpointing (#25379))
                     break;
                 }
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
@@ -925,9 +933,18 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should expire cache here.
+<<<<<<< HEAD
                     globalStateMgr.getAnalyzeManager().refreshHistogramStatisticsCache(
                             histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
                             Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+=======
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().refreshHistogramStatisticsCache(
+                                histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                                Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                    }
+>>>>>>> e364b03bd ([BugFix] Don't refresh stats cache when checkpointing (#25379))
                     break;
                 }
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
