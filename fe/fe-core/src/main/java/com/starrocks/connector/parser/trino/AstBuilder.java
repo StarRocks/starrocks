@@ -65,6 +65,8 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.LambdaArgument;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -125,6 +127,8 @@ import io.trino.sql.tree.JoinOn;
 import io.trino.sql.tree.JoinUsing;
 import io.trino.sql.tree.JsonArray;
 import io.trino.sql.tree.JsonArrayElement;
+import io.trino.sql.tree.LambdaArgumentDeclaration;
+import io.trino.sql.tree.LambdaExpression;
 import io.trino.sql.tree.LikePredicate;
 import io.trino.sql.tree.Limit;
 import io.trino.sql.tree.LogicalExpression;
@@ -987,6 +991,26 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
         List<Expr> arguments = visit(children, context, Expr.class);
         return new FunctionCallExpr("if", arguments);
+    }
+
+    @Override
+    protected ParseNode visitLambdaExpression(LambdaExpression node, ParseTreeContext context) {
+        List<String> names = Lists.newArrayList();
+        for (LambdaArgumentDeclaration argumentDeclaration : node.getArguments()) {
+            names.add(argumentDeclaration.getName().getValue());
+        }
+
+        List<Expr> arguments = Lists.newArrayList();
+        Expr expr = null;
+        if (node.getBody() != null) {
+            expr = (Expr) visit(node.getBody(), context);
+        }
+        // put lambda body to the first argument
+        arguments.add(expr);
+        for (String name : names) {
+            arguments.add(new LambdaArgument(name));
+        }
+        return new LambdaFunctionExpr(arguments);
     }
 
     @Override
