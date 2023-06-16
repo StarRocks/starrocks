@@ -589,6 +589,7 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
             }
         }
     } else {
+        DCHECK(_column_delimiter_length > 0);
         const auto* const base = ptr;
 
         do {
