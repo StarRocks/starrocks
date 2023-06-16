@@ -143,7 +143,7 @@ Follow these steps to perform the BE/CN upgrade availability test:
 
 Follow these steps to perform the FE upgrade availability test:
 
-1. In your development environment, deploy a test FE node of the new version. See [Deploy StarRocks - Start FE service](../deployment/deploy_manually.md#step-1-start-the-fe-service) for detailed instructions.
+1. In your development environment, deploy a test FE node of the new version. See [Deploy StarRocks - Start the Leader FE node](../deployment/deploy_manually.md#step-1-start-the-leader-fe-node) for detailed instructions.
 2. Modify the FE configuration file **fe.conf** of the test FE node:
 
    - Assign different `http_port`, `rpc_port`, `query_port`, and `edit_log_port` from those of the production cluster.

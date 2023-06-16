@@ -46,18 +46,37 @@ You must have [Docker Engine](https://docs.docker.com/engine/install/) (17.06.0 
 
 1. Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/artifacts-ubuntu/tags). You can choose a specific version based on the tag of the image.
 
-   ```Bash
-   # Replace <image_tag> with the tag of the image that you want to download, for example, 2.5.4.
-   docker pull starrocks/artifacts-ubuntu:<image_tag>
-   ```
+   - If you use Ubuntu 22.04:
+
+     ```Bash
+     # Replace <image_tag> with the tag of the image that you want to download, for example, 2.5.4.
+     docker pull starrocks/artifacts-ubuntu:<image_tag>
+     ```
+
+   - If you use ARM-based CentOS 7.9:
+
+     ```Bash
+     # Replace <image_tag> with the tag of the image that you want to download, for example, 2.5.4.
+     docker pull starrocks/artifacts-centos7:<image_tag>
+     ```
 
 2. Copy the StarRocks deployment files from the Docker image to your host machine by running the following command:
 
-   ```Bash
-   # Replace <image_tag> with the tag of the image that you have downloaded, for example, 2.5.4.
-   docker run --rm starrocks/artifacts-ubuntu:<image_tag> \
-       tar -cf - -C /release . | tar -xvf -
-   ```
+   - If you use Ubuntu 22.04:
+
+     ```Bash
+     # Replace <image_tag> with the tag of the image that you have downloaded, for example, 2.5.4.
+     docker run --rm starrocks/artifacts-ubuntu:<image_tag> \
+         tar -cf - -C /release . | tar -xvf -
+     ```
+
+   - If you use ARM-based CentOS 7.9:
+
+     ```Bash
+     # Replace <image_tag> with the tag of the image that you have downloaded, for example, 2.5.4.
+     docker run --rm starrocks/artifacts-centos7:<image_tag> \
+         tar -cf - -C /release . | tar -xvf -
+     ```
 
    The deployment files include the following directories:
 
