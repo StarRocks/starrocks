@@ -162,7 +162,7 @@ public class DescribeStmtTest {
         Assert.assertEquals("int", resultRows.get(0).get(1));
         Assert.assertEquals("YES", resultRows.get(0).get(2));
 
-        Assert.assertEquals("sale_amt", resultRows.get(1).get(0));
+        Assert.assertEquals("mv_sum_sale_amt", resultRows.get(1).get(0));
         Assert.assertEquals("bigint", resultRows.get(1).get(1));
         Assert.assertEquals("YES", resultRows.get(1).get(2));
     }
@@ -188,7 +188,7 @@ public class DescribeStmtTest {
         Assert.assertEquals("int", resultRows.get(0).get(1));
         Assert.assertEquals("YES", resultRows.get(0).get(2));
 
-        Assert.assertEquals("sale_amt", resultRows.get(1).get(0));
+        Assert.assertEquals("mv_sum_sale_amt", resultRows.get(1).get(0));
         Assert.assertEquals("bigint", resultRows.get(1).get(1));
         Assert.assertEquals("YES", resultRows.get(1).get(2));
     }

@@ -420,8 +420,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return new LogicalPlan(valuesOpt, valuesOutputColumns, null);
     }
 
-    private DistributionSpec getTableDistributionSpec(TableRelation node, Map<Column,
-            ColumnRefOperator> columnMetaToColRefMap) {
+    private DistributionSpec getTableDistributionSpec(TableRelation node,
+                                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         DistributionSpec distributionSpec = null;
         DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
 

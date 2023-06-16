@@ -93,6 +93,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -107,6 +109,8 @@ import static java.util.Objects.requireNonNull;
  * Translator from Expr to ScalarOperator
  */
 public final class SqlToScalarOperatorTranslator {
+    private static final Logger LOG = LogManager.getLogger(SqlToScalarOperatorTranslator.class);
+
     private SqlToScalarOperatorTranslator() {
     }
 
@@ -827,6 +831,7 @@ public final class SqlToScalarOperatorTranslator {
                 // So if you need to visit SlotRef here, it must be the case where the old version of analyzed is true
                 // (currently mainly used by some Load logic).
                 // TODO: delete old analyze in Load
+                LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + node.toSql());
                 throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
             }
             return new ColumnRefOperator(node.getSlotId().asInt(),
