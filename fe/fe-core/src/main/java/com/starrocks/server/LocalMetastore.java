@@ -893,6 +893,62 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void checkNotSystemTableForAutoPartition(PartitionInfo partitionInfo, PartitionDesc partitionDesc)
+            throws DdlException {
+
+        if (partitionDesc.isSystem()) {
+            return;
+        }
+
+        if (!partitionInfo.isAutomaticPartition()) {
+            return;
+        }
+
+        if (partitionInfo.isRangePartition()) {
+            throw new DdlException("Automatically partitioned tables only support the syntax " +
+                    "for adding partitions in batches.");
+        }
+
+        if (partitionInfo.getType() == PartitionType.LIST) {
+            if (partitionDesc instanceof SingleItemListPartitionDesc) {
+                SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
+                if (singleItemListPartitionDesc.getValues().size() > 1) {
+                    throw new DdlException("Automatically partitioned tables does not support " +
+                            "multiple values in the same partition");
+                }
+            } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
+                MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
+                if (multiItemListPartitionDesc.getMultiValues().size() > 1) {
+                    throw new DdlException("Automatically partitioned tables does not support " +
+                            "multiple values in the same partition");
+                }
+            }
+        }
+    }
+
+    private void checkAutoPartitionTableLimit(FunctionCallExpr functionCallExpr,
+                                              MultiRangePartitionDesc multiRangePartitionDesc) throws DdlException {
+        String descGranularity = multiRangePartitionDesc.getTimeUnit();
+        String functionName = functionCallExpr.getFnName().getFunction();
+        if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
+            Expr expr = functionCallExpr.getParams().exprs().get(0);
+            String functionGranularity = ((StringLiteral) expr).getStringValue();
+            if (!descGranularity.equalsIgnoreCase(functionGranularity)) {
+                throw new DdlException("The granularity of the auto-partitioned table granularity(" +
+                        functionGranularity + ") should be consistent with the increased partition granularity(" +
+                        descGranularity + ").");
+            }
+        } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
+            throw new DdlException("time_slice does not support pre-created partitions");
+        }
+        if (multiRangePartitionDesc.getStep() > 1) {
+            throw new DdlException("The step of the auto-partitioned table should be 1");
+        }
+    }
+
+>>>>>>> bd8c64716 ([Enhancement] Restrict List to automatically create a partition table and cannot ha… (#25480))
     private OlapTable checkTable(Database db, String tableName) throws DdlException {
         CatalogUtils.checkTableExist(db, tableName);
         Table table = db.getTable(tableName);
