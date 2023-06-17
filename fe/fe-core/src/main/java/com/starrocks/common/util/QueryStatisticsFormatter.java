@@ -30,7 +30,9 @@ public class QueryStatisticsFormatter {
         }
     }
 
-    public static String getRowsReturned(long rowsReturned) { return rowsReturned + " rows"; }
+    public static String getRowsReturned(long rowsReturned) {
+        return rowsReturned + " rows";
+    }
 
     public static String getSecondsFromNano(long nano) {
         final StringBuilder builder = new StringBuilder();

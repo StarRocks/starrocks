@@ -73,7 +73,7 @@ public class CurrentQueryInfoProvider {
     }
 
     public Map<String, QueryStatistics> getQueryStatistics(Collection<QueryStatisticsItem> items)
-        throws AnalysisException {
+            throws AnalysisException {
         return collectQueryStatistics(items);
     }
 
@@ -261,9 +261,13 @@ public class CurrentQueryInfoProvider {
             memUsageBytes += value;
         }
 
-        public void updateSpillBytes(long value) { spillBytes += value; }
+        public void updateSpillBytes(long value) {
+            spillBytes += value;
+        }
 
-        public long getSpillBytes() { return spillBytes; }
+        public long getSpillBytes() {
+            return spillBytes;
+        }
     }
 
     private static class Request {
