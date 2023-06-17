@@ -811,7 +811,6 @@ public class LocalMetastore implements ConnectorMetadata {
             olapTable = (OlapTable) table;
             tableProperties = olapTable.getTableProperty().getProperties();
             partitionInfo = olapTable.getPartitionInfo();
-
         } finally {
             db.readUnlock();
         }
@@ -873,9 +872,34 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void checkNotSystemTableForAutoPartition(PartitionInfo partitionInfo, PartitionDesc partitionDesc)
             throws DdlException {
-        if (partitionInfo.getType() == PartitionType.EXPR_RANGE && !partitionDesc.isSystem()) {
+
+        if (partitionDesc.isSystem()) {
+            return;
+        }
+
+        if (!partitionInfo.isAutomaticPartition()) {
+            return;
+        }
+
+        if (partitionInfo.isRangePartition()) {
             throw new DdlException("Automatically partitioned tables only support the syntax " +
                     "for adding partitions in batches.");
+        }
+
+        if (partitionInfo.getType() == PartitionType.LIST) {
+            if (partitionDesc instanceof SingleItemListPartitionDesc) {
+                SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
+                if (singleItemListPartitionDesc.getValues().size() > 1) {
+                    throw new DdlException("Automatically partitioned tables does not support " +
+                            "multiple values in the same partition");
+                }
+            } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
+                MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
+                if (multiItemListPartitionDesc.getMultiValues().size() > 1) {
+                    throw new DdlException("Automatically partitioned tables does not support " +
+                            "multiple values in the same partition");
+                }
+            }
         }
     }
 
