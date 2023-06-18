@@ -246,7 +246,8 @@ public class SqlParser {
                     // do nothing
                 } else {
                     String token = vocabulary.getDisplayName(a);
-                    if (token.matches(".*[a-zA-Z]+.*")) {
+                    // ensure it's a word
+                    if (token.length() > 1 && token.charAt(1) >= 'A' && token.charAt(1) <= 'Z') {
                         words.add(token);
                     } else {
                         symbols.add(token);

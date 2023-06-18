@@ -679,7 +679,7 @@ public class AnalyzeSingleTest {
     @Test
     public void testColumnAlias() {
         analyzeFail("select * from test.t0 as t(a,b,c)", "Getting syntax error at line 1, column 26. " +
-                "Detail message: Unexpected input '(', expecting {<EOF>, ';'}");
+                "Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}");
         analyzeSuccess("select * from (select * from test.t0) as t(a,b,c)");
         QueryRelation query = ((QueryStatement) analyzeSuccess("select t.a from (select * from test.t0) as t(a,b,c)"))
                 .getQueryRelation();

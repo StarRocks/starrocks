@@ -353,7 +353,7 @@ class ParserTest {
         List<Arguments> arguments = Lists.newArrayList();
 
         arguments.add(Arguments.of("selct * from tbl", "SELECT"));
-        arguments.add(Arguments.of("select , from tbl", "SELECT"));
+        arguments.add(Arguments.of("select , from tbl", "a legal identifier"));
         arguments.add(Arguments.of("CREATE TABLE IF NOT EXISTS timetest (\n" +
                 "  `v1` int(11) NOT NULL,\n" +
                 "  `v2` int(11) NOT NULL,\n" +
@@ -376,7 +376,7 @@ class ParserTest {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
-                ");", "expecting {<EOF>, ';'}"));
+                ");", "the most similar input is {<EOF>, ';'}"));
         return arguments.stream();
     }
 
