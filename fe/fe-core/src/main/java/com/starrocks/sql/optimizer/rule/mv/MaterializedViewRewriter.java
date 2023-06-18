@@ -124,7 +124,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                     Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {mvColumn.getType()}, IS_IDENTICAL));
             if (mvColumn.getType().isDecimalV3()) {
                 ScalarType decimal128Type =
-                        ScalarType.createDecimalV3NarrowestType(38, 0);
+                        ScalarType.createDecimalV3NarrowestType(38, mvColumn.getScale());
                 callOperator.getFunction().setArgsType(new Type[] {mvColumn.getType()});
                 callOperator.getFunction().setRetType(decimal128Type);
             }
