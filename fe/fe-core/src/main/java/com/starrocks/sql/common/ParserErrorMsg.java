@@ -31,7 +31,7 @@ public interface ParserErrorMsg {
     @BaseMessage("Input ''{0}'' is valid only for ''{1}''")
     String failedPredicate(String a0, String a1);
 
-    @BaseMessage("unexpected input ''{0}'', expecting {1}")
+    @BaseMessage("Unexpected input ''{0}'', the most similar input is {1}")
     String unexpectedInput(String a0, String a1);
 
     @BaseMessage("Statement exceeds maximum length limit, please consider modify ''parse_tokens_limit'' session variable")

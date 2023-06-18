@@ -68,7 +68,7 @@ class ParserTest {
             fail("sql should fail to parse.");
         } catch (Exception e) {
             assertContains(e.getMessage(), "Getting syntax error at line 1, column 14. " +
-                    "Detail message: Input 'tbl' is not valid at this position.");
+                    "Detail message: Unexpected input 'tbl', the most similar input is {<EOF>, ';'}.");
         }
     }
 
@@ -353,6 +353,7 @@ class ParserTest {
         List<Arguments> arguments = Lists.newArrayList();
 
         arguments.add(Arguments.of("selct * from tbl", "SELECT"));
+        arguments.add(Arguments.of("select , from tbl", "SELECT"));
         arguments.add(Arguments.of("CREATE TABLE IF NOT EXISTS timetest (\n" +
                 "  `v1` int(11) NOT NULL,\n" +
                 "  `v2` int(11) NOT NULL,\n" +
