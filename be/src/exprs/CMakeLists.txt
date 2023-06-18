@@ -58,7 +58,7 @@ set(EXPR_FILES
   find_in_set.cpp
   function_call_expr.cpp
   function_helper.cpp
-  geo_functions.cpp
+#  geo_functions.cpp
   grouping_sets_functions.cpp
   hyperloglog_functions.cpp
   in_const_predicate.cpp
