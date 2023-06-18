@@ -53,6 +53,8 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
 
+    private static final String EOF = "<EOF>";
+
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
         if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
             return parseWithTrinoDialect(sql, sessionVariable);
@@ -164,7 +166,7 @@ public class SqlParser {
                 String input;
                 if (tokens != null) {
                     if (e.getStartToken().getType() == Token.EOF) {
-                        input = "<EOF>";
+                        input = EOF;
                     } else {
                         input = tokens.getText(e.getStartToken(), e.getOffendingToken());
                     }
@@ -235,13 +237,13 @@ public class SqlParser {
                     result.add("a legal identifier");
                 }
 
-                result.forEach(e -> joiner.add(e));
+                result.forEach(joiner::add);
                 return joiner.toString();
             }
 
             private void addToken(Vocabulary vocabulary, int a, List<String> symbols, List<String> words) {
                 if (a == Token.EOF) {
-                    symbols.add("<EOF>");
+                    symbols.add(EOF);
                 } else if (a == Token.EPSILON) {
                     // do nothing
                 } else {
@@ -272,7 +274,7 @@ public class SqlParser {
         String s = t.getText();
         if (s == null) {
             if (t.getType() == Token.EOF) {
-                s = "<EOF>";
+                s = EOF;
             } else {
                 s = "<" + t.getType() + ">";
             }
