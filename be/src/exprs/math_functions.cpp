@@ -829,6 +829,8 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         }
         if constexpr (!isNorm) {
             result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+        } else {
+            result_value = sum;
         }
         result_data[i] = result_value;
         target_data += dim_size;
