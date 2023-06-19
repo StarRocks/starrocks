@@ -17,6 +17,7 @@
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
+#include "util/bit_util.h"
 
 namespace starrocks::spill {
 // implements for SpillerWriter
@@ -46,12 +47,12 @@ Status RawSpillerWriter::prepare(RuntimeState* state) {
     const auto& opts = options();
     for (size_t i = 0; i < opts.mem_table_pool_size; ++i) {
         if (opts.is_unordered) {
-            _mem_table_pool.push(
-                    std::make_unique<UnorderedMemTable>(state, opts.spill_file_size, _parent_tracker, _spiller));
+            _mem_table_pool.push(std::make_unique<UnorderedMemTable>(state, opts.spill_mem_table_bytes_size,
+                                                                     _parent_tracker, _spiller));
         } else {
-            _mem_table_pool.push(std::make_unique<OrderedMemTable>(&opts.sort_exprs->lhs_ordering_expr_ctxs(),
-                                                                   opts.sort_desc, state, opts.spill_file_size,
-                                                                   _parent_tracker, _spiller));
+            _mem_table_pool.push(
+                    std::make_unique<OrderedMemTable>(&opts.sort_exprs->lhs_ordering_expr_ctxs(), opts.sort_desc, state,
+                                                      opts.spill_mem_table_bytes_size, _parent_tracker, _spiller));
         }
     }
 
@@ -182,11 +183,20 @@ Status PartitionedSpillerWriter::reset_partition(const std::vector<const SpillPa
         _max_level = std::max(_max_level, partition->level);
         _partition_set[partitions[i]->partition_id] = true;
     }
-    for (auto [_, partition] : _id_to_partitions) {
-        RETURN_IF_ERROR(partition->spill_writer->prepare(_runtime_state));
-        partition->spill_writer->acquire_mem_table();
-    }
+    RETURN_IF_ERROR(_prepare_partitions(_runtime_state));
+    return Status::OK();
+}
 
+Status PartitionedSpillerWriter::reset_partition(RuntimeState* state, size_t num_partitions) {
+    num_partitions = BitUtil::next_power_of_two(num_partitions);
+    num_partitions = std::min<size_t>(num_partitions, 1 << max_partition_level);
+    num_partitions = std::max<size_t>(num_partitions, _spiller->options().init_partition_nums);
+
+    _level_to_partitions.clear();
+    _id_to_partitions.clear();
+    std::fill(_partition_set.begin(), _partition_set.end(), false);
+    RETURN_IF_ERROR(_init_with_partition_nums(state, num_partitions));
+    RETURN_IF_ERROR(_prepare_partitions(state));
     return Status::OK();
 }
 
@@ -211,6 +221,14 @@ Status PartitionedSpillerWriter::_init_with_partition_nums(RuntimeState* state, 
         _partition_set[partition->partition_id] = true;
     }
 
+    return Status::OK();
+}
+
+Status PartitionedSpillerWriter::_prepare_partitions(RuntimeState* state) {
+    for (auto [_, partition] : _id_to_partitions) {
+        RETURN_IF_ERROR(partition->spill_writer->prepare(state));
+        partition->spill_writer->acquire_mem_table();
+    }
     return Status::OK();
 }
 

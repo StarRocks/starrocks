@@ -79,8 +79,7 @@ public:
     void set_probe_spiller(std::shared_ptr<spill::Spiller> spiller) { _probe_spiller = std::move(spiller); }
 
 private:
-    void set_spill_strategy(spill::SpillStrategy strategy) { _join_builder->set_spill_strategy(strategy); }
-    spill::SpillStrategy spill_strategy() const { return _join_builder->spill_strategy(); }
+    bool spilled() const { return _join_builder->spiller()->spilled(); }
 
     SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 

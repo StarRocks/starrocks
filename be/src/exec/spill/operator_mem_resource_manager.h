@@ -38,6 +38,9 @@ public:
 
     void to_low_memory_mode();
 
+    // For the current operator available memory (estimated value)
+    size_t operator_avaliable_memory_bytes();
+
 private:
     // performance level. Determine the execution mode and whether memory can be freed early
     // A higher performance level will allow the operator to execute with less memory, which will reduce performance
