@@ -77,6 +77,8 @@ struct TabletReaderParams {
     bool sorted_by_keys_per_tablet = false;
     OlapRuntimeScanRangePruner runtime_range_pruner;
 
+    bool use_pk_index = false;
+
 public:
     std::string to_string() const;
 };

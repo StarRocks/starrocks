@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.clearspring.analytics.util.Lists;
@@ -233,7 +232,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     if (!usedCols.isEmpty()) {
                         Set<Integer> dictCols = usedCols.stream().map(e -> context.stringColumnIdToDictColumnIds.get(e))
                                 .collect(Collectors.toSet());
-                        if (!(globalDictIds.containsAll(dictCols) && couldApplyDictOptimize(operator, encodedStringCols))) {
+                        if (!(globalDictIds.containsAll(dictCols) &&
+                                couldApplyDictOptimize(operator, encodedStringCols))) {
                             return false;
                         }
                     }
@@ -241,7 +241,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
             return true;
         }
-
 
         // create a new dictionary column and assign the same property except for the type and column id
         // the input column maybe a dictionary column or a string column
@@ -441,7 +440,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
                                     scanOperator.getSelectedTabletId(), scanOperator.getPrunedPartitionPredicates(),
-                                    scanOperator.getProjection());
+                                    scanOperator.getProjection(), scanOperator.isUsePkIndex());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
@@ -949,7 +948,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         result.setStatistics(childExpr.get(0).getStatistics());
 
         LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
-        result.setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictToStrings()));
+        result.setLogicalProperty(
+                DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictToStrings()));
         context.clear();
         return result;
     }

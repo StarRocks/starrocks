@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -182,7 +181,6 @@ public class DistributionPrunerRuleTest {
                         .get(0);
 
         assertEquals(20, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedTabletId().size());
-
 
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
         LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator.Builder()

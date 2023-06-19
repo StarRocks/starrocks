@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
@@ -366,7 +365,7 @@ public class PartitionPruneRuleTest {
 
     @Test
     public void transformForSingleItemListPartitionWithTemp(@Mocked OlapTable olapTable,
-                                                    @Mocked ListPartitionInfo partitionInfo)
+                                                            @Mocked ListPartitionInfo partitionInfo)
             throws AnalysisException {
         FeConstants.runningUnitTest = true;
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();

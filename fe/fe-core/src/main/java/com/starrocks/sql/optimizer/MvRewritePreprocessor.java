@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
@@ -168,10 +167,10 @@ public class MvRewritePreprocessor {
 
     /**
      * Make a LogicalOlapScanOperator by using MV's schema which includes:
-     *  - partition infos.
-     *  - distribution infos.
-     *  - original MV's predicates which can be deduced from MV opt expression and be used
-     *       for partition/distribution pruning.
+     * - partition infos.
+     * - distribution infos.
+     * - original MV's predicates which can be deduced from MV opt expression and be used
+     * for partition/distribution pruning.
      */
     private LogicalOlapScanOperator createScanMvOperator(MaterializationContext mvContext) {
         final MaterializedView mv = mvContext.getMv();
