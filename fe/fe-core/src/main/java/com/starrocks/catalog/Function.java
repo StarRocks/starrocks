@@ -252,6 +252,8 @@ public class Function implements Writable {
         this.userVisible = userVisible;
     }
 
+    // TODO: It's dangerous to change this directly because it may change the global function state.
+    // Make sure you use a copy of the global function.
     public void setArgsType(Type[] newTypes) {
         argTypes = newTypes;
     }
@@ -300,6 +302,15 @@ public class Function implements Writable {
         return checksum;
     }
 
+<<<<<<< HEAD
+=======
+    // TODO: It's dangerous to change this directly because it may change the global function state.
+    // Make sure you use a copy of the global function.
+    public void setRetType(Type retType) {
+        this.retType = retType;
+    }
+
+>>>>>>> 04e73f105 ([BugFix] Make sure not change global function by MV Rewrite (#25568))
     // TODO(cmy): Currently we judge whether it is UDF by wheter the 'location' is set.
     // Maybe we should use a separate variable to identify,
     // but additional variables need to modify the persistence information.

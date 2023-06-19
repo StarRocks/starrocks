@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.HashMap;
@@ -116,6 +117,61 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
         return optExpression;
     }
 
+<<<<<<< HEAD
+=======
+    private CallOperator rewriteAggregateFunc(ReplaceColumnRefRewriter replaceColumnRefRewriter,
+                                              Column mvColumn,
+                                              CallOperator queryAggFunc) {
+        String functionName = queryAggFunc.getFnName();
+        if (functionName.equals(FunctionSet.COUNT) && !queryAggFunc.isDistinct()) {
+            CallOperator callOperator = new CallOperator(FunctionSet.SUM,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, IS_IDENTICAL));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (functionName.equals(FunctionSet.SUM) && !queryAggFunc.isDistinct()) {
+            CallOperator callOperator = new CallOperator(FunctionSet.SUM,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    ScalarOperatorUtil.findSumFn(new Type[] {mvColumn.getType()}));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (((functionName.equals(FunctionSet.COUNT) && queryAggFunc.isDistinct())
+                || functionName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) &&
+                mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
+            CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
+                            IS_IDENTICAL));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (
+                (functionName.equals(FunctionSet.NDV) || functionName.equals(FunctionSet.APPROX_COUNT_DISTINCT))
+                        && mvColumn.getAggregationType() == AggregateType.HLL_UNION) {
+            CallOperator callOperator = new CallOperator(FunctionSet.HLL_UNION_AGG,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (functionName.equals(FunctionSet.PERCENTILE_APPROX) &&
+                mvColumn.getAggregationType() == AggregateType.PERCENTILE_UNION) {
+
+            ScalarOperator child = queryAggFunc.getChildren().get(0);
+            if (child instanceof CastOperator) {
+                child = child.getChild(0);
+            }
+            Preconditions.checkState(child instanceof ColumnRefOperator);
+            CallOperator callOperator = new CallOperator(FunctionSet.PERCENTILE_UNION,
+                    queryAggFunc.getType(),
+                    Lists.newArrayList(child),
+                    Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
+                            new Type[] {Type.PERCENTILE}, IS_IDENTICAL));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else {
+            return (CallOperator) replaceColumnRefRewriter.rewrite(queryAggFunc);
+        }
+    }
+
+>>>>>>> 04e73f105 ([BugFix] Make sure not change global function by MV Rewrite (#25568))
     @Override
     public OptExpression visitLogicalAggregate(OptExpression optExpression,
                                                MaterializedViewRule.RewriteContext context) {
