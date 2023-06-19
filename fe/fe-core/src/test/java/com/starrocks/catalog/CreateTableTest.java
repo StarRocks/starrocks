@@ -366,15 +366,15 @@ public class CreateTableTest {
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
                         + " ('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Input 'AS' is not "
-                        + "valid at this position.",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unexpected input 'AS', " +
+                        "the most similar input is {',', ')'}.",
                 () -> createTable("CREATE TABLE test.atbl17 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) \n"
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
                         + "('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Input 'AS' is not "
-                        + "valid at this position.",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unexpected input 'AS', " +
+                        "the most similar input is {',', ')'}.",
                 () -> createTable("CREATE TABLE test.atbl18 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc DOUBLE DEFAULT '1.0' AS (array_avg(array_data)) ) \n"
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"

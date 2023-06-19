@@ -89,7 +89,8 @@ public class AnalyzeJoinTest {
 
         analyzeSuccess("select * from (t0 join tnotnull using(v1)) , t1");
         analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1",
-                "Getting syntax error at line 1, column 43. Detail message: Input 't' is not valid at this position");
+                "Getting syntax error at line 1, column 43. Detail message: Unexpected input 't', " +
+                        "the most similar input is {<EOF>, ';'}.");
         analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1", "Column 'v1' is ambiguous");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
     }
@@ -190,7 +191,7 @@ public class AnalyzeJoinTest {
 
         sql = "select * from (t0 a, (t1) b)";
         analyzeFail(sql, "Getting syntax error at line 1, column 26. " +
-                "Detail message: Input 'b' is not valid at this position");
+                "Detail message: Unexpected input 'b', the most similar input is {')'}.");
 
         sql = "select * from (t0 a, t1 a)";
         analyzeFail(sql, "Not unique table/alias: 'a'");
@@ -206,7 +207,7 @@ public class AnalyzeJoinTest {
 
         sql = "select * from (t0 join t1) t,t1";
         analyzeFail(sql, "Getting syntax error at line 1, column 27. " +
-                "Detail message: Input 't' is not valid at this position");
+                "Detail message: Unexpected input 't', the most similar input is {<EOF>, ';'}.");
 
         sql = "select * from (t0 join t1 t) ,t1";
         analyzeSuccess(sql);

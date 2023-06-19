@@ -15,11 +15,11 @@ E: (1064, 'Getting syntax error. Detail message: Materialized Column must be nul
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
 -- result:
-E: (1064, "Getting syntax error at line 1, column 95. Detail message: Input 'AS' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 95. Detail message: Unexpected input 'AS', the most similar input is {',', ')'}.")
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE DEFAULT "1.0" AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
 -- result:
-E: (1064, "Getting syntax error at line 1, column 94. Detail message: Input 'AS' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 94. Detail message: Unexpected input 'AS', the most similar input is {',', ')'}.")
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
 -- result:
@@ -351,7 +351,7 @@ E: (1064, 'Getting analyzing error. Detail message: Illege expression type for M
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
-E: (1064, "Getting syntax error at line 1, column 49. Detail message: Input '(' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 49. Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}.")
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS AUTO_INCREMENT (array_avg(array_data));
 -- result:
@@ -359,7 +359,7 @@ E: (1064, 'Getting analyzing error from line 1, column 40 to line 1, column 77. 
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS DEFAULT "1.0" (array_avg(array_data));
 -- result:
-E: (1064, "Getting syntax error at line 1, column 40. Detail message: Input 'DEFAULT' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 40. Detail message: Unexpected input 'DEFAULT', the most similar input is {'LEFT', DECIMAL_VALUE, 'DUPLICATE', 'FALSE', 'FILTER', '(', '[', '{', '+', '-', '!', '~', '@', '...'}.")
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (mc_1);
 -- result:
@@ -390,7 +390,7 @@ E: (1064, 'Getting analyzing error. Detail message: Illege expression type for M
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
-E: (1064, "Getting syntax error at line 1, column 52. Detail message: Input '(' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 52. Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}.")
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS AUTO_INCREMENT (array_avg(array_data));
 -- result:
@@ -398,7 +398,7 @@ E: (1064, 'Getting analyzing error from line 1, column 43 to line 1, column 80. 
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS DEFAULT "1.0" (array_avg(array_data));
 -- result:
-E: (1064, "Getting syntax error at line 1, column 43. Detail message: Input 'DEFAULT' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 43. Detail message: Unexpected input 'DEFAULT', the most similar input is {'LEFT', DECIMAL_VALUE, 'DUPLICATE', 'FALSE', 'FILTER', '(', '[', '{', '+', '-', '!', '~', '@', '...'}.")
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS (mc_2);
 -- result:

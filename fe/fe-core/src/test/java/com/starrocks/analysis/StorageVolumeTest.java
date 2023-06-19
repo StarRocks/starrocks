@@ -59,7 +59,7 @@ public class StorageVolumeTest {
     @Test
     public void testAlterStorageVolumeParserAndAnalyzer() {
         String sql = "ALTER STORAGE VOLUME storage_volume_1";
-        AnalyzeTestUtil.analyzeFail(sql, "Input '<EOF>' is not valid at this position");
+        AnalyzeTestUtil.analyzeFail(sql, "Unexpected input '<EOF>', the most similar input is {'SET', 'COMMENT'}");
 
         sql = "ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment', " +
                 "SET (\"aws.s3.region\"=\"us-west-2\", \"enabled\"=\"false\")";

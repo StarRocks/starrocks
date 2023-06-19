@@ -68,7 +68,7 @@ class ParserTest {
             fail("sql should fail to parse.");
         } catch (Exception e) {
             assertContains(e.getMessage(), "Getting syntax error at line 1, column 14. " +
-                    "Detail message: Input 'tbl' is not valid at this position.");
+                    "Detail message: Unexpected input 'tbl', the most similar input is {<EOF>, ';'}.");
         }
     }
 
@@ -279,7 +279,19 @@ class ParserTest {
         }
     }
 
-    
+    @ParameterizedTest
+    @MethodSource("unexpectedTokenSqls")
+    void testUnexpectedTokenSqls(String sql, String expecting) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            fail("sql should fail.");
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            assertContains(e.getMessage(), expecting);
+        }
+    }
+
     private static Stream<Arguments> keyWordSqls() {
         List<String> sqls = Lists.newArrayList();
         sqls.add("select current_role()");
@@ -335,6 +347,39 @@ class ParserTest {
         sqls.add(Pair.create("select abs(distinct v1) from t1", false));
         return sqls.stream().map(e -> Arguments.of(e.first, e.second));
     }
+
+
+    private static Stream<Arguments> unexpectedTokenSqls() {
+        List<Arguments> arguments = Lists.newArrayList();
+
+        arguments.add(Arguments.of("selct * from tbl", "SELECT"));
+        arguments.add(Arguments.of("select , from tbl", "a legal identifier"));
+        arguments.add(Arguments.of("CREATE TABLE IF NOT EXISTS timetest (\n" +
+                "  `v1` int(11) NOT NULL,\n" +
+                "  `v2` int(11) NOT NULL,\n" +
+                "  `v3` int(11) NOT NULL\n" +
+                " ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                " \"replication_num\" = \"1\"\n" +
+                ");", ")"));
+        arguments.add(Arguments.of("analyze table tt abc", "';'"));
+        arguments.add(Arguments.of("select 1,, from tbl", "a legal identifier"));
+        arguments.add(Arguments.of("INSTALL PLUGIN FRO xxx", "FROM"));
+        arguments.add(Arguments.of("select (1 + 1) + 1) from tbl", "';'"));
+        arguments.add(Arguments.of("CREATE TABLE IF NOT EXISTS timetest (\n" +
+                "  `v1` int(11) NOT NULL,\n" +
+                "  `v2` int(11) NOT NULL,\n" +
+                "  `v3` int(11) NOT NULL\n" +
+                ")ENGINE=OLAPDUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                " \"replication_num\" = \"1\"\n" +
+                ");", "the most similar input is {<EOF>, ';'}"));
+        return arguments.stream();
+    }
+
 }
 
 
