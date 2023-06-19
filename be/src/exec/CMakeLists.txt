@@ -213,7 +213,7 @@ set(EXEC_FILES
     pipeline/query_context.cpp
     pipeline/stream_epoch_manager.cpp
     pipeline/stream_pipeline_driver.cpp
-    pipeline/aggregate/combined.cpp
+    pipeline/aggregate/aggregate_operators.cpp
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
