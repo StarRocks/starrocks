@@ -16,9 +16,6 @@ package com.starrocks.sql.parser;
 
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.FailedPredicateException;
-import org.antlr.v4.runtime.InputMismatchException;
-import org.antlr.v4.runtime.LexerNoViableAltException;
-import org.antlr.v4.runtime.NoViableAltException;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
 
@@ -33,15 +30,7 @@ class ErrorHandler extends BaseErrorListener {
         NodePosition pos = new NodePosition(line, charPositionInLine);
         String tokenName;
 
-        if (e instanceof NoViableAltException || e instanceof LexerNoViableAltException) {
-            // it means parser cannot find a suitable rule for the input.
-            tokenName = SqlParser.getTokenDisplay(e.getOffendingToken());
-            detailMsg = PARSER_ERROR_MSG.noViableStatement(tokenName);
-        } else if (e instanceof InputMismatchException) {
-            // it means parser find the input only partially matches the rule.
-            tokenName = SqlParser.getTokenDisplay(e.getOffendingToken());
-            detailMsg = PARSER_ERROR_MSG.inputMismatch(tokenName);
-        } else if (e instanceof FailedPredicateException) {
+        if (e instanceof FailedPredicateException) {
             tokenName = SqlParser.getTokenDisplay(e.getOffendingToken());
             detailMsg = PARSER_ERROR_MSG.failedPredicate(tokenName, ((FailedPredicateException) e).getPredicate());
         } else {

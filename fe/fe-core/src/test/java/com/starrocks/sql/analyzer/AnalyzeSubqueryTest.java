@@ -74,9 +74,9 @@ public class AnalyzeSubqueryTest {
                 "In Predicate only support literal expression list");
 
         analyzeFail("SELECT * FROM T WHERE A IN 1, 2", "Getting syntax error at line 1, column 24." +
-                " Detail message: Input 'IN' is not valid at this position");
+                " Detail message: Unexpected input 'IN', the most similar input is {<EOF>, ';'}.");
         analyzeFail("SELECT * FROM T WHERE A IN 1", "Getting syntax error at line 1, column 24." +
-                " Detail message: Input 'IN' is not valid at this position");
+                " Detail message: Unexpected input 'IN', the most similar input is {<EOF>, ';'}.");
     }
 
     @Test

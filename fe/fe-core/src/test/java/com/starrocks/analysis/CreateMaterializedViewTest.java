@@ -1725,7 +1725,7 @@ public class CreateMaterializedViewTest {
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage()
-                    .contains("No viable statement for input '('."));
+                    .contains("No viable statement for input 'distributed by hash(date_trunc('."));
         }
     }
 

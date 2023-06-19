@@ -114,7 +114,7 @@ PROPERTIES(
 )
 insert into t1 values (1,1,1),(1,2,2),(2,3,3),(2,3,4),(2,5,5);
 -- result:
-E: (1064, "Getting syntax error at line 10, column 0. Detail message: Input 'insert' is not valid at this position.")
+E: (1064, "Getting syntax error at line 10, column 0. Detail message: Unexpected input 'insert', the most similar input is {<EOF>, ';'}.")
 -- !result
 CREATE MATERIALIZED VIEW mv2
 DISTRIBUTED BY HASH(k1) BUCKETS 10
