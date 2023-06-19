@@ -24,8 +24,6 @@
 
 namespace starrocks {
 
-static const size_t block_size = 1024 * 1024;
-
 class BlockCacheTest : public ::testing::Test {
 protected:
     static void SetUpTestCase() { ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok()); }
@@ -59,17 +57,14 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     const std::string cache_key = "test_file";
 
     // write cache
-    off_t offset = 0;
     for (size_t i = 0; i < rounds; ++i) {
         char ch = 'a' + i % 26;
         std::string value(batch_size, ch);
         Status st = cache->write_cache(cache_key + std::to_string(i), 0, batch_size, value.c_str());
         ASSERT_TRUE(st.ok());
-        offset += batch_size;
     }
 
     // read cache
-    offset = 0;
     for (size_t i = 0; i < rounds; ++i) {
         char ch = 'a' + i % 26;
         std::string expect_value(batch_size, ch);
@@ -77,7 +72,6 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
         auto res = cache->read_cache(cache_key + std::to_string(i), 0, batch_size, value);
         ASSERT_TRUE(res.status().ok());
         ASSERT_EQ(memcmp(value, expect_value.c_str(), batch_size), 0);
-        offset += batch_size;
     }
 
     cache->shutdown();
@@ -103,17 +97,14 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     const std::string cache_key = "test_file";
 
     // write cache
-    off_t offset = 0;
     for (size_t i = 0; i < rounds; ++i) {
         char ch = 'a' + i % 26;
         std::string value(batch_size, ch);
         Status st = cache->write_cache(cache_key + std::to_string(i), 0, batch_size, value.c_str());
         ASSERT_TRUE(st.ok());
-        offset += batch_size;
     }
 
     // read cache
-    offset = 0;
     for (size_t i = 0; i < rounds; ++i) {
         char ch = 'a' + i % 26;
         std::string expect_value(batch_size, ch);
@@ -121,7 +112,6 @@ TEST_F(BlockCacheTest, hybrid_cache) {
         auto res = cache->read_cache(cache_key + std::to_string(i), 0, batch_size, value);
         ASSERT_TRUE(res.status().ok());
         ASSERT_EQ(memcmp(value, expect_value.c_str(), batch_size), 0);
-        offset += batch_size;
     }
 
     // remove cache

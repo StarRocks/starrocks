@@ -47,7 +47,6 @@
 namespace starrocks {
 
 std::string space[] = {"", "   ", "\t\t\t", "\n\n\n", "\v\v\v", "\f\f\f", "\r\r\r"};
-const int space_len = 7;
 
 // Tests conversion of s to integer with and without leading/trailing whitespace
 template <typename T>
