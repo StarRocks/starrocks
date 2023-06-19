@@ -144,6 +144,18 @@ public class HiveMetaClientTest {
         Assert.assertEquals("\002", emptyDesc.getCollectionDelim());
         Assert.assertEquals("\003", emptyDesc.getMapkeyDelim());
 
+        // Check blank delimiter
+        Map<String, String> blankParameters = new HashMap<>();
+        blankParameters.put("field.delim", "");
+        blankParameters.put("line.delim", "");
+        blankParameters.put("collection.delim", "");
+        blankParameters.put("mapkey.delim", "");
+        TextFileFormatDesc blankDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(blankParameters);
+        Assert.assertEquals("\001", blankDesc.getFieldDelim());
+        Assert.assertEquals("\n", blankDesc.getLineDelim());
+        Assert.assertEquals("\002", blankDesc.getCollectionDelim());
+        Assert.assertEquals("\003", blankDesc.getMapkeyDelim());
+
         // Check is using custom delimiter
         StorageDescriptor customSd = new StorageDescriptor();
         Map<String, String> parameters = new HashMap<>();
