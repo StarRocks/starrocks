@@ -127,6 +127,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     _column_indexes.insert(_column_indexes.end(), column_indexes.begin(), column_indexes.end());
     _column_writers.reserve(_column_indexes.size());
     size_t num_columns = _tablet_schema->num_columns();
+    std::map<uint32_t, uint32_t> sort_column_idx_by_column_index;
     for (uint32_t i = 0; i < _column_indexes.size(); i++) {
         uint32_t column_index = _column_indexes[i];
         if (column_index >= num_columns) {
@@ -181,7 +182,21 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
         if (column.is_sort_key()) {
-            _sort_column_indexes.emplace_back(i);
+            sort_column_idx_by_column_index[column_index] = i;
+        }
+    }
+    for (auto& column_idx : _tablet_schema->sort_key_idxes()) {
+        auto iter = sort_column_idx_by_column_index.find(column_idx);
+        if (iter != sort_column_idx_by_column_index.end()) {
+            _sort_column_indexes.emplace_back(iter->second);
+        } else {
+            // Currently we have the following two scenarios：
+            //  1. data load or horizontal compaction, we will write the whole row data once a time
+            //  2. vertical compaction, we will first write all sort key columns and write value columns by group
+            // So the all sort key columns should be found in `_column_indexes` so far.
+            std::string err_msg =
+                    strings::Substitute("column $0 is sort key but not find while init segment writer", column_idx);
+            return Status::InternalError(err_msg);
         }
     }
 
