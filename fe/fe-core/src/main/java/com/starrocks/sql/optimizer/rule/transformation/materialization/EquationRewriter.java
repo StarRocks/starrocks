@@ -37,6 +37,8 @@ public class EquationRewriter {
 
     private Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
+    private AggregateFunctionRewriter aggregateFunctionRewriter;
+    boolean underAggFunctionRewriteContext;
 
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
@@ -44,6 +46,18 @@ public class EquationRewriter {
 
     public void setOutputMapping(Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
         this.columnMapping = columnMapping;
+    }
+
+    public void setAggregateFunctionRewriter(AggregateFunctionRewriter aggregateFunctionRewriter) {
+        this.aggregateFunctionRewriter = aggregateFunctionRewriter;
+    }
+
+    public boolean isUnderAggFunctionRewriteContext() {
+        return underAggFunctionRewriteContext;
+    }
+
+    public void setUnderAggFunctionRewriteContext(boolean underAggFunctionRewriteContext) {
+        this.underAggFunctionRewriteContext = underAggFunctionRewriteContext;
     }
 
     protected ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
@@ -63,7 +77,24 @@ public class EquationRewriter {
             @Override
             public ScalarOperator visitCall(CallOperator predicate, Void context) {
                 ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitCall(predicate, context);
+                if (tmp != null) {
+                    return tmp;
+                }
+
+                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(predicate) &&
+                        !isUnderAggFunctionRewriteContext()) {
+                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(predicate);
+                    if (newChooseScalarOp != null) {
+                        setUnderAggFunctionRewriteContext(true);
+                        // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
+                        // `underAggFunctionRewriteContext` to mark it's under agg function rewriter and no need rewrite again.
+                        ScalarOperator rewritten = newChooseScalarOp.accept(this, null);
+                        setUnderAggFunctionRewriteContext(false);
+                        return rewritten;
+                    }
+                }
+
+                return super.visitCall(predicate, context);
             }
 
             @Override
@@ -79,9 +110,7 @@ public class EquationRewriter {
             }
 
             ScalarOperator replace(ScalarOperator scalarOperator) {
-
                 if (equationMap.containsKey(scalarOperator)) {
-
                     Optional<Pair<ColumnRefOperator, ScalarOperator>> mappedColumnAndExprRef =
                             equationMap.get(scalarOperator).stream().findFirst();
 
@@ -103,7 +132,6 @@ public class EquationRewriter {
                     ScalarOperator newExpr = extendedExpr.clone();
                     return replaceColInExpr(newExpr, basedColumn,
                             replaced.clone()) ? newExpr : null;
-
                 }
 
                 return null;
