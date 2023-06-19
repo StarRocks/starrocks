@@ -92,12 +92,14 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     // row id filter
     if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
         int64_t current_chunk_base_row = _row_group_first_row + _raw_rows_read - count;
-        auto start_iter = lower_bound(_need_skip_rowids->begin(), _need_skip_rowids->end(), current_chunk_base_row);
-        auto end_iter =
-                upper_bound(_need_skip_rowids->begin(), _need_skip_rowids->end(), current_chunk_base_row + count - 1);
-        for (; start_iter != end_iter; start_iter++) {
-            chunk_filter[*start_iter - current_chunk_base_row] = 0;
-            has_filter = true;
+        {
+            SCOPED_RAW_TIMER(&_param.stats->build_iceberg_pos_filter_ns);
+            auto start_str = _need_skip_rowids->lower_bound(current_chunk_base_row);
+            auto end_str = _need_skip_rowids->upper_bound(current_chunk_base_row + count - 1);
+            for (; start_str != end_str; start_str++) {
+                chunk_filter[*start_str - current_chunk_base_row] = 0;
+                has_filter = true;
+            }
         }
     }
 
