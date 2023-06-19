@@ -49,6 +49,7 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
     std::call_once(_load_once_flag, [&] {
         _base_version = base_version;
         _builder = builder;
+        _tablet_id = metadata.id();
         _status = _do_load(op_write, metadata, tablet);
         if (!_status.ok()) {
             LOG(WARNING) << "load RowsetUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
@@ -58,7 +59,7 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
             }
         }
     });
-    if (need_resolve_conflict) {
+    if (need_resolve_conflict && _status.ok()) {
         RETURN_IF_ERROR(_resolve_conflict(op_write, metadata, base_version, tablet, builder));
     }
     return _status;
@@ -229,9 +230,11 @@ Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_wr
     LOG(INFO) << "RowsetUpdateState do_load cost: " << cost_str.str();
 
     for (const auto& upsert : _upserts) {
+        upsert->raw_data();
         _memory_usage += upsert != nullptr ? upsert->memory_usage() : 0;
     }
     for (const auto& one_delete : _deletes) {
+        one_delete->raw_data();
         _memory_usage += one_delete != nullptr ? one_delete->memory_usage() : 0;
     }
 
