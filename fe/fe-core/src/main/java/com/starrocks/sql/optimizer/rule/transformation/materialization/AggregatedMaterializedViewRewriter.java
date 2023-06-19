@@ -7,7 +7,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
@@ -35,8 +34,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 import static java.util.function.UnaryOperator.identity;
 
 /**
@@ -585,18 +584,15 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 return null;
             }
         } else {
-            // the rollup function is the same as origin, but use the new column as argument
-            CallOperator newAggCall = (CallOperator) aggCall.clone();
-            newAggCall.setChild(0, targetColumn);
-            // NOTE: Change fn's type  as 1th child has change, otherwise physical plan
+            // NOTE:
+            // 1. Change fn's type  as 1th child has change, otherwise physical plan
             // will still use old arg input's type.
-            newAggCall.getFunction().setArgsType(new Type[] { targetColumn.getType() });
-            return newAggCall;
+            // 2. the rollup function is the same as origin, but use the new column as argument
+            Function newFunc = aggCall.getFunction()
+                    .updateArgType(new Type[] {targetColumn.getType()});
+            return new CallOperator(aggCall.getFnName(), aggCall.getType(), Lists.newArrayList(targetColumn),
+                    newFunc);
         }
-    }
-
-    private Function findArithmeticFunction(Type[] argsType, String fnName) {
-        return Expr.getBuiltinFunction(fnName, argsType, IS_IDENTICAL);
     }
 
     // Rewrite query agg operator by rule:
