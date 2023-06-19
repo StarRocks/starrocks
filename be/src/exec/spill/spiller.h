@@ -104,8 +104,10 @@ public:
 
     const SpillProcessMetrics& metrics() { return _metrics; }
 
-    // set partition
+    // set partitions for spiller only works when spiller has partitioned spill writer
     Status set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
+    // init partition by `num_partitions`
+    Status set_partition(RuntimeState* state, size_t num_partitions);
 
     // no thread-safe
     // TaskExecutor: Executor for runing io tasks

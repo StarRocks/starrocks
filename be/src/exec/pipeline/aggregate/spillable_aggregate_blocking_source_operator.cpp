@@ -109,11 +109,8 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
 
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
-        ASSIGN_OR_RETURN(auto chunk, _aggregator->spiller()->restore(
-                                             state, *executor,
-                                             spill::ResourceMemTrackerGuard(tls_mem_tracker,
-                                                                            state->query_ctx()->weak_from_this())));
-
+        ASSIGN_OR_RETURN(auto chunk,
+                         _aggregator->spiller()->restore(state, *executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
         if (chunk->is_empty()) {
             return chunk;
         }

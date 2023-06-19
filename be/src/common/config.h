@@ -900,7 +900,7 @@ CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 // when spill occurs, whether enable skip synchronous flush
 CONF_mBool(experimental_spill_skip_sync, "true");
 // spill Initial number of partitions
-CONF_mInt32(spill_init_partition, "4");
+CONF_mInt32(spill_init_partition, "16");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB

@@ -30,6 +30,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
+#include "util/bit_util.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
@@ -51,6 +52,17 @@ void SpillableHashJoinBuildOperator::close(RuntimeState* state) {
     HashJoinBuildOperator::close(state);
 }
 
+size_t SpillableHashJoinBuildOperator::estimated_memory_reserved(const ChunkPtr& chunk) {
+    if (chunk && !chunk->is_empty()) {
+        return chunk->memory_usage() + _join_builder->hash_join_builder()->hash_table().mem_usage();
+    }
+    return 0;
+}
+
+size_t SpillableHashJoinBuildOperator::estimated_memory_reserved() {
+    return _join_builder->hash_join_builder()->hash_table().mem_usage() * 2;
+}
+
 bool SpillableHashJoinBuildOperator::need_input() const {
     return !is_finished() && !(_join_builder->spiller()->is_full() || _join_builder->spill_channel()->has_task());
 }
@@ -67,6 +79,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     }
 
     auto io_executor = _join_builder->spill_channel()->io_executor();
+    RETURN_IF_ERROR(_join_builder->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         return _join_builder->spiller()->set_flush_all_call_back(
                 [this]() {
@@ -154,9 +167,14 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
         return Status::OK();
     }
 
-    // TODO: materialize chunk (const/nullable)
-
     auto& ht = _join_builder->hash_join_builder()->hash_table();
+    // Estimate the appropriate number of partitions
+    if (_is_first_time_spill && ht.get_row_count() > 0) {
+        // We estimate the size of the hash table to be twice the size of the already input hash table
+        auto num_partitions = ht.mem_usage() * 2 / _join_builder->spiller()->options().spill_mem_table_bytes_size;
+        RETURN_IF_ERROR(_join_builder->spiller()->set_partition(state, num_partitions));
+    }
+
     ASSIGN_OR_RETURN(auto spill_chunk, ht.convert_to_spill_schema(chunk));
     RETURN_IF_ERROR(append_hash_columns(spill_chunk));
 
@@ -201,11 +219,10 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
 
     // no order by, init with 4 partitions
     _spill_options = std::make_shared<spill::SpilledOptions>(config::spill_init_partition);
-    _spill_options->spill_file_size = state->spill_mem_table_size();
+    _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->min_spilled_size = state->spill_operator_min_bytes();
-    _spill_options->max_memory_size_each_partition = state->spill_operator_max_bytes();
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "hash-join-build";
     _spill_options->plan_node_id = _plan_node_id;

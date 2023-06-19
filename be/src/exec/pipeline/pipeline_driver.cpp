@@ -503,7 +503,6 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 
 void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
                                           const ChunkPtr& chunk) {
-    // TODO: FIXME
     // a simple spill stragety
     auto& mem_resource_mgr = op->mem_resource_manager();
     if (state->enable_spill() && mem_resource_mgr.releaseable() &&
