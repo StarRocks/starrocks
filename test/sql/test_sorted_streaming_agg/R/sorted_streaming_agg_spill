@@ -39,7 +39,7 @@ insert into test_basic (id_int, id_tinyint, id_smallint, id_bigint, id_largeint,
         (8, 80, 400, 8000, 40000, 400000.1, 4000000.1, 'test_char4', 'testvarchar4', '2020-07-21', '1999-07-24', 2367.34)
 select sum(id_int) from test_basic group by id_int order by id_int;
 -- result:
-E: (1064, "Getting syntax error at line 3, column 80. Detail message: Input '', '' is not valid at this position.")
+E: (1064, "Getting syntax error at line 3, column 80. Detail message: Unexpected input '', '', the most similar input is {',', ')'}.")
 -- !result
 select sum(id_int) from test_basic group by id_int order by id_int;
 -- result:
