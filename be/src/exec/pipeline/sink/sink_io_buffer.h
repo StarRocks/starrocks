@@ -72,7 +72,7 @@ public:
         if (--_num_result_sinkers == 0) {
             // when all writes are over, we add a nullptr as a special mark to trigger close
             if (bthread::execution_queue_execute(*_exec_queue_id, nullptr) != 0) {
-                return Status::InternalError("submit task failed");
+                return Status::InternalError("submit close task failed");
             }
             ++_num_pending_chunks;
         }
@@ -84,9 +84,9 @@ public:
     virtual void cancel_one_sinker() { _is_cancelled = true; }
 
     virtual void close(RuntimeState* state) {
-        _is_finished = true;
         if (_exec_queue_id != nullptr) {
             bthread::execution_queue_stop(*_exec_queue_id);
+            _exec_queue_id.reset();
         }
     }
 
@@ -103,6 +103,9 @@ public:
     }
 
     static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
+        if (iter.is_queue_stopped()) {
+            return 0;
+        }
         auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(sink_io_buffer->_state->query_mem_tracker_ptr().get());
         for (; iter; ++iter) {
@@ -122,6 +125,7 @@ protected:
     std::atomic_bool _is_prepared = false;
     std::atomic_bool _is_cancelled = false;
     std::atomic_bool _is_finished = false;
+    std::atomic_bool _is_closed = false;
 
     mutable std::shared_mutex _io_status_mutex;
     Status _io_status;

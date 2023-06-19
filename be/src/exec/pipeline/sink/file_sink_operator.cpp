@@ -83,6 +83,11 @@ Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_pro
 }
 
 void FileSinkIOBuffer::close(RuntimeState* state) {
+    bool expected = false;
+    if (!_is_closed.compare_exchange_strong(expected, true)) {
+        return;
+    }
+
     int64_t num_written_rows = 0;
     if (_writer != nullptr) {
         if (Status status = _writer->close(); !status.ok()) {
@@ -124,7 +129,7 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     // cancelling has happened but close is not invoked
     if (_is_cancelled && !_is_finished) {
         if (_num_pending_chunks == 0) {
-            close(_state);
+            _is_finished = true;
         }
         return;
     }
@@ -134,7 +139,6 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
             status = status.clone_and_prepend("open file writer failed, error");
             LOG(WARNING) << status;
             _fragment_ctx->cancel(status);
-            close(_state);
             return;
         }
         _is_writer_opened = true;
@@ -144,7 +148,7 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     if (chunk == nullptr) {
         // this is the last chunk
         DCHECK_EQ(_num_pending_chunks, 0);
-        close(_state);
+        _is_finished = true;
         return;
     }
 
@@ -152,7 +156,6 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
         status = status.clone_and_prepend("add chunk to file writer failed, error");
         LOG(WARNING) << status;
         _fragment_ctx->cancel(status);
-        close(_state);
         return;
     }
 }
@@ -163,6 +166,7 @@ Status FileSinkOperator::prepare(RuntimeState* state) {
 }
 
 void FileSinkOperator::close(RuntimeState* state) {
+    _file_sink_buffer->close(state);
     Operator::close(state);
 }
 
