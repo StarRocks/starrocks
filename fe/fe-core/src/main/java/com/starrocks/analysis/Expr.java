@@ -49,6 +49,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -721,6 +722,13 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     @Deprecated
     public String toSql() {
         return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
+    }
+
+    /**
+     * `toSqlWithoutTbl` will return sql without table name for column name, so it can be easier to compare two expr.
+     */
+    public String toSqlWithoutTbl() {
+        return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true).visit(this);
     }
 
     public String explain() {

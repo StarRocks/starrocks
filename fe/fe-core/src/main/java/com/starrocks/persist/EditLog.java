@@ -80,8 +80,8 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
-import com.starrocks.privilege.RolePrivilegeCollection;
-import com.starrocks.privilege.UserPrivilegeCollection;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
+import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
@@ -747,6 +747,11 @@ public class EditLog {
                 case OperationType.OP_DROP_TASKS: {
                     DropTasksLog dropTasksLog = (DropTasksLog) journal.getData();
                     globalStateMgr.getTaskManager().replayDropTasks(dropTasksLog.getTaskIdList());
+                    break;
+                }
+                case OperationType.OP_ALTER_TASK: {
+                    final Task task = (Task) journal.getData();
+                    globalStateMgr.getTaskManager().replayAlterTask(task);
                     break;
                 }
                 case OperationType.OP_CREATE_TASK_RUN: {
@@ -1913,7 +1918,7 @@ public class EditLog {
             UserIdentity userIdentity,
             UserAuthenticationInfo authenticationInfo,
             UserProperty userProperty,
-            UserPrivilegeCollection privilegeCollection,
+            UserPrivilegeCollectionV2 privilegeCollection,
             short pluginId,
             short pluginVersion) {
         CreateUserInfo info = new CreateUserInfo(
@@ -1949,7 +1954,7 @@ public class EditLog {
 
     public void logUpdateUserPrivilege(
             UserIdentity userIdentity,
-            UserPrivilegeCollection privilegeCollection,
+            UserPrivilegeCollectionV2 privilegeCollection,
             short pluginId,
             short pluginVersion) {
         UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(
@@ -1958,7 +1963,7 @@ public class EditLog {
     }
 
     public void logUpdateRolePrivilege(
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified,
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
@@ -1970,7 +1975,7 @@ public class EditLog {
     }
 
     public void logDropRole(
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified,
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
@@ -2004,4 +2009,9 @@ public class EditLog {
     private void logJsonObject(short op, Object obj) {
         logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
     }
+
+    public void logAlterTask(Task changedTask) {
+        logEdit(OperationType.OP_ALTER_TASK, changedTask);
+    }
+
 }

@@ -192,11 +192,11 @@ After the load job finishes, StarRocks returns the job result in JSON format. Ex
     "NumberUnselectedRows": 0,
     "LoadBytes": 40888898,
     "LoadTimeMs": 2144,
-    BeginTxnTimeMs: 0,
-    StreamLoadPutTimeMS: 1,
-    ReadDataTimeMs: 0,
-    WriteDataTimeMs: 11,
-    CommitAndPublishTimeMs: 16,
+    "BeginTxnTimeMs": 0,
+    "StreamLoadPutTimeMS": 1,
+    "ReadDataTimeMs": 0,
+    "WriteDataTimeMs": 11,
+    "CommitAndPublishTimeMs": 16,
 }
 ```
 
