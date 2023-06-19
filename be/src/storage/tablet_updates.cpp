@@ -4089,21 +4089,19 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
     return Status::OK();
 }
 
-Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upsert,
-                                                    EditVersion* read_version, std::vector<uint64_t>* rss_rowids) {
+Status TabletUpdates::get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                           std::vector<uint64_t>* rss_rowids) {
     std::lock_guard lg(_index_lock);
-    return prepare_partial_update_states_unlock(tablet, upsert, read_version, rss_rowids);
+    return get_rss_rowids_by_pk_unlock(tablet, keys, read_version, rss_rowids);
 }
 
-Status TabletUpdates::prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upsert,
-                                                           EditVersion* read_version,
-                                                           std::vector<uint64_t>* rss_rowids) {
+Status TabletUpdates::get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                                  std::vector<uint64_t>* rss_rowids) {
     if (read_version != nullptr) {
         // get next_rowset_id and read_version to identify conflict
         std::lock_guard wl(_lock);
         if (_edit_version_infos.empty()) {
-            string msg = strings::Substitute("tablet deleted when prepare_partial_update_states tablet:$0",
-                                             _tablet.tablet_id());
+            string msg = strings::Substitute("tablet deleted when get_rss_rowids_by_pk tablet:$0", _tablet.tablet_id());
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
@@ -4118,14 +4116,14 @@ Status TabletUpdates::prepare_partial_update_states_unlock(Tablet* tablet, const
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
-        std::string msg = strings::Substitute("prepare_partial_update_states error: load primary index failed: $0 $1",
-                                              st.to_string(), debug_string());
+        std::string msg = strings::Substitute("get_rss_rowids_by_pk error: load primary index failed: $0 $1",
+                                              st.get_error_msg(), debug_string());
         LOG(ERROR) << msg;
         _set_error(msg);
         return Status::InternalError(msg);
     }
 
-    index.get(*upsert, rss_rowids);
+    index.get(keys, rss_rowids);
 
     // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
     // we should try to remove the index_entry from cache
@@ -4281,6 +4279,20 @@ std::shared_ptr<EditVersionInfo> TabletUpdates::get_edit_version(const string& v
 std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> TabletUpdates::get_rowset_map() const {
     std::lock_guard lg(_rowsets_lock);
     return std::make_shared<std::unordered_map<uint32_t, RowsetSharedPtr>>(_rowsets);
+}
+
+Status TabletUpdates::get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset,
+                                                          uint32_t* segment_idx) {
+    std::lock_guard<std::mutex> l(_rowsets_lock);
+    for (const auto& rssid_rowset_pair : _rowsets) {
+        if (rssid >= rssid_rowset_pair.first &&
+            rssid < rssid_rowset_pair.first + rssid_rowset_pair.second->num_segments()) {
+            *rowset = rssid_rowset_pair.second;
+            *segment_idx = rssid - rssid_rowset_pair.first;
+            return Status::OK();
+        }
+    }
+    return Status::NotFound(strings::Substitute("rowset for rssid $0 not found", rssid));
 }
 
 } // namespace starrocks

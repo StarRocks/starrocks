@@ -77,7 +77,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
@@ -158,6 +157,8 @@ public class OlapScanNode extends ScanNode {
     private Map<Long, List<Long>> partitionToScanTabletMap;
     // The dict id int column ids to dict string column ids
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
+
+    private boolean usePkIndex = false;
 
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -485,7 +486,7 @@ public class OlapScanNode extends ScanNode {
             boolean collectedStat = false;
             for (Replica replica : replicas) {
                 // TODO: need to refactor after be split into cn + dn
-                ComputeNode node =  GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -825,6 +826,8 @@ public class OlapScanNode extends ScanNode {
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
                 msg.olap_scan_node.setColumn_access_paths(columnAccessPathToThrift());
             }
+
+            msg.olap_scan_node.setUse_pk_index(usePkIndex);
         }
     }
 
@@ -877,6 +880,10 @@ public class OlapScanNode extends ScanNode {
 
     public void setTotalTabletsNum(long totalTabletsNum) {
         this.totalTabletsNum = totalTabletsNum;
+    }
+
+    public void setUsePkIndex(boolean usePkIndex) {
+        this.usePkIndex = usePkIndex;
     }
 
     @Override
