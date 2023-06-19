@@ -1,6 +1,8 @@
---- AWSCredentialsProvider.cpp.bak	2023-06-19 14:40:17
-+++ AWSCredentialsProvider.cpp	2023-06-19 14:40:35
-@@ -259,7 +259,6 @@
+diff --git a/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp b/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
+index 084e4bca6e..6c8b059b2d 100644
+--- a/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
++++ b/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
+@@ -259,7 +259,6 @@ AWSCredentials InstanceProfileCredentialsProvider::GetAWSCredentials()
  
  bool InstanceProfileCredentialsProvider::ExpiresSoon() const
  {
@@ -8,3 +10,10 @@
      auto profileIter = m_ec2MetadataConfigLoader->GetProfiles().find(Aws::Config::INSTANCE_PROFILE_KEY);
      AWSCredentials credentials;
  
+diff --git a/crt/aws-crt-cpp b/crt/aws-crt-cpp
+index 0a9e0ad7ab..cb474daeea 160000
+--- a/crt/aws-crt-cpp
++++ b/crt/aws-crt-cpp
+@@ -1 +1 @@
+-Subproject commit 0a9e0ad7ab07113c65b4846ece3a386407c9c0d3
++Subproject commit cb474daeeaf5c025bd3408103adf61b97b74e600
