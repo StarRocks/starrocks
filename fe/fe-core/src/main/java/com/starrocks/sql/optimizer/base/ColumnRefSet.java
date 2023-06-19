@@ -184,6 +184,10 @@ public class ColumnRefSet implements Cloneable {
         return isIntersect(rhs);
     }
 
+    public boolean containsAny(Collection<ColumnRefOperator> rhs) {
+        return rhs.stream().anyMatch(this::contains);
+    }
+
     public boolean containsAll(List<Integer> rhs) {
         return rhs.stream().allMatch(id -> bitSet.contains(id));
     }
