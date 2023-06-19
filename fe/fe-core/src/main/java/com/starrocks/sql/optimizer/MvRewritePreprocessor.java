@@ -350,6 +350,7 @@ public class MvRewritePreprocessor {
                 .setSelectedTabletId(selectTabletIds)
                 .setHintsTabletIds(Collections.emptyList())
                 .setHasTableHints(false)
+                .setUsePkIndex(false)
                 .build();
     }
 

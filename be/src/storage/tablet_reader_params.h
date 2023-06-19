@@ -83,6 +83,7 @@ struct TabletReaderParams {
     OlapRuntimeScanRangePruner runtime_range_pruner;
 
     std::unordered_map<uint32_t, ColumnAccessPathPtr>* column_access_paths = nullptr;
+    bool use_pk_index = false;
 
 public:
     std::string to_string() const;

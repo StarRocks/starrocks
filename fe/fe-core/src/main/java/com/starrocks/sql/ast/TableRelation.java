@@ -34,7 +34,8 @@ public class TableRelation extends Relation {
     public enum TableHint {
         _META_,
         _BINLOG_,
-        _SYNC_MV_
+        _SYNC_MV_,
+        _USE_PK_INDEX_,
     }
 
     private final TableName name;
@@ -91,7 +92,7 @@ public class TableRelation extends Relation {
 
     // Check whether the table has some table hints, some rules should not be applied.
     public boolean hasTableHints() {
-        return partitionNames != null || isSyncMVQuery() ||  (tabletIds != null && !tabletIds.isEmpty());
+        return partitionNames != null || isSyncMVQuery() || (tabletIds != null && !tabletIds.isEmpty());
     }
 
     public List<Long> getTabletIds() {
@@ -158,8 +159,13 @@ public class TableRelation extends Relation {
     public boolean isBinlogQuery() {
         return tableHints.contains(TableHint._BINLOG_) && table.isOlapTable();
     }
+
     public boolean isSyncMVQuery() {
         return tableHints.contains(TableHint._SYNC_MV_);
+    }
+
+    public boolean isUsePkIndex() {
+        return tableHints.contains(TableHint._USE_PK_INDEX_);
     }
 
     @Override

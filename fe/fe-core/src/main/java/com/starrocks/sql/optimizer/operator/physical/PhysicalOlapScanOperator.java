@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.Lists;
@@ -47,6 +46,8 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private String turnOffReason;
     protected boolean needSortedByKeyPerTablet = false;
 
+    private boolean usePkIndex = false;
+
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
     // TODO: remove this
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
@@ -62,13 +63,15 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     List<Long> selectedPartitionId,
                                     List<Long> selectedTabletId,
                                     List<ScalarOperator> prunedPartitionPredicates,
-                                    Projection projection) {
+                                    Projection projection,
+                                    boolean usePkIndex) {
         super(OperatorType.PHYSICAL_OLAP_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
         this.distributionSpec = distributionDesc;
         this.selectedIndexId = selectedIndexId;
         this.selectedPartitionId = selectedPartitionId;
         this.selectedTabletId = selectedTabletId;
         this.prunedPartitionPredicates = prunedPartitionPredicates;
+        this.usePkIndex = usePkIndex;
     }
 
     public long getSelectedIndexId() {
@@ -130,6 +133,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public void setNeedSortedByKeyPerTablet(boolean needSortedByKeyPerTablet) {
         this.needSortedByKeyPerTablet = needSortedByKeyPerTablet;
+    }
+
+    public boolean isUsePkIndex() {
+        return usePkIndex;
     }
 
     @Override
