@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
@@ -43,6 +42,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private final List<Long> hintsTabletIds;
 
     private final List<ScalarOperator> prunedPartitionPredicates;
+    private final boolean usePkIndex;
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -60,8 +60,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 ((OlapTable) table).getBaseIndexId(),
                 null,
                 null,
+                false,
                 Lists.newArrayList(),
-                Lists.newArrayList());
+                Lists.newArrayList(),
+                false);
     }
 
     public LogicalOlapScanOperator(
@@ -76,7 +78,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             PartitionNames partitionNames,
             boolean hasHintsPartitionNames,
             List<Long> selectedTabletId,
-            List<Long> hintsTabletIds) {
+            List<Long> hintsTabletIds,
+            boolean usePkIndex) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
                 null);
 
@@ -89,6 +92,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
         this.prunedPartitionPredicates = Lists.newArrayList();
+        this.usePkIndex = usePkIndex;
     }
 
     public LogicalOlapScanOperator(
@@ -104,7 +108,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             List<Long> selectedTabletId,
             List<Long> hintsTabletIds) {
         this(table, colRefToColumnMetaMap, columnMetaToColRefMap, hashDistributionSpec, limit, predicate,
-                selectedIndexId, selectedPartitionId, partitionNames, false, selectedTabletId, hintsTabletIds);
+                selectedIndexId, selectedPartitionId, partitionNames, false, selectedTabletId, hintsTabletIds, false);
     }
 
     private LogicalOlapScanOperator(Builder builder) {
@@ -121,6 +125,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedTabletId = builder.selectedTabletId;
         this.hintsTabletIds = builder.hintsTabletIds;
         this.prunedPartitionPredicates = builder.prunedPartitionPredicates;
+        this.usePkIndex = builder.usePkIndex;
     }
 
     public HashDistributionSpec getDistributionSpec() {
@@ -149,6 +154,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     public boolean hasTabletOrPartitionHints() {
         return (hintsTabletIds != null && !hintsTabletIds.isEmpty()) || hasHintsPartitionNames;
+    }
+
+    public boolean isUsePkIndex() {
+        return usePkIndex;
     }
 
     public List<ScalarOperator> getPrunedPartitionPredicates() {
@@ -198,6 +207,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         private List<ScalarOperator> prunedPartitionPredicates;
 
+        private boolean usePkIndex;
+
         @Override
         public LogicalOlapScanOperator build() {
             return new LogicalOlapScanOperator(this);
@@ -215,6 +226,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             this.selectedTabletId = scanOperator.selectedTabletId;
             this.hintsTabletIds = scanOperator.hintsTabletIds;
             this.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
+            this.usePkIndex = scanOperator.usePkIndex;
             return this;
         }
 
@@ -240,6 +252,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         public Builder setHashDistributionSpec(HashDistributionSpec hashDistributionSpec) {
             this.hashDistributionSpec = hashDistributionSpec;
+            return this;
+        }
+
+        public Builder setUsePkIndex(boolean usePkIndex) {
+            this.usePkIndex = usePkIndex;
             return this;
         }
     }

@@ -267,16 +267,11 @@ public:
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns, void* state);
 
-    /*
-    Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
-                                         EditVersion* read_version, uint32_t* next_rowset_id,
-                                         std::vector<std::vector<uint64_t>*>* rss_rowids);
-    */
-    Status prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upserts, EditVersion* read_version,
-                                         std::vector<uint64_t>* rss_rowids);
+    Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                std::vector<uint64_t>* rss_rowids);
 
-    Status prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upserts,
-                                                EditVersion* read_version, std::vector<uint64_t>* rss_rowids);
+    Status get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                       std::vector<uint64_t>* rss_rowids);
 
     Status get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges);
 
@@ -296,6 +291,11 @@ public:
     std::shared_ptr<EditVersionInfo> get_edit_version(const string& version) const;
 
     std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> get_rowset_map() const;
+
+    Status get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
+                                         std::vector<uint32_t>* rowset_ids);
+
+    Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
 private:
     friend class Tablet;
