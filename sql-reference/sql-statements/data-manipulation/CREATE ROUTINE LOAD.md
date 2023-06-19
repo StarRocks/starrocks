@@ -421,17 +421,18 @@ COLUMNS TERMINATED BY ",",
 COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
 PROPERTIES
 (
-"property.security.protocol" = "ssl", -- 使用 SSL 加密
-"property.ssl.ca.location" = "FILE:ca-cert", -- CA 证书的位置
--- 如果 Kafka Server 端开启了 Client 身份认证，则还需设置如下三个参数：
-"property.ssl.certificate.location" = "FILE:client.pem", -- Client 的 Public Key 的位置
-"property.ssl.key.location" = "FILE:client.key", -- Client 的 Private Key 的位置
-"property.ssl.key.password" = "abcdefg" -- Client 的 Private Key 的密码
+"desired_concurrent_number" = "5"
 )
 FROM KAFKA
 (
     "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
-    "kafka_topic" = "ordertest1"
+    "kafka_topic" = "ordertest1",
+    "property.security.protocol" = "ssl", -- 使用 SSL 加密
+    "property.ssl.ca.location" = "FILE:ca-cert", -- CA 证书的位置
+    -- 如果 Kafka Server 端开启了 Client 身份认证，则还需设置如下三个参数：
+    "property.ssl.certificate.location" = "FILE:client.pem", -- Client 的 Public Key 的位置
+    "property.ssl.key.location" = "FILE:client.key", -- Client 的 Private Key 的位置
+    "property.ssl.key.password" = "abcdefg" -- Client 的 Private Key 的密码
 );
 ```
 
