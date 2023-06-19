@@ -96,7 +96,7 @@ VALUES
 ('2020-08-01', '2020-08-01 00:00:00', 'char2', 'varchar2', false)
 insert overwrite duplicate_table_with_null1 select * from duplicate_table_with_null2;
 -- result:
-E: (1064, "Getting syntax error at line 5, column 0. Detail message: Input 'insert' is not valid at this position.")
+E: (1064, "Getting syntax error at line 5, column 0. Detail message: Unexpected input 'insert', the most similar input is {<EOF>, ';'}.")
 -- !result
 select * from duplicate_table_with_null1;
 -- result:
