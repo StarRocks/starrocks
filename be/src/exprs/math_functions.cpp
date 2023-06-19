@@ -755,10 +755,14 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     const Column* target = columns[1].get();
     size_t target_size = target->size();
     if (base->size() != target_size) {
-        return Status::InvalidArgument("cosine_similarity requires equal length arrays");
+        return Status::InvalidArgument(fmt::format(
+                "cosine_similarity requires equal length arrays. base array size is {} and target array size is {}.",
+                base->size(), target->size()));
     }
     if (base->has_null() || target->has_null()) {
-        return Status::InvalidArgument("cosine_similarity does not support null values");
+        return Status::InvalidArgument(
+                fmt::format("cosine_similarity does not support null values. {} array has null value.",
+                            base->has_null() ? "base" : "target"));
     }
     if (base->is_nullable()) {
         base = down_cast<const NullableColumn*>(base)->data_column().get();
@@ -805,7 +809,10 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         size_t t_dim_size = target_offset[i + 1] - target_offset[i];
         size_t b_dim_size = base_offset[i + 1] - base_offset[i];
         if (t_dim_size != b_dim_size) {
-            return Status::InvalidArgument("cosine_similarity requires equal length arrays in each row");
+            return Status::InvalidArgument(
+                    fmt::format("cosine_similarity requires equal length arrays in each row. base array dimension size "
+                                "is {}, target array dimension size is {}.",
+                                b_dim_size, t_dim_size));
         }
         if (t_dim_size == 0) {
             return Status::InvalidArgument("cosine_similarity requires non-empty arrays in each row");
