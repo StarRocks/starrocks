@@ -198,19 +198,19 @@ public class SystemInfoServiceTest {
     @Test(expected = AnalysisException.class)
     public void validHostAndPortTest1() throws Exception {
         createHostAndPort(1);
-        systemInfoService.validateHostAndPort(hostPort);
+        systemInfoService.validateHostAndPort(hostPort, false);
     }
 
     @Test(expected = AnalysisException.class)
     public void validHostAndPortTest3() throws Exception {
         createHostAndPort(3);
-        systemInfoService.validateHostAndPort(hostPort);
+        systemInfoService.validateHostAndPort(hostPort, false);
     }
 
     @Test
     public void validHostAndPortTest4() throws Exception {
         createHostAndPort(4);
-        systemInfoService.validateHostAndPort(hostPort);
+        systemInfoService.validateHostAndPort(hostPort, false);
     }
 
     @Test
