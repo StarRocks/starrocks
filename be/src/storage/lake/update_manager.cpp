@@ -67,6 +67,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
     RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
+    _update_state_cache.update_object_size(state_entry, state.memory_usage());
     cost_str << " [UpdateStateCache load] " << watch.elapsed_time();
     watch.reset();
     // 2. rewrite segment file if it is partial update
@@ -168,9 +169,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
     LOG(INFO) << strings::Substitute(
             "lake publish_primary_key_tablet tablet:$0 rowsetid:$1 upserts:$2 deletes:$3 new_del:$4 total_del:$5 "
-            "base_ver:$6 new_ver:$7 cost:$8",
+            "base_ver:$6 new_ver:$7 txn_id:$8 cost:$9",
             tablet->id(), rowset_id, upserts.size(), state.deletes().size(), new_del, total_del, base_version,
-            metadata.version(), cost_str.str());
+            metadata.version(), txn_id, cost_str.str());
     _print_memory_stats();
 
     return Status::OK();
@@ -619,11 +620,21 @@ bool UpdateManager::TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint3
     return true;
 }
 
+bool UpdateManager::TEST_check_update_state_cache_noexist(uint32_t tablet_id, int64_t txn_id) {
+    auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet_id, txn_id));
+    if (state_entry == nullptr) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     // use tabletid-txnid as update state cache's key, so it can retry safe.
     auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), txnlog.txn_id()));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& state = state_entry->value();
+    _update_state_cache.update_object_size(state_entry, state.memory_usage());
     // get latest metadata from cache, it is not matter if it isn't the real latest metadata.
     auto metadata_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet->id());
     if (metadata_ptr != nullptr) {
@@ -638,7 +649,7 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
             _update_state_cache.release(state_entry);
         }
     } else {
-        // if latest metadata not in cache, do nothing
+        _update_state_cache.remove(state_entry);
     }
 }
 
