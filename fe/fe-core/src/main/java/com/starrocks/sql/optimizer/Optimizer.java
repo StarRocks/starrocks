@@ -76,6 +76,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 
+import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
+
 /**
  * Optimizer's entrance class
  */
