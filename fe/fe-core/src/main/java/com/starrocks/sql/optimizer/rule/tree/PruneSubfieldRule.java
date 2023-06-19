@@ -199,10 +199,12 @@ public class PruneSubfieldRule implements TreeRewriteRule {
         public OptExpression visitLogicalJoin(OptExpression optExpression, Void context) {
             visitPredicate(optExpression);
             LogicalJoinOperator join = optExpression.getOp().cast();
-            ComplexExpressionCollector collector = new ComplexExpressionCollector();
-            join.getOnPredicate().accept(collector, null);
-            for (ScalarOperator expr : collector.complexExpressions) {
-                allComplexColumns.put(expr, expr.getUsedColumns());
+            if (join.getOnPredicate() != null) {
+                ComplexExpressionCollector collector = new ComplexExpressionCollector();
+                join.getOnPredicate().accept(collector, null);
+                for (ScalarOperator expr : collector.complexExpressions) {
+                    allComplexColumns.put(expr, expr.getUsedColumns());
+                }
             }
             return visitChildren(optExpression, context);
         }
