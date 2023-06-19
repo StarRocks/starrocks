@@ -78,7 +78,6 @@ import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -1989,8 +1988,9 @@ public class Auth implements Writable {
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         byte[] s = reader.readJson(byte[].class);
-        DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(s));
-        readFields(dataInputStream);
+        //String s = reader.readJson(String.class);
+        //DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8)));
+        //readFields(dataInputStream);
 
         SerializeData serializeData = reader.readJson(SerializeData.class);
         try {

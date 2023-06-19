@@ -1598,7 +1598,10 @@ public class GlobalStateMgr {
         checksum = checksum ^ flag;
         int starrocksMetaVersion;
         if (flag < 0) {
-            checksum ^= dis.readInt();
+            int communityMetaVersion = dis.readInt();
+            checksum ^= communityMetaVersion;
+            MetaContext.get().setMetaVersion(communityMetaVersion);
+
             starrocksMetaVersion = dis.readInt();
             checksum ^= starrocksMetaVersion;
         } else {
