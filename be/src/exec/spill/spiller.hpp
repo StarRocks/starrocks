@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <mutex>
 #include <utility>
 
@@ -451,6 +452,37 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& execu
         }
     }
 
+    // all of the partition is the small partition
+    if (spilling_partitions.empty()) {
+        // select partition
+        std::vector<SpilledPartition*> all_spillable_partitions;
+        for (const auto& [pid, partition] : _id_to_partitions) {
+            if (!partition->is_spliting) {
+                all_spillable_partitions.emplace_back(partition);
+            }
+        }
+
+        // order by mem_usage desc
+        std::sort(all_spillable_partitions.begin(), all_spillable_partitions.end(),
+                  [](SpilledPartition* left, SpilledPartition* right) {
+                      return left->spill_writer->mem_table()->mem_usage() >
+                             left->spill_writer->mem_table()->mem_usage();
+                  });
+        // select partitions to spill util half of mem_table
+        size_t accumulate_spill_bytes = 0;
+        for (auto partition : all_spillable_partitions) {
+            accumulate_spill_bytes += partition->spill_writer->mem_table()->mem_usage();
+            spilling_partitions.emplace_back(partition);
+            if (accumulate_spill_bytes > _mem_tracker->consumption() / 2) {
+                break;
+            }
+        }
+    }
+
+    if (spilling_partitions.empty() && splitting_partitions.empty()) {
+        return Status::OK();
+    }
+
     _running_flush_tasks++;
 
     auto task = [this, state, guard = guard, splitting_partitions = std::move(splitting_partitions),
@@ -513,6 +545,11 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& execu
             for (auto partition : splitting_partitions) {
                 _remove_partition(partition);
             }
+        }
+
+        if (!splitting_partitions.empty()) {
+            LOG(INFO) << "memtracker consumption:" << _mem_tracker->consumption()
+                      << ",instance:" << state->instance_mem_tracker()->consumption();
         }
 
         return Status::OK();
