@@ -1070,8 +1070,17 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                     _set_error(msg);
                     return;
                 }
-                _do_update(rowset_id, i, conditional_column, latest_applied_version.major(), upserts, index, tablet_id,
-                           &new_deletes);
+                st = _do_update(rowset_id, i, conditional_column, latest_applied_version.major(), upserts, index,
+                                tablet_id, &new_deletes);
+                if (!st.ok()) {
+                    manager->update_state_cache().remove(state_entry);
+                    std::string msg =
+                            strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                                st.to_string(), debug_string());
+                    LOG(ERROR) << msg;
+                    _set_error(msg);
+                    return;
+                }
                 manager->index_cache().update_object_size(index_entry, index.memory_usage());
                 if (delete_pks != nullptr) {
                     index.erase(*delete_pks, &new_deletes);
@@ -1121,8 +1130,17 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                         _set_error(msg);
                         return;
                     }
-                    _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major(), upserts,
-                               index, tablet_id, &new_deletes);
+                    st = _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major(),
+                                    upserts, index, tablet_id, &new_deletes);
+                    if (!st.ok()) {
+                        manager->update_state_cache().remove(state_entry);
+                        std::string msg = strings::Substitute(
+                                "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
+                                debug_string());
+                        LOG(ERROR) << msg;
+                        _set_error(msg);
+                        return;
+                    }
                     manager->index_cache().update_object_size(index_entry, index.memory_usage());
                     if (delete_pks != nullptr) {
                         index.erase(*delete_pks, &new_deletes);
@@ -1386,7 +1404,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
         read_column_ids.push_back(condition_column);
 
         std::vector<uint64_t> old_rowids(upserts[upsert_idx]->size());
-        index.get(*upserts[upsert_idx], &old_rowids);
+        RETURN_IF_ERROR(index.get(*upserts[upsert_idx], &old_rowids));
         bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
         if (!non_old_value) {
             std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
@@ -1397,8 +1415,8 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
             auto old_unordered_column =
                     ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_columns[0] = old_unordered_column->clone_empty();
-            get_column_values(read_column_ids, read_version, num_default > 0, old_rowids_by_rssid, &old_columns,
-                              nullptr);
+            RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, num_default > 0, old_rowids_by_rssid,
+                                              &old_columns, nullptr));
             auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
@@ -1411,7 +1429,8 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
             std::vector<std::unique_ptr<Column>> new_columns(1);
             auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             new_columns[0] = new_column->clone_empty();
-            get_column_values(read_column_ids, read_version, false, new_rowids_by_rssid, &new_columns, nullptr);
+            RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, false, new_rowids_by_rssid, &new_columns,
+                                              nullptr));
 
             int idx_begin = 0;
             int upsert_idx_step = 0;
@@ -1422,8 +1441,8 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
                 } else {
                     int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
                     if (r > 0) {
-                        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
-                                     idx_begin + upsert_idx_step, new_deletes);
+                        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                                     idx_begin + upsert_idx_step, new_deletes));
 
                         idx_begin = j + 1;
                         upsert_idx_step = 0;
@@ -1437,17 +1456,17 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
             }
 
             if (idx_begin < old_column->size()) {
-                index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin, idx_begin + upsert_idx_step,
-                             new_deletes);
+                RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                             idx_begin + upsert_idx_step, new_deletes));
             }
         } else {
-            index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes));
         }
     } else {
         std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
         MonotonicStopWatch watch;
         watch.start();
-        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get());
+        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get()));
         LOG(INFO) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
                   << iostat->print_str();
     }
