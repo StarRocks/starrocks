@@ -347,13 +347,19 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
-    public void testLambdaFunction() throws Exception {
+    public void testSelectLambdaFunction() throws Exception {
         // trino do not support array_map function, just test the lambda function
         String sql = "select array_map(array['a1_a2','a1_a2'], x->split(x, '_'));";
         assertPlanContains(sql, "array_map(<slot 2> -> split(<slot 2>, '_'), ['a1_a2','a1_a2'])");
 
         sql = "select transform(split('a1_a2,b1_b2', ','), x->split(x, '_'));";
         assertPlanContains(sql, "array_map(<slot 2> -> split(<slot 2>, '_'), split('a1_a2,b1_b2', ','))");
+
+        sql = "select all_match(array[1,2,3], x-> x>0);";
+        assertPlanContains(sql, "all_match(array_map(<slot 2> -> <slot 2> > 0, [1,2,3]))");
+
+        sql = "select any_match(array[1,2,null], x -> x is not null);";
+        assertPlanContains(sql, "any_match(array_map(<slot 2> -> <slot 2> IS NOT NULL, [1,2,NULL]))");
     }
 
     @Test
@@ -433,6 +439,24 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select map_values(c1) from test_map";
         assertPlanContains(sql, "<slot 5> : map_values(2: c1)");
+
+        sql = "select map() from test_map";
+        assertPlanContains(sql, "map{}");
+
+        sql = "select map(array[1,2,3],array['a','b','c']);";
+        assertPlanContains(sql, "map_from_arrays([1,2,3], ['a','b','c'])");
+
+        sql = "select map_filter(map(array[10, 20, 30], array['a', NULL, 'c']), (k, v) -> v IS NOT NULL);";
+        assertPlanContains(sql, "map_filter(7: map_from_arrays, map_values(map_apply((<slot 2>, <slot 3>) -> " +
+                "map{<slot 2>:<slot 3> IS NOT NULL}, 7: map_from_arrays)))");
+
+        sql = "select transform_keys(MAP(ARRAY [1, 2, 3], ARRAY ['a', 'b', 'c']), (k, v) -> k + 1);";
+        assertPlanContains(sql, "map_apply((<slot 2>, <slot 3>) -> map{CAST(<slot 2> AS SMALLINT) + 1:<slot 3>}, " +
+                "map_from_arrays([1,2,3], ['a','b','c']))");
+
+        sql = "select transform_values(map(array [1, 2, 3], array ['a', 'b', 'c']), (k, v) -> k * k);";
+        assertPlanContains(sql, "map_apply((<slot 2>, <slot 3>) -> map{<slot 2>:CAST(<slot 2> AS SMALLINT) * " +
+                "CAST(<slot 2> AS SMALLINT)}, map_from_arrays([1,2,3], ['a','b','c']))");
     }
 
     @Test

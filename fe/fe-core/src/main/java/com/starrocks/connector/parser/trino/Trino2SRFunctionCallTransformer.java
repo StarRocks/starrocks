@@ -78,6 +78,7 @@ public class Trino2SRFunctionCallTransformer {
         registerJsonFunctionTransformer();
         registerBitwiseFunctionTransformer();
         registerUnicodeFunctionTransformer();
+        registerMapFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -231,6 +232,12 @@ public class Trino2SRFunctionCallTransformer {
         // from_utf8 -> from_binary
         registerFunctionTransformer("from_utf8", 1, new FunctionCallExpr("from_binary",
                 ImmutableList.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("utf8"))));
+    }
+
+    private static void registerMapFunctionTransformer() {
+        // map(array, array) -> map_from_arrays
+        registerFunctionTransformer("map", 2, "map_from_arrays",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
