@@ -99,6 +99,11 @@ Status Spiller::set_partition(const std::vector<const SpillPartitionInfo*>& pari
     return Status::OK();
 }
 
+Status Spiller::set_partition(RuntimeState* state, size_t num_partitions) {
+    RETURN_IF_ERROR(down_cast<PartitionedSpillerWriter*>(_writer.get())->reset_partition(state, num_partitions));
+    return Status::OK();
+}
+
 void Spiller::update_spilled_task_status(Status&& st) {
     std::lock_guard guard(_mutex);
     if (_spilled_task_status.ok() && !st.ok()) {

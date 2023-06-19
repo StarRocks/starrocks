@@ -34,6 +34,7 @@ public:
     size_t spilling_operators() { return _spilling_operators; }
 
     void increase_spillable_operators() { _spillable_operators++; }
+    void decrease_spillable_operators() { _spillable_operators--; }
     size_t spillable_operators() { return _spillable_operators; }
 
     BlockManager* block_manager() const { return _block_manager.get(); }
