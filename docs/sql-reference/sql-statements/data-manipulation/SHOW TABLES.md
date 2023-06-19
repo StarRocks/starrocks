@@ -66,7 +66,7 @@ Example 2: View tables in database `hudi_db` of the external catalog `hudi_catal
 ```plain
 show tables from hudi_catalog.hudi_db;
 +----------------------------+
-| Tables_in_hudi_db       |
+| Tables_in_hudi_db          |
 +----------------------------+
 | hudi_sync_mor              |
 | hudi_table1                |

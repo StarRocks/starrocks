@@ -8,7 +8,7 @@ Creates a user-defined function (UDF). Currently, you can only create Java UDFs,
 
 > **NOTE**
 >
-> To create a global UDF, you must have the SYSTEM-level CREATE GLOBAL FUNCTION privilege. To create a database-level UDF, you must have the DATABASE-level CREATE FUNCTION privilege.
+> To create a global UDF, you must have the SYSTEM-level CREATE GLOBAL FUNCTION privilege. To create a database-wide UDF, you must have the DATABASE-level CREATE FUNCTION privilege.
 
 ## Syntax
 
