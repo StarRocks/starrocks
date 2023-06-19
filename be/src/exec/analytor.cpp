@@ -475,6 +475,19 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
+        auto check_if_overflow = [](Column* maybe_nullable_column) {
+            auto* column = ColumnHelper::get_data_column(maybe_nullable_column);
+            if (!column->is_binary()) {
+                return Status::OK();
+            }
+
+            auto* binary_column = down_cast<BinaryColumn*>(column);
+            if (binary_column->get_bytes().size() > std::numeric_limits<uint32_t>::max()) {
+                return Status::InternalError(
+                        strings::Substitute("Binary column size overflow: $0", binary_column->get_bytes().size()));
+            }
+            return Status::OK();
+        };
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
@@ -487,17 +500,20 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
                 } else {
                     TRY_CATCH_BAD_ALLOC(_agg_intput_columns[i][j]->append(*column, 0, column->size()));
                 }
+                RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
             }
         }
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+            RETURN_IF_ERROR(check_if_overflow(_partition_columns[i].get()));
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+            RETURN_IF_ERROR(check_if_overflow(_order_columns[i].get()));
         }
     }
 
