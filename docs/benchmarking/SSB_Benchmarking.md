@@ -51,9 +51,9 @@ Software version: StarRocks Community Version 3.0, ClickHouse 23.3, Apache Druid
 
 ### Test results
 
-The following table shows the performance test results on thirteen queries. `ClickHouse vs StarRocks` in the table header means using the query response time of ClickHouse to divide the query response time of StarRocks. A larger value indicates better performance of StarRocks.
+The following table shows the performance test results on thirteen queries. The unit of query latency is ms. `ClickHouse vs StarRocks` in the table header means using the query response time of ClickHouse to divide the query response time of StarRocks. A larger value indicates better performance of StarRocks.
 
-|      | StarRocks-3.0 | StarRocks-3.0-index | ClickHouse-23.3(ms) | ClickHouse vs StarRocks | Druid-25.0.0(ms) | Druid vs StarRocks |
+|      | StarRocks-3.0 | StarRocks-3.0-index | ClickHouse-23.3 | ClickHouse vs StarRocks | Druid-25.0.0 | Druid vs StarRocks |
 | ---- | ------------- | ------------------- | ------------------- | ----------------------- | ---------------- | ------------------ |
 | Q1.1 | 33            | 30                  | 48                  | 1.45                    | 430              | 13.03              |
 | Q1.2 | 10            | 10                  | 15                  | 1.50                    | 270              | 27.00              |

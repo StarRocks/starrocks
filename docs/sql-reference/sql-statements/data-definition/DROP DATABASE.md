@@ -2,7 +2,7 @@
 
 ## Description
 
-This statement is used to drop database.
+Drops a database in StarRocks.
 
 Syntax:
 
