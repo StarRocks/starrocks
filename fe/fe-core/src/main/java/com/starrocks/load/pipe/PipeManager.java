@@ -158,7 +158,7 @@ public class PipeManager {
     private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
         long dbId = GlobalStateMgr.getCurrentState().mayGetDb(name.getDbName())
                 .map(Database::getId)
-                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_NO_DB_ERROR));
         return Pair.create(dbId, name.getPipeName());
     }
 

@@ -130,6 +130,7 @@ import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 
@@ -830,6 +831,7 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         return null;
     }
 
+    // -------------------------------------------- Pipe Statement -------------------------------------------------
     @Override
     public Void visitCreatePipeStatement(CreatePipeStmt stmt, ConnectContext context) {
         PipeAnalyzer.analyze(stmt, context);
@@ -850,6 +852,12 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowPipeStatement(ShowPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDescPipeStatement(DescPipeStmt stmt, ConnectContext context) {
         PipeAnalyzer.analyze(stmt, context);
         return null;
     }
