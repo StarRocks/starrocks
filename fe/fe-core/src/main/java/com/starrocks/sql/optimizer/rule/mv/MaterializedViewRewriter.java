@@ -21,7 +21,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -35,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.HashMap;
@@ -121,13 +121,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
             CallOperator callOperator = new CallOperator(FunctionSet.SUM,
                     queryAggFunc.getType(),
                     queryAggFunc.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {mvColumn.getType()}, IS_IDENTICAL));
-            if (mvColumn.getType().isDecimalV3()) {
-                ScalarType decimal128Type =
-                        ScalarType.createDecimalV3NarrowestType(38, mvColumn.getScale());
-                callOperator.getFunction().setArgsType(new Type[] {mvColumn.getType()});
-                callOperator.getFunction().setRetType(decimal128Type);
-            }
+                    ScalarOperatorUtil.findSumFn(new Type[] {mvColumn.getType()}));
             return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
         } else if (((functionName.equals(FunctionSet.COUNT) && queryAggFunc.isDistinct())
                 || functionName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) &&
