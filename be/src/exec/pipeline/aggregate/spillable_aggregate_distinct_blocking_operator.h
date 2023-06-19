@@ -48,6 +48,16 @@ public:
         TRACE_SPILL_LOG << "AggregateDistinctBlockingSink, mark spill " << (void*)this;
     }
 
+    size_t estimated_memory_reserved(const ChunkPtr& chunk) override {
+        if (chunk && !chunk->is_empty()) {
+            if (_aggregator->hash_set_variant().need_expand(chunk->num_rows())) {
+                return chunk->memory_usage() + _aggregator->hash_set_memory_usage();
+            }
+            return chunk->memory_usage();
+        }
+        return 0;
+    }
+
 private:
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
     Status _spill_aggregated_data(RuntimeState* state);

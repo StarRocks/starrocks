@@ -17,6 +17,8 @@
 #include <type_traits>
 #include <variant>
 
+#include "util/phmap/phmap.h"
+
 namespace starrocks {
 
 namespace detail {
@@ -214,6 +216,13 @@ size_t AggHashMapVariant::size() const {
     });
 }
 
+bool AggHashMapVariant::need_expand(size_t increasement) const {
+    // TODO: think about two-level hashmap
+    size_t size = this->size() + increasement;
+    // see detail implement in reset_growth_left
+    return size >= phmap::priv::CapacityToGrowth(this->capacity());
+}
+
 size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
     return visit([pool](const auto& hash_map_with_key) {
         return hash_map_with_key->hash_map.dump_bound() + pool->total_reserved_bytes();
@@ -281,6 +290,12 @@ size_t AggHashSetVariant::size() const {
         }
         return sz;
     });
+}
+
+bool AggHashSetVariant::need_expand(size_t increasement) const {
+    size_t size = this->size() + increasement;
+    // see detail implement in reset_growth_left
+    return size >= phmap::priv::CapacityToGrowth(this->capacity());
 }
 
 size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
