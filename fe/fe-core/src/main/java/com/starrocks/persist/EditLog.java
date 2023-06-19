@@ -102,6 +102,7 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeStatus;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -222,7 +223,7 @@ public class EditLog {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
                     LOG.info("Begin to unprotect create table. db = "
                             + info.getDbName() + " table = " + info.getTable().getId());
-                    globalStateMgr.replayCreateTable(info.getDbName(), info.getTable());
+                    globalStateMgr.replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_DROP_TABLE:
@@ -1047,6 +1048,26 @@ public class EditLog {
                     MaterializedViewMgr.getInstance().replayEpoch(epoch);
                     break;
                 }
+                case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
+                    SetDefaultStorageVolumeLog log = (SetDefaultStorageVolumeLog) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replaySetDefaultStorageVolume(log);
+                    break;
+                }
+                case OperationType.OP_CREATE_STORAGE_VOLUME: {
+                    StorageVolume sv = (StorageVolume) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replayCreateStorageVolume(sv);
+                    break;
+                }
+                case OperationType.OP_UPDATE_STORAGE_VOLUME: {
+                    StorageVolume sv = (StorageVolume) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replayUpdateStorageVolume(sv);
+                    break;
+                }
+                case OperationType.OP_DROP_STORAGE_VOLUME: {
+                    DropStorageVolumeLog log = (DropStorageVolumeLog) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(log);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1162,9 +1183,10 @@ public class EditLog {
         logEdit(OperationType.OP_DELETE_AUTO_INCREMENT_ID, info);
     }
 
-    public void logCreateDb(Database db) {
+    public void logCreateDb(Database db, String storageVolumeId) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             CreateDbInfo createDbInfo = new CreateDbInfo(db.getId(), db.getFullName());
+            createDbInfo.setStorageVolumeId(storageVolumeId);
             logJsonObject(OperationType.OP_CREATE_DB_V2, createDbInfo);
         } else {
             logEdit(OperationType.OP_CREATE_DB, db);
@@ -2014,4 +2036,19 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_TASK, changedTask);
     }
 
+    public void logSetDefaultStorageVolume(SetDefaultStorageVolumeLog log) {
+        logEdit(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, log);
+    }
+
+    public void logCreateStorageVolume(StorageVolume storageVolume) {
+        logEdit(OperationType.OP_CREATE_STORAGE_VOLUME, storageVolume);
+    }
+
+    public void logUpdateStorageVolume(StorageVolume storageVolume) {
+        logEdit(OperationType.OP_UPDATE_STORAGE_VOLUME, storageVolume);
+    }
+
+    public void logDropStorageVolume(DropStorageVolumeLog log) {
+        logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
+    }
 }

@@ -23,35 +23,16 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class CreateDbInfo implements Writable {
-    @SerializedName(value = "i")
-    private long id;
+public class SetDefaultStorageVolumeLog implements Writable {
+    @SerializedName(value = "id")
+    private String id;
 
-    @SerializedName(value = "n")
-    private String dbName;
-
-    @SerializedName(value = "svId")
-    private String storageVolumeId;
-
-    public CreateDbInfo(long id, String dbName) {
+    public SetDefaultStorageVolumeLog(String id) {
         this.id = id;
-        this.dbName = dbName;
     }
 
-    public long getId() {
+    public String getId() {
         return id;
-    }
-
-    public String getDbName() {
-        return dbName;
-    }
-
-    public void setStorageVolumeId(String storageVolumeId) {
-        this.storageVolumeId = storageVolumeId;
-    }
-
-    public String getStorageVolumeId() {
-        return storageVolumeId;
     }
 
     @Override
@@ -59,8 +40,8 @@ public class CreateDbInfo implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static CreateDbInfo read(DataInput in) throws IOException {
+    public static SetDefaultStorageVolumeLog read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, CreateDbInfo.class);
+        return GsonUtils.GSON.fromJson(json, SetDefaultStorageVolumeLog.class);
     }
 }

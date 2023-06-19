@@ -59,6 +59,7 @@ import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -128,8 +129,6 @@ public class Database extends MetaObject implements Writable {
 
     // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
     private String location;
-
-    private String storageVolumeId = "";
 
     public Database() {
         this(0, null);
@@ -349,14 +348,6 @@ public class Database extends MetaObject implements Writable {
         return this;
     }
 
-    public String getStorageVolumeId() {
-        return storageVolumeId;
-    }
-
-    public void setStorageVolumeId(String storageVolumeId) {
-        this.storageVolumeId = storageVolumeId;
-    }
-
     public void setNameWithLock(String newName) {
         writeLock();
         try {
@@ -494,6 +485,31 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
+    // return false if table already exists
+    public boolean createTableWithLock(Table table, String storageVolumeId, boolean isReplay) {
+        writeLock();
+        try {
+            String tableName = table.getName();
+            if (nameToTable.containsKey(tableName)) {
+                return false;
+            } else {
+                idToTable.put(table.getId(), table);
+                nameToTable.put(table.getName(), table);
+
+                table.onCreate();
+                if (!isReplay) {
+                    // Write edit log
+                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
+                    info.setStorageVolumeId(storageVolumeId);
+                    GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
+                }
+            }
+            return true;
+        } finally {
+            writeUnlock();
+        }
+    }
+
     public boolean createTable(Table table) {
         boolean result = true;
         String tableName = table.getName();
@@ -587,6 +603,9 @@ public class Database extends MetaObject implements Writable {
         if (table != null) {
             this.nameToTable.remove(tableName);
             this.idToTable.remove(table.getId());
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isCloudNativeTable()) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
+            }
         }
     }
 

@@ -88,6 +88,8 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID GLOBAL_FUNCTION_MGR = new SRMetaBlockID(27);
 
+    public static final SRMetaBlockID STORAGE_VOLUME_MGR = new SRMetaBlockID(28);
+
     @Override
     public String toString() {
         return String.valueOf(id);
