@@ -217,10 +217,12 @@ size_t AggHashMapVariant::size() const {
 }
 
 bool AggHashMapVariant::need_expand(size_t increasement) const {
+    size_t capacity = this->capacity();
+    if (capacity == 0) return true;
     // TODO: think about two-level hashmap
     size_t size = this->size() + increasement;
     // see detail implement in reset_growth_left
-    return size >= phmap::priv::CapacityToGrowth(this->capacity());
+    return size >= phmap::priv::CapacityToGrowth(capacity);
 }
 
 size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
