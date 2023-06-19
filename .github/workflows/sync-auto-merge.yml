@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   pr-label:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, sync-normal]
     env:
       PR_NUMBER: ${{ github.event.number }}
     outputs:
@@ -47,13 +47,18 @@ jobs:
 
   sync-info-check:
     needs: pr-label
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, sync-normal]
     if: >
       contains(github.event.pull_request.title, '(sync #') &&
       contains(needs.pr-label.outputs.labels, 'sync') &&
       !contains(needs.pr-label.outputs.labels, 'conflict') &&
       !contains(needs.pr-label.outputs.labels, 'pending')
     steps:
+    - name: clean
+      run: |
+        rm -rf ${{ github.workspace }}
+        mkdir -p ${{ github.workspace }}
+
       - name: add automerge label
         uses: actions-ecosystem/action-add-labels@v1
         with:

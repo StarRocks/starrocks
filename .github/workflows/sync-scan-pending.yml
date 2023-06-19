@@ -28,20 +28,13 @@ jobs:
 
   scan-pending-pr:
     name: SCAN PENDING PRS
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, sync-normal]
     steps:
-
-      - name: checkout tools
-        uses: actions/checkout@v3
-        with:
-          repository: StarRocks/elastic-service
-          path: './elastic-service'
-          token: ${{ secrets.SYNC_PAT }}
 
       - name: scan
         id: scan
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          cd ${{ github.workspace }}/elastic-service
+          cd /var/lib/elastic-service
           python3 lib/pr_sequence_checker.py scan

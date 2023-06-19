@@ -11,7 +11,7 @@ on:
 jobs:
 
   delete-branch:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, sync-normal]
     if: >
       contains(github.event.pull_request.title, '(sync #') &&
       contains(github.event.pull_request.labels.*.name, 'sync') &&
