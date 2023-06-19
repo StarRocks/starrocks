@@ -757,6 +757,11 @@ public class MaterializedViewRewriter {
             final ScalarOperator compensationPredicate = getMVCompensationPredicate(rewriteContext,
                     columnRewriter, mvColumnRefToScalarOp, equalPredicates, otherPredicates);
             if (compensationPredicate == null) {
+<<<<<<< HEAD
+=======
+                logMVRewrite(mvRewriteContext, "Rewrite query failed: get compensation predicates from MV but " +
+                        "rewrite compensation failed");
+>>>>>>> 69c912809 ([BugFix] Support use AggregateFunctionRewriter in EquationRewriter to rewrite more cases (#25542))
                 return null;
             }
 
@@ -1372,7 +1377,7 @@ public class MaterializedViewRewriter {
     }
 
     protected OptExpression rewriteProjection(RewriteContext rewriteContext,
-                                              EquationRewriter queryExprToMvExprRewriter,
+                                              EquationRewriter equationRewriter,
                                               OptExpression mvOptExpr) {
         Map<ColumnRefOperator, ScalarOperator> queryMap = MvUtils.getColumnRefMap(
                 rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
@@ -1401,9 +1406,9 @@ public class MaterializedViewRewriter {
         }
 
         Map<ColumnRefOperator, ScalarOperator> newQueryProjection = Maps.newHashMap();
+        equationRewriter.setOutputMapping(outputMapping);
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedQueryColumnMap.entrySet()) {
-            ScalarOperator rewritten = replaceExprWithTarget(entry.getValue(),
-                    queryExprToMvExprRewriter, outputMapping);
+            ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(entry.getValue());
             if (rewritten == null) {
                 return null;
             }
@@ -1419,12 +1424,13 @@ public class MaterializedViewRewriter {
     }
 
     protected List<ScalarOperator> rewriteScalarOpToTarget(List<ScalarOperator> exprsToRewrites,
-                                                           EquationRewriter queryExprToMvExprRewriter,
+                                                           EquationRewriter equationRewriter,
                                                            Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
                                                            ColumnRefSet originalColumnSet) {
         List<ScalarOperator> rewrittenExprs = Lists.newArrayList();
+        equationRewriter.setOutputMapping(outputMapping);
         for (ScalarOperator expr : exprsToRewrites) {
-            ScalarOperator rewritten = replaceExprWithTarget(expr, queryExprToMvExprRewriter, outputMapping);
+            ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(expr);
             if (expr.isVariable() && expr == rewritten) {
                 // it means it can not be rewritten  by target
                 return Lists.newArrayList();
@@ -1462,13 +1468,6 @@ public class MaterializedViewRewriter {
             return false;
         }
         return true;
-    }
-
-    protected ScalarOperator replaceExprWithTarget(ScalarOperator expr,
-                                                   EquationRewriter queryExprToMvExprRewriter,
-                                                   Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
-        queryExprToMvExprRewriter.setOutputMapping(columnMapping);
-        return queryExprToMvExprRewriter.replaceExprWithTarget(expr);
     }
 
     private List<BiMap<Integer, Integer>> generateRelationIdMap(
