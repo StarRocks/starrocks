@@ -28,6 +28,9 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -46,8 +49,8 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class StreamLoadManager {
-    private static final Logger LOG = LogManager.getLogger(StreamLoadManager.class);
+public class StreamLoadMgr {
+    private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
 
     private Map<String, StreamLoadTask> idToStreamLoadTask;
     private Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
@@ -69,7 +72,7 @@ public class StreamLoadManager {
         lock.readLock().unlock();
     }
 
-    public StreamLoadManager() {
+    public StreamLoadMgr() {
         init();
     }
 
@@ -438,10 +441,10 @@ public class StreamLoadManager {
         return (long) idToStreamLoadTask.size() + (long) dbToLabelToStreamLoadTask.size();
     }
 
-    public static StreamLoadManager loadStreamLoadManager(DataInput in) throws IOException {
+    public static StreamLoadMgr loadStreamLoadManager(DataInput in) throws IOException {
         int size = in.readInt();
         long currentMs = System.currentTimeMillis();
-        StreamLoadManager streamLoadManager = new StreamLoadManager();
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         streamLoadManager.init();
         for (int i = 0; i < size; i++) {
             StreamLoadTask loadTask = StreamLoadTask.read(in);
@@ -455,5 +458,21 @@ public class StreamLoadManager {
             streamLoadManager.addLoadTask(loadTask);
         }
         return streamLoadManager;
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        long currentMs = System.currentTimeMillis();
+        int numJson = reader.readInt();
+        for (int i = 0; i < numJson; ++i) {
+            StreamLoadTask loadTask = reader.readJson(StreamLoadTask.class);
+            loadTask.init();
+            // discard expired task right away
+            if (loadTask.checkNeedRemove(currentMs)) {
+                LOG.info("discard expired task: {}", loadTask.getLabel());
+                continue;
+            }
+
+            addLoadTask(loadTask);
+        }
     }
 }

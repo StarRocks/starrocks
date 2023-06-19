@@ -24,6 +24,9 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -41,8 +44,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class InsertOverwriteJobManager implements Writable, GsonPostProcessable {
-    private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobManager.class);
+public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobMgr.class);
 
     @SerializedName(value = "overwriteJobMap")
     private Map<Long, InsertOverwriteJob> overwriteJobMap;
@@ -59,7 +62,7 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     private transient ReentrantReadWriteLock lock;
 
-    public InsertOverwriteJobManager() {
+    public InsertOverwriteJobMgr() {
         this.overwriteJobMap = Maps.newHashMap();
         this.tableToOverwriteJobs = Maps.newHashMap();
         ThreadFactory threadFactory = new DefaultThreadFactory("cancel-thread");
@@ -225,9 +228,9 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static InsertOverwriteJobManager read(DataInput in) throws IOException {
+    public static InsertOverwriteJobMgr read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        InsertOverwriteJobManager jobManager = GsonUtils.GSON.fromJson(json, InsertOverwriteJobManager.class);
+        InsertOverwriteJobMgr jobManager = GsonUtils.GSON.fromJson(json, InsertOverwriteJobMgr.class);
         return jobManager;
     }
 
@@ -245,5 +248,12 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                 }
             }
         }
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        InsertOverwriteJobMgr catalog = reader.readJson(InsertOverwriteJobMgr.class);
+        overwriteJobMap = catalog.overwriteJobMap;
+        tableToOverwriteJobs = catalog.tableToOverwriteJobs;
+        runningJobs = catalog.runningJobs;
     }
 }

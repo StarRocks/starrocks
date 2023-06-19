@@ -25,10 +25,13 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.RolePrivilegeCollection;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -62,8 +65,6 @@ import java.util.stream.Collectors;
 // WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
 public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
-
-    private final GlobalStateMgr globalStateMgr;
     private final Map<String, ResourceGroup> resourceGroupMap = new HashMap<>();
 
     // Record the current short_query resource group.
@@ -76,10 +77,6 @@ public class ResourceGroupMgr implements Writable {
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-
-    public ResourceGroupMgr(GlobalStateMgr globalStateMgr) {
-        this.globalStateMgr = globalStateMgr;
-    }
 
     private void readLock() {
         lock.readLock().lock();
@@ -162,7 +159,7 @@ public class ResourceGroupMgr implements Writable {
 
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             try {
-                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+                AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
                 List<String> validRoles = new ArrayList<>();
 
                 Set<Long> activeRoles = ctx.getCurrentRoleIds();
@@ -171,7 +168,7 @@ public class ResourceGroupMgr implements Writable {
                 }
 
                 for (Long roleId : activeRoles) {
-                    RolePrivilegeCollection rolePrivilegeCollection =
+                    RolePrivilegeCollectionV2 rolePrivilegeCollection =
                             manager.getRolePrivilegeCollectionUnlocked(roleId, false);
                     if (rolePrivilegeCollection != null) {
                         validRoles.add(rolePrivilegeCollection.getName());
@@ -565,5 +562,16 @@ public class ResourceGroupMgr implements Writable {
     private static class SerializeData {
         @SerializedName("WorkGroups")
         public List<ResourceGroup> resourceGroups;
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int numJson = reader.readInt();
+        List<ResourceGroup> resourceGroups = new ArrayList<>();
+        for (int i = 0; i < numJson; ++i) {
+            ResourceGroup resourceGroup = reader.readJson(ResourceGroup.class);
+            resourceGroups.add(resourceGroup);
+        }
+        resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
+        resourceGroups.forEach(this::replayAddResourceGroup);
     }
 }

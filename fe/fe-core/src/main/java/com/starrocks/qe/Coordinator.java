@@ -41,7 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -213,7 +213,7 @@ public class Coordinator {
         this.jobId = jobId;
         this.queryId = queryId;
         ConnectContext connectContext = new ConnectContext();
-        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
+        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
@@ -529,7 +529,7 @@ public class Coordinator {
             deltaUrls = Lists.newArrayList();
             loadCounters = Maps.newHashMap();
             List<Long> relatedBackendIds = Lists.newArrayList(coordinatorPreprocessor.getAddressToBackendID().values());
-            GlobalStateMgr.getCurrentState().getLoadManager()
+            GlobalStateMgr.getCurrentState().getLoadMgr()
                     .initJobProgress(jobId, queryId, coordinatorPreprocessor.getInstanceIds(),
                             relatedBackendIds);
             LOG.info("dispatch load job: {} to {}", DebugUtil.printId(queryId),
@@ -1484,14 +1484,14 @@ public class Coordinator {
                     loadJobType == TLoadJobType.INSERT_VALUES) {
                 if (params.isSetSink_load_bytes() && params.isSetSource_load_rows()
                         && params.isSetSource_load_bytes()) {
-                    GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
+                    GlobalStateMgr.getCurrentState().getLoadMgr().updateJobPrgress(
                             jobId, params);
                 }
             }
         } else {
             if (params.isSetSink_load_bytes() && params.isSetSource_load_rows()
                     && params.isSetSource_load_bytes()) {
-                GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
+                GlobalStateMgr.getCurrentState().getLoadMgr().updateJobPrgress(
                         jobId, params);
             }
         }

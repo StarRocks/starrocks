@@ -463,6 +463,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        for (Column column : fullSchema) {
+            this.nameToColumn.put(column.getName(), column);
+        }
         relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 

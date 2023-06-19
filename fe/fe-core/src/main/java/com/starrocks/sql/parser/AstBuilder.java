@@ -130,6 +130,7 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
@@ -1196,8 +1197,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.columnNameWithComment().size() > 0) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
+        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+        AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement);
 
-        return new AlterViewStmt(targetTableName, colWithComments, (QueryStatement) visit(context.queryStatement()));
+        return new AlterViewStmt(targetTableName, alterClause);
     }
 
     @Override
@@ -4654,7 +4657,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public String extendPrivilegeType(boolean isGlobal, String type) {
         if (isGlobal) {
             if (type.equals("FUNCTIONS") || type.equals("FUNCTION")) {
-                return "GLOBAL_" + type;
+                return "GLOBAL " + type;
             }
         }
         return type;

@@ -11,14 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class RolePrivilegeCollection extends PrivilegeCollection {
@@ -54,7 +51,7 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
 
     public RolePrivilegeCollection(String name, RoleFlags... flags) {
         this.name = name;
-        for (RoleFlags flag : flags) {
+        for (RolePrivilegeCollection.RoleFlags flag : flags) {
             this.mask |= flag.mask;
         }
         this.parentRoleIds = new HashSet<>();
@@ -62,17 +59,21 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     }
 
     private void assertMutable() throws PrivilegeException {
-        if (!checkFlag(RoleFlags.MUTABLE)) {
+        if (!checkFlag(RolePrivilegeCollection.RoleFlags.MUTABLE)) {
             throw new PrivilegeException("role " + name + " is not mutable!");
         }
     }
 
     public void disableMutable() {
-        this.mask &= ~RoleFlags.MUTABLE.mask;
+        this.mask &= ~RolePrivilegeCollection.RoleFlags.MUTABLE.mask;
     }
 
     public boolean isRemovable() {
-        return checkFlag(RoleFlags.REMOVABLE);
+        return checkFlag(RolePrivilegeCollection.RoleFlags.REMOVABLE);
+    }
+
+    public boolean isMutable() {
+        return checkFlag(RolePrivilegeCollection.RoleFlags.MUTABLE);
     }
 
     public String getName() {
@@ -88,11 +89,6 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         parentRoleIds.add(parentRoleId);
     }
 
-    public void removeParentRole(long parentRoleId) throws PrivilegeException {
-        assertMutable();
-        parentRoleIds.remove(parentRoleId);
-    }
-
     public Set<Long> getParentRoleIds() {
         return parentRoleIds;
     }
@@ -101,25 +97,7 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         subRoleIds.add(subRoleId);
     }
 
-    public void removeSubRole(long subRoleId) {
-        subRoleIds.remove(subRoleId);
-    }
-
     public Set<Long> getSubRoleIds() {
         return subRoleIds;
-    }
-
-    @Override
-    public void grant(ObjectType type, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects, boolean isGrant)
-            throws PrivilegeException {
-        assertMutable();
-        super.grant(type, privilegeTypes, objects, isGrant);
-    }
-
-    @Override
-    public void revoke(ObjectType type, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects)
-            throws PrivilegeException {
-        assertMutable();
-        super.revoke(type, privilegeTypes, objects);
     }
 }

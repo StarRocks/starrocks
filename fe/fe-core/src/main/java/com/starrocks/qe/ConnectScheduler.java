@@ -137,7 +137,7 @@ public class ConnectScheduler {
         int conns = connByUser.get(ctx.getQualifiedUser()).get();
         long currentConns;
         if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-            currentConns = ctx.getGlobalStateMgr().getAuthenticationManager().getMaxConn(ctx.getQualifiedUser());
+            currentConns = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
         } else {
             currentConns = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
         }

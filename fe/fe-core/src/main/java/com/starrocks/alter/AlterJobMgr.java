@@ -42,7 +42,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -79,6 +79,9 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -86,7 +89,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -98,6 +101,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnRenameClause;
@@ -128,20 +132,21 @@ import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Arrays;
+import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 
-public class Alter {
-    private static final Logger LOG = LogManager.getLogger(Alter.class);
+public class AlterJobMgr {
+    private static final Logger LOG = LogManager.getLogger(AlterJobMgr.class);
 
-    private AlterHandler schemaChangeHandler;
-    private AlterHandler materializedViewHandler;
-    private SystemHandler clusterHandler;
+    private final SchemaChangeHandler schemaChangeHandler;
+    private final MaterializedViewHandler materializedViewHandler;
+    private final SystemHandler clusterHandler;
 
-    public Alter() {
+    public AlterJobMgr() {
         schemaChangeHandler = new SchemaChangeHandler();
         materializedViewHandler = new MaterializedViewHandler();
         clusterHandler = new SystemHandler();
@@ -184,14 +189,13 @@ public class Alter {
                 throw new DdlException(
                         "Do not support create materialized view on primary key table[" + tableName + "]");
             }
-            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().hasRunningOverwriteJob(olapTable.getId())) {
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
                         "please start to create materialized view after insert overwrite");
             }
             olapTable.checkStableAndNormal();
 
-            ((MaterializedViewHandler) materializedViewHandler).processCreateMaterializedView(stmt, db,
-                    olapTable);
+            materializedViewHandler.processCreateMaterializedView(stmt, db, olapTable);
         } finally {
             db.writeUnlock();
         }
@@ -245,7 +249,7 @@ public class Alter {
                         + "Do not allow doing DROP ops");
             }
             // drop materialized view
-            ((MaterializedViewHandler) materializedViewHandler).processDropMaterializedView(stmt, db, olapTable);
+            materializedViewHandler.processDropMaterializedView(stmt, db, olapTable);
 
         } catch (MetaNotFoundException e) {
             if (stmt.isSetIfExists()) {
@@ -291,7 +295,7 @@ public class Alter {
                         + "Do not allow to do ALTER ops");
             }
 
-            MVManager.getInstance().stopMaintainMV(materializedView);
+            MaterializedViewMgr.getInstance().stopMaintainMV(materializedView);
 
             // rename materialized view
             if (newMvName != null) {
@@ -333,7 +337,7 @@ public class Alter {
                 throw new DdlException("Unsupported modification for materialized view");
             }
 
-            MVManager.getInstance().rebuildMaintainMV(materializedView);
+            MaterializedViewMgr.getInstance().rebuildMaintainMV(materializedView);
         } finally {
             db.writeUnlock();
         }
@@ -344,7 +348,7 @@ public class Alter {
         if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
             String viewDefineSql = materializedView.getViewDefineSql();
             ConnectContext context = new ConnectContext();
-            context.setQualifiedUser(AuthenticationManager.ROOT_USER);
+            context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
@@ -601,7 +605,7 @@ public class Alter {
         try {
             MaterializedView mv = (MaterializedView) db.getTable(tableId);
             TableProperty tableProperty = mv.getTableProperty();
-            if  (tableProperty == null) {
+            if (tableProperty == null) {
                 tableProperty = new TableProperty(properties);
                 mv.setTableProperty(tableProperty.buildProperty(opCode));
             } else {
@@ -763,7 +767,7 @@ public class Alter {
                     throw new DdlException("Lake table not support alter in_memory");
                 }
 
-                ((SchemaChangeHandler) schemaChangeHandler).updatePartitionsInMemoryMeta(
+                schemaChangeHandler.updatePartitionsInMemoryMeta(
                         db, tableName, partitionNames, properties);
 
                 db.writeLock();
@@ -790,28 +794,28 @@ public class Alter {
                 }
 
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName,
+                    schemaChangeHandler.updateTableMeta(db, tableName,
                             properties, TTabletMetaType.INMEMORY);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.ENABLE_PERSISTENT_INDEX);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.WRITE_QUORUM);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.REPLICATED_STORAGE);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
-                    boolean isSuccess = ((SchemaChangeHandler) schemaChangeHandler).updateBinlogConfigMeta(db, olapTable.getId(),
+                    boolean isSuccess = schemaChangeHandler.updateBinlogConfigMeta(db, olapTable.getId(),
                             properties, TTabletMetaType.BINLOG_CONFIG);
                     if (!isSuccess) {
                         throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
                     }
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                         || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableConstraint(db, olapTable.getName(), properties);
+                    schemaChangeHandler.updateTableConstraint(db, olapTable.getName(), properties);
                 } else {
                     throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
@@ -896,7 +900,7 @@ public class Alter {
     }
 
     public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws UserException {
-        TableName dbTableName = stmt.getTbl();
+        TableName dbTableName = stmt.getTableName();
         String dbName = dbTableName.getDb();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -916,32 +920,32 @@ public class Alter {
                 throw new DdlException("The specified table [" + tableName + "] is not a view");
             }
 
+
+            AlterViewClause alterViewClause = (AlterViewClause) stmt.getAlterClause();
+            String inlineViewDef = alterViewClause.getInlineViewDef();
+            List<Column> newFullSchema = alterViewClause.getColumns();
+            long sqlMode = ctx.getSessionVariable().getSqlMode();
+
             View view = (View) table;
-            modifyViewDef(db, view, stmt.getInlineViewDef(), ctx.getSessionVariable().getSqlMode(), stmt.getColumns());
+            String viewName = view.getName();
+
+            view.setInlineViewDefWithSqlMode(inlineViewDef, ctx.getSessionVariable().getSqlMode());
+            try {
+                view.init();
+            } catch (UserException e) {
+                throw new DdlException("failed to init view stmt", e);
+            }
+            view.setNewFullSchema(newFullSchema);
+
+            db.dropTable(viewName);
+            db.createTable(view);
+
+            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
+            LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {
             db.writeUnlock();
         }
-    }
-
-    private void modifyViewDef(Database db, View view, String inlineViewDef, long sqlMode, List<Column> newFullSchema)
-            throws DdlException {
-        String viewName = view.getName();
-
-        view.setInlineViewDefWithSqlMode(inlineViewDef, sqlMode);
-        try {
-            view.init();
-        } catch (UserException e) {
-            throw new DdlException("failed to init view stmt", e);
-        }
-        view.setNewFullSchema(newFullSchema);
-
-        db.dropTable(viewName);
-        db.createTable(view);
-
-        AlterViewInfo alterViewInfo =
-                new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
-        LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
     }
 
     public void replayModifyViewDef(AlterViewInfo alterViewInfo) throws DdlException {
@@ -973,7 +977,7 @@ public class Alter {
     }
 
     public ShowResultSet processAlterCluster(AlterSystemStmt stmt) throws UserException {
-        return clusterHandler.process(Arrays.asList(stmt.getAlterClause()), null, null);
+        return clusterHandler.process(Collections.singletonList(stmt.getAlterClause()), null, null);
     }
 
     private void processRename(Database db, OlapTable table, List<AlterClause> alterClauses) throws DdlException {
@@ -1116,5 +1120,35 @@ public class Alter {
 
     public AlterHandler getClusterHandler() {
         return this.clusterHandler;
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int schemaChangeJobSize = reader.readJson(int.class);
+        for (int i = 0; i != schemaChangeJobSize; ++i) {
+            AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            schemaChangeHandler.addAlterJobV2(alterJobV2);
+
+            // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
+            // to prevent TabletInvertedIndex data loss,
+            // So just use AlterJob.replay() instead of AlterHandler.replay().
+            if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
+                alterJobV2.replay(alterJobV2);
+                LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
+            }
+        }
+
+        int materializedViewJobSize = reader.readJson(int.class);
+        for (int i = 0; i != materializedViewJobSize; ++i) {
+            AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            materializedViewHandler.addAlterJobV2(alterJobV2);
+
+            // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
+            // to prevent TabletInvertedIndex data loss,
+            // So just use AlterJob.replay() instead of AlterHandler.replay().
+            if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
+                alterJobV2.replay(alterJobV2);
+                LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
+            }
+        }
     }
 }

@@ -46,9 +46,9 @@ import org.apache.logging.log4j.Logger;
 public class LoadLoadingChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LoadLoadingChecker.class);
 
-    private LoadManager loadManager;
+    private LoadMgr loadManager;
 
-    public LoadLoadingChecker(LoadManager loadManager) {
+    public LoadLoadingChecker(LoadMgr loadManager) {
         super("Load loading checker", Config.load_checker_interval_second * 1000L);
         this.loadManager = loadManager;
     }

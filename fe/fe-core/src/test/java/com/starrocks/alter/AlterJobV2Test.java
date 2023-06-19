@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.util.ThreadUtil;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -68,6 +69,7 @@ public class AlterJobV2Test {
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.setUpForPersistTest();
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -85,6 +87,11 @@ public class AlterJobV2Test {
                         "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
     }
 
+    @AfterClass
+    public static void teardown() throws Exception {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
         // waiting table state to normal
         int retryTimes = 5;
@@ -100,7 +107,7 @@ public class AlterJobV2Test {
         // 1. process a schema change job
         String alterStmtStr = "alter table test.schema_change_test add column k4 int default '1'";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
         // 2. check alter job
         waitForSchemaChangeAlterJobFinish();
 
@@ -119,7 +126,7 @@ public class AlterJobV2Test {
         // 1. process a rollup job
         String alterStmtStr = "alter table test.schema_change_test add rollup test_rollup(k1, k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
         // 2. check alter job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
@@ -146,7 +153,7 @@ public class AlterJobV2Test {
         // 1. process a modify table properties job(enable_persistent_index)
         String alterStmtStr = "alter table test.properties_change_test set ('enable_persistent_index' = 'true');";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
         // 2. check alter job
         waitForSchemaChangeAlterJobFinish();
 
@@ -162,7 +169,7 @@ public class AlterJobV2Test {
         // 4. process a modify table properties job(in_memory)
         String alterStmtStr2 = "alter table test.properties_change_test set ('in_memory' = 'true');";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr2, connectContext);
-        GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
 
         // 4. check alter job
         waitForSchemaChangeAlterJobFinish();
@@ -186,7 +193,7 @@ public class AlterJobV2Test {
             // modify column which define in mv
             String alterStmtStr = "alter table test.modify_column_test modify column k2 varchar(10)";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv2 = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv2");
@@ -210,7 +217,7 @@ public class AlterJobV2Test {
 
             String alterStmtStr = "alter table test.modify_column_test3 modify column k2 varchar(20)";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
@@ -235,7 +242,7 @@ public class AlterJobV2Test {
 
             String alterStmtStr = "alter table test.testModifyWithSelectStarMV2 add column k4 bigint";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
@@ -263,7 +270,7 @@ public class AlterJobV2Test {
 
             String alterStmtStr = "alter table test.modify_column_test5 drop column k2";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
@@ -280,7 +287,7 @@ public class AlterJobV2Test {
     public void testModifyWithExpr() throws Exception {
         try {
             starRocksAssert.withTable("CREATE TABLE modify_column_test4(k1 int, k2 int, k3 int) ENGINE = OLAP " +
-                            "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+                    "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
             String sql = "CREATE MATERIALIZED VIEW test.mv4 DISTRIBUTED BY HASH(k1) " +
                     " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 + 1 FROM modify_column_test4";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -291,7 +298,7 @@ public class AlterJobV2Test {
                 String alterStmtStr = "alter table test.modify_column_test4 modify column k3 varchar(10)";
                 AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
                         connectContext);
-                GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
 
                 waitForSchemaChangeAlterJobFinish();
                 MaterializedView mv = (MaterializedView) GlobalStateMgr
@@ -305,7 +312,7 @@ public class AlterJobV2Test {
                 String alterStmtStr = "alter table test.modify_column_test4 modify column k2 varchar(30) ";
                 AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
                         connectContext);
-                GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
 
                 waitForSchemaChangeAlterJobFinish();
                 MaterializedView mv = (MaterializedView) GlobalStateMgr
@@ -330,7 +337,7 @@ public class AlterJobV2Test {
             // modify column which not define in mv
             String alterStmtStr = "alter table test.modify_column_test modify column k3 varchar(10)";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
 
             waitForSchemaChangeAlterJobFinish();
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv1");

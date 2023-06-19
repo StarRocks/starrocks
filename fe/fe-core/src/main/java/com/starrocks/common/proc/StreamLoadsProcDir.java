@@ -19,7 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -60,7 +60,7 @@ public class StreamLoadsProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult baseProcResult = new BaseProcResult();
         baseProcResult.setNames(TITLE_NAMES);
-        StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
+        StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
         try {
             List<StreamLoadTask> streamLoadTaskList = streamLoadManager.getTask(null, null, true);
             for (StreamLoadTask streamLoadTask : streamLoadTaskList) {

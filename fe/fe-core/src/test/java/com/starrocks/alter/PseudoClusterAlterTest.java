@@ -39,7 +39,7 @@ public class PseudoClusterAlterTest {
     @Test
     public void testAlterTableSimple() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
-        AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterInstance().getSchemaChangeHandler();
+        AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
         long expectAlterFinishNumber = handler.getAlterJobV2Num(AlterJobV2.JobState.FINISHED) + 1;
         String table = "table_simple";
         String createTableSql = PseudoCluster.newCreateTableSqlBuilder().setTableName(table).build();
@@ -62,7 +62,7 @@ public class PseudoClusterAlterTest {
     @Test
     public void testAlterTableWithConcurrentInsert() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
-        AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterInstance().getSchemaChangeHandler();
+        AlterHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
         long expectAlterFinishNumber = handler.getAlterJobV2Num(AlterJobV2.JobState.FINISHED) + 1;
         final String table = "table_concurrent_insert";
         final String createTableSql = PseudoCluster.newCreateTableSqlBuilder().setTableName(table).build();

@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DateLiteral;
@@ -79,6 +80,9 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.qe.ConnectContext;
@@ -110,8 +114,8 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class DeleteHandler implements Writable {
-    private static final Logger LOG = LogManager.getLogger(DeleteHandler.class);
+public class DeleteMgr implements Writable {
+    private static final Logger LOG = LogManager.getLogger(DeleteMgr.class);
 
     // TransactionId -> DeleteJob
     private final Map<Long, DeleteJob> idToDeleteJob;
@@ -126,7 +130,7 @@ public class DeleteHandler implements Writable {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final Set<Long> killJobSet;
 
-    public DeleteHandler() {
+    public DeleteMgr() {
         idToDeleteJob = Maps.newConcurrentMap();
         dbToDeleteInfos = Maps.newConcurrentMap();
         killJobSet = Sets.newConcurrentHashSet();
@@ -760,7 +764,7 @@ public class DeleteHandler implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static DeleteHandler read(DataInput in) throws IOException {
+    public static DeleteMgr read(DataInput in) throws IOException {
         String json;
         try {
             json = Text.readString(in);
@@ -773,9 +777,9 @@ public class DeleteHandler implements Writable {
             // discarding it doesn't make much of a difference
         } catch (IllegalArgumentException e) {
             LOG.warn("read delete handler json string failed, ignore", e);
-            return new DeleteHandler();
+            return new DeleteMgr();
         }
-        return GsonUtils.GSON.fromJson(json, DeleteHandler.class);
+        return GsonUtils.GSON.fromJson(json, DeleteMgr.class);
     }
 
     public long saveDeleteHandler(DataOutputStream dos, long checksum) throws IOException {
@@ -816,6 +820,17 @@ public class DeleteHandler implements Writable {
             } finally {
                 lock.writeLock().unlock();
             }
+        }
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int analyzeJobSize = reader.readInt();
+        for (int i = 0; i < analyzeJobSize; ++i) {
+            long dbId = reader.readJson(long.class);
+            List<MultiDeleteInfo> multiDeleteInfos =
+                    (List<MultiDeleteInfo>) reader.readJson(new TypeToken<List<MultiDeleteInfo>>() {
+                    }.getType());
+            dbToDeleteInfos.put(dbId, multiDeleteInfos);
         }
     }
 }

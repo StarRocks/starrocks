@@ -349,7 +349,7 @@ public class DDLStmtExecutor {
                             + " Try using broker load. See 'help broker load;'");
                 }
 
-                context.getGlobalStateMgr().getLoadManager().createLoadJobFromStmt(stmt, context);
+                context.getGlobalStateMgr().getLoadMgr().createLoadJobFromStmt(stmt, context);
             });
             return null;
         }
@@ -357,7 +357,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCancelLoadStatement(CancelLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLoadManager().cancelLoadJob(stmt);
+                context.getGlobalStateMgr().getLoadMgr().cancelLoadJob(stmt);
             });
             return null;
         }
@@ -365,7 +365,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().createRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().createRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -373,7 +373,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitPauseRoutineLoadStatement(PauseRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().pauseRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().pauseRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -381,7 +381,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().resumeRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().resumeRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -389,7 +389,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitStopRoutineLoadStatement(StopRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().stopRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().stopRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -397,7 +397,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterRoutineLoadStatement(AlterRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().alterRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().alterRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -405,7 +405,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterLoadStatement(AlterLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLoadManager().alterLoadJob(stmt);
+                context.getGlobalStateMgr().getLoadMgr().alterLoadJob(stmt);
             });
             return null;
         }
@@ -414,7 +414,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().createUser(stmt);
+                    context.getGlobalStateMgr().getAuthenticationMgr().createUser(stmt);
                 } else {
                     context.getGlobalStateMgr().getAuth().createUser(stmt);
                 }
@@ -426,7 +426,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager()
+                    context.getGlobalStateMgr().getAuthenticationMgr()
                             .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
                 } else {
                     context.getGlobalStateMgr().getAuth().alterUser(stmt);
@@ -439,7 +439,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitDropUserStatement(DropUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().dropUser(stmt);
+                    context.getGlobalStateMgr().getAuthenticationMgr().dropUser(stmt);
                 } else {
                     context.getGlobalStateMgr().getAuth().dropUser(stmt);
                 }
@@ -452,9 +452,9 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
                     if (stmt instanceof GrantRoleStmt) {
-                        context.getGlobalStateMgr().getAuthorizationManager().grantRole((GrantRoleStmt) stmt);
+                        context.getGlobalStateMgr().getAuthorizationMgr().grantRole((GrantRoleStmt) stmt);
                     } else {
-                        context.getGlobalStateMgr().getAuthorizationManager().revokeRole((RevokeRoleStmt) stmt);
+                        context.getGlobalStateMgr().getAuthorizationMgr().revokeRole((RevokeRoleStmt) stmt);
                     }
                 } else {
                     if (stmt instanceof GrantRoleStmt) {
@@ -473,13 +473,13 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
                     if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        context.getGlobalStateMgr().getAuthorizationManager().grant((GrantPrivilegeStmt) stmt);
+                        context.getGlobalStateMgr().getAuthorizationMgr().grant((GrantPrivilegeStmt) stmt);
                     } else {
                         context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
                     }
                 } else {
                     if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        context.getGlobalStateMgr().getAuthorizationManager().revoke((RevokePrivilegeStmt) stmt);
+                        context.getGlobalStateMgr().getAuthorizationMgr().revoke((RevokePrivilegeStmt) stmt);
                     } else {
                         context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
                     }
@@ -492,7 +492,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthorizationManager().createRole(stmt);
+                    context.getGlobalStateMgr().getAuthorizationMgr().createRole(stmt);
                 } else {
                     context.getGlobalStateMgr().getAuth().createRole(stmt);
                 }
@@ -504,7 +504,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitDropRoleStatement(DropRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthorizationManager().dropRole(stmt);
+                    context.getGlobalStateMgr().getAuthorizationMgr().dropRole(stmt);
                 } else {
                     context.getGlobalStateMgr().getAuth().dropRole(stmt);
                 }
@@ -516,7 +516,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitSetUserPropertyStatement(SetUserPropertyStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().updateUserProperty(stmt.getUser(),
+                    context.getGlobalStateMgr().getAuthenticationMgr().updateUserProperty(stmt.getUser(),
                             stmt.getPropertyPairList());
                 } else {
                     context.getGlobalStateMgr().getAuth().updateUserProperty(stmt);
@@ -770,7 +770,7 @@ public class DDLStmtExecutor {
                         stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN);
 
-                context.getGlobalStateMgr().getAnalyzeManager().addAnalyzeJob(analyzeJob);
+                context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 // from current session, may execute analyze stmt
@@ -790,7 +790,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropAnalyzeStatement(DropAnalyzeJobStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(
-                    () -> context.getGlobalStateMgr().getAnalyzeManager().removeAnalyzeJob(stmt.getId()));
+                    () -> context.getGlobalStateMgr().getAnalyzeMgr().removeAnalyzeJob(stmt.getId()));
             return null;
         }
 
@@ -871,6 +871,15 @@ public class DDLStmtExecutor {
         }
 
         @Override
+        public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
+            try {
+                return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
+            } catch (UserException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        @Override
         public ShowResultSet visitDropTaskStmt(DropTaskStmt dropTaskStmt, ConnectContext context) {
             TaskManager taskManager = context.getGlobalStateMgr().getTaskManager();
             Task task = taskManager.getTask(dropTaskStmt.getTaskName().getName());
@@ -881,15 +890,6 @@ public class DDLStmtExecutor {
             }
             taskManager.dropTasks(Collections.singletonList(task.getId()), false);
             return null;
-        }
-
-        @Override
-        public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
-            try {
-                return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
-            } catch (UserException e) {
-                throw new RuntimeException(e);
-            }
         }
     }
 

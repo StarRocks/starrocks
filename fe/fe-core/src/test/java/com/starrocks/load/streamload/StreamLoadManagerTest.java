@@ -59,7 +59,6 @@ public class StreamLoadManagerTest {
     @Before
     public void setUp() {
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
-        globalTransactionMgr.setEditLog(editLog);
         FeConstants.runningUnitTest = true;
     
         try {
@@ -116,7 +115,7 @@ public class StreamLoadManagerTest {
 
     @Test
     public void testBeginStreamLoadTask() throws UserException {
-        StreamLoadManager streamLoadManager = new StreamLoadManager();
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
         String tableName = "test_tbl";
@@ -145,7 +144,7 @@ public class StreamLoadManagerTest {
 
     @Test
     public void testChannelIdEqualChannelNum() throws UserException {
-        StreamLoadManager streamLoadManager = new StreamLoadManager();
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
         String tableName = "test_tbl";
@@ -165,7 +164,7 @@ public class StreamLoadManagerTest {
 
     @Test
     public void testGetTaskByName() throws UserException {
-        StreamLoadManager streamLoadManager = new StreamLoadManager();
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
         String tableName = "test_tbl";

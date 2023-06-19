@@ -15,7 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;
@@ -64,17 +64,17 @@ public class PrivilegeStmtAnalyzerV2Test {
         for (int i = 0; i < 2; ++i) {
             starRocksAssert.withTable("create table db1.tbl" + i + createTblStmtStr);
         }
-        ctx.getGlobalStateMgr().getAuthorizationManager().initBuiltinRolesAndUsers();
+        ctx.getGlobalStateMgr().getAuthorizationMgr().initBuiltinRolesAndUsers();
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
-        ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
+        ctx.getGlobalStateMgr().getAuthenticationMgr().createUser(createUserStmt);
     }
 
     @AfterClass
     public static void cleanup() throws Exception {
         DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "drop user test_user", ctx);
-        ctx.getGlobalStateMgr().getAuthenticationManager().dropUser(dropUserStmt);
+        ctx.getGlobalStateMgr().getAuthenticationMgr().dropUser(dropUserStmt);
     }
 
     @Test
@@ -268,12 +268,12 @@ public class PrivilegeStmtAnalyzerV2Test {
         String sql = "create role test_role";
         CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("test_role", createStmt.getRoles().get(0));
-        ctx.getGlobalStateMgr().getAuthorizationManager().createRole(createStmt);
+        ctx.getGlobalStateMgr().getAuthorizationMgr().createRole(createStmt);
 
         sql = "create role test_role2";
         createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("test_role2", createStmt.getRoles().get(0));
-        ctx.getGlobalStateMgr().getAuthorizationManager().createRole(createStmt);
+        ctx.getGlobalStateMgr().getAuthorizationMgr().createRole(createStmt);
 
         // bad name
         sql = "create role ___";
@@ -386,7 +386,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create role role" + i, ctx), ctx);
         }
 
-        AuthorizationManager authorizationManager = ctx.getGlobalStateMgr().getAuthorizationManager();
+        AuthorizationMgr authorizationManager = ctx.getGlobalStateMgr().getAuthorizationMgr();
 
         String sql = "grant role1, role2 to user test_user";
         GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -724,7 +724,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         ConnectContext context = AnalyzeTestUtil.getConnectContext();
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user user_exists", context);
-        context.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
+        context.getGlobalStateMgr().getAuthenticationMgr().createUser(createUserStmt);
 
         analyzeSuccess("create user user_not_exists");
         analyzeSuccess("create user if not exists user_not_exists");
@@ -745,7 +745,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         context = AnalyzeTestUtil.getConnectContext();
         CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create role role_exists", context);
-        context.getGlobalStateMgr().getAuthorizationManager().createRole(createRoleStmt);
+        context.getGlobalStateMgr().getAuthorizationMgr().createRole(createRoleStmt);
 
         analyzeSuccess("create role role_not_exists");
         analyzeSuccess("create role if not exists role_not_exists");

@@ -34,7 +34,7 @@ public class KafkaTaskInfoTest {
 
     @Test
     public void testReadyToExecute(@Injectable KafkaRoutineLoadJob kafkaRoutineLoadJob) throws Exception {
-        new MockUp<RoutineLoadManager>() {
+        new MockUp<RoutineLoadMgr>() {
             @Mock
             public RoutineLoadJob getJob(long jobId) {
                 return kafkaRoutineLoadJob;
@@ -74,7 +74,7 @@ public class KafkaTaskInfoTest {
 
     @Test
     public void testProgressKeepUp(@Injectable KafkaRoutineLoadJob kafkaRoutineLoadJob) throws Exception {
-        new MockUp<RoutineLoadManager>() {
+        new MockUp<RoutineLoadMgr>() {
             @Mock
             public RoutineLoadJob getJob(long jobId) {
                 return kafkaRoutineLoadJob;

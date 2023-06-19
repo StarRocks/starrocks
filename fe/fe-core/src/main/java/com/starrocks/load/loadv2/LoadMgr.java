@@ -99,8 +99,8 @@ import java.util.stream.Collectors;
  * LoadManager.lock
  * LoadJob.lock
  */
-public class LoadManager implements Writable {
-    private static final Logger LOG = LogManager.getLogger(LoadManager.class);
+public class LoadMgr implements Writable {
+    private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
 
     private Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
     private Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
@@ -108,7 +108,7 @@ public class LoadManager implements Writable {
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public LoadManager(LoadJobScheduler loadJobScheduler) {
+    public LoadMgr(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
     }
 
@@ -768,24 +768,19 @@ public class LoadManager implements Writable {
         return checksum;
     }
 
-    public void loadLoadJobsV2JsonFormat(DataInputStream in) throws IOException,
-            SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(in, LoadManager.class.getName());
-        try {
-            int size = reader.readInt();
-            long now = System.currentTimeMillis();
-            while (size-- > 0) {
-                LoadJob loadJob = reader.readJson(LoadJob.class);
-                // discard expired job right away
-                if (isJobExpired(loadJob, now)) {
-                    LOG.info("discard expired job: {}", loadJob);
-                    continue;
-                }
-
-                putLoadJob(loadJob);
+    public void loadLoadJobsV2JsonFormat(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        long now = System.currentTimeMillis();
+        while (size-- > 0) {
+            LoadJob loadJob = reader.readJson(LoadJob.class);
+            // discard expired job right away
+            if (isJobExpired(loadJob, now)) {
+                LOG.info("discard expired job: {}", loadJob);
+                continue;
             }
-        } finally {
-            reader.close();
+
+            putLoadJob(loadJob);
         }
     }
 

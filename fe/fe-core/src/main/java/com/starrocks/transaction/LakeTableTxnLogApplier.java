@@ -20,7 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.lake.compaction.CompactionManager;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,7 +49,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         List<String> validDictCacheColumns = Lists.newArrayList();
         long maxPartitionVersionTime = -1;
         long tableId = table.getId();
-        CompactionManager compactionManager = GlobalStateMgr.getCurrentState().getCompactionManager();
+        CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             Partition partition = table.getPartition(partitionCommitInfo.getPartitionId());
             long version = partitionCommitInfo.getVersion();

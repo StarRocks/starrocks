@@ -78,7 +78,7 @@ public class CatalogLevelTest {
         String sql = "create user u1";
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                 AnalyzeTestUtil.getConnectContext());
-        GlobalStateMgr.getCurrentState().getAuthenticationManager().createUser(createUserStmt);
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().createUser(createUserStmt);
 
         AnalyzeTestUtil.getConnectContext().setCurrentUserIdentity(new UserIdentity("u1", "%"));
         Assert.assertFalse(PrivilegeActions.checkAnyActionOnOrInDb(

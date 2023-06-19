@@ -50,7 +50,7 @@ public class MVJobExecutor extends LeaderDaemon {
     }
 
     private void runImpl() {
-        List<MVMaintenanceJob> jobs = MVManager.getInstance().getRunnableJobs();
+        List<MVMaintenanceJob> jobs = MaterializedViewMgr.getInstance().getRunnableJobs();
         if (CollectionUtils.isEmpty(jobs)) {
             return;
         }

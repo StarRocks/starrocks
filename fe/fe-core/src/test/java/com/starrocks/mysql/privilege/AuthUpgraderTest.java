@@ -18,7 +18,7 @@ package com.starrocks.mysql.privilege;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserDesc;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.ParseUtil;
@@ -112,8 +112,8 @@ public class AuthUpgraderTest {
         ctx.getGlobalStateMgr().initAuth(true);
         AuthUpgrader authUpgrader = new AuthUpgrader(
                 relayAuth,
-                ctx.getGlobalStateMgr().getAuthenticationManager(),
-                ctx.getGlobalStateMgr().getAuthorizationManager(),
+                ctx.getGlobalStateMgr().getAuthenticationMgr(),
+                ctx.getGlobalStateMgr().getAuthorizationMgr(),
                 ctx.getGlobalStateMgr());
         if (onlyUpgradeJournal) {
             UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
@@ -419,7 +419,7 @@ public class AuthUpgraderTest {
         checkPrivilegeAsUser(selectUser, "select * from db0.tbl0");
         UserIdentity user = createUserByRole("impersonateRole");
         ctx.setCurrentUserIdentity(user);
-        ctx.getGlobalStateMgr().getAuthorizationManager().canExecuteAs(ctx, selectUser);
+        ctx.getGlobalStateMgr().getAuthorizationMgr().canExecuteAs(ctx, selectUser);
 
         // restart
         ctx.getGlobalStateMgr().initAuth(true);
@@ -439,7 +439,7 @@ public class AuthUpgraderTest {
         checkPrivilegeAsUser(selectUser, "select * from db0.tbl0");
         user = createUserByRole("impersonateRole");
         ctx.setCurrentUserIdentity(user);
-        ctx.getGlobalStateMgr().getAuthorizationManager().canExecuteAs(ctx, selectUser);
+        ctx.getGlobalStateMgr().getAuthorizationMgr().canExecuteAs(ctx, selectUser);
     }
 
     @Test
@@ -460,12 +460,12 @@ public class AuthUpgraderTest {
                 replayUpgrade(image);
             }
             ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("harry", "%"));
-            ctx.getGlobalStateMgr().getAuthorizationManager().canExecuteAs(
+            ctx.getGlobalStateMgr().getAuthorizationMgr().canExecuteAs(
                     ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory", "%"));
 
             UserIdentity user = createUserByRole("harry");
             ctx.setCurrentUserIdentity(user);
-            ctx.getGlobalStateMgr().getAuthorizationManager().canExecuteAs(
+            ctx.getGlobalStateMgr().getAuthorizationMgr().canExecuteAs(
                     ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory", "%"));
         }
     }
@@ -486,7 +486,7 @@ public class AuthUpgraderTest {
                 replayUpgrade(image);
             }
             ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("testafteruserdropped", "%"));
-            Assert.assertFalse(ctx.getGlobalStateMgr().getAuthorizationManager().canExecuteAs(
+            Assert.assertFalse(ctx.getGlobalStateMgr().getAuthorizationMgr().canExecuteAs(
                     ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory1", "%")));
         }
     }
@@ -521,7 +521,7 @@ public class AuthUpgraderTest {
     }
 
     private void checkPasswordEquals(String username, String pass) {
-        AuthenticationManager authenticationManager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr authenticationManager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         UserIdentity userIdentity = new UserIdentity(username, "%");
         UserAuthenticationInfo info =
                 authenticationManager.getUserToAuthenticationInfo().get(userIdentity);

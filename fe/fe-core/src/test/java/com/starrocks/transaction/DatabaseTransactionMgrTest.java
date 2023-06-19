@@ -91,10 +91,8 @@ public class DatabaseTransactionMgrTest {
         metaContext.setThreadLocalInfo();
 
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
-        masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
 
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
-        slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
 
         lableToTxnId = addTransactionToTransactionMgr();
     }

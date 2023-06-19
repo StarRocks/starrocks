@@ -12,21 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
 
-import java.util.List;
-
 // Alter view statement
-public class AlterViewStmt extends BaseViewStmt {
-    public AlterViewStmt(TableName tbl, List<ColWithComment> cols, QueryStatement queryStatement) {
-        super(tbl, cols, queryStatement);
+public class AlterViewStmt extends DdlStmt {
+    private final TableName tableName;
+    private final AlterClause alterClause;
+
+    public AlterViewStmt(TableName tableName, AlterClause alterClause) {
+        this.tableName = tableName;
+        this.alterClause = alterClause;
     }
 
-    public TableName getTbl() {
+    public TableName getTableName() {
         return tableName;
+    }
+
+    public AlterClause getAlterClause() {
+        return alterClause;
     }
 
     @Override

@@ -39,7 +39,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.alter.Alter;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
@@ -54,11 +54,11 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.JobState;
-import com.starrocks.load.loadv2.LoadManager;
+import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
-import com.starrocks.load.routineload.RoutineLoadManager;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.monitor.jvm.JvmService;
@@ -158,7 +158,7 @@ public final class MetricRepo {
 
         // 1. gauge
         // load jobs
-        LoadManager loadManger = GlobalStateMgr.getCurrentState().getLoadManager();
+        LoadMgr loadManger = GlobalStateMgr.getCurrentState().getLoadMgr();
         for (EtlJobType jobType : EtlJobType.values()) {
             if (jobType == EtlJobType.MINI || jobType == EtlJobType.UNKNOWN) {
                 continue;
@@ -183,7 +183,7 @@ public final class MetricRepo {
         }
 
         // running alter job
-        Alter alter = GlobalStateMgr.getCurrentState().getAlterInstance();
+        AlterJobMgr alter = GlobalStateMgr.getCurrentState().getAlterJobMgr();
         for (AlterJobV2.JobType jobType : AlterJobV2.JobType.values()) {
             if (jobType != AlterJobV2.JobType.SCHEMA_CHANGE && jobType != AlterJobV2.JobType.ROLLUP) {
                 continue;
@@ -259,7 +259,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
 
         // routine load jobs
-        RoutineLoadManager routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+        RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
             GaugeMetric<Long> gauge = new GaugeMetric<Long>("routine_load_jobs",
                     MetricUnit.NOUNIT, "routine load jobs") {
@@ -547,7 +547,7 @@ public final class MetricRepo {
     }
 
     public static void updateRoutineLoadProcessMetrics() {
-        List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadManager().getRoutineLoadJobByState(
+        List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadMgr().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
                                 RoutineLoadJob.JobState.PAUSED,
                                 RoutineLoadJob.JobState.RUNNING));

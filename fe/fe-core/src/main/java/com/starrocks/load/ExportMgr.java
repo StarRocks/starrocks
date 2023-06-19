@@ -154,6 +154,7 @@ public class ExportMgr {
         }
         return matchedJob;
     }
+
     public void cancelExportJob(CancelExportStmt stmt) throws UserException {
         ExportJob matchedJob = getExportJob(stmt.getDbName(), stmt.getQueryId());
         UUID queryId = stmt.getQueryId();
@@ -164,8 +165,8 @@ public class ExportMgr {
             // check auth
             TableName tableName = matchedJob.getTableName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                                                         tableName.getDb(), tableName.getTbl(),
-                                                                         PrivPredicate.SELECT)) {
+                    tableName.getDb(), tableName.getTbl(),
+                    PrivPredicate.SELECT)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, Privilege.SELECT_PRIV);
             }
         }
@@ -451,25 +452,17 @@ public class ExportMgr {
         return checksum;
     }
 
-    public void loadExportJobV2(DataInputStream dis)
-            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, ExportMgr.class.getName());
-        try {
-            int size = reader.readInt();
-            long currentTimeMs = System.currentTimeMillis();
-            for (int i = 0; i < size; i++) {
-                ExportJob job = reader.readJson(ExportJob.class);
-                // discard expired job right away
-                if (isJobExpired(job, currentTimeMs)) {
-                    LOG.info("discard expired job: {}", job);
-                    continue;
-                }
-                unprotectAddJob(job);
+    public void loadExportJobV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        long currentTimeMs = System.currentTimeMillis();
+        for (int i = 0; i < size; i++) {
+            ExportJob job = reader.readJson(ExportJob.class);
+            // discard expired job right away
+            if (isJobExpired(job, currentTimeMs)) {
+                LOG.info("discard expired job: {}", job);
+                continue;
             }
-        } finally {
-            reader.close();
+            unprotectAddJob(job);
         }
-
-        LOG.info("finished replay exportJob from image");
     }
 }

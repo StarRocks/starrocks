@@ -20,7 +20,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;
@@ -65,10 +65,10 @@ public class AuthenticationManagerTest {
 
     @Test
     public void testInitDefault() throws Exception {
-        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertTrue(manager.doesUserExist(UserIdentity.ROOT));
         Assert.assertFalse(manager.doesUserExist(UserIdentity.createAnalyzedUserIdentWithIp("fake", "%")));
-        Assert.assertEquals(new UserProperty().getMaxConn(), manager.getMaxConn(AuthenticationManager.ROOT_USER));
+        Assert.assertEquals(new UserProperty().getMaxConn(), manager.getMaxConn(AuthenticationMgr.ROOT_USER));
     }
 
     @Test
@@ -78,7 +78,7 @@ public class AuthenticationManagerTest {
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
-        AuthenticationManager masterManager = new AuthenticationManager();
+        AuthenticationMgr masterManager = new AuthenticationMgr();
         Assert.assertNull(masterManager.checkPassword(
                 testUserWithIp.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed));
         Assert.assertFalse(masterManager.doesUserExist(testUser));
@@ -118,7 +118,7 @@ public class AuthenticationManagerTest {
         Assert.assertNull(user);
 
         // start to replay
-        AuthenticationManager followerManager = AuthenticationManager.load(emptyImage.getDataInputStream());
+        AuthenticationMgr followerManager = AuthenticationMgr.load(emptyImage.getDataInputStream());
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         Assert.assertFalse(followerManager.doesUserExist(testUserWithIp));
 
@@ -156,7 +156,7 @@ public class AuthenticationManagerTest {
         Assert.assertNull(user);
 
         // purely loaded from image
-        AuthenticationManager imageManager = AuthenticationManager.load(finalImage.getDataInputStream());
+        AuthenticationMgr imageManager = AuthenticationMgr.load(finalImage.getDataInputStream());
         Assert.assertTrue(imageManager.doesUserExist(testUser));
         Assert.assertTrue(imageManager.doesUserExist(testUserWithIp));
         user = imageManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", scramble, seed);
@@ -167,8 +167,8 @@ public class AuthenticationManagerTest {
 
     @Test
     public void testCreateUserWithDefaultRole() throws Exception {
-        AuthenticationManager masterManager = ctx.getGlobalStateMgr().getAuthenticationManager();
-        AuthorizationManager authorizationManager = ctx.getGlobalStateMgr().getAuthorizationManager();
+        AuthenticationMgr masterManager = ctx.getGlobalStateMgr().getAuthenticationMgr();
+        AuthorizationMgr authorizationManager = ctx.getGlobalStateMgr().getAuthorizationMgr();
 
         String sql = "create role test_r1";
         CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -250,7 +250,7 @@ public class AuthenticationManagerTest {
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
-        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertNull(manager.checkPassword(
                 testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
         Assert.assertFalse(manager.doesUserExist(testUser));
@@ -303,7 +303,7 @@ public class AuthenticationManagerTest {
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
-        AuthenticationManager masterManager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr masterManager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertFalse(masterManager.doesUserExist(testUser));
         Assert.assertTrue(masterManager.doesUserExist(UserIdentity.ROOT));
 
@@ -348,7 +348,7 @@ public class AuthenticationManagerTest {
         masterManager.save(finalImage.getDataOutputStream());
 
         // 7. verify replay...
-        AuthenticationManager followerManager = AuthenticationManager.load(emptyImage.getDataInputStream());
+        AuthenticationMgr followerManager = AuthenticationMgr.load(emptyImage.getDataInputStream());
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         // 7.1 replay create user
         CreateUserInfo createInfo = (CreateUserInfo)
@@ -378,14 +378,14 @@ public class AuthenticationManagerTest {
         Assert.assertTrue(followerManager.doesUserExist(UserIdentity.ROOT));
 
         // 8. verify alter image
-        AuthenticationManager alterManager = AuthenticationManager.load(alterImage.getDataInputStream());
+        AuthenticationMgr alterManager = AuthenticationMgr.load(alterImage.getDataInputStream());
         Assert.assertTrue(alterManager.doesUserExist(testUser));
         Assert.assertEquals(testUser, alterManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
         Assert.assertTrue(alterManager.doesUserExist(UserIdentity.ROOT));
 
         // 9. verify final image
-        AuthenticationManager finalManager = AuthenticationManager.load(finalImage.getDataInputStream());
+        AuthenticationMgr finalManager = AuthenticationMgr.load(finalImage.getDataInputStream());
         Assert.assertFalse(finalManager.doesUserExist(testUser));
         Assert.assertTrue(finalManager.doesUserExist(UserIdentity.ROOT));
     }
@@ -395,7 +395,7 @@ public class AuthenticationManagerTest {
         UserIdentity testUserWithHost = UserIdentity.createAnalyzedUserIdentWithDomain("user_with_host", "host01");
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
-        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertFalse(manager.doesUserExist(testUserWithHost));
 
         // create a user with host name
@@ -456,7 +456,7 @@ public class AuthenticationManagerTest {
 
     @Test
     public void testSortUserIdentity() throws Exception {
-        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user sort_user@['host01'] identified by 'abc'", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
