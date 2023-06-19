@@ -39,11 +39,16 @@ Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     return Status::OK();
 }
+
 Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     auto params = convert_to_aggregator_params(_tnode);
-    _aggregator = std::make_shared<Aggregator>(std::move(params));
-    return _aggregator->prepare(state, _pool, runtime_profile());
+
+    // Avoid partial-prepared Aggregator, which is dangerous to close
+    auto aggregator = std::make_shared<Aggregator>(std::move(params));
+    RETURN_IF_ERROR(aggregator->prepare(state, _pool, runtime_profile()));
+    _aggregator = std::move(aggregator);
+    return Status::OK();
 }
 
 Status AggregateBaseNode::close(RuntimeState* state) {

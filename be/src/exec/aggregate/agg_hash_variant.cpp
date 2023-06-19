@@ -227,7 +227,8 @@ bool AggHashMapVariant::need_expand(size_t increasement) const {
 
 size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
     return visit([pool](const auto& hash_map_with_key) {
-        return hash_map_with_key->hash_map.dump_bound() + pool->total_reserved_bytes();
+        size_t pool_bytes = (pool != nullptr) ? pool->total_reserved_bytes() : 0;
+        return hash_map_with_key->hash_map.dump_bound() + pool_bytes;
     });
 }
 
@@ -302,7 +303,8 @@ bool AggHashSetVariant::need_expand(size_t increasement) const {
 
 size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
     return visit([&](auto& hash_set_with_key) {
-        return hash_set_with_key->hash_set.dump_bound() + pool->total_reserved_bytes();
+        size_t pool_bytes = pool != nullptr ? pool->total_reserved_bytes() : 0;
+        return hash_set_with_key->hash_set.dump_bound() + pool_bytes;
     });
 }
 
