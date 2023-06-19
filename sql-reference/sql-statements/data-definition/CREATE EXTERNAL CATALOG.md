@@ -12,7 +12,7 @@
 
 > **注意**
 >
-> - 使用该语句需要有 System 级 CREATE EXTERNAL CATALOG 权限。
+> - 在 3.0 及以后版本，使用该语句需要有 System 级 CREATE EXTERNAL CATALOG 权限。
 > - 在创建 External Catalog 前，需要根据数据源的存储系统（如 AWS S3）、元数据服务（如 Hive metastore）和认证方式（如 Kerberos）在 StarRocks 中做相应的配置。详细信息，请参见以上各个 External Catalog 文档中的「前提条件」小节。
 
 ## 语法
@@ -27,7 +27,7 @@ PROPERTIES ("key"="value", ...)
 
 | 参数         | 必选 | 说明                                                         |
 | ------------ | ---- | ------------------------------------------------------------ |
-| catalog_name | 是   | External catalog 的名称，命名要求如下：<ul><li>必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。</li><li>总长度不能超过 64 个字符。</li></ul> |
+| catalog_name | 是   | External catalog 的名称，命名要求如下：<ul><li>必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。</li><li>总长度不能超过 1023 个字符。</li><li>Catalog 名称大小写敏感。</li></ul> |
 | comment      | 否   | External catalog 的描述。 |
 | PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 [Hive catalog](/data_source/catalog/hive_catalog.md)、[Iceberg catalog](/data_source/catalog/iceberg_catalog.md)、[Hudi catalog](/data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](/data_source/catalog/deltalake_catalog.md) 和 [JDBC Catalog](/data_source/catalog/jdbc_catalog.md)。 |
 
