@@ -24,15 +24,15 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public class FilePipeSource extends PipeSource implements GsonPostProcessable {
+public class FilePipeSource implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(FilePipeSource.class);
 
@@ -44,6 +44,8 @@ public class FilePipeSource extends PipeSource implements GsonPostProcessable {
     private Map<String, String> tableProperties;
     @SerializedName(value = "auto_ingest")
     private boolean autoIngest = true;
+    @SerializedName(value = "batch_size")
+    private long batchSize = Pipe.DEFAULT_BATCH_SIZE;
     @SerializedName(value = "eos")
     private boolean eos = false;
 
@@ -56,7 +58,6 @@ public class FilePipeSource extends PipeSource implements GsonPostProcessable {
         this.fileListRepo = new FileListRepo();
     }
 
-    @Override
     public void poll() {
         // TODO: poll it seriously
         if (fileListRepo.size() == 0) {
@@ -80,21 +81,27 @@ public class FilePipeSource extends PipeSource implements GsonPostProcessable {
         }
     }
 
-    @Override
     public boolean eos() {
         return eos;
     }
 
-    @Override
-    public PipePiece pullPiece() {
+    public FilePipePiece pullPiece() {
+        Preconditions.checkArgument(batchSize > 0, "not support batch_size=0");
+
         List<PipeFile> unloadFiles = fileListRepo.getUnloadedFiles();
         if (CollectionUtils.isEmpty(unloadFiles)) {
             return null;
         }
-        List<PipeFile> loadFile = Collections.singletonList(unloadFiles.get(0));
         FilePipePiece piece = new FilePipePiece();
-        piece.setFile(unloadFiles.get(0));
-        fileListRepo.updateFiles(loadFile, FileListRepo.PipeFileState.LOADING);
+        long totalBytes = 0;
+        for (PipeFile file : ListUtils.emptyIfNull(unloadFiles)) {
+            totalBytes += file.getSize();
+            piece.addFile(file);
+            if (totalBytes >= batchSize) {
+                break;
+            }
+        }
+        fileListRepo.updateFiles(piece.getFiles(), FileListRepo.PipeFileState.LOADING);
 
         return piece;
     }
@@ -103,11 +110,15 @@ public class FilePipeSource extends PipeSource implements GsonPostProcessable {
         FileListRepo.PipeFileState state =
                 taskState == PipeTaskDesc.PipeTaskState.ERROR ?
                         FileListRepo.PipeFileState.FAILED : FileListRepo.PipeFileState.LOADED;
-        fileListRepo.updateFiles(Collections.singletonList(piece.getFile()), state);
+        fileListRepo.updateFiles(piece.getFiles(), state);
     }
 
     public void setAutoIngest(boolean autoIngest) {
         this.autoIngest = autoIngest;
+    }
+
+    public void setBatchSize(long batchSize) {
+        this.batchSize = batchSize;
     }
 
     public void setPath(String path) {

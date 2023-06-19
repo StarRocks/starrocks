@@ -16,7 +16,7 @@
 package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.analysis.TableName;
-import com.starrocks.load.pipe.PipeSource;
+import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -33,7 +33,7 @@ public class CreatePipeStmt extends DdlStmt {
     private final InsertStmt insertStmt;
     private String insertSql;
     private TableName targetTable;
-    private PipeSource pipeSource;
+    private FilePipeSource pipeSource;
 
     public CreatePipeStmt(boolean ifNotExists, PipeName pipeName, int insertSqlStartIndex, InsertStmt insertStmt,
                           Map<String, String> properties, NodePosition pos) {
@@ -77,11 +77,11 @@ public class CreatePipeStmt extends DdlStmt {
         this.targetTable = targetTable;
     }
 
-    public void setDataSource(PipeSource source) {
+    public void setDataSource(FilePipeSource source) {
         this.pipeSource = source;
     }
 
-    public PipeSource getDataSource() {
+    public FilePipeSource getDataSource() {
         return pipeSource;
     }
 

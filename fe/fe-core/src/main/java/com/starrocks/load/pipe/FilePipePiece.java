@@ -15,20 +15,46 @@
 
 package com.starrocks.load.pipe;
 
-public class FilePipePiece extends PipePiece {
+import org.apache.commons.collections4.ListUtils;
 
-    private PipeFile file;
+import java.util.ArrayList;
+import java.util.List;
 
-    public PipeFile getFile() {
-        return file;
+public class FilePipePiece {
+
+    private List<PipeFile> files;
+
+    public FilePipePiece() {
+        this.files = new ArrayList<>();
     }
 
-    public void setFile(PipeFile file) {
-        this.file = file;
+    public FilePipePiece(List<PipeFile> files) {
+        this.files = files;
     }
 
-    @Override
-    PipeTaskDesc convertToTask() {
-        return null;
+    public List<PipeFile> getFiles() {
+        return files;
     }
+
+    public void setFiles(List<PipeFile> files) {
+        this.files = files;
+    }
+
+    public void addFiles(List<PipeFile> files) {
+        this.files.addAll(files);
+    }
+
+    public void addFile(PipeFile file) {
+        this.files.add(file);
+    }
+
+    public long getTotalBytes() {
+        return ListUtils.emptyIfNull(files).stream().map(PipeFile::getSize).reduce(0L, Long::sum);
+    }
+
+    public long getTotalRows() {
+        // FIXME: implement it
+        return 1;
+    }
+
 }

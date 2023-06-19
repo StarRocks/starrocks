@@ -128,9 +128,6 @@ import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
-import com.starrocks.load.pipe.EmptyPipeSource;
-import com.starrocks.load.pipe.FilePipeSource;
-import com.starrocks.load.pipe.PipeSource;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.PulsarProgress;
@@ -355,17 +352,10 @@ public class GsonUtils {
                     .registerSubtype(AggregateFunction.class, "AggregateFunction")
                     .registerSubtype(TableFunction.class, "TableFunction");
 
-<<<<<<< HEAD
     public static final RuntimeTypeAdapterFactory<StorageVolumeMgr> STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(StorageVolumeMgr.class, "clazz")
                     .registerSubtype(SharedNothingStorageVolumeMgr.class, "SharedNothingStorageVolumeMgr")
                     .registerSubtype(SharedDataStorageVolumeMgr.class, "SharedDataStorageVolumeMgr");
-=======
-    public static final RuntimeTypeAdapterFactory<PipeSource> PIPE_SOURCE_ADAPTER_FACTORY =
-            RuntimeTypeAdapterFactory.of(PipeSource.class, "clazz")
-                    .registerSubtype(FilePipeSource.class, "FilePipeSource")
-                    .registerSubtype(EmptyPipeSource.class, "EmptyPipeSource");
->>>>>>> 46577351ef (suppport drop database)
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
@@ -424,7 +414,6 @@ public class GsonUtils {
             .registerTypeAdapterFactory(ABSTRACT_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(PIPE_SOURCE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

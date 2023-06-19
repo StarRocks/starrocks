@@ -1143,9 +1143,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = DISABLE_FUNCTION_FOLD_CONSTANTS, flag = VariableMgr.INVISIBLE)
     private boolean disableFunctionFoldConstants = false;
 
-    @VarAttr(name = ENABLE_PIPE_VALIDATE, flag = VariableMgr.INVISIBLE)
-    private boolean enablePipeValidate = true;
-
     private int exprChildrenLimit = -1;
 
     public int getExprChildrenLimit() {
@@ -2205,10 +2202,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setDisableFunctionFoldConstants(boolean disableFunctionFoldConstants) {
         this.disableFunctionFoldConstants = disableFunctionFoldConstants;
-    }
-
-    public boolean isEnablePipeValidate() {
-        return enablePipeValidate;
     }
 
     // Serialize to thrift object

@@ -22,7 +22,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.load.pipe.EmptyPipeSource;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
@@ -43,12 +42,14 @@ import java.util.Map;
 public class PipeAnalyzer {
 
     public static final String PROPERTY_AUTO_INGEST = "auto_ingest";
-    public static final String POLL_INTERVAL = "poll_interval";
+    public static final String PROPERTY_POLL_INTERVAL = "poll_interval";
+    public static final String PROPERTY_BATCH_SIZE = "batch_size";
 
     private static final ImmutableSet<String> SUPPORTED_PROPERTIES =
             new ImmutableSortedSet.Builder<String>(String.CASE_INSENSITIVE_ORDER)
                     .add(PROPERTY_AUTO_INGEST)
-                    .add(POLL_INTERVAL)
+                    .add(PROPERTY_POLL_INTERVAL)
+                    .add(PROPERTY_BATCH_SIZE)
                     .build();
 
     private static void analyzePipeName(PipeName pipeName, ConnectContext context) {
@@ -73,17 +74,40 @@ public class PipeAnalyzer {
             if (!SUPPORTED_PROPERTIES.contains(propertyName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
             }
-            switch (propertyName) {
-                case POLL_INTERVAL: {
-                    int value = Integer.parseInt(properties.get(propertyName));
+            String valueStr = properties.get(propertyName);
+            switch (propertyName.toLowerCase()) {
+                case PROPERTY_POLL_INTERVAL: {
+                    int value = -1;
+                    try {
+                        value = Integer.parseInt(valueStr);
+                    } catch (NumberFormatException ignored) {
+                    }
                     if (value < 1 || value > 1024) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                                POLL_INTERVAL + " should in [1, 1024]");
+                                PROPERTY_POLL_INTERVAL + " should in [1, 1024]");
                     }
                     break;
                 }
-                default:
-
+                case PROPERTY_BATCH_SIZE: {
+                    int value = -1;
+                    try {
+                        value = Integer.parseInt(valueStr);
+                    } catch (NumberFormatException ignored) {
+                    }
+                    if (value < 0) {
+                        ErrorReport.reportSemanticException(
+                                ErrorCode.ERR_INVALID_PARAMETER,
+                                PROPERTY_BATCH_SIZE + " should in [0, +oo)");
+                    }
+                    break;
+                }
+                case PROPERTY_AUTO_INGEST: {
+                    VariableMgr.parseBooleanVariable(valueStr);
+                    break;
+                }
+                default: {
+                    break;
+                }
             }
         }
     }
@@ -97,10 +121,6 @@ public class PipeAnalyzer {
         stmt.setTargetTable(insertStmt.getTableName());
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());
         stmt.setInsertSql(insertSql);
-        if (!context.getSessionVariable().isEnablePipeValidate()) {
-            stmt.setDataSource(new EmptyPipeSource());
-            return;
-        }
         InsertAnalyzer.analyze(insertStmt, context);
 
         // Must be the form: insert into <target_table> select <projection> from <source_table> [where_clause]
@@ -128,13 +148,8 @@ public class PipeAnalyzer {
         }
 
         TableFunctionTable sourceTable = (TableFunctionTable) rawTable;
-        FilePipeSource source =
-                new FilePipeSource(sourceTable.getPath(), sourceTable.getFormat(), sourceTable.getProperties());
-        if (properties.containsKey(PROPERTY_AUTO_INGEST)) {
-            boolean value = VariableMgr.parseBooleanVariable(properties.get(PROPERTY_AUTO_INGEST));
-            source.setAutoIngest(value);
-        }
-        stmt.setDataSource(source);
+        stmt.setDataSource(
+                new FilePipeSource(sourceTable.getPath(), sourceTable.getFormat(), sourceTable.getProperties()));
     }
 
     public static void analyze(DropPipeStmt stmt, ConnectContext context) {

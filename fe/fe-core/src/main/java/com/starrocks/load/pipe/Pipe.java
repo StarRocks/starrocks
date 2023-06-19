@@ -27,6 +27,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -49,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 /**
  * Pipe: continuously load and unload data
@@ -56,7 +58,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class Pipe implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(Pipe.class);
+
     public static final int DEFAULT_POLL_INTERVAL = 10;
+    public static final long DEFAULT_BATCH_SIZE = 1 << 30;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
     @SerializedName(value = "name")
@@ -69,8 +73,8 @@ public class Pipe implements GsonPostProcessable {
     private State state;
     @SerializedName(value = "originSql")
     private String originSql;
-    @SerializedName(value = "pipeSource")
-    private PipeSource pipeSource;
+    @SerializedName(value = "filePipeSource")
+    private FilePipeSource pipeSource;
     @SerializedName(value = "targetTable")
     private TableName targetTable;
     @SerializedName(value = "properties")
@@ -84,7 +88,7 @@ public class Pipe implements GsonPostProcessable {
     private int pollIntervalSecond = DEFAULT_POLL_INTERVAL;
     private long lastPolledTime = 0;
 
-    protected Pipe(PipeId id, String name, TableName targetTable, PipeSource sourceTable, String originSql) {
+    protected Pipe(PipeId id, String name, TableName targetTable, FilePipeSource sourceTable, String originSql) {
         this.name = Preconditions.checkNotNull(name);
         this.id = Preconditions.checkNotNull(id);
         this.targetTable = Preconditions.checkNotNull(targetTable);
@@ -109,8 +113,16 @@ public class Pipe implements GsonPostProcessable {
         if (MapUtils.isEmpty(properties)) {
             return;
         }
-        if (properties.containsKey(PipeAnalyzer.POLL_INTERVAL)) {
-            this.pollIntervalSecond = Integer.parseInt(properties.get(PipeAnalyzer.POLL_INTERVAL));
+        if (properties.containsKey(PipeAnalyzer.PROPERTY_POLL_INTERVAL)) {
+            this.pollIntervalSecond = Integer.parseInt(properties.get(PipeAnalyzer.PROPERTY_POLL_INTERVAL));
+        }
+        if (properties.containsKey(PipeAnalyzer.PROPERTY_AUTO_INGEST)) {
+            boolean value = VariableMgr.parseBooleanVariable(properties.get(PipeAnalyzer.PROPERTY_AUTO_INGEST));
+            pipeSource.setAutoIngest(value);
+        }
+        if (properties.containsKey(PipeAnalyzer.PROPERTY_BATCH_SIZE)) {
+            long batchSize = Long.parseLong(properties.get(PipeAnalyzer.PROPERTY_BATCH_SIZE));
+            pipeSource.setBatchSize(batchSize);
         }
     }
 
@@ -163,9 +175,6 @@ public class Pipe implements GsonPostProcessable {
         Preconditions.checkState(type == Type.FILE);
 
         if (MapUtils.isNotEmpty(runningTasks)) {
-            return;
-        }
-        if (pipeSource instanceof EmptyPipeSource) {
             return;
         }
         FilePipeSource fileSource = (FilePipeSource) pipeSource;
@@ -237,7 +246,7 @@ public class Pipe implements GsonPostProcessable {
                 if (task.isFinished()) {
                     FilePipePiece piece = task.getPiece();
                     loadStatus.loadFiles++;
-                    loadStatus.loadBytes += piece.getFile().getSize();
+                    loadStatus.loadBytes += piece.getTotalBytes();
                     // TODO: fill data rows
                     loadStatus.loadRows += 1;
                 }
@@ -279,8 +288,6 @@ public class Pipe implements GsonPostProcessable {
     }
 
     private String buildFileSelectSource(FilePipePiece piece) {
-        Preconditions.checkState(pipeSource instanceof FilePipeSource);
-
         FilePipeSource fileSource = (FilePipeSource) pipeSource;
         StringBuilder sb = new StringBuilder();
         sb.append("TABLE(");
@@ -291,8 +298,9 @@ public class Pipe implements GsonPostProcessable {
             }
             isFirst = false;
             if (entry.getKey().equalsIgnoreCase(TableFunctionTable.PROPERTY_PATH)) {
-                sb.append("'").append(TableFunctionTable.PROPERTY_PATH).append("'='").append(piece.getFile().getPath())
-                        .append("'");
+                // TODO: it's not supported right now
+                String files = piece.getFiles().stream().map(PipeFile::getPath).collect(Collectors.joining(","));
+                sb.append("'").append(TableFunctionTable.PROPERTY_PATH).append("'='").append(files).append("'");
             } else {
                 sb.append("'").append(entry.getKey()).append("'='");
                 sb.append(entry.getValue()).append("'");
@@ -445,11 +453,11 @@ public class Pipe implements GsonPostProcessable {
         return targetTable;
     }
 
-    public PipeSource getPipeSource() {
+    public FilePipeSource getPipeSource() {
         return pipeSource;
     }
 
-    public void setDataSource(PipeSource dataSource) {
+    public void setDataSource(FilePipeSource dataSource) {
         this.pipeSource = dataSource;
     }
 
