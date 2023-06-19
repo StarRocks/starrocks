@@ -1018,7 +1018,7 @@ public class MaterializedViewRewriter {
                     columnRewriter, mvColumnRefToScalarOp, equalPredicates, otherPredicates);
             if (compensationPredicate == null) {
                 logMVRewrite(mvRewriteContext, "Rewrite query failed: get compensation predicates from MV but " +
-                        " rewrite compensation failed");
+                        "rewrite compensation failed");
                 return null;
             }
 
@@ -1876,7 +1876,7 @@ public class MaterializedViewRewriter {
     }
 
     protected OptExpression rewriteProjection(RewriteContext rewriteContext,
-                                              EquationRewriter queryExprToMvExprRewriter,
+                                              EquationRewriter equationRewriter,
                                               OptExpression mvOptExpr) {
         Map<ColumnRefOperator, ScalarOperator> queryMap = MvUtils.getColumnRefMap(
                 rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
@@ -1905,9 +1905,9 @@ public class MaterializedViewRewriter {
         }
 
         Map<ColumnRefOperator, ScalarOperator> newQueryProjection = Maps.newHashMap();
+        equationRewriter.setOutputMapping(outputMapping);
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedQueryColumnMap.entrySet()) {
-            ScalarOperator rewritten = replaceExprWithTarget(entry.getValue(),
-                    queryExprToMvExprRewriter, outputMapping);
+            ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(entry.getValue());
             if (rewritten == null) {
                 logMVRewrite(mvRewriteContext, "Rewrite projection failed: cannot rewrite expr %s",
                         entry.getValue().toString());
@@ -1933,8 +1933,9 @@ public class MaterializedViewRewriter {
             ColumnRefSet originalColumnSet, boolean isUnion,
             List<ScalarOperator> rewrittenFailedPredciates) {
         List<ScalarOperator> rewrittenExprs = Lists.newArrayList();
+        equationRewriter.setOutputMapping(outputMapping);
         for (ScalarOperator expr : exprsToRewrites) {
-            ScalarOperator rewritten = replaceExprWithTarget(expr, queryExprToMvExprRewriter, outputMapping);
+            ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(expr);
             if (expr.isVariable() && expr == rewritten) {
                 // it means it can not be rewritten  by target
                 if (isUnion) {
@@ -1980,13 +1981,6 @@ public class MaterializedViewRewriter {
             return false;
         }
         return true;
-    }
-
-    protected ScalarOperator replaceExprWithTarget(ScalarOperator expr,
-                                                   EquationRewriter queryExprToMvExprRewriter,
-                                                   Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
-        queryExprToMvExprRewriter.setOutputMapping(columnMapping);
-        return queryExprToMvExprRewriter.replaceExprWithTarget(expr);
     }
 
     private List<BiMap<Integer, Integer>> generateRelationIdMap(
