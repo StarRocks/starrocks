@@ -142,6 +142,8 @@ public class OlapScanNode extends ScanNode {
     // record the selected partition with the selected tablets belong to it
     private Map<Long, List<Long>> partitionToScanTabletMap;
 
+    private boolean usePkIndex = false;
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -620,7 +622,8 @@ public class OlapScanNode extends ScanNode {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
-                    output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
 
@@ -714,6 +717,7 @@ public class OlapScanNode extends ScanNode {
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
+            msg.olap_scan_node.setUse_pk_index(usePkIndex);
         }
     }
 
@@ -765,6 +769,10 @@ public class OlapScanNode extends ScanNode {
 
     public void setTotalTabletsNum(long totalTabletsNum) {
         this.totalTabletsNum = totalTabletsNum;
+    }
+
+    public void setUsePkIndex(boolean usePkIndex) {
+        this.usePkIndex = usePkIndex;
     }
 
     @Override

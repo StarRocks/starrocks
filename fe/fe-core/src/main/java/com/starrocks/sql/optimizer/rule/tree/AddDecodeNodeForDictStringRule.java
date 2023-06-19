@@ -235,7 +235,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     if (!usedCols.isEmpty()) {
                         Set<Integer> dictCols = usedCols.stream().map(e -> context.stringColumnIdToDictColumnIds.get(e))
                                 .collect(Collectors.toSet());
-                        if (!(globalDictIds.containsAll(dictCols) && couldApplyDictOptimize(operator, encodedStringCols))) {
+                        if (!(globalDictIds.containsAll(dictCols) &&
+                                couldApplyDictOptimize(operator, encodedStringCols))) {
                             return false;
                         }
                     }
@@ -243,7 +244,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
             return true;
         }
-
 
         // create a new dictionary column and assign the same property except for the type and column id
         // the input column maybe a dictionary column or a string column
@@ -442,7 +442,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             new PhysicalOlapScanOperator(scanOperator.getTable(), newColRefToColumnMetaMap,
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
-                                    scanOperator.getSelectedTabletId(), scanOperator.getProjection());
+                                    scanOperator.getSelectedTabletId(), scanOperator.getProjection(),
+                                    scanOperator.isUsePkIndex());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
@@ -468,14 +469,14 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             // For string column rewrite to dictionary column, other columns remain unchanged
             Arrays.stream(columnIds).map(cid -> stringColumnIdToDictColumnIds.getOrDefault(cid, cid))
                     .forEach(rewritesOutputColumns::union);
-            LogicalProperty newProperty =  new LogicalProperty(logicalProperty);
+            LogicalProperty newProperty = new LogicalProperty(logicalProperty);
             newProperty.setOutputColumns(rewritesOutputColumns);
             return newProperty;
         }
 
         private static LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
                                                             ColumnRefSet outputColumns) {
-            LogicalProperty newProperty =  new LogicalProperty(logicalProperty);
+            LogicalProperty newProperty = new LogicalProperty(logicalProperty);
             newProperty.setOutputColumns(outputColumns);
             return newProperty;
         }

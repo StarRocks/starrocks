@@ -155,10 +155,10 @@ public class MvRewritePreprocessor {
 
     /**
      * Make a LogicalOlapScanOperator by using MV's schema which includes:
-     *  - partition infos.
-     *  - distribution infos.
-     *  - original MV's predicates which can be deduced from MV opt expression and be used
-     *       for partition/distribution pruning.
+     * - partition infos.
+     * - distribution infos.
+     * - original MV's predicates which can be deduced from MV opt expression and be used
+     * for partition/distribution pruning.
      */
     private LogicalOlapScanOperator createScanMvOperator(MaterializationContext mvContext) {
         final MaterializedView mv = mvContext.getMv();
