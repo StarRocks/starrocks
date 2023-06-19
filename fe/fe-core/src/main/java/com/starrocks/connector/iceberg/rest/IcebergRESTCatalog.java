@@ -47,7 +47,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_REST_CATALOG_PREFIX;
+import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
 
 public class IcebergRESTCatalog implements IcebergCatalog {
 
@@ -63,10 +63,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         properties.forEach((key, value) -> {
             String newKey = key.toLowerCase();
-            String newValue = value.toLowerCase();
-            if (newKey.startsWith(ICEBERG_REST_CATALOG_PREFIX)) {
-                newKey = newKey.substring(ICEBERG_REST_CATALOG_PREFIX.length());
-                copiedProperties.put(newKey, newValue);
+            if (newKey.startsWith(ICEBERG_CUSTOM_PROPERTIES_PREFIX)) {
+                newKey = newKey.substring(ICEBERG_CUSTOM_PROPERTIES_PREFIX.length());
+                copiedProperties.put(newKey, value);
             }
         });
 
