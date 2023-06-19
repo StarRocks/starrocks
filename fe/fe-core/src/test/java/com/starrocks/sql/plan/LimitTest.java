@@ -745,4 +745,11 @@ public class LimitTest extends PlanTestBase {
                 "     offset: 6\n" +
                 "     limit: 15");
     }
+
+    @Test
+    public void testConstantOrderByLimit() throws Exception {
+        String sql = "select * from t0 order by 'abc' limit 100, 100 ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 100");
+    }
 }
