@@ -27,10 +27,21 @@ Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     return Status::OK();
 }
+
 Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
+<<<<<<< HEAD:be/src/exec/vectorized/aggregate/aggregate_base_node.cpp
     _aggregator = std::make_shared<Aggregator>(_tnode);
     return _aggregator->prepare(state, _pool, runtime_profile(), _mem_tracker.get());
+=======
+    auto params = convert_to_aggregator_params(_tnode);
+
+    // Avoid partial-prepared Aggregator, which is dangerous to close
+    auto aggregator = std::make_shared<Aggregator>(std::move(params));
+    RETURN_IF_ERROR(aggregator->prepare(state, _pool, runtime_profile()));
+    _aggregator = std::move(aggregator);
+    return Status::OK();
+>>>>>>> 2f9f17539 ([BugFix] fix access partial-prepared Aggregator (#25561)):be/src/exec/aggregate/aggregate_base_node.cpp
 }
 
 Status AggregateBaseNode::close(RuntimeState* state) {
