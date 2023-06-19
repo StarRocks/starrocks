@@ -16,14 +16,17 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
+import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE;
 
@@ -52,6 +55,26 @@ public class ScalarOperatorUtil {
         return (CallOperator) scalarOpRewriter.rewrite(
                 new CallOperator(FunctionSet.SUM, fn.getReturnType(), Lists.newArrayList(arg), fn),
                 DEFAULT_TYPE_CAST_RULE);
+    }
+
+    public static Function findArithmeticFunction(CallOperator call, String fnName) {
+        return findArithmeticFunction(call.getFunction().getArgs(), fnName);
+    }
+
+    public static Function findArithmeticFunction(Type[] argsType, String fnName) {
+        return Expr.getBuiltinFunction(fnName, argsType, IS_IDENTICAL);
+    }
+
+    public static Function findSumFn(Type[] argTypes) {
+        Function sumFn = findArithmeticFunction(argTypes, FunctionSet.SUM);
+        Preconditions.checkState(sumFn != null);
+        Function newFn = sumFn.copy();
+        if (argTypes[0].isDecimalV3()) {
+            newFn.setArgsType(argTypes);
+            newFn.setRetType(ScalarType.createDecimalV3NarrowestType(38,
+                    ((ScalarType) argTypes[0]).getScalarScale()));
+        }
+        return newFn;
     }
 
     public static CallOperator buildMultiSumDistinct(CallOperator oldFunctionCall) {

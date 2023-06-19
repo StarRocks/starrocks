@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -27,6 +26,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 import java.util.Map;
+
+import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 
 public class ArithmeticCommutativeRule extends BottomUpScalarOperatorRewriteRule {
     // Don't support DIVIDE, because DIVIDE will use double type, Double is not efficient and will lose precision
@@ -107,9 +108,5 @@ public class ArithmeticCommutativeRule extends BottomUpScalarOperatorRewriteRule
         }
 
         return predicate;
-    }
-
-    private Function findArithmeticFunction(CallOperator call, String fnName) {
-        return Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(), Function.CompareMode.IS_IDENTICAL);
     }
 }
