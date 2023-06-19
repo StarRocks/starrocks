@@ -3945,7 +3945,7 @@ E: (1064, 'Getting analyzing error. Detail message: Lambda arguments should equa
 -- !result
 select all_match((x,y) -> x < y, [],{});
 -- result:
-E: (1064, "Getting syntax error at line 1, column 37. Detail message: Input '}' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 37. Detail message: Unexpected input '}', the most similar input is {'FN'}.")
 -- !result
 select all_match([],null);
 -- result:
@@ -3953,7 +3953,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 24. D
 -- !result
 select all_match({});
 -- result:
-E: (1064, "Getting syntax error at line 1, column 18. Detail message: Input '}' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 18. Detail message: Unexpected input '}', the most similar input is {'FN'}.")
 -- !result
 select all_match();
 -- result:
@@ -3973,7 +3973,7 @@ E: (1064, 'Getting analyzing error. Detail message: Lambda arguments should equa
 -- !result
 select any_match((x,y) -> x < y, [],{});
 -- result:
-E: (1064, "Getting syntax error at line 1, column 37. Detail message: Input '}' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 37. Detail message: Unexpected input '}', the most similar input is {'FN'}.")
 -- !result
 select any_match([],null);
 -- result:
@@ -3981,7 +3981,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 24. D
 -- !result
 select any_match({});
 -- result:
-E: (1064, "Getting syntax error at line 1, column 18. Detail message: Input '}' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 18. Detail message: Unexpected input '}', the most similar input is {'FN'}.")
 -- !result
 select any_match();
 -- result:

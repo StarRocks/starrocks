@@ -30,6 +30,64 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_unique` (\n" +
+                "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "    `c_address` varchar(41) NOT NULL COMMENT \"\",\n" +
+                "    `c_city` varchar(11) NOT NULL COMMENT \"\",\n" +
+                "    `c_nation` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `c_region` varchar(13) NOT NULL COMMENT \"\",\n" +
+                "    `c_phone` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `c_mktsegment` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`c_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa2\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ")\n");
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_primary` (\n" +
+                "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "    `c_address` varchar(41) NOT NULL COMMENT \"\",\n" +
+                "    `c_city` varchar(11) NOT NULL COMMENT \"\",\n" +
+                "    `c_nation` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `c_region` varchar(13) NOT NULL COMMENT \"\",\n" +
+                "    `c_phone` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `c_mktsegment` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`c_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa2\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ")\n");
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_null` (\n" +
+                "    `c_custkey` int(11) NULL COMMENT \"\",\n" +
+                "    `c_name` varchar(26) NULL COMMENT \"\",\n" +
+                "    `c_address` varchar(41) NULL COMMENT \"\",\n" +
+                "    `c_city` varchar(11) NULL COMMENT \"\",\n" +
+                "    `c_nation` varchar(16) NULL COMMENT \"\",\n" +
+                "    `c_region` varchar(13) NULL COMMENT \"\",\n" +
+                "    `c_phone` varchar(16) NULL COMMENT \"\",\n" +
+                "    `c_mktsegment` varchar(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"colocate_with\" = \"groupa2\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"unique_constraints\" = \"c_custkey\"\n" +
+                ")\n");
+
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
@@ -151,9 +209,64 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa1\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
+                "    \"unique_constraints\" = \"lo_custkey\",\n" +
                 "    \"foreign_key_constraints\" = \"(lo_custkey) REFERENCES customer(c_custkey);" +
                 " (lo_partkey) REFERENCES part(p_partkey);  (lo_suppkey) REFERENCES supplier(s_suppkey);" +
                 "  (lo_orderdate) REFERENCES dates(d_datekey)\"\n" +
+                ")");
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_primary` (\n" +
+                "    `lo_custkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_partkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_orderdate` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `lo_shippriority` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_quantity` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_extendedprice` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_discount` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_revenue` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_supplycost` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_tax` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_commitdate` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`lo_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`lo_custkey`) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ")");
+
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_unique` (\n" +
+                "    `lo_custkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_orderkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_linenumber` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_partkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_orderdate` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_orderpriority` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "    `lo_shippriority` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_quantity` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_extendedprice` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_ordtotalprice` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_discount` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_revenue` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_supplycost` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_tax` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_commitdate` int(11) NOT NULL COMMENT \"\",\n" +
+                "    `lo_shipmode` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`lo_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`lo_custkey`) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_null` (\n" +
@@ -411,20 +524,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select count(*) from " +
                 "emps  right join locations on emps.locationid = locations.locationid");
         // TODO: Query's right outer join will be converted to Inner Join.
-        testRewriteFail(mv, "select empid as col2, emps.locationid from " +
+        testRewriteOK(mv, "select empid as col2, emps.locationid from " +
                 "emps  right join locations on emps.locationid = locations.locationid " +
                 "where emps.deptno > 10");
         // TODO: Query's right outer join will be converted to Inner Join.
-        testRewriteFail(mv, "select count(*) from " +
+        testRewriteOK(mv, "select count(*) from " +
                 "emps  right join locations on emps.locationid = locations.locationid " +
                 "where emps.deptno > 10");
         testRewriteOK(mv, "select empid as col2, locations.locationid from " +
                 "emps  right join locations on emps.locationid = locations.locationid " +
                 "where locations.locationid > 10");
-        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
                 "emps inner join locations on emps.locationid = locations.locationid " +
                 "and locations.locationid > 10");
-        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
                 "emps inner join locations on emps.locationid = locations.locationid " +
                 "and emps.locationid > 10");
     }
@@ -1289,7 +1402,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testJoinMaterialization11() {
-        testRewriteFail("select empid from emps\n"
+        testRewriteOK("select empid from emps\n"
                         + "join depts using (deptno)",
                 "select empid from emps\n"
                         + "where deptno in (select deptno from depts)");
@@ -2663,26 +2776,26 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testTimeSliceRewrite() throws Exception {
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t_time_slice` (\n" +
-            "    `dt` datetime NOT NULL COMMENT \"\",\n" +
-            "    `c1` int(11) NOT NULL COMMENT \"\"\n" +
-            ") ENGINE=OLAP\n" +
-            "DUPLICATE KEY(`dt`)\n" +
-            "COMMENT \"OLAP\"\n" +
-            "PARTITION BY RANGE(`dt`)\n" +
-            "(\n" +
-            "    PARTITION p1 VALUES [(\"2023-06-01\"), (\"2023-06-02\")),\n" +
-            "    PARTITION p2 VALUES [(\"2023-06-02\"), (\"2023-06-03\")),\n" +
-            "    PARTITION p3 VALUES [(\"2023-06-03\"), (\"2023-06-04\"))\n" +
-            ")\n" +
-            "DISTRIBUTED BY HASH(`c1`) BUCKETS 1\n" +
-            "PROPERTIES (\n" +
-            "    \"replication_num\" = \"1\",\n" +
-            "    \"in_memory\" = \"false\"\n" +
-            ")");
+                "    `dt` datetime NOT NULL COMMENT \"\",\n" +
+                "    `c1` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(\n" +
+                "    PARTITION p1 VALUES [(\"2023-06-01\"), (\"2023-06-02\")),\n" +
+                "    PARTITION p2 VALUES [(\"2023-06-02\"), (\"2023-06-03\")),\n" +
+                "    PARTITION p3 VALUES [(\"2023-06-03\"), (\"2023-06-04\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`c1`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ")");
 
         String mv = "SELECT time_slice(dt, interval 5 minute) as t, sum(c1) FROM t_time_slice GROUP BY t";
         testRewriteOK(mv, "SELECT time_slice(dt, interval 5 minute) as t FROM t_time_slice " +
-            "WHERE dt BETWEEN '2023-06-01' AND '2023-06-02' GROUP BY t");
+                "WHERE dt BETWEEN '2023-06-01' AND '2023-06-02' GROUP BY t");
         starRocksAssert.dropTable("t_time_slice");
     }
 
@@ -2690,21 +2803,464 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testCountDistinctRollupAgg() throws Exception {
         {
             String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
-                + "from emps group by empid, deptno, locationid";
+                    + "from emps group by empid, deptno, locationid";
             String query = "select empid, count(distinct name) as s\n"
-                + "from emps where deptno=1 and locationid=1 "
-                + "group by empid ";
+                    + "from emps where deptno=1 and locationid=1 "
+                    + "group by empid ";
             testRewriteOK(mv, query);
         }
 
         {
             String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
-                + "from emps group by empid, deptno, locationid";
+                    + "from emps group by empid, deptno, locationid";
             String query = "select empid, count(distinct name) as s\n"
-                + "from emps where deptno=1 \n"
-                + "group by empid ";
+                    + "from emps where deptno=1 \n"
+                    + "group by empid ";
+            testRewriteFail(mv, query);
+        }
+    }
+
+    @Test
+    public void testJoinDeriveRewrite() {
+        // left outer join
+        {
+            // Equivalence class should not be used. because c_custkey is nullable in mv, but lo_custkey is
+            // not nullable
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
+            // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey where c_name = 'name'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey" +
+                    " group by lo_orderkey, c_name";
+            // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
+            // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
+            String query =  "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey where c_name = 'name'" +
+                    " group by lo_orderkey, c_name";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select lo_orderkey, c_custkey, sum(lo_revenue) as total_revenue" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey" +
+                    " group by lo_orderkey, c_custkey";
+            String query =  "select lo_orderkey, c_custkey, sum(lo_revenue) as total_revenue" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey" +
+                    " group by lo_orderkey, c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 28: c_custkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey where c_name = 'name'";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 31: c_name = 'name'\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey where c_custkey = 1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey = 1\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            // should contain c_custkey IS NOT NULL predicate
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey and lo_shipmode = c_name";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey and lo_shipmode = c_name";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey where c_name = 'name' and c_custkey = 100";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey = 100, 31: c_name = 'name'\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            // left anti join rewritten into left outer join with compensation predicate:
+            // c_custkey is null
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey" +
+                    " from lineorder left anti join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey IS NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        // right outer join
+        {
+            // Equivalence class should not be used. because c_custkey is nullable in mv, but lo_custkey is
+            // not nullable
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey";
+            // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
+            // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey where lo_orderkey = 10";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey where lo_linenumber = 10";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 27: lo_linenumber = 10\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey" +
+                    " group by lo_orderkey, lo_custkey";
+            // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
+            // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
+            String query =  "select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey where lo_orderkey = 10" +
+                    " group by lo_orderkey, lo_custkey";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select lo_custkey, c_name, sum(lo_revenue) as total_revenue" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey" +
+                    " group by lo_custkey, c_name";
+            String query =  "select lo_custkey, c_name, sum(lo_revenue) as total_revenue" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey" +
+                    " group by lo_custkey, c_name";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 27: lo_custkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey where lo_orderkey = 1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 26: lo_orderkey = 1\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            // the compensation predicate is lo_custkey is not null, lo_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            // should contain c_custkey IS NOT NULL predicate
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: lo_custkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey and lo_shipmode = c_name";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey and lo_shipmode = c_name";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 31: lo_custkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey where lo_linenumber = 10 and lo_quantity = 100";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 27: lo_linenumber = 10, 28: lo_quantity = 100\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            // right anti join rewritten into left outer join, with compensation predicate:
+            // lo_custkey is null.
+            // and lo_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select c_name" +
+                    " from lineorder right anti join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 29: lo_custkey IS NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        // test inner join
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
+                    " from lineorder inner join customer_primary" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
+                    " from lineorder left semi join customer_primary" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
+                    " from lineorder inner join customer_unique" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
+                    " from lineorder left semi join customer_unique" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode" +
+                    " from lineorder left semi join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
+                    " from lineorder_primary inner join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select c_name" +
+                    " from lineorder_primary right semi join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
+                    " from lineorder_unique inner join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select c_name" +
+                    " from lineorder_unique right semi join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_shipmode, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select c_name" +
+                    " from lineorder right semi join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+        }
+
+        // test full outer join
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder full outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 26: lo_orderkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder_null full outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder_null left outer join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 26: lo_orderkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder full outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder right outer join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder full outer join customer_null" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder right outer join customer_null" +
+                    " on lo_custkey = c_custkey";
             testRewriteFail(mv, query);
         }
 
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder full outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder inner join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey IS NOT NULL, 26: lo_orderkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder full outer join customer_null" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder inner join customer_null" +
+                    " on lo_custkey = c_custkey";
+            testRewriteFail(mv, query);
+        }
+
+        {
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder_null full outer join customer" +
+                    " on lo_custkey = c_custkey";
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+                    " from lineorder_null inner join customer" +
+                    " on lo_custkey = c_custkey";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey IS NOT NULL, 26: lo_orderkey IS NOT NULL\n" +
+                    "     partitions=1/1");
+        }
     }
 }

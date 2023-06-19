@@ -53,7 +53,6 @@ public:
 
 TEST_F(PosixFileSystemTest, random_access) {
     std::string fname = "./ut_dir/fs_posix/random_access";
-    WritableFileOptions ops;
     std::unique_ptr<WritableFile> wfile;
     auto fs = FileSystem::Default();
     WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};

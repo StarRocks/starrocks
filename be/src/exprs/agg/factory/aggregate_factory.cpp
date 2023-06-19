@@ -95,6 +95,10 @@ AggregateFunctionPtr AggregateFactory::MakeCumeDistWindowFunction() {
     return std::make_shared<CumeDistWindowFunction>();
 }
 
+AggregateFunctionPtr AggregateFactory::MakePercentRankWindowFunction() {
+    return std::make_shared<PercentRankWindowFunction>();
+}
+
 AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {
     return std::make_shared<NtileWindowFunction>();
 }

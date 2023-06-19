@@ -67,7 +67,7 @@ public:
               _enable_replicated_storage(enable_replicated_storage),
               _write_quorum_type(write_quorum_type),
               _num_repicas(num_repicas) {}
-    ~TabletSinkSender() = default;
+    virtual ~TabletSinkSender() = default;
 
 public:
     virtual Status send_chunk(const OlapTableSchemaParam* schema, const std::vector<OlapTablePartition*>& partitions,

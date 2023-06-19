@@ -1727,6 +1727,51 @@ TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
     }
 }
 
+TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/array_struct_map.csv";
+
+    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+
+    auto* tuple_desc = _create_tuple_desc(csv_descs);
+    auto* common_range = _create_scan_range(small_file, 0, 0);
+    auto* param = _create_param(small_file, common_range, tuple_desc);
+    std::vector<std::string> hive_column_names{"id"};
+    param->hive_column_names = &hive_column_names;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.field_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.collection_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.mapkey_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        range->text_file_desc.line_delim = "";
+        param->scan_ranges[0] = range;
+        auto scanner = std::make_shared<HdfsTextScanner>();
+        auto status = scanner->init(_runtime_state, *param);
+        EXPECT_FALSE(status.ok());
+    }
+}
+
 // =============================================================================
 
 /*
