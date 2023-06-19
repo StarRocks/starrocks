@@ -77,8 +77,8 @@ struct SpilledOptions {
 
     // max mem table size for each spiller
     size_t mem_table_pool_size{};
-    // the spilled file size
-    size_t spill_file_size{};
+    // memory table peak mem usage
+    size_t spill_mem_table_bytes_size{};
     // spilled format type
     SpillFormaterType spill_type{};
 
@@ -88,7 +88,6 @@ struct SpilledOptions {
 
     CompressionTypePB compress_type = CompressionTypePB::LZ4;
 
-    size_t max_memory_size_each_partition = 2 * 1024 * 1024;
     size_t min_spilled_size = 1 * 1024 * 1024;
 
     bool read_shared = false;
