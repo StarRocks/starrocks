@@ -38,9 +38,19 @@ void OperatorMemoryResourceManager::to_low_memory_mode() {
     }
 }
 
+size_t OperatorMemoryResourceManager::operator_avaliable_memory_bytes() {
+    // TODO: think about multi-operators
+    auto* runtime_state = _op->runtime_state();
+    size_t avaliable = runtime_state->spill_mem_table_size() * runtime_state->spill_mem_table_num();
+    avaliable = std::max<size_t>(avaliable, runtime_state->spill_operator_min_bytes());
+    avaliable = std::min<size_t>(avaliable, runtime_state->spill_operator_max_bytes());
+    return avaliable;
+}
+
 void OperatorMemoryResourceManager::close() {
     if (_performance_level == MEM_RESOURCE_LOW_MEMORY && _query_spill_manager != nullptr) {
         _query_spill_manager->decrease_spilling_operators();
+        _query_spill_manager->decrease_spillable_operators();
     }
 }
 
