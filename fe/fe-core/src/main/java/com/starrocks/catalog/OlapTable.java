@@ -208,9 +208,6 @@ public class OlapTable extends Table {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
-    @SerializedName(value = "storageVolumeId")
-    protected String storageVolumeId = "";
-
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -386,14 +383,6 @@ public class OlapTable extends Table {
 
     public OlapTableState getState() {
         return state;
-    }
-
-    public void setStorageVolumeId(String storageVolumeId) {
-        this.storageVolumeId = storageVolumeId;
-    }
-
-    public String getStorageVolumeId() {
-        return storageVolumeId;
     }
 
     public List<Index> getIndexes() {

@@ -76,6 +76,11 @@ public class InfoSchemaDb extends Database {
     }
 
     @Override
+    public boolean createTableWithLock(Table table, String storageVolumeId, boolean isReplay) {
+        return false;
+    }
+
+    @Override
     public boolean createTable(Table table) {
         // Do nothing.
         return false;

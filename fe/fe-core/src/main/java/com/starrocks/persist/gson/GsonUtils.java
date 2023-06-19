@@ -152,6 +152,9 @@ import com.starrocks.privilege.StorageVolumePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
+import com.starrocks.server.SharedDataStorageVolumeMgr;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -349,6 +352,11 @@ public class GsonUtils {
                     .registerSubtype(AggregateFunction.class, "AggregateFunction")
                     .registerSubtype(TableFunction.class, "TableFunction");
 
+    public static final RuntimeTypeAdapterFactory<StorageVolumeMgr> STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(StorageVolumeMgr.class, "clazz")
+                    .registerSubtype(SharedNothingStorageVolumeMgr.class, "SharedNothingStorageVolumeMgr")
+                    .registerSubtype(SharedDataStorageVolumeMgr.class, "SharedDataStorageVolumeMgr");
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -405,6 +413,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(ROUTINE_LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ABSTRACT_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

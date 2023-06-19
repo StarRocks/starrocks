@@ -16,9 +16,13 @@ package com.starrocks.server;
 
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.persist.DropStorageVolumeLog;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.storagevolume.StorageVolume;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,20 +63,55 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected String createInternalNoLock(String name, String svType, List<String> locations,
                                           Map<String, String> params, Optional<Boolean> enabled,
-                                          String comment) throws AnalysisException {
+                                          String comment) {
         String id = UUID.randomUUID().toString();
         StorageVolume sv = new StorageVolume(id, name, svType, locations, params, enabled.orElse(true), comment);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateStorageVolume(sv);
         idToSV.put(id, sv);
         return id;
     }
 
     @Override
     protected void updateInternalNoLock(StorageVolume sv) {
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateStorageVolume(sv);
         idToSV.put(sv.getId(), sv);
     }
 
     @Override
     protected void removeInternalNoLock(StorageVolume sv) {
-        idToSV.remove(sv.getId(), sv);
+        DropStorageVolumeLog log = new DropStorageVolumeLog(sv.getId());
+        GlobalStateMgr.getCurrentState().getEditLog().logDropStorageVolume(log);
+        idToSV.remove(sv.getId());
+    }
+
+    @Override
+    public void load(SRMetaBlockReader reader)
+            throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
+        SharedNothingStorageVolumeMgr data = (SharedNothingStorageVolumeMgr) reader.readJson(StorageVolumeMgr.class);
+        this.storageVolumeToDbs = data.storageVolumeToDbs;
+        this.storageVolumeToTables = data.storageVolumeToTables;
+        this.defaultStorageVolumeId = data.defaultStorageVolumeId;
+        this.idToSV = data.idToSV;
+    }
+
+    @Override
+    public void replayCreateStorageVolume(StorageVolume sv) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            idToSV.put(sv.getId(), sv);
+        }
+    }
+
+    @Override
+    public void replayUpdateStorageVolume(StorageVolume sv) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            idToSV.put(sv.getId(), sv);
+        }
+    }
+
+    @Override
+    public void replayDropStorageVolume(DropStorageVolumeLog log) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            idToSV.remove(log.getId());
+        }
     }
 }
