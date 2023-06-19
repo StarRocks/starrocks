@@ -502,6 +502,10 @@ public class GlobalStateMgr {
         return this.tabletInvertedIndex;
     }
 
+    public NodeMgr getNodeMgr() {
+        return this.nodeMgr;
+    }
+
     // only for test
     public void setColocateTableIndex(ColocateTableIndex colocateTableIndex) {
         this.colocateTableIndex = colocateTableIndex;
