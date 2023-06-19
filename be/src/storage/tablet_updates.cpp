@@ -1415,8 +1415,8 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
             auto old_unordered_column =
                     ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_columns[0] = old_unordered_column->clone_empty();
-            RETURN_IF_ERROR(
-                    get_column_values(read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns, nullptr));
+            RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, num_default > 0, old_rowids_by_rssid,
+                                              &old_columns, nullptr));
             auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
@@ -1429,7 +1429,8 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
             std::vector<std::unique_ptr<Column>> new_columns(1);
             auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             new_columns[0] = new_column->clone_empty();
-            RETURN_IF_ERROR(get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns, nullptr));
+            RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, false, new_rowids_by_rssid, &new_columns,
+                                              nullptr));
 
             int idx_begin = 0;
             int upsert_idx_step = 0;
