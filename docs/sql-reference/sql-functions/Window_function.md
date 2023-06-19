@@ -21,7 +21,7 @@ Currently supported functions include:
 * MIN(), MAX(), COUNT(), SUM(), AVG()
 * FIRST_VALUE(), LAST_VALUE(), LEAD(), LAG()
 * ROW_NUMBER(), RANK(), DENSE_RANK()
-* CUME_DIST()
+* CUME_DIST(), PERCENT_RANK()
 * QUALIFY()
 
 ### PARTITION BY clause
@@ -225,19 +225,19 @@ FROM int_t;
 ~~~
 
 ~~~Plain Text
-+---+---+-----------------------+
-| x | y | cume_dist             |
-+---+---+-----------------------+
-| 1 | 1 | 0.3333333333333333    |
-| 1 | 2 | 1.0000000000000000    |
-| 1 | 2 | 1.0000000000000000    |
-| 2 | 1 | 0.3333333333333333    |
-| 2 | 2 | 0.6666666666666667    |
-| 2 | 3 | 1.0000000000000000    |
-| 3 | 1 | 0.6666666666666667    |
-| 3 | 1 | 0.6666666666666667    |
-| 3 | 2 | 1.0000000000000000    |
-+---+---+-----------------------+
++---+---+--------------------+
+| x | y | cume_dist          |
++---+---+--------------------+
+| 1 | 1 | 0.3333333333333333 |
+| 1 | 2 |                  1 |
+| 1 | 2 |                  1 |
+| 2 | 1 | 0.3333333333333333 |
+| 2 | 2 | 0.6666666666666667 |
+| 2 | 3 |                  1 |
+| 3 | 1 | 0.6666666666666667 |
+| 3 | 1 | 0.6666666666666667 |
+| 3 | 2 |                  1 |
++---+---+--------------------+
 ~~~
 
 ### DENSE_RANK()
@@ -733,6 +733,52 @@ select x, property,
           rows between 3 preceding and 2 following) as 'local minimum'
 from int_t
 where property in ('prime','square');
+~~~
+
+### PERCENT_RANK()
+
+The PERCENT_RANK() function calculates the relative rank of a row within a result set as a percentage. It returns the percentage of partition values less than the value in the current row, excluding the highest value. The return values range from 0 to 1. This function is useful for percentile calculations and analyzing data distribution.
+
+The PERCENT_RANK() function is calculated using the following formula, where rank represents the row rank and rows represents the number of partition rows:
+
+~~~Plain Text
+(rank - 1) / (rows - 1)
+~~~
+
+Syntax:
+
+~~~SQL
+PERCENT_RANK() OVER (partition_by_clause order_by_clause)
+~~~
+
+**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value (1 - 1)/(N - 1) = 0, where N is the partition size.**
+
+The following example shows the relative rank of column y within each group of column x.
+
+~~~SQL
+SELECT x, y,
+    PERCENT_RANK()
+        OVER (
+            PARTITION BY x
+            ORDER BY y
+        ) AS `percent_rank`
+FROM int_t;
+~~~
+
+~~~Plain Text
++---+---+--------------+
+| x | y | percent_rank |
++---+---+--------------+
+| 1 | 1 |            0 |
+| 1 | 2 |          0.5 |
+| 1 | 2 |          0.5 |
+| 2 | 1 |            0 |
+| 2 | 2 |          0.5 |
+| 2 | 3 |            1 |
+| 3 | 1 |            0 |
+| 3 | 1 |            0 |
+| 3 | 2 |            1 |
++---+---+--------------+
 ~~~
 
 ### RANK()

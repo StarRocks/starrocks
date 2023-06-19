@@ -77,23 +77,46 @@ SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by FROM cume_test ORDER
 SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by FROM cume_test ORDER BY v2;
 SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1 FROM cume_test;
 
+SELECT *, PERCENT_RANK() OVER () AS percent_rank_without_order_by FROM cume_test;
+SELECT *, PERCENT_RANK() OVER () AS percent_rank_without_order_by FROM cume_test ORDER BY v2 DESC;
+SELECT *, PERCENT_RANK() OVER () AS percent_rank_without_order_by FROM cume_test ORDER BY v3;
+SELECT *, PERCENT_RANK() OVER () AS percent_rank_without_order_by, PERCENT_RANK() OVER (ORDER BY v4) AS percent_rank_v4 FROM cume_test;
+
 SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v2 DESC) AS cume_dist_v2 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v3) AS cume_dist_v3 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v4) AS cume_dist_v4 FROM cume_test;
 
-SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1 FROM cume_test WHERE v1 IS NOT NULL;
-SELECT *, CUME_DIST() OVER (ORDER BY v2 DESC) AS cume_dist_v2 FROM cume_test WHERE v2 IS NOT NULL;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v1) AS percent_rank_v1 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v2) AS percent_rank_v2 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v3 DESC) AS percent_rank_v3 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v4) AS percent_rank_v4 FROM cume_test;
+
+SELECT *, CUME_DIST() OVER (ORDER BY v1 DESC) AS cume_dist_v1 FROM cume_test WHERE v1 IS NOT NULL;
+SELECT *, CUME_DIST() OVER (ORDER BY v2) AS cume_dist_v2 FROM cume_test WHERE v2 IS NOT NULL;
 SELECT *, CUME_DIST() OVER (ORDER BY v3) AS cume_dist_v3 FROM cume_test WHERE v3 IS NOT NULL;
 SELECT *, CUME_DIST() OVER (ORDER BY v4) AS cume_dist_v4 FROM cume_test WHERE v4 IS NOT NULL;
 
+SELECT *, PERCENT_RANK() OVER (ORDER BY v1) AS percent_rank_v1 FROM cume_test WHERE v1 IS NOT NULL;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v2) AS percent_rank_v2 FROM cume_test WHERE v2 IS NOT NULL;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v3) AS percent_rank_v3 FROM cume_test WHERE v3 IS NOT NULL;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v4 DESC) AS percent_rank_v4 FROM cume_test WHERE v4 IS NOT NULL;
+
 SELECT *, CUME_DIST() OVER (ORDER BY k1, k2) AS cume_dist_k1_k2 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY k1 ASC, k2 DESC) AS cume_dist_k1_asc_k2_desc FROM cume_test;
+
+SELECT *, PERCENT_RANK() OVER (ORDER BY k1, k2) AS percent_rank_k1_k2 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY k1 DESC, k2 ASC) AS percent_rank_k1_desc_k2_asc FROM cume_test;
 
 SELECT *, CUME_DIST() OVER (PARTITION BY v1 ORDER BY v2) AS cume_dist_v1_partition_v2 FROM cume_test;
 SELECT *, CUME_DIST() OVER (PARTITION BY v3 ORDER BY v4) AS cume_dist_v3_partition_v4 FROM cume_test;
 SELECT *, CUME_DIST() OVER (PARTITION BY k1 ORDER BY k2) AS cume_dist_k1_partition_k2 FROM cume_test ORDER BY v1;
 SELECT *, CUME_DIST() OVER (PARTITION BY v4 ORDER BY v3) AS cume_dist_v4_partition_v3 FROM cume_test ORDER BY v2 DESC;
+
+SELECT *, PERCENT_RANK() OVER (PARTITION BY v1 ORDER BY v3) AS percent_rank_v1_partition_v3 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (PARTITION BY v2 ORDER BY v4) AS percent_rank_v2_partition_v4 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (PARTITION BY k2 ORDER BY k1) AS percent_rank_k2_partition_k1 FROM cume_test ORDER BY v1;
+SELECT *, PERCENT_RANK() OVER (PARTITION BY v4 ORDER BY v2) AS percent_rank_v4_partition_v2 FROM cume_test ORDER BY v2 DESC;
 
 SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1, ROW_NUMBER() OVER (ORDER BY v1, v3) AS row_number_v1_v3 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v2) AS cume_dist_v2, RANK() OVER (ORDER BY v1) AS rank_v1 FROM cume_test;
@@ -104,8 +127,28 @@ SELECT *, CUME_DIST() OVER (ORDER BY v2) AS cume_dist_v2, LEAD(v2) OVER (ORDER B
 SELECT *, CUME_DIST() OVER (ORDER BY v3) AS cume_dist_v3, FIRST_VALUE(v2) OVER (ORDER BY v1, v3) AS first_value_v2 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v4) AS cume_dist_v4, LAST_VALUE(v2) OVER (ORDER BY v1, v3 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_value_v2 FROM cume_test;
 
+SELECT *, PERCENT_RANK() OVER (ORDER BY v1) AS percent_rank_v1, ROW_NUMBER() OVER (ORDER BY v1, v3) AS row_number_v1_v3 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v2) AS percent_rank_v2, RANK() OVER (ORDER BY v1) AS rank_v1 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v3) AS percent_rank_v3, DENSE_RANK() OVER (ORDER BY v1) AS dense_rank_v1 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v4) AS percent_rank_v4, NTILE(5) OVER (ORDER BY v1, v3) AS ntile_v1 FROM cume_test ;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v1) AS percent_rank_v1, LAG(v2) OVER (ORDER BY v1, v3) AS lag_v2 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v2) AS percent_rank_v2, LEAD(v2) OVER (ORDER BY v1, v3) AS lead_v2 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v3) AS percent_rank_v3, FIRST_VALUE(v2) OVER (ORDER BY v1, v3) AS first_value_v2 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v4) AS percent_rank_v4, LAST_VALUE(v2) OVER (ORDER BY v1, v3 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_value_v2 FROM cume_test;
+
+SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1, PERCENT_RANK() OVER (ORDER BY v3) AS percent_rank_v3 FROM cume_test;
+SELECT *, CUME_DIST() OVER (ORDER BY v2) AS cume_dist_v2, PERCENT_RANK() OVER (ORDER BY v2) AS percent_rank_v2 FROM cume_test;
+SELECT *, CUME_DIST() OVER (ORDER BY v3) AS cume_dist_v3, PERCENT_RANK() OVER (ORDER BY v3) AS percent_rank_v3 FROM cume_test WHERE v3 IS NOT NULL;
+SELECT *, CUME_DIST() OVER (ORDER BY v4 DESC) AS cume_dist_v4, PERCENT_RANK() OVER (ORDER BY v1 DESC) AS percent_rank_v1 FROM cume_test;
+SELECT *, CUME_DIST() OVER (PARTITION BY k1 ORDER BY k2) AS percent_rank_k1_partition_k2, PERCENT_RANK() OVER (ORDER BY v1) AS percent_rank_v1 FROM cume_test;
+SELECT *, CUME_DIST() OVER (PARTITION BY v3 ORDER BY v4) AS percent_rank_v3_partition_v4, PERCENT_RANK() OVER (PARTITION BY v4 ORDER BY v3) AS percent_rank_v4_partition_v3 FROM cume_test;
+
 SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1, AVG(v2) OVER (ORDER BY v1, v3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS avg_v2 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v2) AS cume_dist_v2, SUM(v2) OVER (ORDER BY v1, v3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum_v2 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1, MIN(v2) OVER (ORDER BY v1, v3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS min_v2 FROM cume_test;
+
+SELECT *, PERCENT_RANK() OVER (ORDER BY v1) AS percent_rank_v1, AVG(v2) OVER (ORDER BY v1, v3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS avg_v2 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v2) AS percent_rank_v2, SUM(v2) OVER (ORDER BY v1, v3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum_v2 FROM cume_test;
+SELECT *, PERCENT_RANK() OVER (ORDER BY v1) AS percent_rank_v1, MIN(v2) OVER (ORDER BY v1, v3 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS min_v2 FROM cume_test;
 
 DROP TABLE IF EXISTS `cume_test`;

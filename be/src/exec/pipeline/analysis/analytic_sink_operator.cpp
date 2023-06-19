@@ -286,8 +286,8 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_fr
 
 void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_range_frame_materializing(
         size_t chunk_size, bool is_new_partition) {
-    if (_analytor->has_cume_function()) {
-        _analytor->set_partition_size_for_cume_function();
+    if (_analytor->should_set_partition_size()) {
+        _analytor->set_partition_size_for_function();
     }
     while (_analytor->current_row_position() < _analytor->partition_end() &&
            !_analytor->is_current_chunk_finished_eval(chunk_size)) {
