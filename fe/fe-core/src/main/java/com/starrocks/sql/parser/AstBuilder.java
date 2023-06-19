@@ -3723,11 +3723,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // -------------------------------------------- Pipe Statement -----------------------------------------------------
-    @Override
-    public PipeName visitPipeName(StarRocksParser.PipeNameContext context) {
+
+    private PipeName resolvePipeName(StarRocksParser.QualifiedNameContext context) {
         String dbName = null;
         String pipeName = null;
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        QualifiedName qualifiedName = getQualifiedName(context);
         if (qualifiedName.getParts().size() == 2) {
             dbName = qualifiedName.getParts().get(0);
             pipeName = qualifiedName.getParts().get(1);
@@ -3748,7 +3748,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreatePipeStatement(StarRocksParser.CreatePipeStatementContext context) {
-        PipeName pipeName = (PipeName) visit(context.pipeName());
+        PipeName pipeName = resolvePipeName(context.qualifiedName());
         boolean ifNotExists = context.IF() != null;
         ParseNode insertNode = visit(context.insertStatement());
         if (!(insertNode instanceof InsertStmt)) {
@@ -3770,7 +3770,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropPipeStatement(StarRocksParser.DropPipeStatementContext context) {
-        PipeName pipeName = (PipeName) visit(context.pipeName());
+        PipeName pipeName = resolvePipeName(context.qualifiedName());
         boolean ifExists = context.IF() != null;
         return new DropPipeStmt(ifExists, pipeName, createPos(context));
     }
@@ -3793,7 +3793,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDescPipeStatement(StarRocksParser.DescPipeStatementContext context) {
-        PipeName pipeName = (PipeName) visit(context.pipeName());
+        PipeName pipeName = resolvePipeName(context.qualifiedName());
         return new DescPipeStmt(createPos(context), pipeName);
     }
 
@@ -3810,7 +3810,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAlterPipeStatement(StarRocksParser.AlterPipeStatementContext context) {
-        PipeName pipeName = (PipeName) visit(context.pipeName());
+        PipeName pipeName = resolvePipeName(context.qualifiedName());
         AlterPipeClause alterPipeClause = (AlterPipeClause) visit(context.alterPipeClause());
         return new AlterPipeStmt(createPos(context), pipeName, alterPipeClause);
     }
