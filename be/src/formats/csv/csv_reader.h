@@ -174,7 +174,7 @@ public:
 
     virtual ~CSVReader() = default;
 
-    virtual Status next_record(Record* record);
+    Status next_record(Record* record);
 
     Status next_record(CSVRow& row);
 

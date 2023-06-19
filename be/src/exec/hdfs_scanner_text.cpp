@@ -49,7 +49,7 @@ public:
 
     Status reset(size_t offset, size_t remain_length);
 
-    Status next_record(Record* record) override;
+    Status next_record(Record* record);
 
 protected:
     Status _fill_buffer() override;
