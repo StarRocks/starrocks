@@ -234,6 +234,8 @@ public:
 
     Status reset_partition(const std::vector<const SpillPartitionInfo*>& partitions);
 
+    Status reset_partition(RuntimeState* state, size_t num_partitions);
+
     void cancel() override {}
 
     void shuffle(std::vector<uint32_t>& dst, const SpillHashColumn* hash_column);
@@ -279,6 +281,8 @@ public:
 
 private:
     Status _init_with_partition_nums(RuntimeState* state, int num_partitions);
+    // prepare and acquire mem_table for each partition in _id_to_partitions
+    Status _prepare_partitions(RuntimeState* state);
 
     // split partition by hash
     // hash-based partitioning can have significant degradation in the case of heavily skewed data.
