@@ -1488,7 +1488,7 @@ public class GlobalStateMgr {
         int flag = dis.readInt();
         checksum = checksum ^ flag;
         int starrocksMetaVersion;
-        int metaVersion = 0;
+        int metaVersion = FeConstants.META_VERSION;
         if (flag < 0) {
             metaVersion = dis.readInt();
             checksum ^= metaVersion;
