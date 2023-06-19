@@ -98,6 +98,7 @@ public class AnalyticExpr extends Expr {
     public static String DENSERANK = "DENSE_RANK";
     public static String ROWNUMBER = "ROW_NUMBER";
     public static String CUMEDIST = "CUME_DIST";
+    public static String PERCENTRANK = "PERCENT_RANK";
     public static String NTILE = "NTILE";
     public static String MIN = "MIN";
     public static String MAX = "MAX";
@@ -254,7 +255,7 @@ public class AnalyticExpr extends Expr {
             return false;
         }
 
-        return fn.functionName().equalsIgnoreCase(CUMEDIST);
+        return fn.functionName().equalsIgnoreCase(CUMEDIST) || fn.functionName().equalsIgnoreCase(PERCENTRANK);
     }
 
     public static boolean isRowNumberFn(Function fn) {
