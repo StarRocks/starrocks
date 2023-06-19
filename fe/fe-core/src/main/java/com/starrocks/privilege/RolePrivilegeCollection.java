@@ -18,6 +18,10 @@ import com.google.gson.annotations.SerializedName;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Deprecated class, can be removed in version 3.2
+ */
+@Deprecated
 public class RolePrivilegeCollection extends PrivilegeCollection {
     // the name of the role
     @SerializedName(value = "n")
