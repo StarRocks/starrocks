@@ -16,26 +16,44 @@ package com.starrocks.storagevolume;
 
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
+<<<<<<< HEAD
+=======
+import com.starrocks.credential.hdfs.HDFSCloudCredential;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> a23fd057b ([Feature] Storage volume mgr persistence (#24893))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.parquet.Strings;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+<<<<<<< HEAD
 public class StorageVolume {
     public static final String S3_PREFIX = "s3://";
 
+=======
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
+
+public class StorageVolume implements Writable, GsonPostProcessable {
+>>>>>>> a23fd057b ([Feature] Storage volume mgr persistence (#24893))
     public enum StorageVolumeType {
         UNKNOWN,
         S3,
@@ -44,20 +62,27 @@ public class StorageVolume {
 
     // Without id, the scenario like "create storage volume 'a', drop storage volume 'a', create storage volume 'a'"
     // can not be handled. They will be treated as the same storage volume.
+    @SerializedName("i")
     private String id;
 
+    @SerializedName("n")
     private String name;
 
+    @SerializedName("s")
     private StorageVolumeType svt;
 
+    @SerializedName("l")
     private List<String> locations;
 
     private CloudConfiguration cloudConfiguration;
 
+    @SerializedName("p")
     private Map<String, String> params;
 
+    @SerializedName("c")
     private String comment;
 
+    @SerializedName("e")
     private boolean enabled;
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
@@ -217,4 +242,29 @@ public class StorageVolume {
                 return params;
         }
     }
+<<<<<<< HEAD
+=======
+
+    private void setEmptyAuthenticationIfNeeded(Map<String, String> params) {
+        if (svt == StorageVolumeType.HDFS) {
+            params.computeIfAbsent(HDFS_AUTHENTICATION, key -> HDFSCloudCredential.EMPTY);
+        }
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        String json = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, json);
+    }
+
+    public static StorageVolume read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, StorageVolume.class);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+    }
+>>>>>>> a23fd057b ([Feature] Storage volume mgr persistence (#24893))
 }

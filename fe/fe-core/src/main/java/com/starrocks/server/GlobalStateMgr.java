@@ -185,6 +185,7 @@ import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -1453,6 +1454,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
                         .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                        .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                         .build();
                 try {
                     loadHeaderV2(dis);
@@ -1862,6 +1864,7 @@ public class GlobalStateMgr {
                     streamLoadMgr.save(dos);
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
+                    storageVolumeMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
@@ -2888,8 +2891,19 @@ public class GlobalStateMgr {
         }
     }
 
+<<<<<<< HEAD
     public void replayCreateTable(String dbName, Table table) {
         localMetastore.replayCreateTable(dbName, table);
+=======
+    private static void addTableComment(StringBuilder sb, Table table) {
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            sb.append("\nCOMMENT \"").append(table.getDisplayComment()).append("\"");
+        }
+    }
+
+    public void replayCreateTable(CreateTableInfo info) {
+        localMetastore.replayCreateTable(info);
+>>>>>>> a23fd057b ([Feature] Storage volume mgr persistence (#24893))
     }
 
     public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
