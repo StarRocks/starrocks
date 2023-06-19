@@ -547,11 +547,6 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& execu
             }
         }
 
-        if (!splitting_partitions.empty()) {
-            LOG(INFO) << "memtracker consumption:" << _mem_tracker->consumption()
-                      << ",instance:" << state->instance_mem_tracker()->consumption();
-        }
-
         return Status::OK();
     };
 
