@@ -475,4 +475,10 @@ public class OperationType {
     public static final short OP_UPDATE_USER_PROP_V3 = 13061;
 
     public static final short OP_CREATE_STREAM_LOAD_TASK_V2 = 13070;
+
+    // storage volume
+    public static final short OP_SET_DEFAULT_STORAGE_VOLUME = 13100;
+    public static final short OP_CREATE_STORAGE_VOLUME = 13101;
+    public static final short OP_UPDATE_STORAGE_VOLUME = 13102;
+    public static final short OP_DROP_STORAGE_VOLUME = 13103;
 }
