@@ -37,4 +37,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
           cd /var/lib/elastic-service
+          export PATH=/var/local/env/tools:$PATH
           python3 lib/pr_sequence_checker.py scan

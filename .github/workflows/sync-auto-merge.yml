@@ -54,10 +54,10 @@ jobs:
       !contains(needs.pr-label.outputs.labels, 'conflict') &&
       !contains(needs.pr-label.outputs.labels, 'pending')
     steps:
-    - name: clean
-      run: |
-        rm -rf ${{ github.workspace }}
-        mkdir -p ${{ github.workspace }}
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
 
       - name: add automerge label
         uses: actions-ecosystem/action-add-labels@v1
