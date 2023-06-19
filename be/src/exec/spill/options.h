@@ -77,7 +77,7 @@ struct SpilledOptions {
 
     // max mem table size for each spiller
     size_t mem_table_pool_size{};
-    // the spilled file size
+    // memory table peak mem usage
     size_t spill_mem_table_bytes_size{};
     // spilled format type
     SpillFormaterType spill_type{};
