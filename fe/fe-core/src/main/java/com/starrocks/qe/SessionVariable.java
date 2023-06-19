@@ -431,8 +431,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String DISABLE_FUNCTION_FOLD_CONSTANTS = "disable_function_fold_constants";
 
-    public static final String ENABLE_PIPE_VALIDATE = "enable_pipe_validate";
-
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)

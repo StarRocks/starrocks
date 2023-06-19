@@ -1067,6 +1067,7 @@ public class EditLog {
                     DropStorageVolumeLog log = (DropStorageVolumeLog) journal.getData();
                     globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(log);
                     break;
+                }
                 case OperationType.OP_PIPE: {
                     PipeOpEntry opEntry = (PipeOpEntry) journal.getData();
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);

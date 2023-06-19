@@ -234,8 +234,7 @@ public class Pipe implements GsonPostProcessable {
             for (PipeTaskDesc task : runningTasks.values()) {
                 if (task.isFinished() || task.tooManyErrors()) {
                     removeTaskId.add(task.getId());
-                    FilePipePiece piece = task.getPiece();
-                    ((FilePipeSource) pipeSource).finishPiece(piece, task.getState());
+                    pipeSource.finishPiece(task.getPiece(), task.getState());
                 }
                 if (task.isError()) {
                     failedTaskExecutionCount++;
@@ -254,13 +253,15 @@ public class Pipe implements GsonPostProcessable {
             for (long taskId : removeTaskId) {
                 runningTasks.remove(taskId);
             }
+
+            // Persist LoadStatus
+            // TODO: currently we cannot guarantee the consistency of LoadStatus and FileList
+            if (CollectionUtils.isNotEmpty(removeTaskId)) {
+                persistPipe();
+                LOG.info("pipe {} remove finalized tasks {}", this, removeTaskId);
+            }
         } finally {
             lock.writeLock().unlock();
-        }
-
-        if (CollectionUtils.isNotEmpty(removeTaskId)) {
-            persistPipe();
-            LOG.info("pipe {} remove finalized tasks {}", this, removeTaskId);
         }
     }
 
