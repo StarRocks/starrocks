@@ -54,7 +54,7 @@ public class CreateTableInfo implements Writable {
     private String dbName;
     @SerializedName(value = "t")
     private Table table;
-    @SerializedName(value = "volumeId")
+    @SerializedName(value = "svId")
     private String storageVolumeId;
 
     public CreateTableInfo() {

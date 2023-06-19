@@ -22,6 +22,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -44,30 +45,28 @@ import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public abstract class StorageVolumeMgr {
+public abstract class StorageVolumeMgr implements GsonPostProcessable {
     private static final String ENABLED = "enabled";
 
     public static final String DEFAULT = "default";
 
     public static final String LOCAL = "local";
 
-    @SerializedName("defaultStorageVolumeId")
+    @SerializedName("defaultSVId")
     protected String defaultStorageVolumeId = "";
 
     protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     // volume id to dbs
-    @SerializedName("storageVolumeToDbs")
+    @SerializedName("svToDbs")
     protected Map<String, Set<Long>> storageVolumeToDbs = new HashMap<>();
 
     // volume id to tables
-    @SerializedName("storageVolumeToTables")
+    @SerializedName("svToTables")
     protected Map<String, Set<Long>> storageVolumeToTables = new HashMap<>();
 
-    @SerializedName("dbToStorageVolumes")
     protected Map<Long, String> dbToStorageVolume = new HashMap<>();
 
-    @SerializedName("tableToStorageVolumes")
     protected Map<Long, String> tableToStorageVolume = new HashMap<>();
 
     public String createStorageVolume(CreateStorageVolumeStmt stmt)
@@ -265,8 +264,21 @@ public abstract class StorageVolumeMgr {
         this.storageVolumeToDbs = data.storageVolumeToDbs;
         this.storageVolumeToTables = data.storageVolumeToTables;
         this.defaultStorageVolumeId = data.defaultStorageVolumeId;
-        this.dbToStorageVolume = data.dbToStorageVolume;
-        this.tableToStorageVolume = data.tableToStorageVolume;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        for (Map.Entry<String, Set<Long>> entry : storageVolumeToDbs.entrySet()) {
+            for (Long dbId : entry.getValue()) {
+                dbToStorageVolume.put(dbId, entry.getKey());
+            }
+        }
+
+        for (Map.Entry<String, Set<Long>> entry : storageVolumeToTables.entrySet()) {
+            for (Long tableId : entry.getValue()) {
+                tableToStorageVolume.put(tableId, entry.getKey());
+            }
+        }
     }
 
     public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;

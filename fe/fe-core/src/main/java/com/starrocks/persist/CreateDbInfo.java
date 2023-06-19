@@ -30,7 +30,7 @@ public class CreateDbInfo implements Writable {
     @SerializedName(value = "n")
     private String dbName;
 
-    @SerializedName(value = "storageVolumeId")
+    @SerializedName(value = "svId")
     private String storageVolumeId;
 
     public CreateDbInfo(long id, String dbName) {

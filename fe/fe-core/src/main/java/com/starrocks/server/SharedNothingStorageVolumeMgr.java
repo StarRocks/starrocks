@@ -91,8 +91,6 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
         this.storageVolumeToDbs = data.storageVolumeToDbs;
         this.storageVolumeToTables = data.storageVolumeToTables;
         this.defaultStorageVolumeId = data.defaultStorageVolumeId;
-        this.dbToStorageVolume = data.dbToStorageVolume;
-        this.tableToStorageVolume = data.tableToStorageVolume;
         this.idToSV = data.idToSV;
     }
 
