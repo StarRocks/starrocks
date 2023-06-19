@@ -168,7 +168,9 @@ public class GlobalStateMgrTest {
         field.setAccessible(true);
         field.set(globalStateMgr, new Load());
 
-        long checksum1 = globalStateMgr.saveHeader(dos, new Random().nextLong(), 0);
+        long checksum1 = 0;
+        checksum1 = globalStateMgr.saveVersion(dos, checksum1);
+        checksum1 = globalStateMgr.saveHeader(dos, new Random().nextLong(), checksum1);
         globalStateMgr.clear();
         globalStateMgr = null;
         dos.close();

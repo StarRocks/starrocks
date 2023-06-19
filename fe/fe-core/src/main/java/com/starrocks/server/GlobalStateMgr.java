@@ -141,7 +141,6 @@ import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.elasticsearch.EsRepository;
-import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -377,7 +376,6 @@ public class GlobalStateMgr {
     private Daemon replayer;
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
-    private StarRocksRepository starRocksRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
     private ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
 
@@ -660,7 +658,6 @@ public class GlobalStateMgr {
         this.resourceGroupMgr = new ResourceGroupMgr();
 
         this.esRepository = new EsRepository();
-        this.starRocksRepository = new StarRocksRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
@@ -1310,7 +1307,6 @@ public class GlobalStateMgr {
         labelCleaner.start();
         // ES state store
         esRepository.start();
-        starRocksRepository.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
@@ -3047,10 +3043,6 @@ public class GlobalStateMgr {
 
     public EsRepository getEsRepository() {
         return this.esRepository;
-    }
-
-    public StarRocksRepository getStarRocksRepository() {
-        return this.starRocksRepository;
     }
 
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {

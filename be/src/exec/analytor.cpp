@@ -38,8 +38,11 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
                                const std::string& symbol, FunctionContext* context);
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
-                   const TupleDescriptor* result_tuple_desc)
-        : _tnode(tnode), _child_row_desc(child_row_desc), _result_tuple_desc(result_tuple_desc) {
+                   const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
+        : _tnode(tnode),
+          _child_row_desc(child_row_desc),
+          _result_tuple_desc(result_tuple_desc),
+          _use_hash_based_partition(use_hash_based_partition) {
     if (tnode.analytic_node.__isset.buffered_tuple_id) {
         _buffered_tuple_id = tnode.analytic_node.buffered_tuple_id;
     }
@@ -455,6 +458,19 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
+        auto check_if_overflow = [](Column* maybe_nullable_column) {
+            auto* column = ColumnHelper::get_data_column(maybe_nullable_column);
+            if (!column->is_binary()) {
+                return Status::OK();
+            }
+
+            auto* binary_column = down_cast<BinaryColumn*>(column);
+            if (binary_column->get_bytes().size() > std::numeric_limits<uint32_t>::max()) {
+                return Status::InternalError(
+                        strings::Substitute("Binary column size overflow: $0", binary_column->get_bytes().size()));
+            }
+            return Status::OK();
+        };
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
@@ -467,17 +483,20 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
                 } else {
                     TRY_CATCH_BAD_ALLOC(_agg_intput_columns[i][j]->append(*column, 0, column->size()));
                 }
+                RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
             }
         }
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+            RETURN_IF_ERROR(check_if_overflow(_partition_columns[i].get()));
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+            RETURN_IF_ERROR(check_if_overflow(_order_columns[i].get()));
         }
     }
 
@@ -538,9 +557,14 @@ void Analytor::find_partition_end() {
     _found_partition_end.second = static_cast<int64_t>(_partition_columns[0]->size());
     {
         SCOPED_TIMER(_partition_search_timer);
-        for (auto& column : _partition_columns) {
+        if (_use_hash_based_partition) {
             _found_partition_end.second =
-                    _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end.second);
+                    _find_first_not_equal_for_hash_based_partition(_partition_end, start, _found_partition_end.second);
+        } else {
+            for (auto& column : _partition_columns) {
+                _found_partition_end.second =
+                        _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end.second);
+            }
         }
     }
 
@@ -758,6 +782,32 @@ int64_t Analytor::_find_first_not_equal(Column* column, int64_t target, int64_t 
     return end - 1;
 }
 
+int64_t Analytor::_find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end) {
+    // In this case, we cannot compare each column one by one like Analytor::_find_first_not_equal does,
+    // and we must compare all the partition columns for one comparation
+    auto compare = [this](size_t left, size_t right) {
+        for (auto& column : _partition_columns) {
+            auto res = column->compare_at(left, right, *column, 1);
+            if (res != 0) {
+                return res;
+            }
+        }
+        return 0;
+    };
+    while (start + 1 < end) {
+        int64_t mid = start + (end - start) / 2;
+        if (compare(target, mid) == 0) {
+            start = mid;
+        } else {
+            end = mid;
+        }
+    }
+    if (compare(target, end - 1) == 0) {
+        return end;
+    }
+    return end - 1;
+}
+
 void Analytor::_find_candidate_partition_ends() {
     if (!_partition_statistics.is_high_cardinality()) {
         return;
@@ -794,7 +844,8 @@ void Analytor::_find_candidate_peer_group_ends() {
 
 AnalytorPtr AnalytorFactory::create(int i) {
     if (!_analytors[i]) {
-        _analytors[i] = std::make_shared<Analytor>(_tnode, _child_row_desc, _result_tuple_desc);
+        _analytors[i] =
+                std::make_shared<Analytor>(_tnode, _child_row_desc, _result_tuple_desc, _use_hash_based_partition);
     }
     return _analytors[i];
 }

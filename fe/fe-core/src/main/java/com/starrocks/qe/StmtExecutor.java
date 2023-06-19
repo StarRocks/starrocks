@@ -1314,7 +1314,12 @@ public class StmtExecutor {
 
         MetaUtils.normalizationTableName(context, stmt.getTableName());
         Database database = MetaUtils.getDatabase(context, stmt.getTableName());
-        Table targetTable = MetaUtils.getTable(context, stmt.getTableName());
+        Table targetTable;
+        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
+            targetTable = ((InsertStmt) stmt).getTargetTable();
+        } else {
+            targetTable = MetaUtils.getTable(context, stmt.getTableName());
+        }
 
         String label = DebugUtil.printId(context.getExecutionId());
         if (stmt instanceof InsertStmt) {
