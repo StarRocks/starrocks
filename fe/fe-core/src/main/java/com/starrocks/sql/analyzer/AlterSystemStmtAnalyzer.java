@@ -13,6 +13,15 @@ import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.AddFollowerClause;
+import com.starrocks.sql.ast.AddObserverClause;
+import com.starrocks.sql.ast.AlterSystemStmt;
+>>>>>>> 82f880c6e ([BugFix] Fix drop FE failed when the target FE is using FQDN bug the leader node is not (#25575))
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.validator.routines.InetAddressValidator;
@@ -24,7 +33,23 @@ import java.net.UnknownHostException;
 public class AlterSystemStmtAnalyzer {
 
     public static void analyze(DdlStmt ddlStmt, ConnectContext session) {
+<<<<<<< HEAD
         new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor().analyze((AlterSystemStmt) ddlStmt, session);
+=======
+        if (ddlStmt instanceof AlterSystemStmt) {
+            new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor().analyze((AlterSystemStmt) ddlStmt, session);
+        } else if (ddlStmt instanceof CancelAlterSystemStmt) {
+            CancelAlterSystemStmt stmt = (CancelAlterSystemStmt) ddlStmt;
+            try {
+                for (String hostPort : stmt.getHostPorts()) {
+                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
+                    stmt.getHostPortPairs().add(pair);
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("FRONTEND", e.getMessage()));
+            }
+        }
+>>>>>>> 82f880c6e ([BugFix] Fix drop FE failed when the target FE is using FQDN bug the leader node is not (#25575))
     }
 
     static class AlterSystemStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
@@ -36,7 +61,8 @@ public class AlterSystemStmtAnalyzer {
         public Void visitComputeNodeClause(ComputeNodeClause computeNodeClause, ConnectContext context) {
             try {
                 for (String hostPort : computeNodeClause.getHostPorts()) {
-                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
+                            computeNodeClause instanceof AddComputeNodeClause && !FrontendOptions.isUseFqdn());
                     computeNodeClause.getHostPortPairs().add(pair);
                 }
                 Preconditions.checkState(!computeNodeClause.getHostPortPairs().isEmpty());
@@ -50,7 +76,8 @@ public class AlterSystemStmtAnalyzer {
         public Void visitBackendClause(BackendClause backendClause, ConnectContext context) {
             try {
                 for (String hostPort : backendClause.getHostPorts()) {
-                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
+                            backendClause instanceof AddBackendClause && !FrontendOptions.isUseFqdn());
                     backendClause.getHostPortPairs().add(pair);
                 }
                 Preconditions.checkState(!backendClause.getHostPortPairs().isEmpty());
@@ -63,7 +90,11 @@ public class AlterSystemStmtAnalyzer {
         @Override
         public Void visitFrontendClause(FrontendClause frontendClause, ConnectContext context) {
             try {
-                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(frontendClause.getHostPort());
+                Pair<String, Integer> pair = SystemInfoService
+                        .validateHostAndPort(frontendClause.getHostPort(),
+                                (frontendClause instanceof AddFollowerClause
+                                        || frontendClause instanceof AddObserverClause)
+                                        && !FrontendOptions.isUseFqdn());
                 frontendClause.setHost(pair.first);
                 frontendClause.setPort(pair.second);
                 Preconditions.checkState(!Strings.isNullOrEmpty(frontendClause.getHost()));
@@ -103,5 +134,33 @@ public class AlterSystemStmtAnalyzer {
                 throw new SemanticException("unknown host " + e.getMessage());
             }
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public Void visitModifyBrokerClause(ModifyBrokerClause clause, ConnectContext context) {
+            validateBrokerName(clause);
+            try {
+                if (clause.getOp() != ModifyBrokerClause.ModifyOp.OP_DROP_ALL) {
+                    for (String hostPort : clause.getHostPorts()) {
+                        Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
+                        clause.getHostPortPairs().add(pair);
+                    }
+                    Preconditions.checkState(!clause.getHostPortPairs().isEmpty());
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("BROKER", e.getMessage()));
+            }
+            return null;
+        }
+
+        private void validateBrokerName(ModifyBrokerClause clause) {
+            try {
+                clause.validateBrokerName();
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+>>>>>>> 82f880c6e ([BugFix] Fix drop FE failed when the target FE is using FQDN bug the leader node is not (#25575))
     }
 }
