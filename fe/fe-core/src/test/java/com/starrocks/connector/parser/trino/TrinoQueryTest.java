@@ -995,4 +995,34 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select json_array(ta, tb, tc, tg) from tall;";
         assertPlanContains(sql, "json_array(CAST(1: ta AS JSON), CAST(2: tb AS JSON), CAST(3: tc AS JSON), CAST(7: tg AS JSON))");
     }
+
+    @Test
+    public void testSelectValue() throws Exception {
+        String sql = "select * from (values (1, 2, 3))";
+        assertPlanContains(sql, "1 | 2 | 3");
+
+        sql = "select * from (values (1, 2, 3)) as t0(a,b,c);";
+        assertPlanContains(sql, "1: a | 2: b | 3: c");
+
+        sql = "select * from (values 1, 2, 3)";
+        assertPlanContains(sql, "constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "         3");
+
+        sql = "select * from (values (1), (2), (3))";
+        assertPlanContains(sql, "1\n" +
+                "         2\n" +
+                "         3");
+
+        sql = "select * from (values (0,1),(1,2),(2,3)) t0 (a,b) ;";
+        assertPlanContains(sql, "0 | 1\n" +
+                "         1 | 2\n" +
+                "         2 | 3");
+
+        sql = "select * from (values (0,(1,2)),(1,(2,3)),(2,(3,4)))  t0 (a,b) ;";
+        assertPlanContains(sql, "0 | row(1, 2)\n" +
+                "         1 | row(2, 3)\n" +
+                "         2 | row(3, 4)");
+    }
 }
