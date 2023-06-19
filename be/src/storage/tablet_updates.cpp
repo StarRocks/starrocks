@@ -1070,7 +1070,8 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                     _set_error(msg);
                     return;
                 }
-                st = _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
+                st = _do_update(rowset_id, i, conditional_column, latest_applied_version.major(), upserts, index,
+                                tablet_id, &new_deletes);
                 if (!st.ok()) {
                     manager->update_state_cache().remove(state_entry);
                     std::string msg =
@@ -1129,8 +1130,8 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                         _set_error(msg);
                         return;
                     }
-                    st = _do_update(rowset_id, loaded_upsert, conditional_column, upserts, index, tablet_id,
-                                    &new_deletes);
+                    st = _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major(),
+                                    upserts, index, tablet_id, &new_deletes);
                     if (!st.ok()) {
                         manager->update_state_cache().remove(state_entry);
                         std::string msg = strings::Substitute(
