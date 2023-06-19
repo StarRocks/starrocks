@@ -160,7 +160,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         if (expect != actual) {
             return Status::Corruption(
                     strings::Substitute("Bad page: checksum mismatch (actual=$0 vs expect=$1), filename=$2",
-                                        actual, expect, opts.read_file->filename()));
+                                        actual, expect, opts.rblock->path()));
         }
     }
 
