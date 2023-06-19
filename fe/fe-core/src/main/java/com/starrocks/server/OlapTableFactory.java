@@ -188,6 +188,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         // create table
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
         OlapTable table;
+        String storageVolumeId = "";
         if (stmt.isExternal()) {
             table = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
@@ -208,8 +209,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                 StorageVolume sv = null;
                 try {
                     if (volume.isEmpty()) {
-                        if (!db.getStorageVolumeId().isEmpty()) {
-                            sv = svm.getStorageVolume(db.getStorageVolumeId());
+                        String dbStorageVolumeId = svm.getStorageVolumeIdOfDb(db.getId());
+                        if (dbStorageVolumeId != null) {
+                            sv = svm.getStorageVolume(dbStorageVolumeId);
                         } else {
                             sv = svm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
                         }
@@ -225,7 +227,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Unknown storage volume \"" + volume + "\"");
                 }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                metastore.setLakeStorageInfo(table, sv.getId(), properties);
+                storageVolumeId = sv.getId();
+                metastore.setLakeStorageInfo(table, storageVolumeId, properties);
+                svm.bindTableToStorageVolume(sv.getId(), table.getId());
                 table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
@@ -582,7 +586,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 if (metastore.getDb(db.getId()) == null) {
                     throw new DdlException("database has been dropped when creating table");
                 }
-                createTblSuccess = db.createTableWithLock(table, false);
+                createTblSuccess = db.createTableWithLock(table, storageVolumeId, false);
                 if (!createTblSuccess) {
                     if (db.isSystemDatabase()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "create denied");

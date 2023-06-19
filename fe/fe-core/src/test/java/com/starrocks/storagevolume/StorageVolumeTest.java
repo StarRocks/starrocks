@@ -23,6 +23,8 @@ import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
@@ -35,6 +37,9 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -296,5 +301,33 @@ public class StorageVolumeTest {
         fs = FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
         sv = StorageVolume.fromFileStoreInfo(fs);
         Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
+    }
+
+    @Test
+    public void testSerializationAndDeserialization() throws IOException, DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
+                storageParams, true, "");
+
+        FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(byteArrayOutputStream)) {
+            sv.write(out);
+            out.flush();
+        }
+
+        StorageVolume sv1 = null;
+        try (DataInputStream in = new DataInputStream(byteArrayOutputStream.getInputStream())) {
+            sv1 = StorageVolume.read(in);
+        }
+        byteArrayOutputStream.close();
+        Assert.assertEquals(sv.getId(), sv1.getId());
+        Assert.assertEquals(sv.getComment(), sv1.getComment());
+        Assert.assertEquals(sv.getName(), sv1.getName());
+        Assert.assertEquals(sv.getEnabled(), sv1.getEnabled());
+        Assert.assertEquals(CloudType.AWS, sv1.getCloudConfiguration().getCloudType());
     }
 }
