@@ -80,6 +80,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
@@ -156,6 +157,7 @@ import io.trino.sql.tree.TimestampLiteral;
 import io.trino.sql.tree.Trim;
 import io.trino.sql.tree.TryExpression;
 import io.trino.sql.tree.Union;
+import io.trino.sql.tree.Values;
 import io.trino.sql.tree.WhenClause;
 import io.trino.sql.tree.Window;
 import io.trino.sql.tree.WindowFrame;
@@ -345,7 +347,50 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitAliasedRelation(AliasedRelation node, ParseTreeContext context) {
         Relation relation = (Relation) visit(node.getRelation(), context);
         relation.setAlias(new TableName(null, node.getAlias().getValue()));
+        List<String> columnNames = getColumnNames(Optional.ofNullable(node.getColumnNames()));
+        if (columnNames != null && !columnNames.isEmpty()) {
+            relation.setColumnOutputNames(columnNames);
+
+            if (relation instanceof SubqueryRelation) {
+                // set value relation alias name here, otherwise sr optimizer will lose the alias name
+                SubqueryRelation subqueryRelation = (SubqueryRelation) relation;
+                if (subqueryRelation.getQueryStatement().getQueryRelation() instanceof ValuesRelation) {
+                    ValuesRelation valuesRelation = (ValuesRelation) subqueryRelation.getQueryStatement().getQueryRelation();
+                    valuesRelation.setColumnOutputNames(columnNames);
+                }
+            }
+        }
         return relation;
+    }
+
+    @Override
+    protected ParseNode visitValues(Values node, ParseTreeContext context) {
+        if (node.getRows().isEmpty()) {
+            return null;
+        } else {
+            List<Expr> rows = visit(node.getRows(), context, Expr.class);
+            List<ValueList> valueLists = Lists.newArrayList();
+
+            if (node.getRows().get(0) instanceof Row) {
+                // (values (1,2),(3,4),(5,6)), has three rows, each row is row function call
+                for (Expr rowFnCall : rows) {
+                    valueLists.add(new ValueList(rowFnCall.getChildren()));
+                }
+            } else {
+                // (values 1,2,3,4,5,6), has six rows, each row has one int value
+                for (Expr value : rows) {
+                    valueLists.add(new ValueList(Lists.newArrayList(value)));
+                }
+            }
+            List<List<Expr>> records = valueLists.stream().map(ValueList::getRow).collect(toList());
+
+            List<String> colNames = Lists.newArrayList();
+            for (int i = 0; i < records.get(0).size(); ++i) {
+                colNames.add("column_" + i);
+            }
+
+            return new ValuesRelation(records, colNames);
+        }
     }
 
     @Override
