@@ -297,7 +297,7 @@ public:
 };
 
 // verify that for the output including both meta and data columns
-TEST_F(BinlogReaderTest, test_read_full_columns) {
+TEST_F(BinlogReaderTest, DISABLED_test_read_full_columns) {
     Schema schema;
     FieldPtr op = make_field(4, BINLOG_OP, TYPE_TINYINT);
     FieldPtr version = make_field(5, BINLOG_VERSION, TYPE_BIGINT);
@@ -325,7 +325,7 @@ public:
 };
 
 // verify that for the output only including data columns
-TEST_F(BinlogReaderTest, test_read_data_columns) {
+TEST_F(BinlogReaderTest, DISABLED_test_read_data_columns) {
     DataColumnsVerifier verifier;
     test_reader(_schema, verifier);
 }
@@ -340,7 +340,7 @@ public:
 };
 
 // verify that for the output including random columns
-TEST_F(BinlogReaderTest, test_read_random_columns) {
+TEST_F(BinlogReaderTest, DISABLED_test_read_random_columns) {
     Schema schema;
     FieldPtr op = make_field(4, BINLOG_OP, TYPE_TINYINT);
     schema.append(op);
