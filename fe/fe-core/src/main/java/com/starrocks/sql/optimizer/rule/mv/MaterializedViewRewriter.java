@@ -21,6 +21,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -110,18 +111,27 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                                               Column mvColumn,
                                               CallOperator queryAggFunc) {
         String functionName = queryAggFunc.getFnName();
-        if ((functionName.equals(FunctionSet.COUNT) || functionName.equals(FunctionSet.SUM))
-                && !queryAggFunc.isDistinct()) {
+        if (functionName.equals(FunctionSet.COUNT) && !queryAggFunc.isDistinct()) {
             CallOperator callOperator = new CallOperator(FunctionSet.SUM,
                     queryAggFunc.getType(),
                     queryAggFunc.getChildren(),
                     Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, IS_IDENTICAL));
-
             return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
-        } else if (
-                ((functionName.equals(FunctionSet.COUNT) && queryAggFunc.isDistinct())
-                        || functionName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) &&
-                        mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
+        } else if (functionName.equals(FunctionSet.SUM) && !queryAggFunc.isDistinct()) {
+            CallOperator callOperator = new CallOperator(FunctionSet.SUM,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {mvColumn.getType()}, IS_IDENTICAL));
+            if (mvColumn.getType().isDecimalV3()) {
+                ScalarType decimal128Type =
+                        ScalarType.createDecimalV3NarrowestType(38, mvColumn.getScale());
+                callOperator.getFunction().setArgsType(new Type[] {mvColumn.getType()});
+                callOperator.getFunction().setRetType(decimal128Type);
+            }
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (((functionName.equals(FunctionSet.COUNT) && queryAggFunc.isDistinct())
+                || functionName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) &&
+                mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
             CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
                     queryAggFunc.getType(),
                     queryAggFunc.getChildren(),

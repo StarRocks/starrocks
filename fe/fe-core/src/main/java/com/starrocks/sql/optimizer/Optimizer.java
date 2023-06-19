@@ -125,7 +125,7 @@ public class Optimizer {
         OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
-        logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
+        logicOperatorTree = rewriteAndValidatePlan(connectContext, logicOperatorTree, rootTaskContext);
         OptimizerTraceUtil.log(connectContext, "after logical rewrite, new logicOperatorTree:\n%s", logicOperatorTree);
         return logicOperatorTree;
     }
@@ -151,7 +151,7 @@ public class Optimizer {
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.RuleBaseOptimize")) {
-            logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
+            logicOperatorTree = rewriteAndValidatePlan(connectContext, logicOperatorTree, rootTaskContext);
         }
 
         memo.init(logicOperatorTree);
@@ -237,7 +237,9 @@ public class Optimizer {
         }
     }
 
-    private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
+    private OptExpression logicalRuleRewrite(ConnectContext connectContext,
+                                             OptExpression tree,
+                                             TaskContext rootTaskContext) {
         tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
         ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         deriveLogicalProperty(tree);
@@ -313,9 +315,14 @@ public class Optimizer {
             }
         }
 
-        if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW) && sessionVariable.isEnableSyncMaterializedViewRewrite()) {
+        if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW)
+                && sessionVariable.isEnableSyncMaterializedViewRewrite()) {
             // Add a config to decide whether to rewrite sync mv.
+
+            OptimizerTraceUtil.logOptExpression(connectContext, "before MaterializedViewRule:\n%s", tree);
             tree = new MaterializedViewRule().transform(tree, context).get(0);
+            OptimizerTraceUtil.logOptExpression(connectContext, "after MaterializedViewRule:\n%s", tree);
+
             deriveLogicalProperty(tree);
         }
 
@@ -392,8 +399,10 @@ public class Optimizer {
         return true;
     }
 
-    private OptExpression rewriteAndValidatePlan(OptExpression tree, TaskContext rootTaskContext) {
-        OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
+    private OptExpression rewriteAndValidatePlan(ConnectContext connectContext,
+                                                 OptExpression tree,
+                                                 TaskContext rootTaskContext) {
+        OptExpression result = logicalRuleRewrite(connectContext, tree, rootTaskContext);
         OptExpressionValidator validator = new OptExpressionValidator();
         validator.validate(result);
         return result;

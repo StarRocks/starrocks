@@ -41,6 +41,10 @@ function: wait_materialized_view_finish()
 create materialized view mv_3 as select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1;
 function: wait_materialized_view_finish()
 
+CREATE MATERIALIZED VIEW mv_4
+AS SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1;
+function: wait_materialized_view_finish()
+
 insert into duplicate_tbl values 
     ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
     ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
@@ -51,7 +55,9 @@ insert into duplicate_tbl values
 select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1;
 select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1;
 select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1;
+SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1;
 
 drop materialized view mv_1;
 drop materialized view mv_2;
 drop materialized view mv_3;
+drop materialized view mv_4;
