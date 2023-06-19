@@ -90,7 +90,7 @@ public class CheckDecommissionAction extends RestBaseAction {
         for (String hostPort : hostPortArr) {
             Pair<String, Integer> pair;
             try {
-                pair = SystemInfoService.validateHostAndPort(hostPort);
+                pair = SystemInfoService.validateHostAndPort(hostPort, false);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
