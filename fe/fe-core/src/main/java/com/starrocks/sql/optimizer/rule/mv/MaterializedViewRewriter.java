@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.HashMap;
@@ -118,10 +119,22 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                     Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, IS_IDENTICAL));
 
             return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+<<<<<<< HEAD
         } else if (
                 ((functionName.equals(FunctionSet.COUNT) && queryAggFunc.isDistinct())
                         || functionName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) &&
                         mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
+=======
+        } else if (functionName.equals(FunctionSet.SUM) && !queryAggFunc.isDistinct()) {
+            CallOperator callOperator = new CallOperator(FunctionSet.SUM,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    ScalarOperatorUtil.findSumFn(new Type[] {mvColumn.getType()}));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (((functionName.equals(FunctionSet.COUNT) && queryAggFunc.isDistinct())
+                || functionName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) &&
+                mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
+>>>>>>> 04e73f105 ([BugFix] Make sure not change global function by MV Rewrite (#25568))
             CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
                     queryAggFunc.getType(),
                     queryAggFunc.getChildren(),
