@@ -929,6 +929,18 @@ public class NodeMgr {
         }
     }
 
+    public boolean checkFeExistByRPCPort(String host, int rpcPort) {
+        try {
+            tryLock(true);
+            return frontends
+                    .values()
+                    .stream()
+                    .anyMatch(fe -> fe.getHost().equals(host) && fe.getRpcPort() == rpcPort);
+        } finally {
+            unlock();
+        }
+    }
+
     public Frontend checkFeExist(String host, int port) {
         tryLock(true);
         try {
