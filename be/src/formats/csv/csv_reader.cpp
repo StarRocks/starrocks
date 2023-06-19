@@ -47,7 +47,28 @@ Status CSVReader::_expand_buffer() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void CSVReader::split_record(const Record& record, Fields* fields) const {
+=======
+// _expand_buffer must ensure that there is no data in the buffer. However, after we introduced the state machine parser,
+// this constraint became too strong and we introduced a more relaxed buffer expansion function.
+Status CSVReader::_expand_buffer_loosely() {
+    if (UNLIKELY(_storage.size() >= kMaxBufferSize)) {
+        return Status::InternalError("CSV line length exceed limit " + std::to_string(kMaxBufferSize));
+    }
+    size_t new_capacity = std::min(_storage.size() * 2, kMaxBufferSize);
+    _storage.resize(new_capacity);
+    CSVBuffer new_buff(_storage.data(), _storage.size());
+    new_buff.set_position_offset(_buff.position_offset());
+    new_buff.set_limit_offset(_buff.limit_offset());
+    _buff = new_buff;
+    return Status::OK();
+}
+
+void CSVReader::split_record(const Record& record, Fields* columns) const {
+    DCHECK(_column_delimiter_length > 0);
+
+>>>>>>> 91179de6d ([BugFix] Fix BE hive csv reader OOM and Hang when field_delim='' (#25452))
     const char* value = record.data;
     const char* ptr = record.data;
     const size_t size = record.size;
