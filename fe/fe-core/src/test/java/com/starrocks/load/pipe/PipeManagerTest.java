@@ -200,6 +200,25 @@ public class PipeManagerTest {
     }
 
     @Test
+    public void pollPipe() throws Exception {
+        final String pipeName = "p3";
+        String sql = "create pipe p3 properties('poll_interval' = '1') as " +
+                "insert into tbl1 select * from table('path'='fake://pipe', 'format'='parquet')";
+        createPipe(sql);
+
+        Pipe p3 = getPipe(pipeName);
+        Assert.assertEquals(0, p3.getLastPolledTime());
+        p3.poll();
+
+        Thread.sleep(1000);
+        p3.poll();
+        long current = System.currentTimeMillis() / 1000;
+        Assert.assertEquals(current, p3.getLastPolledTime());
+        p3.poll();
+        Assert.assertEquals(current, p3.getLastPolledTime());
+    }
+
+    @Test
     public void executePipe() throws Exception {
         String sql = "create pipe p3 as insert into tbl1 select * from table('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

@@ -34,6 +34,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.commons.collections.CollectionUtils;
@@ -55,6 +56,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class Pipe implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(Pipe.class);
+    public static final int DEFAULT_POLL_INTERVAL = 10;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
     @SerializedName(value = "name")
@@ -79,6 +81,8 @@ public class Pipe implements GsonPostProcessable {
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private Map<Long, PipeTaskDesc> runningTasks = new HashMap<>();
     private int failedTaskExecutionCount = 0;
+    private int pollIntervalSecond = DEFAULT_POLL_INTERVAL;
+    private long lastPolledTime = 0;
 
     protected Pipe(PipeId id, String name, TableName targetTable, PipeSource sourceTable, String originSql) {
         this.name = Preconditions.checkNotNull(name);
@@ -97,15 +101,31 @@ public class Pipe implements GsonPostProcessable {
         Pipe res = new Pipe(new PipeId(dbId, id), pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
                 stmt.getInsertSql());
         res.properties = stmt.getProperties();
+        res.processProperties();
         return res;
+    }
+
+    private void processProperties() {
+        if (MapUtils.isEmpty(properties)) {
+            return;
+        }
+        if (properties.containsKey(PipeAnalyzer.POLL_INTERVAL)) {
+            this.pollIntervalSecond = Integer.parseInt(properties.get(PipeAnalyzer.POLL_INTERVAL));
+        }
     }
 
     /**
      * Poll event from data source
      */
     public void poll() throws UserException {
+        long nextPollTime = lastPolledTime + pollIntervalSecond;
+        if (System.currentTimeMillis() / 1000 < nextPollTime) {
+            return;
+        }
+
         try {
             lock.writeLock().lock();
+            lastPolledTime = System.currentTimeMillis() / 1000;
             pipeSource.poll();
         } catch (Throwable e) {
             changeState(State.ERROR, true);
@@ -441,10 +461,15 @@ public class Pipe implements GsonPostProcessable {
         return loadStatus;
     }
 
+    public long getLastPolledTime() {
+        return lastPolledTime;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         this.runningTasks = new HashMap<>();
         this.lock = new ReentrantReadWriteLock();
+        processProperties();
     }
 
     public String toJson() {

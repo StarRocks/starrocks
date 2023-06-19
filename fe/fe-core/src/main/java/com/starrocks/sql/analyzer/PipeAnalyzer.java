@@ -42,11 +42,13 @@ import java.util.Map;
 
 public class PipeAnalyzer {
 
-    private static final String PROPERTY_AUTO_INGEST = "auto_ingest";
+    public static final String PROPERTY_AUTO_INGEST = "auto_ingest";
+    public static final String POLL_INTERVAL = "poll_interval";
 
     private static final ImmutableSet<String> SUPPORTED_PROPERTIES =
             new ImmutableSortedSet.Builder<String>(String.CASE_INSENSITIVE_ORDER)
                     .add(PROPERTY_AUTO_INGEST)
+                    .add(POLL_INTERVAL)
                     .build();
 
     private static void analyzePipeName(PipeName pipeName, ConnectContext context) {
@@ -70,6 +72,18 @@ public class PipeAnalyzer {
         for (String propertyName : properties.keySet()) {
             if (!SUPPORTED_PROPERTIES.contains(propertyName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
+            }
+            switch (propertyName) {
+                case POLL_INTERVAL: {
+                    int value = Integer.parseInt(properties.get(propertyName));
+                    if (value < 1 || value > 1024) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                                POLL_INTERVAL + " should in [1, 1024]");
+                    }
+                    break;
+                }
+                default:
+
             }
         }
     }
