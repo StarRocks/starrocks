@@ -1988,6 +1988,7 @@ public class Auth implements Writable {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        LOG.info("version is {}", GlobalStateMgr.getCurrentStateJournalVersion());
         byte[] s = reader.readJson(byte[].class);
         DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(s));
         readFields(dataInputStream);
