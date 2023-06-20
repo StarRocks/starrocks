@@ -452,6 +452,30 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     }
 }
 
+<<<<<<< HEAD
+=======
+void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
+                                          const ChunkPtr& chunk) {
+    // a simple spill stragety
+    auto& mem_resource_mgr = op->mem_resource_manager();
+    if (state->enable_spill() && mem_resource_mgr.releaseable() &&
+        op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
+        int64_t request_reserved = 0;
+        if (chunk == nullptr) {
+            request_reserved = op->estimated_memory_reserved();
+        } else {
+            request_reserved = op->estimated_memory_reserved(chunk);
+        }
+        request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
+
+        if (!tls_thread_status.try_mem_reserve(request_reserved, tracker,
+                                               tracker->limit() * state->spill_mem_limit_threshold())) {
+            mem_resource_mgr.to_low_memory_mode();
+        }
+    }
+}
+
+>>>>>>> c1a3351a1 ([BugFix] fix wrong consumption in mem_tracker under auto spill mode (#25657))
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
