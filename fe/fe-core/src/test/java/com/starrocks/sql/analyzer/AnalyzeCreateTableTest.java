@@ -384,4 +384,13 @@ public class AnalyzeCreateTableTest {
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         AnalyzeTestUtil.getConnectContext().setDatabase("test");
     }
+
+    @Test
+    public void testGeneratedColumnWithExternalTable() throws Exception {
+        analyzeFail("create external table ex_hive_tbl0 (col_tinyint tinyint null comment \"column tinyint\"," + 
+                    "col_varchar varchar(5), col_boolean boolean null comment \"column boolean\", col_new int" + 
+                    "as col_tinyint+1) ENGINE=hive properties (\"resource\" = \"hive_resource\"," +
+                    "\"table\" = \"hive_hdfs_orc_nocompress\"," +
+                    "\"database\" = \"hive_extbl_test\");");
+    }
 }
