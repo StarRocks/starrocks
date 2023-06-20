@@ -72,7 +72,7 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
         }
 
         // get column type
-        LogicalType type = _tablet->tablet_schema().column(index).type();
+        LogicalType type = _tablet->tablet_schema()->column(index).type();
         _collect_context.seg_collecter_params.field_type.emplace_back(type);
 
         // get collect field

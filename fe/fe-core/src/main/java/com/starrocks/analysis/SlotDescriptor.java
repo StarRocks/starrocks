@@ -47,7 +47,12 @@ import com.starrocks.thrift.TSlotDescriptor;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 public class SlotDescriptor {
+
+    private static final Logger LOG = LogManager.getLogger(SlotDescriptor.class);
     private final SlotId id;
     private final TupleDescriptor parent;
     private Type type;
@@ -232,8 +237,9 @@ public class SlotDescriptor {
         }
         Preconditions.checkState(isMaterialized, "isMaterialized must be true");
 
+        TSlotDescriptor tSlotDescriptor;
         if (originType != null) {
-            return new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
+            tSlotDescriptor = new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
                     -1, -1,
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),
                     -1, true);
@@ -244,11 +250,18 @@ public class SlotDescriptor {
             if (type.isNull()) {
                 type = ScalarType.BOOLEAN;
             }
-            return new TSlotDescriptor(id.asInt(), parent.getId().asInt(), type.toThrift(), -1,
+            tSlotDescriptor = new TSlotDescriptor(id.asInt(), parent.getId().asInt(), type.toThrift(), -1,
                     -1, -1,
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),
                     -1, true);
         }
+
+        if (column != null) {
+            LOG.debug("column name:{}, column unique id:{}", column.getName(), column.getUniqueId());
+            tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+        }
+
+        return tSlotDescriptor;
     }
 
     public String debugString() {

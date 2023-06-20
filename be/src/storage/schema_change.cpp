@@ -250,7 +250,8 @@ void ChunkMerger::_pop_heap() {
 }
 
 Status LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
+                                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                                   TabletSchemaCSPtr base_tablet_schema) {
 #ifndef BE_TEST
     Status st = CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange");
     if (!st.ok()) {
@@ -271,9 +272,11 @@ Status LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowse
 }
 
 Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                                     TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
+                                     TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                                     TabletSchemaCSPtr base_tablet_schema) {
+    auto cur_base_tablet_schema = !base_tablet_schema ? base_tablet->tablet_schema() : base_tablet_schema;
     Schema base_schema =
-            ChunkHelper::convert_schema(base_tablet->tablet_schema(), _chunk_changer->get_selected_column_indexes());
+            ChunkHelper::convert_schema(cur_base_tablet_schema, _chunk_changer->get_selected_column_indexes());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
@@ -362,10 +365,11 @@ SchemaChangeWithSorting::SchemaChangeWithSorting(ChunkChanger* chunk_changer, si
 
 Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_rowset_writer,
                                         TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
-                                        RowsetSharedPtr rowset) {
+                                        RowsetSharedPtr rowset, TabletSchemaCSPtr base_tablet_schema) {
+    auto cur_base_tablet_schema = !base_tablet_schema ? base_tablet->tablet_schema() : base_tablet_schema;
     MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
     Schema base_schema =
-            ChunkHelper::convert_schema(base_tablet->tablet_schema(), _chunk_changer->get_selected_column_indexes());
+            ChunkHelper::convert_schema(cur_base_tablet_schema, _chunk_changer->get_selected_column_indexes());
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
@@ -544,10 +548,22 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
                                      strings::Substitute("tablet $0 is doing disk balance", new_tablet->tablet_id()));
     }
 
+    // Create a new tablet schema, should merge with dropped columns in light weight schema change
+    TabletSchemaSPtr base_tablet_schema = std::make_shared<TabletSchema>();
+    base_tablet_schema->copy_from(base_tablet->tablet_schema());
+    if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
+        base_tablet_schema->clear_columns();
+        for (const auto& column : request.columns) {
+            base_tablet_schema->append_column(TabletColumn(column));
+        }
+    }
+
     SchemaChangeParams sc_params;
     sc_params.base_tablet = base_tablet;
     sc_params.new_tablet = new_tablet;
-    sc_params.chunk_changer = std::make_unique<ChunkChanger>(sc_params.new_tablet->tablet_schema());
+    auto tablet_schema_ptr = new_tablet->tablet_schema();
+    sc_params.chunk_changer = std::make_unique<ChunkChanger>(tablet_schema_ptr);
+    sc_params.base_tablet_schema = base_tablet_schema;
 
     if (request.__isset.materialized_view_params && request.materialized_view_params.size() > 0) {
         if (!request.__isset.query_options || !request.__isset.query_globals) {
@@ -568,7 +584,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     // primary key do not support materialized view, initialize materialized_params_map here,
     // just for later column_mapping of _parse_request.
     SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
-    Status status = SchemaChangeUtils::parse_request(base_tablet->tablet_schema(), new_tablet->tablet_schema(),
+    Status status = SchemaChangeUtils::parse_request(base_tablet_schema, tablet_schema_ptr,
                                                      sc_params.chunk_changer.get(), sc_params.materialized_params_map,
                                                      !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
                                                      &sc_params.sc_directly, &materialized_column_idxs);
@@ -601,15 +617,15 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-        const auto& base_sort_key_idxes = base_tablet->tablet_schema().sort_key_idxes();
-        const auto& new_sort_key_idxes = new_tablet->tablet_schema().sort_key_idxes();
+        const auto& base_sort_key_idxes = base_tablet->tablet_schema()->sort_key_idxes();
+        const auto& new_sort_key_idxes = new_tablet->tablet_schema()->sort_key_idxes();
         std::vector<int32_t> base_sort_key_unique_ids;
         std::vector<int32_t> new_sort_key_unique_ids;
         for (auto idx : base_sort_key_idxes) {
-            base_sort_key_unique_ids.emplace_back(base_tablet->tablet_schema().column(idx).unique_id());
+            base_sort_key_unique_ids.emplace_back(base_tablet->tablet_schema()->column(idx).unique_id());
         }
         for (auto idx : new_sort_key_idxes) {
-            new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema().column(idx).unique_id());
+            new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema()->column(idx).unique_id());
         }
         if (std::mismatch(new_sort_key_unique_ids.begin(), new_sort_key_unique_ids.end(),
                           base_sort_key_unique_ids.begin())
@@ -683,7 +699,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
             }
             // prepare tablet reader to prevent rowsets being compacted
             std::unique_ptr<TabletReader> tablet_reader =
-                    std::make_unique<TabletReader>(base_tablet, version, base_schema);
+                    std::make_unique<TabletReader>(base_tablet, version, base_schema, sc_params.base_tablet_schema);
             RETURN_IF_ERROR(tablet_reader->prepare());
             readers.emplace_back(std::move(tablet_reader));
         }
@@ -842,7 +858,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         writer_context.partition_id = new_tablet->partition_id();
         writer_context.tablet_schema_hash = new_tablet->schema_hash();
         writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
-        writer_context.tablet_schema = &new_tablet->tablet_schema();
+        writer_context.tablet_schema = new_tablet->tablet_schema();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = sc_params.rowsets_to_change[i]->version();
         writer_context.segments_overlap = sc_params.rowsets_to_change[i]->rowset_meta()->segments_overlap();
@@ -858,7 +874,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         }
 
         auto st = sc_procedure->process(sc_params.rowset_readers[i].get(), rowset_writer.get(), new_tablet, base_tablet,
-                                        sc_params.rowsets_to_change[i]);
+                                        sc_params.rowsets_to_change[i], sc_params.base_tablet_schema);
         if (!st.ok()) {
             LOG(WARNING) << _alter_msg_header << "failed to process the schema change. from tablet "
                          << base_tablet->get_tablet_info().to_string() << " to tablet "

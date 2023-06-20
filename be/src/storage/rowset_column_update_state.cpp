@@ -91,7 +91,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
     OlapReaderStatistics stats;
     auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     std::vector<uint32_t> update_columns;
@@ -99,7 +99,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
     for (uint32_t cid : txn_meta.partial_update_column_ids()) {
         update_columns_with_keys.push_back(cid);
-        if (cid >= schema.num_key_columns()) {
+        if (cid >= schema->num_key_columns()) {
             update_columns.push_back(cid);
         }
     }
@@ -295,7 +295,7 @@ static StatusOr<ChunkPtr> read_from_source_segment(Rowset* rowset, const Schema&
                                                    OlapReaderStatistics* stats, int64_t version,
                                                    RowsetSegmentId rowset_seg_id, const std::string& path) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
-    auto segment = Segment::open(fs, path, rowset_seg_id.segment_id, &rowset->schema());
+    auto segment = Segment::open(fs, path, rowset_seg_id.segment_id, rowset->schema());
     if (!segment.ok()) {
         LOG(WARNING) << "Fail to open " << path << ": " << segment.status();
         return segment.status();
@@ -341,7 +341,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
     auto segment_writer =
-            std::make_unique<SegmentWriter>(std::move(wfile), rowsetid_segid.segment_id, tschema.get(), writer_options);
+            std::make_unique<SegmentWriter>(std::move(wfile), rowsetid_segid.segment_id, tschema, writer_options);
     RETURN_IF_ERROR(segment_writer->init(false));
     return std::move(segment_writer);
 }
@@ -434,13 +434,13 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
     std::vector<uint32_t> unique_update_column_ids;
     const auto& tschema = rowset->schema();
     for (int32_t cid : txn_meta.partial_update_column_ids()) {
-        if (cid >= tschema.num_key_columns()) {
+        if (cid >= tschema->num_key_columns()) {
             update_column_ids.push_back(cid);
             update_column_uids.push_back((uint32_t)cid);
         }
     }
     for (uint32_t cid : txn_meta.partial_update_column_unique_ids()) {
-        auto& column = tschema.column(cid);
+        auto& column = tschema->column(cid);
         if (!column.is_key()) {
             unique_update_column_ids.push_back(cid);
         }

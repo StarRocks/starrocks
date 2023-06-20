@@ -49,6 +49,7 @@ struct TSlotDescriptor {
   8: required string colName;
   9: required i32 slotIdx
   10: required bool isMaterialized
+  11: optional i32 col_unique_id = -1
 }
 
 struct TTupleDescriptor {
@@ -191,7 +192,9 @@ struct TColumn {
     6: optional string default_value               
     7: optional bool is_bloom_filter_column     
     8: optional Exprs.TExpr define_expr 
-    9: optional bool is_auto_increment                                                              
+    9: optional bool is_auto_increment
+    10: optional i32 col_unique_id  = -1
+    11: optional bool has_bitmap_index = false
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
@@ -250,6 +253,7 @@ struct TOlapTableIndexSchema {
     1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
+    4: required list<TColumn> columns_desc
 }
 
 struct TOlapTableSchemaParam {

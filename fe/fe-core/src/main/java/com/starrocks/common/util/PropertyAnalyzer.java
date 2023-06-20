@@ -164,6 +164,9 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
 
+    // light schema change
+    public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
+
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
         if (properties == null) {
@@ -512,6 +515,30 @@ public class PropertyAnalyzer {
 
         return schemaVersion;
     }
+
+    public static Boolean analyzeUseLightSchemaChange(Map<String, String> properties) throws AnalysisException {
+        if (properties == null || properties.isEmpty()) {
+            return false;
+        }
+        String value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        // set light schema change false by default
+        if (Config.allow_default_light_schema_change) {
+            properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+            return true;
+        }
+        if (null == value) {
+            return false;
+        }
+        properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
+            return true;
+        } else if (Boolean.FALSE.toString().equalsIgnoreCase(value)) {
+            return false;
+        }
+        throw new AnalysisException(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE
+            + " must be `true` or `false`");
+    }
+
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
                                                         boolean isPrimaryKey) throws AnalysisException {

@@ -160,6 +160,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // foreign key constraint for mv rewrite
     private List<ForeignKeyConstraint> foreignKeyConstraints;
 
+    private Boolean useSchemaLightChange;
+
     private PeriodDuration dataCachePartitionDuration;
 
     public TableProperty(Map<String, String> properties) {
@@ -553,6 +555,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
+    public TableProperty buildUseLightSchemaChange() {
+        useSchemaLightChange = Boolean.parseBoolean(
+            properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE, "false"));
+        return this;
+    }
+
+    public Boolean getUseSchemaLightChange() {
+        return useSchemaLightChange;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
@@ -582,5 +594,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildBinlogAvailableVersion();
         buildConstraint();
         buildDataCachePartitionDuration();
+        buildUseLightSchemaChange();
     }
 }

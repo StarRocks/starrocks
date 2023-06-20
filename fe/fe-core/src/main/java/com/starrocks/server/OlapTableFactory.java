@@ -79,6 +79,7 @@ import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class OlapTableFactory implements AbstractTableFactory {
+
     private static final Logger LOG = LogManager.getLogger(OlapTableFactory.class);
     public static final OlapTableFactory INSTANCE = new OlapTableFactory();
 
@@ -232,7 +233,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setStorageVolume(StorageVolumeMgr.LOCAL);
             }
 
-            if (table.isCloudNativeTable() && !runMode.isAllowCreateLakeTable())  {
+            if (table.isCloudNativeTable() && !runMode.isAllowCreateLakeTable()) {
                 throw new DdlException("Cannot create table with persistent volume in current run mode \"" + runMode + "\"");
             }
             if (table.isOlapTable() && !runMode.isAllowCreateOlapTable()) {
@@ -247,6 +248,26 @@ public class OlapTableFactory implements AbstractTableFactory {
         // set base index id
         long baseIndexId = metastore.getNextId();
         table.setBaseIndexId(baseIndexId);
+
+        // get use light schema change
+        Boolean useLightSchemaChange;
+        try {
+            useLightSchemaChange = PropertyAnalyzer.analyzeUseLightSchemaChange(properties);
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+        // only support olap table use light schema change optimization
+        useLightSchemaChange = useLightSchemaChange;
+        table.setUseLightSchemaChange(useLightSchemaChange);
+        if (useLightSchemaChange) {
+            for (Column column : baseSchema) {
+                column.setUniqueId(table.incAndGetMaxColUniqueId());
+                LOG.debug("table: {}, newColumn: {}, uniqueId: {}", table.getName(), column.getName(),
+                        column.getUniqueId());
+            }
+        } else {
+            LOG.debug("table: {} doesn't use light schema change", table.getName());
+        }
 
         // analyze bloom filter columns
         Set<String> bfColumns = null;
@@ -391,7 +412,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         try {
             colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
             boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
-                                                colocateGroup, false /* expectLakeTable */);
+                    colocateGroup, false /* expectLakeTable */);
             if (table instanceof ExternalOlapTable == false && addedToColocateGroup) {
                 // Colocate table should keep the same bucket number across the partitions
                 DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();

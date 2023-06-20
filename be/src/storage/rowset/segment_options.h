@@ -25,6 +25,7 @@
 #include "storage/disjunctive_predicates.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/seek_range.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 class Condition;
@@ -89,6 +90,8 @@ public:
     const std::atomic<bool>* is_cancelled = nullptr;
 
     std::unordered_map<uint32_t, ColumnAccessPathPtr>* column_access_paths = nullptr;
+
+    TabletSchemaCSPtr tablet_schema = nullptr;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

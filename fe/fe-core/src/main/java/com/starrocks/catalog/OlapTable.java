@@ -211,6 +211,9 @@ public class OlapTable extends Table {
     @SerializedName(value = "storageVolumeId")
     protected String storageVolumeId = "";
 
+    @SerializedName(value = "maxColUniqueId")
+    protected int maxColUniqueId = -1;
+
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -361,6 +364,20 @@ public class OlapTable extends Table {
     public TableProperty getTableProperty() {
         return this.tableProperty;
     }
+
+    public int incAndGetMaxColUniqueId() {
+        this.maxColUniqueId++;
+        return this.maxColUniqueId;
+    }
+
+    public int getMaxColUniqueId() {
+        return this.maxColUniqueId;
+    }
+
+    public void setMaxColUniqueId(int maxColUniqueId) {
+        this.maxColUniqueId = maxColUniqueId;
+    }
+
 
     public boolean dynamicPartitionExists() {
         return tableProperty != null
@@ -1472,6 +1489,7 @@ public class OlapTable extends Table {
             tableProperty.write(out);
         }
         tempPartitions.write(out);
+        out.writeInt(maxColUniqueId);
     }
 
     @Override
@@ -1568,6 +1586,8 @@ public class OlapTable extends Table {
             }
         }
         tempPartitions.unsetPartitionInfo();
+
+        maxColUniqueId = in.readInt();
 
         // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
         // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
@@ -2278,6 +2298,24 @@ public class OlapTable extends Table {
         tableProperty.modifyTableProperties(properties);
         tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
     }
+
+    public Boolean getUseLightSchemaChange() {
+        if (tableProperty != null) {
+            return tableProperty.getUseSchemaLightChange();
+        }
+        // property is set false by default
+        return false;
+    }
+
+    public void setUseLightSchemaChange(boolean useLightSchemaChange) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE,
+                Boolean.valueOf(useLightSchemaChange).toString());
+        tableProperty.buildUseLightSchemaChange();
+    }
+
 
     @Override
     public void onCreate() {

@@ -54,7 +54,7 @@ public:
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, int64_t level) {
         std::srand(std::time(nullptr));
         std::vector<std::string> test_data;
-        auto schema = ChunkHelper::convert_schema(*_tablet_schema);
+        auto schema = ChunkHelper::convert_schema(_tablet_schema);
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 24576 * pow(config::size_tiered_level_multiple + 1, level - 2); ++i) {
             test_data.push_back("well" + std::to_string(std::rand()));
@@ -160,7 +160,7 @@ public:
         rowset_writer_context->partition_id = 10;
         rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/0/12345/1111";
         rowset_writer_context->rowset_state = VISIBLE;
-        rowset_writer_context->tablet_schema = _tablet_schema.get();
+        rowset_writer_context->tablet_schema = _tablet_schema;
         rowset_writer_context->version.first = version;
         rowset_writer_context->version.second = version;
     }
@@ -326,7 +326,7 @@ public:
 
 protected:
     StorageEngine* _engine = nullptr;
-    std::unique_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<TabletSchema> _tablet_schema;
     std::string _schema_hash_path;
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;

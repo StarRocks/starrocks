@@ -286,6 +286,15 @@ public:
 
     void get_basic_info(TabletBasicInfo& info);
 
+    const TabletSchemaCSPtr tablet_schema() const override;
+
+    const TabletSchema& unsafe_tablet_schema_ref() const override;
+
+    const TabletSchemaCSPtr thread_safe_get_tablet_schema() const;
+
+    void update_max_version_schema(const TabletSchemaSPtr& tablet_schema);
+
+
 protected:
     void on_shutdown() override;
 
@@ -328,6 +337,9 @@ private:
     static const int64_t kInvalidCumulativePoint = -1;
 
     TimestampedVersionTracker _timestamped_version_tracker;
+
+    // Max schema_version schema from Rowset or FE
+    TabletSchemaCSPtr _max_version_schema;
 
     OnceFlag _init_once;
     // meta store lock is used for prevent 2 threads do checkpoint concurrently
@@ -414,27 +426,27 @@ inline void Tablet::set_cumulative_layer_point(int64_t new_point) {
 }
 
 inline KeysType Tablet::keys_type() const {
-    return _tablet_meta->tablet_schema().keys_type();
+    return tablet_schema()->keys_type();
 }
 
 inline size_t Tablet::num_columns() const {
-    return _tablet_meta->tablet_schema().num_columns();
+    return tablet_schema()->num_columns();
 }
 
 inline size_t Tablet::num_key_columns() const {
-    return _tablet_meta->tablet_schema().num_key_columns();
+    return tablet_schema()->num_key_columns();
 }
 
 inline size_t Tablet::num_rows_per_row_block() const {
-    return _tablet_meta->tablet_schema().num_rows_per_row_block();
+    return tablet_schema()->num_rows_per_row_block();
 }
 
 inline size_t Tablet::next_unique_id() const {
-    return _tablet_meta->tablet_schema().next_column_unique_id();
+    return tablet_schema()->next_column_unique_id();
 }
 
 inline size_t Tablet::field_index(const string& field_name) const {
-    return _tablet_meta->tablet_schema().field_index(field_name);
+    return tablet_schema()->field_index(field_name);
 }
 
 inline bool Tablet::enable_shortcut_compaction() const {

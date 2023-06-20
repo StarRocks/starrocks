@@ -20,7 +20,8 @@ namespace starrocks {
 
 SegmentRewriter::SegmentRewriter() = default;
 
-Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
+Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path,
+                                const std::shared_ptr<const TabletSchema>& tschema,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>& columns,
                                 uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
@@ -49,7 +50,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     }
 
     SegmentWriterOptions opts;
-    SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
+    SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
     auto schema = ChunkHelper::convert_schema(tschema, column_ids);
@@ -69,7 +70,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
-Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
+Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchemaCSPtr& tschema,
                                 AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns) {
     if (column_ids.size() == 0) {
@@ -88,7 +89,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     std::vector<uint32_t> src_column_ids;
     std::set<uint32_t> update_columns_set(column_ids.begin(), column_ids.end());
 
-    for (auto i = 0; i < tschema.num_columns(); ++i) {
+    for (auto i = 0; i < tschema->num_columns(); ++i) {
         if (i != auto_increment_column_id && update_columns_set.find(i) == update_columns_set.end()) {
             src_column_ids.emplace_back(i);
         }
@@ -116,14 +117,14 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path));
 
-    std::vector<uint32_t> full_column_ids(tschema.num_columns());
+    std::vector<uint32_t> full_column_ids(tschema->num_columns());
     std::iota(full_column_ids.begin(), full_column_ids.end(), 0);
     auto schema = ChunkHelper::convert_schema(tschema, full_column_ids);
     auto chunk = ChunkHelper::new_chunk(schema, full_column_ids.size());
 
     size_t update_columns_index = 0;
     size_t read_columns_index = 0;
-    for (int i = 0; i < tschema.num_columns(); ++i) {
+    for (int i = 0; i < tschema->num_columns(); ++i) {
         if (i == auto_increment_column_id) {
             chunk->get_column_by_index(i).reset(auto_increment_partial_update_state.write_column.release());
         } else if (update_columns_set.find(i) != update_columns_set.end()) {
@@ -136,7 +137,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     }
 
     SegmentWriterOptions opts;
-    SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
+    SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(full_column_ids, true));
 
     uint64_t index_size = 0;
@@ -151,7 +152,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
-Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
+Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchemaCSPtr& tschema,
                                 starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns,
                                 const starrocks::lake::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet) {
@@ -167,7 +168,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     std::vector<uint32_t> src_column_ids;
     std::set<uint32_t> update_columns_set(column_ids.begin(), column_ids.end());
 
-    for (auto i = 0; i < tschema.num_columns(); ++i) {
+    for (auto i = 0; i < tschema->num_columns(); ++i) {
         if (i != auto_increment_column_id && update_columns_set.find(i) == update_columns_set.end()) {
             src_column_ids.emplace_back(i);
         }
@@ -201,14 +202,14 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path));
 
-    std::vector<uint32_t> full_column_ids(tschema.num_columns());
+    std::vector<uint32_t> full_column_ids(tschema->num_columns());
     std::iota(full_column_ids.begin(), full_column_ids.end(), 0);
     auto schema = ChunkHelper::convert_schema(tschema, full_column_ids);
     auto chunk = ChunkHelper::new_chunk(schema, full_column_ids.size());
 
     size_t update_columns_index = 0;
     size_t read_columns_index = 0;
-    for (int i = 0; i < tschema.num_columns(); ++i) {
+    for (int i = 0; i < tschema->num_columns(); ++i) {
         if (i == auto_increment_column_id) {
             chunk->get_column_by_index(i).reset(auto_increment_partial_update_state.write_column.release());
         } else if (update_columns_set.find(i) != update_columns_set.end()) {
@@ -221,7 +222,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     }
 
     SegmentWriterOptions opts;
-    SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
+    SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(full_column_ids, true));
 
     uint64_t index_size = 0;
@@ -233,7 +234,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     return Status::OK();
 }
 
-Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema& tschema,
+Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchemaCSPtr& tschema,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>& columns,
                                 uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(src_path));
@@ -249,7 +250,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema&
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(fopts, src_path));
 
     SegmentWriterOptions opts;
-    SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
+    SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
     auto schema = ChunkHelper::convert_schema(tschema, column_ids);

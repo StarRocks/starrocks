@@ -40,8 +40,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterCancelException;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeMaterializedView;
@@ -63,6 +66,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.Nullable;
 
 /**
@@ -179,6 +184,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     // table(view)'s comment
     @SerializedName(value = "comment")
     protected String comment = "";
+    // table readwrite lock
+    protected ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock(true);
+    public volatile boolean isDropped = false;
 
     // not serialized field
     // record all materialized views based on this Table
@@ -593,6 +601,107 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     @Override
     public String toString() {
         return "Table [id=" + id + ", name=" + name + ", type=" + type + "]";
+    }
+
+    public void markDropped() {
+        isDropped = true;
+    }
+
+    public void unmarkDropped() {
+        isDropped = false;
+    }
+
+    public void readLock() {
+        this.rwLock.readLock().lock();
+    }
+
+    public boolean tryReadLock(long timeout, TimeUnit unit) {
+        try {
+            return this.rwLock.readLock().tryLock(timeout, unit);
+        } catch (InterruptedException e) {
+            LOG.warn("failed to try read lock at table[" + name + "]", e);
+            return false;
+        }
+    }
+
+    public void readUnlock() {
+        this.rwLock.readLock().unlock();
+    }
+
+    public void writeLock() {
+        this.rwLock.writeLock().lock();
+    }
+
+    public boolean writeLockIfExist() {
+        this.rwLock.writeLock().lock();
+        if (isDropped) {
+            this.rwLock.writeLock().unlock();
+            return false;
+        }
+        return true;
+    }
+
+    public boolean tryWriteLock(long timeout, TimeUnit unit) {
+        try {
+            return this.rwLock.writeLock().tryLock(timeout, unit);
+        } catch (InterruptedException e) {
+            LOG.warn("failed to try write lock at table[" + name + "]", e);
+            return false;
+        }
+    }
+
+    public void writeUnlock() {
+        this.rwLock.writeLock().unlock();
+    }
+
+    public boolean isWriteLockHeldByCurrentThread() {
+        return this.rwLock.writeLock().isHeldByCurrentThread();
+    }
+
+    public <E extends Exception> void writeLockOrException(E e) throws E {
+        writeLock();
+        if (isDropped) {
+            writeUnlock();
+            throw e;
+        }
+    }
+
+    public void writeLockOrDdlException() throws DdlException {
+        writeLockOrException(new DdlException("unknown table, tableName=" + name));
+    }
+
+    public void writeLockOrMetaException() throws MetaNotFoundException {
+        writeLockOrException(new MetaNotFoundException("unknown table, tableName=" + name));
+    }
+
+    public void writeLockOrAlterCancelException() throws AlterCancelException {
+        writeLockOrException(new AlterCancelException("unknown table, tableName=" + name));
+    }
+
+    public boolean tryWriteLockOrMetaException(long timeout, TimeUnit unit) throws MetaNotFoundException {
+        return tryWriteLockOrException(timeout, unit, new MetaNotFoundException("unknown table, tableName=" + name));
+    }
+
+    public <E extends Exception> boolean tryWriteLockOrException(long timeout, TimeUnit unit, E e) throws E {
+        if (tryWriteLock(timeout, unit)) {
+            if (isDropped) {
+                writeUnlock();
+                throw e;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    public boolean tryWriteLockIfExist(long timeout, TimeUnit unit) {
+        if (tryWriteLock(timeout, unit)) {
+            if (isDropped) {
+                writeUnlock();
+                return false;
+            }
+            return true;
+        }
+        return false;
     }
 
     /*

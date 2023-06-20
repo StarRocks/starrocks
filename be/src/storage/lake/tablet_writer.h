@@ -100,11 +100,11 @@ public:
     virtual RowsetTxnMetaPB* rowset_txn_meta() = 0;
 
     // allow to set custom tablet schema for writer, used in partial update
-    void set_tablet_schema(std::shared_ptr<const TabletSchema> schema) { _schema = std::move(schema); }
+    void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
 protected:
     Tablet _tablet;
-    std::shared_ptr<const TabletSchema> _schema;
+    TabletSchemaCSPtr _schema;
     int64_t _txn_id;
     std::vector<std::string> _files;
     int64_t _num_rows = 0;

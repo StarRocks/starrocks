@@ -72,7 +72,8 @@ public:
     virtual ~SchemaChange() = default;
 
     virtual Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
-                           TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
+                           TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                           TabletSchemaCSPtr base_tablet_schema = nullptr) = 0;
     void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
     std::string alter_msg_header() { return _alter_msg_header; }
 
@@ -85,7 +86,8 @@ public:
     ~LinkedSchemaChange() override = default;
 
     Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                   TabletSchemaCSPtr base_tablet_schema = nullptr) override;
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
@@ -99,7 +101,8 @@ public:
     ~SchemaChangeDirectly() override = default;
 
     Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                   TabletSchemaCSPtr base_tablet_schema = nullptr) override;
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
@@ -113,7 +116,8 @@ public:
     ~SchemaChangeWithSorting() override = default;
 
     Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                   TabletSchemaCSPtr base_tablet_schema = nullptr) override;
 
     static Status _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
                                     TabletSharedPtr tablet);
@@ -140,6 +144,7 @@ private:
         TabletSharedPtr new_tablet;
         std::vector<std::unique_ptr<TabletReader>> rowset_readers;
         Version version;
+        TabletSchemaCSPtr base_tablet_schema = nullptr;
         MaterializedViewParamMap materialized_params_map;
         std::vector<RowsetSharedPtr> rowsets_to_change;
         bool sc_sorting = false;

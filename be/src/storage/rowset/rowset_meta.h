@@ -45,6 +45,7 @@
 #include "json2pb/json_to_pb.h"
 #include "json2pb/pb_to_json.h"
 #include "storage/olap_common.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 
@@ -199,6 +200,15 @@ public:
 
     const RowsetMetaPB& get_meta_pb() const { return *_rowset_meta_pb; }
 
+    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema_ptr) {
+        TabletSchemaPB* ts_pb = _rowset_meta_pb->mutable_tablet_schema();
+        tablet_schema_ptr->to_schema_pb(ts_pb);
+        CHECK(_schema == nullptr);
+        _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
+    }
+
+    const TabletSchemaCSPtr tablet_schema() { return _schema; }
+
 private:
     bool _deserialize_from_pb(std::string_view value) {
         return _rowset_meta_pb->ParseFromArray(value.data(), value.size());
@@ -209,6 +219,9 @@ private:
             _rowset_id.init(_rowset_meta_pb->deprecated_rowset_id());
         } else {
             _rowset_id.init(_rowset_meta_pb->rowset_id());
+        }
+        if (_rowset_meta_pb->has_tablet_schema()) {
+            _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
         }
     }
 
@@ -237,6 +250,8 @@ private:
     std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
     RowsetId _rowset_id;
     bool _is_removed_from_rowset_meta = false;
+    TabletSchemaCSPtr _schema = nullptr;
+
 };
 
 } // namespace starrocks

@@ -95,9 +95,9 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
     }
 
     OlapReaderStatistics stats;
-    auto& schema = rowset->schema();
+    const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
@@ -147,9 +147,9 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     auto span = Tracer::Instance().start_trace_txn_tablet("rowset_update_state_load", rowset->txn_id(),
                                                           tablet->tablet_id());
     _tablet_id = tablet->tablet_id();
-    auto& schema = rowset->schema();
+    const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
@@ -181,9 +181,9 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
 }
 
 Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
-    auto& schema = rowset->schema();
+    const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
@@ -195,9 +195,9 @@ Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
 }
 
 Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
-    auto& schema = rowset->schema();
+    const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
@@ -316,14 +316,14 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
 
     int64_t t_start = MonotonicMillis();
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
-    const auto& tablet_schema = tablet->tablet_schema();
+    const auto tablet_schema = tablet->tablet_schema();
 
     std::vector<uint32_t> update_column_ids(txn_meta.partial_update_column_ids().begin(),
                                             txn_meta.partial_update_column_ids().end());
     std::set<uint32_t> update_columns_set(update_column_ids.begin(), update_column_ids.end());
 
     std::vector<uint32_t> read_column_ids;
-    for (uint32_t i = 0; i < tablet_schema.num_columns(); i++) {
+    for (uint32_t i = 0; i < tablet_schema->num_columns(); i++) {
         if (update_columns_set.find(i) == update_columns_set.end()) {
             read_column_ids.push_back(i);
         }
@@ -399,7 +399,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
     }
 
     _auto_increment_partial_update_states[idx].init(
-            rowset, schema != nullptr ? schema.get() : const_cast<TabletSchema*>(&tablet->tablet_schema()),
+            rowset, schema != nullptr ? schema : tablet->tablet_schema(),
             column_id[0], idx);
     _auto_increment_partial_update_states[idx].src_rss_rowids.resize(_upserts[idx]->size());
 
@@ -587,12 +587,13 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     std::vector<uint32_t> read_column_ids;
     // currently assume it's a partial update (explict for normal, implict for auto increment)
     if (!txn_meta.partial_update_column_ids().empty()) {
-        const auto& tschema = tablet->tablet_schema();
+        const auto tschema = tablet->tablet_schema();
+
         // columns supplied in rowset
         std::vector<uint32_t> update_colum_ids(txn_meta.partial_update_column_ids().begin(),
                                                txn_meta.partial_update_column_ids().end());
         std::set<uint32_t> update_columns_set(update_colum_ids.begin(), update_colum_ids.end());
-        for (uint32_t i = 0; i < tschema.num_columns(); i++) {
+        for (uint32_t i = 0; i < tschema->num_columns(); i++) {
             if (update_columns_set.find(i) == update_columns_set.end()) {
                 read_column_ids.push_back(i);
             }

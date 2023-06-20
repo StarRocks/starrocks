@@ -130,6 +130,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             chunk->append_column(std::move(column), slot->id());
         }
     }
+    _collect_context.seg_collecter_params.tablet_schema = _params.tablet->tablet_schema();
     return Status::OK();
 }
 
@@ -159,7 +160,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
         if (_params->read_page[i]) {
             auto cid = _params->cids[i];
             if (_column_iterators[cid] == nullptr) {
-                ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid));
+                ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid, nullptr, _params->tablet_schema));
 
                 ColumnIteratorOptions iter_opts;
                 iter_opts.check_dict_encoding = true;

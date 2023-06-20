@@ -46,6 +46,8 @@
 #include "storage/tablet_updates.h"
 #include "util/uid_util.h"
 #include "util/url_coding.h"
+#include "storage/utils.h"
+#include "storage/metadata_util.h"
 
 namespace starrocks {
 
@@ -56,7 +58,7 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
     *tablet_meta = std::make_shared<TabletMeta>(
             request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash, shard_id,
             request.tablet_schema, next_unique_id,
-            request.__isset.enable_persistent_index ? request.enable_persistent_index : false, col_ordinal_to_unique_id,
+            request.__isset.enable_persistent_index && request.enable_persistent_index, col_ordinal_to_unique_id,
             tablet_uid, request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
             request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME);
 
@@ -71,6 +73,16 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
 
 TabletMetaSharedPtr TabletMeta::create() {
     return std::make_shared<TabletMeta>();
+}
+
+RowsetMetaSharedPtr & TabletMeta::rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets) {
+    return *std::max_element(
+            rowsets.begin(), rowsets.end(),
+            [](const RowsetMetaSharedPtr &a, const RowsetMetaSharedPtr &b) {
+                return !a->tablet_schema()
+                       || (b->tablet_schema()
+                           && a->tablet_schema()->schema_version() < b->tablet_schema()->schema_version());
+            });
 }
 
 TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,

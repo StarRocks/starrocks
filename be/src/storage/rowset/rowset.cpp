@@ -32,8 +32,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/rowset/rowset.h"
-
 #include <unistd.h>
 
 #include <memory>
@@ -64,12 +62,13 @@
 
 namespace starrocks {
 
-Rowset::Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta)
-        : _schema(schema),
-          _rowset_path(std::move(rowset_path)),
+Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta)
+        : _rowset_path(std::move(rowset_path)),
           _rowset_meta(std::move(rowset_meta)),
           _refs_by_reader(0) {
     MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+    _schema = _rowset_meta->tablet_schema() ? _rowset_meta->tablet_schema() : schema;
+    DCHECK(_schema);
 }
 
 Rowset::~Rowset() {
@@ -477,7 +476,6 @@ StatusOr<ChunkIteratorPtr> Rowset::new_iterator(const Schema& schema, const Rows
 Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptions& options,
                                      std::vector<ChunkIteratorPtr>* segment_iterators) {
     RowsetReleaseGuard guard(shared_from_this());
-
     RETURN_IF_ERROR(load());
 
     SegmentReadOptions seg_options;
@@ -494,6 +492,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
     seg_options.column_access_paths = options.column_access_paths;
+    seg_options.tablet_schema = options.tablet_schema;
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }

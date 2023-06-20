@@ -43,6 +43,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "runtime/global_dict/types.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 
@@ -89,7 +90,7 @@ struct SegmentWriterOptions {
 //
 class SegmentWriter {
 public:
-    SegmentWriter(std::unique_ptr<WritableFile> block, uint32_t segment_id, const TabletSchema* tablet_schema,
+    SegmentWriter(std::unique_ptr<WritableFile> block, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                   SegmentWriterOptions opts);
     ~SegmentWriter();
 
@@ -134,7 +135,7 @@ private:
     void _init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column);
 
     uint32_t _segment_id;
-    const TabletSchema* _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
     SegmentWriterOptions _opts;
 
     std::unique_ptr<WritableFile> _wfile;

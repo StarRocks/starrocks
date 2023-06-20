@@ -47,7 +47,7 @@ struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     std::unique_ptr<Column> write_column;
     Rowset* rowset;
-    TabletSchema* schema;
+    TabletSchemaCSPtr schema;
     uint32_t id;
     uint32_t segment_id;
     std::vector<uint32_t> rowids;
@@ -55,7 +55,7 @@ struct AutoIncrementPartialUpdateState {
     bool skip_rewrite;
     AutoIncrementPartialUpdateState() : rowset(nullptr), schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
 
-    void init(Rowset* rowset, TabletSchema* schema, uint32_t id, uint32_t segment_id) {
+    void init(Rowset* rowset, TabletSchemaCSPtr schema, uint32_t id, uint32_t segment_id) {
         this->rowset = rowset;
         this->schema = schema;
         this->id = id;

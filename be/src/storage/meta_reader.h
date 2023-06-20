@@ -57,6 +57,8 @@ struct SegmentMetaCollecterParams {
     std::vector<bool> read_page;
     std::vector<LogicalType> field_type;
     int32_t max_cid;
+    bool use_page_cache;
+    TabletSchemaCSPtr tablet_schema;
 };
 
 // MetaReader will implements
