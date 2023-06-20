@@ -39,8 +39,9 @@
 #include "serde/column_array_serde.h"
 
 namespace starrocks::spill {
-<<<<<<< HEAD
-SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
+
+SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
+    total_spill_bytes = total_spill_bytes_;
     spill_timer = ADD_TIMER(profile, "SpillTime");
     spill_rows = ADD_COUNTER(profile, "SpilledRows", TUnit::UNIT);
     flush_timer = ADD_TIMER(profile, "SpillFlushTimer");
@@ -49,14 +50,6 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     restore_timer = ADD_TIMER(profile, "SpillRestoreTimer");
     shuffle_timer = ADD_TIMER(profile, "SpillShuffleTimer");
     split_partition_timer = ADD_TIMER(profile, "SplitPartitionTimer");
-=======
-
-SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
-    _spiller_metrics = std::make_shared<RuntimeProfile>("SpillerMetrics");
-    total_spill_bytes = total_spill_bytes_;
-    profile->add_child(_spiller_metrics.get(), true, nullptr);
->>>>>>> fdc805697 ([Enhancement] add disk_spill in runtime query statistics  (#25462))
-
     flush_bytes = ADD_COUNTER(profile, "SpillFlushBytes", TUnit::BYTES);
     restore_bytes = ADD_COUNTER(profile, "SpillRestoreBytes", TUnit::BYTES);
     serialize_timer = ADD_TIMER(profile, "SpillSerializeTimer");
