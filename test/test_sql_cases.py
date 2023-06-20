@@ -200,3 +200,85 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             # set variable dynamically
             if var:
                 self.__setattr__(var, actual_res)
+<<<<<<< HEAD
+=======
+
+    def _init_data(self, sql_list: List[str]) -> List[str]:
+        self.db = list()
+        self.resource = list()
+
+        sql_list = self._replace_uuid_variables(sql_list)
+
+        for sql in sql_list:
+            db_name = self._get_db_name(sql)
+            if len(db_name) > 0:
+                self.db.append(db_name)
+            resource_name = self._get_resource_name(sql)
+            if len(resource_name) > 0:
+                self.resource.append(resource_name)
+
+        self._clear_db_and_resource_if_exists()
+
+        if len(self.db) == 0:
+            self._create_and_use_db()
+
+        return sql_list
+
+    def _clear_db_and_resource_if_exists(self):
+        for each_db in self.db:
+            log.info("init drop db: %s" % each_db)
+            self.drop_database(each_db)
+
+        for each_resource in self.resource:
+            log.info("init drop resource: %s" % each_resource)
+            self.drop_resource(each_resource)
+
+    def _create_and_use_db(self):
+        db_name = "test_db_%s" % uuid.uuid1().hex
+        self.db.append(db_name)
+        self.execute_sql("CREATE DATABASE %s;" % db_name)
+        self.execute_sql("USE %s;" % db_name)
+        print("[SQL]: CREATE DATABASE %s;" % db_name)
+        print("[SQL]: USE %s;" % db_name)
+
+    def _check_db_unique(self):
+        all_db_dict = dict()
+        for case in case_list:
+            sql_list = self._replace_uuid_variables(case.sql)
+            for sql in sql_list:
+                db_name = self._get_db_name(sql)
+                if len(db_name) > 0:
+                    all_db_dict.setdefault(db_name, set()).add(case.name)
+        error_info_dict = {db: cases for db, cases in all_db_dict.items() if len(cases) > 1}
+        tools.assert_true(len(error_info_dict) <= 0, "Pre Check Failed, Duplicate DBs: \n%s" % json.dumps(error_info_dict, indent=2))
+
+    @staticmethod
+    def _replace_uuid_variables(sql_list: List[str]) -> List[str]:
+        ret = list()
+        variable_dict = dict()
+        for sql in sql_list:
+            uuid_vars = re.findall(r"\${(uuid[0-9]*)}", sql)
+            for each_uuid in uuid_vars:
+                if each_uuid not in variable_dict:
+                    variable_dict[each_uuid] = uuid.uuid1().hex
+
+        for sql in sql_list:
+            for each_var in variable_dict:
+                sql = sql.replace("${%s}" % each_var, variable_dict[each_var])
+            ret.append(sql)
+        return ret
+
+    @staticmethod
+    def _get_db_name(sql: str) -> str:
+        db_name = ""
+        if "CREATE DATABASE" in sql.upper():
+            db_name = sql.rstrip(";").strip().split(" ")[-1]
+        return db_name
+
+    @staticmethod
+    def _get_resource_name(sql: str) -> str:
+        matches = list()
+        if "CREATE EXTERNAL RESOURCE" in sql.upper():
+            matches = re.findall(r'CREATE EXTERNAL RESOURCE \"?([a-zA-Z0-9_-]+)\"?', sql, flags=re.IGNORECASE)
+        return matches[0] if len(matches) > 0 else ""
+>>>>>>> 55d6ef534 ([Tool]fix bug (#25605))
