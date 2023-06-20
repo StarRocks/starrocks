@@ -101,7 +101,9 @@ The type of your data source. Set the value to `hive`.
 
 #### GeneralParams
 
-`GeneralParams` 包含如下参数。
+A set of general parameters.
+
+The following table describes the parameters you can configure in `GeneralParams`.
 
 | Parameter                | Required | Description                                                  |
 | ------------------------ | -------- | ------------------------------------------------------------ |
