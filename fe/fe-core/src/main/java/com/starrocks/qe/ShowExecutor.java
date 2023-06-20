@@ -54,11 +54,9 @@ import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -117,7 +115,7 @@ import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeCollection;
+import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.TablePEntryObject;
@@ -205,6 +203,7 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.Warehouse;
@@ -863,12 +862,7 @@ public class ShowExecutor {
                     LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
                     continue;
                 }
-                if (table.isView()) {
-                    if (!PrivilegeActions.checkAnyActionOnView(
-                            connectContext, catalogName, db.getFullName(), table.getName())) {
-                        continue;
-                    }
-                } else if (!PrivilegeActions.checkAnyActionOnTable(connectContext,
+                if (!PrivilegeActions.checkAnyActionOnTable(connectContext,
                         catalogName, dbName, tableName)) {
                     continue;
                 }
@@ -996,6 +990,11 @@ public class ShowExecutor {
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
         }
+        String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeIdOfDb(db.getId());
+        if (!Strings.isNullOrEmpty(storageVolumeId)) {
+            StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolume(storageVolumeId);
+            createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(sv.getName()).append("\")");
+        }
         rows.add(Lists.newArrayList(showStmt.getDb(), createSqlBuilder.toString()));
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
@@ -1052,9 +1051,11 @@ public class ShowExecutor {
         if (table.isHiveTable() || table.isHudiTable()) {
             location = ((HiveMetaStoreTable) table).getTableLocation();
         } else if (table.isIcebergTable()) {
-            location = ((IcebergTable) table).getTableLocation();
+            location = table.getTableLocation();
         } else if (table.isDeltalakeTable()) {
-            location = ((DeltaLakeTable) table).getTableLocation();
+            location = table.getTableLocation();
+        } else if (table.isPaimonTable()) {
+            location = table.getTableLocation();
         }
 
         if (!Strings.isNullOrEmpty(location)) {
@@ -2083,7 +2084,7 @@ public class ShowExecutor {
         return catalogOptional.get().getName();
     }
 
-    private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeCollection.PrivilegeEntry privilegeEntry)
+    private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeEntry privilegeEntry)
             throws MetaNotFoundException {
         if (objectType.equals(ObjectType.CATALOG)) {
             CatalogPEntryObject catalogPEntryObject =
@@ -2111,12 +2112,12 @@ public class ShowExecutor {
     }
 
     private List<List<String>> privilegeToRowString(AuthorizationMgr authorizationManager, GrantRevokeClause userOrRoleName,
-                                                    Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>>
-                                                            typeToPrivilegeEntryList) throws PrivilegeException {
+                                                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList)
+            throws PrivilegeException {
         List<List<String>> infos = new ArrayList<>();
-        for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
+        for (Map.Entry<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntry
                 : typeToPrivilegeEntryList.entrySet()) {
-            for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
+            for (PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
                 ObjectType objectType = typeToPrivilegeEntry.getKey();
                 String catalogName;
                 try {
@@ -2163,7 +2164,7 @@ public class ShowExecutor {
                     infos.add(granteeRole);
                 }
 
-                Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
+                Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
                         authorizationManager.getTypeToPrivilegeEntryListByRole(showStmt.getRole());
                 infos.addAll(privilegeToRowString(authorizationManager,
                         new GrantRevokeClause(null, showStmt.getRole()), typeToPrivilegeEntryList));
@@ -2173,7 +2174,7 @@ public class ShowExecutor {
                     infos.add(granteeRole);
                 }
 
-                Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
+                Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
                         authorizationManager.getTypeToPrivilegeEntryListByUser(showStmt.getUserIdent());
                 infos.addAll(privilegeToRowString(authorizationManager,
                         new GrantRevokeClause(showStmt.getUserIdent(), null), typeToPrivilegeEntryList));

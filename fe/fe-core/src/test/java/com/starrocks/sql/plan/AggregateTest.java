@@ -1102,8 +1102,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select v1, sum(v2) from t0";
         plan = getFragmentPlan(sql);
@@ -1125,8 +1124,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select max(v2) from t0 having v1 = 1";
         plan = getFragmentPlan(sql);
@@ -1152,8 +1150,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select v1, max(v2) from t0 having v1 = 1";
         plan = getFragmentPlan(sql);
@@ -1176,8 +1173,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select v1 from t0 group by v2 order by v3";
         plan = getFragmentPlan(sql);
@@ -1220,8 +1216,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0\n"));
+                "     avgRowSize=3.0\n"));
 
         sql = "select v1,abs(v1) + 1 from t0 group by v2 order by v3";
         plan = getFragmentPlan(sql);
@@ -1266,8 +1261,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=3.0\n"));
 
         sql = "select lead(v2) over(partition by v1) from t0 group by v1";
         plan = getFragmentPlan(sql);
@@ -1315,9 +1309,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0\n" +
-                ""));
+                "     avgRowSize=3.0\n"));
 
         connectContext.getSessionVariable().setSqlMode(sqlmode);
     }

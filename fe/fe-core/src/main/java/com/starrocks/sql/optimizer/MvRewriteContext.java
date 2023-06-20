@@ -15,9 +15,12 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rule.Rule;
+import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
@@ -43,6 +46,9 @@ public class MvRewriteContext {
     private ScalarOperator mvPruneConjunct;
 
     private final List<ScalarOperator> onPredicates;
+    private final Rule rule;
+
+    private List<JoinDeriveContext> joinDeriveContexts;
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -50,13 +56,15 @@ public class MvRewriteContext {
             OptExpression queryExpression,
             ReplaceColumnRefRewriter queryColumnRefRewriter,
             PredicateSplit queryPredicateSplit,
-            List<ScalarOperator> onPredicates) {
+            List<ScalarOperator> onPredicates, Rule rule) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
         this.queryColumnRefRewriter = queryColumnRefRewriter;
         this.queryPredicateSplit = queryPredicateSplit;
         this.onPredicates = onPredicates;
+        this.rule = rule;
+        this.joinDeriveContexts = Lists.newArrayList();
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -104,5 +112,17 @@ public class MvRewriteContext {
 
     public List<ScalarOperator> getOnPredicates() {
         return onPredicates;
+    }
+
+    public Rule getRule() {
+        return rule;
+    }
+
+    public void addJoinDeriveContext(JoinDeriveContext joinDeriveContext) {
+        joinDeriveContexts.add(joinDeriveContext);
+    }
+
+    public List<JoinDeriveContext> getJoinDeriveContexts() {
+        return joinDeriveContexts;
     }
 }

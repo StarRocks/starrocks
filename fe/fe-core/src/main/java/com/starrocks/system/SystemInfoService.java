@@ -34,10 +34,7 @@
 
 package com.starrocks.system;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableCollection;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -51,7 +48,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -62,12 +58,12 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
@@ -87,6 +83,7 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -95,7 +92,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class SystemInfoService {
+public class SystemInfoService implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
     public static final String DEFAULT_CLUSTER = "default_cluster";
 
@@ -165,9 +162,6 @@ public class SystemInfoService {
     }
 
     private void setComputeNodeOwner(ComputeNode computeNode) {
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-        Preconditions.checkState(cluster != null);
-        cluster.addComputeNode(computeNode.getId());
         computeNode.setBackendState(BackendState.using);
     }
 
@@ -211,9 +205,6 @@ public class SystemInfoService {
     }
 
     private void setBackendOwner(Backend backend) {
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-        Preconditions.checkState(cluster != null);
-        cluster.addBackend(backend.getId());
         backend.setBackendState(BackendState.using);
     }
 
@@ -300,22 +291,14 @@ public class SystemInfoService {
         // update idToComputeNode
         idToComputeNodeRef.remove(dropComputeNode.getId());
 
-        // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-        if (null != cluster) {
-            // remove worker
-            if (RunMode.allowCreateLakeTable()) {
-                long starletPort = dropComputeNode.getStarletPort();
-                // only need to remove worker after be reported its staretPort
-                if (starletPort != 0) {
-                    String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
-                    GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
-                }
+        // remove worker
+        if (RunMode.allowCreateLakeTable()) {
+            long starletPort = dropComputeNode.getStarletPort();
+            // only need to remove worker after be reported its staretPort
+            if (starletPort != 0) {
+                String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
             }
-
-            cluster.removeComputeNode(dropComputeNode.getId());
-        } else {
-            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
 
         // log
@@ -412,22 +395,14 @@ public class SystemInfoService {
         copiedReportVerions.remove(droppedBackend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
-        // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-        if (null != cluster) {
-            // remove worker
-            if (RunMode.allowCreateLakeTable()) {
-                long starletPort = droppedBackend.getStarletPort();
-                // only need to remove worker after be reported its staretPort
-                if (starletPort != 0) {
-                    String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                    GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
-                }
+        // remove worker
+        if (RunMode.allowCreateLakeTable()) {
+            long starletPort = droppedBackend.getStarletPort();
+            // only need to remove worker after be reported its staretPort
+            if (starletPort != 0) {
+                String workerAddr = droppedBackend.getHost() + ":" + starletPort;
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
             }
-
-            cluster.removeBackend(droppedBackend.getId());
-        } else {
-            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
 
         // log
@@ -790,35 +765,6 @@ public class SystemInfoService {
         return ImmutableMap.copyOf(idToComputeNodeRef);
     }
 
-    public ImmutableCollection<ComputeNode> getComputeNodes() {
-        List<Long> computeNodeIds = getComputeNodeIds(true);
-        if (computeNodeIds != null && computeNodeIds.size() > 0) {
-            return getComputeNodes(true);
-        } else {
-            return getBackends(true);
-        }
-    }
-
-    public ImmutableCollection<ComputeNode> getComputeNodes(boolean needAlive) {
-        ImmutableMap<Long, ComputeNode> idToComputeNode = ImmutableMap.copyOf(idToComputeNodeRef);
-        List<Long> computeNodeIds = getComputeNodeIds(needAlive);
-        List<ComputeNode> computeNodes = new ArrayList<>();
-        for (Long computeNodeId : computeNodeIds) {
-            computeNodes.add(idToComputeNode.get(computeNodeId));
-        }
-        return ImmutableList.copyOf(computeNodes);
-    }
-
-    public ImmutableCollection<ComputeNode> getBackends(boolean needAlive) {
-        ImmutableMap<Long, Backend> idToComputeNode = ImmutableMap.copyOf(idToBackendRef);
-        List<Long> backendIds = getBackendIds(needAlive);
-        List<ComputeNode> backends = new ArrayList<>();
-        for (Long backendId : backendIds) {
-            backends.add(idToComputeNode.get(backendId));
-        }
-        return ImmutableList.copyOf(backends);
-    }
-
     public long getBackendReportVersion(long backendId) {
         AtomicLong atomicLong;
         if ((atomicLong = idToReportVersionRef.get(backendId)) == null) {
@@ -913,7 +859,7 @@ public class SystemInfoService {
         this.idToReportVersionRef = ImmutableMap.of();
     }
 
-    public static Pair<String, Integer> validateHostAndPort(String hostPort) throws AnalysisException {
+    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) throws AnalysisException {
         hostPort = hostPort.replaceAll("\\s+", "");
         if (hostPort.isEmpty()) {
             throw new AnalysisException("Invalid host port: " + hostPort);
@@ -932,7 +878,7 @@ public class SystemInfoService {
         int heartbeatPort = -1;
         try {
             // validate host
-            if (!InetAddressValidator.getInstance().isValid(host) && !FrontendOptions.isUseFqdn()) {
+            if (resolveHost && !InetAddressValidator.getInstance().isValid(host)) {
                 // maybe this is a hostname
                 // if no IP address for the host could be found, 'getByName'
                 // will throw
@@ -960,18 +906,6 @@ public class SystemInfoService {
         // update idToComputeNode
         newComputeNode.setBackendState(BackendState.using);
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
-
-        // to add compute to DEFAULT_CLUSTER
-        if (newComputeNode.getBackendState() == BackendState.using) {
-            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-            if (null != cluster) {
-                // replay log
-                cluster.addComputeNode(newComputeNode.getId());
-            } else {
-                // This happens in loading image when fe is restarted, because loadCluster is after loadComputeNode,
-                // cluster is not created. CN in cluster will be updated in loadCluster.
-            }
-        }
     }
 
     public void replayAddBackend(Backend newBackend) {
@@ -982,18 +916,6 @@ public class SystemInfoService {
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.put(newBackend.getId(), new AtomicLong(0L));
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
-
-        // to add be to DEFAULT_CLUSTER
-        if (newBackend.getBackendState() == BackendState.using) {
-            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-            if (null != cluster) {
-                // replay log
-                cluster.addBackend(newBackend.getId());
-            } else {
-                // This happens in loading image when fe is restarted, because loadCluster is after loadBackend,
-                // cluster is not created. Be in cluster will be updated in loadCluster.
-            }
-        }
     }
 
     public void replayDropComputeNode(long computeNodeId) {
@@ -1001,21 +923,14 @@ public class SystemInfoService {
         // update idToComputeNode
         ComputeNode cn = idToComputeNodeRef.remove(computeNodeId);
 
-        // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-        if (null != cluster) {
-            cluster.removeComputeNode(computeNodeId);
-            // clear map in starosAgent
-            if (RunMode.allowCreateLakeTable()) {
-                long starletPort = cn.getStarletPort();
-                if (starletPort == 0) {
-                    return;
-                }
-                String workerAddr = cn.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
+        // clear map in starosAgent
+        if (RunMode.allowCreateLakeTable()) {
+            long starletPort = cn.getStarletPort();
+            if (starletPort == 0) {
+                return;
             }
-        } else {
-            LOG.error("Cluster DEFAULT_CLUSTER " + DEFAULT_CLUSTER + " no exist.");
+            String workerAddr = cn.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
         }
     }
 
@@ -1029,22 +944,14 @@ public class SystemInfoService {
         copiedReportVerions.remove(backend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
-        // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
-        if (null != cluster) {
-            cluster.removeBackend(backend.getId());
-
-            // clear map in starosAgent
-            if (RunMode.allowCreateLakeTable()) {
-                long starletPort = backend.getStarletPort();
-                if (starletPort == 0) {
-                    return;
-                }
-                String workerAddr = backend.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
+        // clear map in starosAgent
+        if (RunMode.allowCreateLakeTable()) {
+            long starletPort = backend.getStarletPort();
+            if (starletPort == 0) {
+                return;
             }
-        } else {
-            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
+            String workerAddr = backend.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
         }
     }
 
@@ -1162,6 +1069,15 @@ public class SystemInfoService {
         ImmutableMap<Long, DiskInfo> newPathInfos = ImmutableMap.copyOf(copiedPathInfos);
         pathHashToDishInfoRef = newPathInfos;
         LOG.debug("update path infos: {}", newPathInfos);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        Map<Long, AtomicLong> idToReportVersion = new HashMap<>();
+        for (long beId : idToBackendRef.keySet()) {
+            idToReportVersion.put(beId, new AtomicLong(0));
+        }
+        idToReportVersionRef = ImmutableMap.copyOf(idToReportVersion);
     }
 }
 

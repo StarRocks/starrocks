@@ -11,76 +11,104 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.persist.metablock;
 
 import com.google.gson.annotations.SerializedName;
 
-public enum SRMetaBlockID {
-    INVALID(0),
+import java.util.Objects;
 
-    NODE_MGR(1),
-
-    LOCAL_META_STORE(2),
-
-    ALTER_MGR(3),
-
-    CATALOG_RECYCLE_BIN(4),
-
-    VARIABLE_MGR(5),
-
-    RESOURCE_MGR(6),
-
-    EXPORT_MGR(7),
-
-    BACKUP_MGR(8),
-
-    @Deprecated
-    AUTH(9),
-
-    GLOBAL_TRANSACTION_MGR(10),
-
-    COLOCATE_TABLE_INDEX(11),
-
-    ROUTINE_LOAD_MGR(12),
-
-    LOAD_MGR(13),
-
-    SMALL_FILE_MGR(14),
-
-    PLUGIN_MGR(15),
-
-    DELETE_MGR(16),
-
-    ANALYZE_MGR(17),
-
-    RESOURCE_GROUP_MGR(18),
-
-    AUTHENTICATION_MGR(19),
-
-    AUTHORIZATION_MGR(20),
-
-    TASK_MGR(21),
-
-    CATALOG_MGR(22),
-
-    INSERT_OVERWRITE_JOB_MGR(23),
-
-    COMPACTION_MGR(24),
-
-    STREAM_LOAD_MGR(25),
-
-    MATERIALIZED_VIEW_MGR(26),
-
-    GLOBAL_FUNCTION_MGR(27);
-
+public class SRMetaBlockID {
     @SerializedName("i")
-    private final int id;
+    protected int id;
 
-    SRMetaBlockID(int id) {
+    protected SRMetaBlockID(int id) {
         this.id = id;
     }
 
     public int getId() {
         return id;
+    }
+
+
+    public static final SRMetaBlockID INVALID = new SRMetaBlockID(0);
+
+    public static final SRMetaBlockID NODE_MGR = new SRMetaBlockID(1);
+
+    public static final SRMetaBlockID LOCAL_META_STORE = new SRMetaBlockID(2);
+
+    public static final SRMetaBlockID ALTER_MGR = new SRMetaBlockID(3);
+
+    public static final SRMetaBlockID CATALOG_RECYCLE_BIN = new SRMetaBlockID(4);
+
+    public static final SRMetaBlockID VARIABLE_MGR = new SRMetaBlockID(5);
+
+    public static final SRMetaBlockID RESOURCE_MGR = new SRMetaBlockID(6);
+
+    public static final SRMetaBlockID EXPORT_MGR = new SRMetaBlockID(7);
+
+    public static final SRMetaBlockID BACKUP_MGR = new SRMetaBlockID(8);
+
+    @Deprecated
+    public static final SRMetaBlockID AUTH = new SRMetaBlockID(9);
+
+    public static final SRMetaBlockID GLOBAL_TRANSACTION_MGR = new SRMetaBlockID(10);
+
+    public static final SRMetaBlockID COLOCATE_TABLE_INDEX = new SRMetaBlockID(11);
+
+    public static final SRMetaBlockID ROUTINE_LOAD_MGR = new SRMetaBlockID(12);
+
+    public static final SRMetaBlockID LOAD_MGR = new SRMetaBlockID(13);
+
+    public static final SRMetaBlockID SMALL_FILE_MGR = new SRMetaBlockID(14);
+
+    public static final SRMetaBlockID PLUGIN_MGR = new SRMetaBlockID(15);
+
+    public static final SRMetaBlockID DELETE_MGR = new SRMetaBlockID(16);
+
+    public static final SRMetaBlockID ANALYZE_MGR = new SRMetaBlockID(17);
+
+    public static final SRMetaBlockID RESOURCE_GROUP_MGR = new SRMetaBlockID(18);
+
+    public static final SRMetaBlockID AUTHENTICATION_MGR = new SRMetaBlockID(19);
+
+    public static final SRMetaBlockID AUTHORIZATION_MGR = new SRMetaBlockID(20);
+
+    public static final SRMetaBlockID TASK_MGR = new SRMetaBlockID(21);
+
+    public static final SRMetaBlockID CATALOG_MGR = new SRMetaBlockID(22);
+
+    public static final SRMetaBlockID INSERT_OVERWRITE_JOB_MGR = new SRMetaBlockID(23);
+
+    public static final SRMetaBlockID COMPACTION_MGR = new SRMetaBlockID(24);
+
+    public static final SRMetaBlockID STREAM_LOAD_MGR = new SRMetaBlockID(25);
+
+    public static final SRMetaBlockID MATERIALIZED_VIEW_MGR = new SRMetaBlockID(26);
+
+    public static final SRMetaBlockID GLOBAL_FUNCTION_MGR = new SRMetaBlockID(27);
+
+    public static final SRMetaBlockID STORAGE_VOLUME_MGR = new SRMetaBlockID(28);
+
+    @Override
+    public String toString() {
+        return String.valueOf(id);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        SRMetaBlockID that = (SRMetaBlockID) o;
+        return id == that.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 }

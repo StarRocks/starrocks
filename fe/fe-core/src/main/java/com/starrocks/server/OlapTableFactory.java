@@ -67,6 +67,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -187,9 +188,15 @@ public class OlapTableFactory implements AbstractTableFactory {
         // create table
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
         OlapTable table;
+        String storageVolumeId = "";
         if (stmt.isExternal()) {
             table = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
+            if (GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .checkFeExistByRPCPort(((ExternalOlapTable) table).getSourceTableHost(),
+                            ((ExternalOlapTable) table).getSourceTablePort())) {
+                throw new DdlException("can not create OLAP external table of self cluster");
+            }
         } else if (stmt.isOlapEngine()) {
             RunMode runMode = RunMode.getCurrentRunMode();
             String volume = "";
@@ -207,7 +214,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                 StorageVolume sv = null;
                 try {
                     if (volume.isEmpty()) {
-                        sv = svm.getStorageVolume(db.getStorageVolumeId());
+                        String dbStorageVolumeId = svm.getStorageVolumeIdOfDb(db.getId());
+                        if (dbStorageVolumeId != null) {
+                            sv = svm.getStorageVolume(dbStorageVolumeId);
+                        } else {
+                            sv = svm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+                        }
                     } else if (volume.equals(StorageVolumeMgr.DEFAULT)) {
                         sv = svm.getDefaultStorageVolume();
                     } else {
@@ -220,7 +232,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Unknown storage volume \"" + volume + "\"");
                 }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                metastore.setLakeStorageInfo(table, sv.getId(), properties);
+                storageVolumeId = sv.getId();
+                metastore.setLakeStorageInfo(table, storageVolumeId, properties);
+                svm.bindTableToStorageVolume(sv.getId(), table.getId());
                 table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
@@ -286,6 +300,10 @@ public class OlapTableFactory implements AbstractTableFactory {
         boolean enablePersistentIndex =
                 PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         false);
+        if (enablePersistentIndex && table.isCloudNativeTable()) {
+            throw new DdlException("Cannot create cloud native table with persistent index yet");
+        }
+
         table.setEnablePersistentIndex(enablePersistentIndex);
 
         if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
@@ -336,6 +354,17 @@ public class OlapTableFactory implements AbstractTableFactory {
             throw new DdlException(e.getMessage());
         }
 
+        if (table.isCloudNativeTable() && properties != null) {
+            try {
+                PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                if (duration != null) {
+                    table.setDataCachePartitionDuration(duration);
+                }
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
+
         if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             // if this is an unpartitioned table, we should analyze data property and replication num here.
             // if this is a partitioned table, there properties are already analyzed in RangePartitionDesc analyze phase.
@@ -373,7 +402,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
                                                 colocateGroup, false /* expectLakeTable */);
             if (table instanceof ExternalOlapTable == false && addedToColocateGroup) {
-                // Colocate table should keep the same bucket number accross the partitions
+                // Colocate table should keep the same bucket number across the partitions
                 DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
                 if (defaultDistributionInfo.getBucketNum() == 0) {
                     int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
@@ -443,7 +472,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         Preconditions.checkNotNull(version);
 
         // storage_format is not necessary, remove storage_format if exist.
-        if (properties != null && properties.containsKey("storage_format")) {
+        if (properties != null) {
             properties.remove("storage_format");
         }
 
@@ -562,7 +591,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 if (metastore.getDb(db.getId()) == null) {
                     throw new DdlException("database has been dropped when creating table");
                 }
-                createTblSuccess = db.createTableWithLock(table, false);
+                createTblSuccess = db.createTableWithLock(table, storageVolumeId, false);
                 if (!createTblSuccess) {
                     if (db.isSystemDatabase()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "create denied");

@@ -33,6 +33,8 @@ Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
     if (state->spill_mode() == TSpillMode::FORCE) {
         _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
     }
+    _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     return Status::OK();
 }
 
@@ -138,7 +140,7 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
 
     // init spill parameters
     _spill_options = std::make_shared<spill::SpilledOptions>(&_sort_exec_exprs, sort_desc);
-    _spill_options->spill_file_size = state->spill_mem_table_size();
+    _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();

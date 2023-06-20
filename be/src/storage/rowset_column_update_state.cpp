@@ -206,13 +206,13 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
 
     int64_t t_read_rss = MonotonicMillis();
     if (need_lock) {
-        RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states(
-                tablet, _upserts[idx], &(_partial_update_states[idx].read_version),
-                &(_partial_update_states[idx].src_rss_rowids)));
+        RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk(tablet, *_upserts[idx],
+                                                                &(_partial_update_states[idx].read_version),
+                                                                &(_partial_update_states[idx].src_rss_rowids)));
     } else {
-        RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states_unlock(
-                tablet, _upserts[idx], &(_partial_update_states[idx].read_version),
-                &(_partial_update_states[idx].src_rss_rowids)));
+        RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk_unlock(tablet, *_upserts[idx],
+                                                                       &(_partial_update_states[idx].read_version),
+                                                                       &(_partial_update_states[idx].src_rss_rowids)));
     }
     // build `rss_rowid_to_update_rowid`
     _partial_update_states[idx].build_rss_rowid_to_update_rowid();

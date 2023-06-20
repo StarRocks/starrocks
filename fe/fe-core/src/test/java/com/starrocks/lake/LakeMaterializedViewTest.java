@@ -130,7 +130,7 @@ public class LakeMaterializedViewTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
-            public StorageVolume getStorageVolume(String fsKey) throws AnalysisException {
+            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
                         .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
                         .setCredential(AwsCredentialInfo.newBuilder()

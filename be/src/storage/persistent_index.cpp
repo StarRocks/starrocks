@@ -52,7 +52,6 @@ constexpr uint64_t kPageMax = 1ULL << 32;
 constexpr size_t kPackSize = 16;
 constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
 constexpr size_t kBucketSizeMax = 256;
-constexpr size_t kMinEnableBFKVNum = 10000000;
 constexpr size_t kLongKeySize = 64;
 constexpr size_t kFixedMaxKeySize = 128;
 

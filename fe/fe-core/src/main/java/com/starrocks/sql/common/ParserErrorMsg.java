@@ -28,11 +28,11 @@ public interface ParserErrorMsg {
     @BaseMessage("No viable statement for input ''{0}''")
     String noViableStatement(String a0);
 
-    @BaseMessage("Input ''{0}'' is not valid at this position")
-    String inputMismatch(String a0);
-
     @BaseMessage("Input ''{0}'' is valid only for ''{1}''")
     String failedPredicate(String a0, String a1);
+
+    @BaseMessage("Unexpected input ''{0}'', the most similar input is {1}")
+    String unexpectedInput(String a0, String a1);
 
     @BaseMessage("Statement exceeds maximum length limit, please consider modify ''parse_tokens_limit'' session variable")
     String tokenExceedLimit();

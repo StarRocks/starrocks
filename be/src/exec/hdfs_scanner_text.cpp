@@ -54,6 +54,8 @@ public:
 protected:
     Status _fill_buffer() override;
 
+    void _trim_row_delimeter(Record* record);
+
 private:
     RandomAccessFile* _file;
     size_t _offset = 0;
@@ -87,6 +89,7 @@ Status HdfsScannerCSVReader::next_record(Record* record) {
     } else {
         _remain_length -= consume;
     }
+    _trim_row_delimeter(record);
     return Status::OK();
 }
 
@@ -131,15 +134,25 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     return Status::OK();
 }
 
+void HdfsScannerCSVReader::_trim_row_delimeter(Record* record) {
+    // For default row delemiter which is line break, we need to trim the windows line break
+    // if the file was written in windows platfom.
+    if (_parse_options.row_delimiter == "\n") {
+        while (record->size > 0 && record->data[record->size - 1] == '\r') {
+            record->size--;
+        }
+    }
+}
+
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     TTextFileDesc text_file_desc = _scanner_params.scan_ranges[0]->text_file_desc;
 
     // All delimiters will not be empty.
     // Even if the user has not set it, there will be a default value.
-    DCHECK(!text_file_desc.field_delim.empty());
-    DCHECK(!text_file_desc.line_delim.empty());
-    DCHECK(!text_file_desc.collection_delim.empty());
-    DCHECK(!text_file_desc.mapkey_delim.empty());
+    if (text_file_desc.field_delim.empty() || text_file_desc.line_delim.empty() ||
+        text_file_desc.collection_delim.empty() || text_file_desc.mapkey_delim.empty()) {
+        return Status::Corruption("Hive TEXTFILE's delimiters is missing");
+    }
 
     // _field_delimiter and _record_delimiter should use std::string,
     // because the CSVReader is using std::string type as delimiter.
@@ -150,16 +163,8 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
     // but in fact, only the first character of the delimiter will take effect.
     // So here, we only use the first character of collection_delim and mapkey_delim.
-    if (text_file_desc.collection_delim.empty() || text_file_desc.mapkey_delim.empty()) {
-        // During the StarRocks upgrade process, collection_delim and mapkey_delim may be empty,
-        // in order to prevent crash, we set _collection_delimiter
-        // and _mapkey_delimiter a default value here.
-        _collection_delimiter = '\002';
-        _mapkey_delimiter = '\003';
-    } else {
-        _collection_delimiter = text_file_desc.collection_delim.front();
-        _mapkey_delimiter = text_file_desc.mapkey_delim.front();
-    }
+    _collection_delimiter = text_file_desc.collection_delim.front();
+    _mapkey_delimiter = text_file_desc.mapkey_delim.front();
 
     // by default it's unknown compression. we will synthesise informaiton from FE and BE(file extension)
     // parse compression type from FE first.

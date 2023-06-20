@@ -178,7 +178,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "runtime_adaptive_dop_max_output_amplification_factor";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
-    public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_INCREMENTAL_REFRESH_MV = "enable_incremental_mv";
@@ -193,11 +192,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
     public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
-
-    // Use resource group. It will influence the CPU schedule, I/O scheduler, and
-    // memory limit etc. in BE.
-    public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
-    public static final String ENABLE_RESOURCE_GROUP_V2 = "enable_resource_group_v2";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
@@ -316,6 +310,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
             "enable_multicolumn_global_runtime_filter";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
+    public static final String ENABLE_MV_OPTIMIZER_TRACE_LOG = "enable_mv_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
@@ -428,6 +423,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
+    public static final String SCAN_OR_TO_UNION_LIMIT = "scan_or_to_union_limit";
+
+    public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
+
+    public static final String SELECT_RATIO_THRESHOLD = "SELECT_RATIO_THRESHOLD";
+
+    public static final String DISABLE_FUNCTION_FOLD_CONSTANTS = "disable_function_fold_constants";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -467,9 +470,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMVPlanner = false;
     @VarAttr(name = ENABLE_INCREMENTAL_REFRESH_MV)
     private boolean enableIncrementalRefreshMV = false;
-
-    @VarAttr(name = ENABLE_PIPELINE_QUERY_STATISTIC)
-    private boolean enablePipelineQueryStatistic = true;
 
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
     private boolean enableLocalShuffleAgg = true;
@@ -909,6 +909,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_MV_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
+    private boolean enableMVOptimizerTraceLog = false;
+
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryDebugTrace = false;
 
@@ -1124,6 +1127,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PLAN_VALIDATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePlanValidation = true;
+
+    @VarAttr(name = SCAN_OR_TO_UNION_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int scanOrToUnionLimit = 4;
+
+    @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private long scanOrToUnionThreshold = 50000000;
+
+    @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double selectRatioThreshold = 0.15;
+
+    @VarAttr(name = DISABLE_FUNCTION_FOLD_CONSTANTS, flag = VariableMgr.INVISIBLE)
+    private boolean disableFunctionFoldConstants = false;
 
     private int exprChildrenLimit = -1;
 
@@ -1877,6 +1892,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableOptimizerTraceLog = val;
     }
 
+    public boolean isEnableMVOptimizerTraceLog() {
+        return enableMVOptimizerTraceLog || enableOptimizerTraceLog;
+    }
+
+    public void setEnableMVOptimizerTraceLog(boolean val) {
+        this.enableMVOptimizerTraceLog = val;
+    }
+
     public boolean isRuntimeFilterOnExchangeNode() {
         return runtimeFilterOnExchangeNode;
     }
@@ -2146,6 +2169,38 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboPruneSubfield = cboPruneSubfield;
     }
 
+    public int getScanOrToUnionLimit() {
+        return scanOrToUnionLimit;
+    }
+
+    public void setScanOrToUnionLimit(int scanOrToUnionLimit) {
+        this.scanOrToUnionLimit = scanOrToUnionLimit;
+    }
+
+    public long getScanOrToUnionThreshold() {
+        return scanOrToUnionThreshold;
+    }
+
+    public void setScanOrToUnionThreshold(long scanOrToUnionThreshold) {
+        this.scanOrToUnionThreshold = scanOrToUnionThreshold;
+    }
+
+    public double getSelectRatioThreshold() {
+        return selectRatioThreshold;
+    }
+
+    public void setSelectRatioThreshold(double selectRatioThreshold) {
+        this.selectRatioThreshold = selectRatioThreshold;
+    }
+
+    public boolean isDisableFunctionFoldConstants() {
+        return disableFunctionFoldConstants;
+    }
+
+    public void setDisableFunctionFoldConstants(boolean disableFunctionFoldConstants) {
+        this.disableFunctionFoldConstants = disableFunctionFoldConstants;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -2222,7 +2277,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));
         tResult.setSpill_mode(TSpillMode.valueOf(spillMode.toUpperCase()));
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
-        tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
+        tResult.setEnable_pipeline_query_statistic(true);
         tResult.setRuntime_filter_early_return_selectivity(runtimeFilterEarlyReturnSelectivity);
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);

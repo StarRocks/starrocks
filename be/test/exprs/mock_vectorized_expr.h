@@ -204,4 +204,19 @@ public:
     ColumnPtr col;
 };
 
+class MockColumnExpr : public MockCostExpr {
+public:
+    MockColumnExpr(const TExprNode& t, ColumnPtr column) : MockCostExpr(t), _column(column) {}
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        start();
+        auto col = _column->clone();
+        stop();
+        return std::move(col);
+    }
+
+private:
+    ColumnPtr _column;
+};
+
 } // namespace starrocks

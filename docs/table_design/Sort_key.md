@@ -50,8 +50,12 @@ CREATE TABLE site_access_duplicate
     pv BIGINT DEFAULT '0'
 )
 DUPLICATE KEY(site_id, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 10;
+DISTRIBUTED BY HASH(site_id);
 ```
+
+> **NOTICE**
+>
+> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](./Data_distribution.md#determine-the-number-of-buckets).
 
 ### Aggregate Key
 
@@ -68,7 +72,7 @@ CREATE TABLE site_access_aggregate
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 10;
+DISTRIBUTED BY HASH(site_id);
 ```
 
 >**NOTICE**
@@ -90,7 +94,7 @@ CREATE TABLE site_access_unique
     pv BIGINT DEFAULT '0'
 )
 UNIQUE KEY(site_id, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 10;
+DISTRIBUTED BY HASH(site_id);
 ```
 
 ### Primary Key
@@ -108,7 +112,7 @@ CREATE TABLE site_access_primary
     pv BIGINT DEFAULT '0'
 )
 PRIMARY KEY(site_id)
-DISTRIBUTED BY HASH(site_id) BUCKETS 10
+DISTRIBUTED BY HASH(site_id)
 ORDER BY(site_id,city_code);
 ```
 
