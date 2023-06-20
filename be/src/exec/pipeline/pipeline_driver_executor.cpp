@@ -26,6 +26,8 @@
 
 namespace starrocks::pipeline {
 
+inline thread_local std::queue<DriverRawPtr> tls_driver_queue;
+
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
                                            bool enable_resource_group)
         : Base(name),
@@ -63,7 +65,6 @@ void GlobalDriverExecutor::initialize(int num_threads) {
                       [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
     }
 
-    _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
         _thread_pool->submit_func([this]() { this->_worker_thread(); });
@@ -88,21 +89,13 @@ void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* r
 void GlobalDriverExecutor::_worker_thread() {
     auto current_thread = Thread::current_thread();
     const int worker_id = _next_id++;
-    std::queue<DriverRawPtr> local_driver_queue;
-    while (true) {
-        if (_num_threads_setter.should_shrink()) {
-            break;
-        }
+    while (!_num_threads_setter.should_shrink()) {
         // Reset TLS state
         CurrentThread::current().set_query_id({});
         CurrentThread::current().set_fragment_instance_id({});
         CurrentThread::current().set_pipeline_driver_id(0);
 
-        if (current_thread != nullptr) {
-            current_thread->set_idle(true);
-        }
-
-        auto maybe_driver = _get_next_driver(local_driver_queue);
+        auto maybe_driver = _get_next_driver();
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -111,9 +104,6 @@ void GlobalDriverExecutor::_worker_thread() {
             continue;
         }
 
-        if (current_thread != nullptr) {
-            current_thread->set_idle(false);
-        }
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
 
@@ -189,7 +179,7 @@ void GlobalDriverExecutor::_worker_thread() {
             }
             case LOCAL_WAITING: {
                 driver->driver_acct().update_enter_local_queue_timestamp();
-                local_driver_queue.push(driver);
+                tls_driver_queue.push(driver);
                 break;
             }
             case FINISH:
@@ -218,13 +208,45 @@ void GlobalDriverExecutor::_worker_thread() {
     }
 }
 
-StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverRawPtr>& local_driver_queue) {
+StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver() {
+    auto current_thread = Thread::current_thread();
+    // Try polling once
+    _blocked_driver_poller->polling(true);
+    auto maybe_driver = _get_next_driver(false);
+    RETURN_IF_ERROR(maybe_driver);
+    auto* driver = maybe_driver.value();
+    if (driver != nullptr) {
+        return driver;
+    }
+    // Keep working if local queue is not empty
+    if (!tls_driver_queue.empty()) {
+        return nullptr;
+    }
+    // Current thread observes that the ready queue is empty
+    // Try polling until the ready queue is not empty
+    if (_blocked_driver_poller->polling(false)) {
+        return nullptr;
+    } else {
+        // Failed to get the control of the poller
+        // Just simply wait on ready queue
+        if (current_thread != nullptr) {
+            current_thread->set_idle(true);
+        }
+        auto maybe_driver = _get_next_driver(true);
+        if (current_thread != nullptr) {
+            current_thread->set_idle(false);
+        }
+        return maybe_driver;
+    }
+}
+
+StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(bool block) {
     DriverRawPtr driver = nullptr;
-    if (!local_driver_queue.empty()) {
-        const size_t local_driver_num = local_driver_queue.size();
+    if (!tls_driver_queue.empty()) {
+        const size_t local_driver_num = tls_driver_queue.size();
         for (size_t i = 0; i < local_driver_num; i++) {
-            driver = local_driver_queue.front();
-            local_driver_queue.pop();
+            driver = tls_driver_queue.front();
+            tls_driver_queue.pop();
             if (driver->source_operator()->has_output()) {
                 return driver;
             } else {
@@ -232,7 +254,7 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
                     driver->set_driver_state(DriverState::INPUT_EMPTY);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
-                    local_driver_queue.push(driver);
+                    tls_driver_queue.push(driver);
                 }
                 driver = nullptr;
             }
@@ -241,8 +263,7 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
 
     // If local driver queue is not empty, we cannot block here. Otherwise these local drivers may not be scheduled until
     // ready queue is not empty.
-    const bool need_block = local_driver_queue.empty();
-    return this->_driver_queue->take(need_block);
+    return this->_driver_queue->take(block && tls_driver_queue.empty());
 }
 
 void GlobalDriverExecutor::submit(DriverRawPtr driver) {

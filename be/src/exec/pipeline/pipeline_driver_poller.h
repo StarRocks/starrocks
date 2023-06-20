@@ -39,11 +39,14 @@ public:
 
     using DriverList = std::list<DriverRawPtr>;
 
-    ~PipelineDriverPoller() { shutdown(); };
-    // start poller thread
-    void start();
-    // shutdown poller thread
-    void shutdown();
+    PipelineDriverPoller(const PipelineDriverPoller&) = delete;
+    PipelineDriverPoller& operator=(const PipelineDriverPoller&) = delete;
+    ~PipelineDriverPoller() = default;
+
+    // polling driver from blocked driver queue in preemption manner
+    // return true if it preempt successfully, otherwise return false
+    bool polling(bool once);
+
     // add blocked driver to poller
     void add_blocked_driver(const DriverRawPtr driver);
     // remove blocked driver from poller
@@ -64,17 +67,14 @@ public:
     void iterate_immutable_driver(const IterateImmutableDriverFunc& call) const;
 
 private:
-    void run_internal();
-    PipelineDriverPoller(const PipelineDriverPoller&) = delete;
-    PipelineDriverPoller& operator=(const PipelineDriverPoller&) = delete;
-
-private:
     mutable std::mutex _global_mutex;
     std::condition_variable _cond;
     DriverList _blocked_drivers;
 
     mutable std::shared_mutex _local_mutex;
     DriverList _local_blocked_drivers;
+
+    std::atomic<bool> _is_polling = false;
 
     DriverQueue* _driver_queue;
     scoped_refptr<Thread> _polling_thread;

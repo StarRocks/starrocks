@@ -17,36 +17,23 @@
 #include <chrono>
 namespace starrocks::pipeline {
 
-void PipelineDriverPoller::start() {
-    DCHECK(this->_polling_thread.get() == nullptr);
-    auto status = Thread::create(
-            "pipeline", "pipeline_poller", [this]() { run_internal(); }, &this->_polling_thread);
-    if (!status.ok()) {
-        LOG(FATAL) << "Fail to create PipelineDriverPoller: error=" << status.to_string();
+bool PipelineDriverPoller::polling(bool once) {
+    if (_is_polling.load(std::memory_order_relaxed)) {
+        return false;
     }
-    while (!this->_is_polling_thread_initialized.load(std::memory_order_acquire)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    bool is_polling = false;
+    if (!_is_polling.compare_exchange_strong(is_polling, true, std::memory_order_relaxed)) {
+        return false;
     }
-}
-
-void PipelineDriverPoller::shutdown() {
-    if (!this->_is_shutdown.load() && _polling_thread.get() != nullptr) {
-        this->_is_shutdown.store(true, std::memory_order_release);
-        _cond.notify_one();
-        _polling_thread->join();
-    }
-}
-
-void PipelineDriverPoller::run_internal() {
-    this->_is_polling_thread_initialized.store(true, std::memory_order_release);
-    DriverList tmp_blocked_drivers;
+    DeferOp defer([this]() { _is_polling.store(false, std::memory_order_relaxed); });
     int spin_count = 0;
+    DriverList tmp_blocked_drivers;
     std::vector<DriverRawPtr> ready_drivers;
     while (!_is_shutdown.load(std::memory_order_acquire)) {
         {
             std::unique_lock<std::mutex> lock(_global_mutex);
             tmp_blocked_drivers.splice(tmp_blocked_drivers.end(), _blocked_drivers);
-            if (_local_blocked_drivers.empty() && tmp_blocked_drivers.empty() && _blocked_drivers.empty()) {
+            if (!once && _local_blocked_drivers.empty() && tmp_blocked_drivers.empty() && _blocked_drivers.empty()) {
                 std::cv_status cv_status = std::cv_status::no_timeout;
                 while (!_is_shutdown.load(std::memory_order_acquire) && this->_blocked_drivers.empty()) {
                     cv_status = _cond.wait_for(lock, std::chrono::milliseconds(10));
@@ -149,13 +136,20 @@ void PipelineDriverPoller::run_internal() {
             }
         }
 
-        if (ready_drivers.empty()) {
+        bool has_ready_drivers = !ready_drivers.empty();
+        if (!has_ready_drivers) {
             spin_count += 1;
         } else {
             spin_count = 0;
 
             _driver_queue->put_back(ready_drivers);
             ready_drivers.clear();
+        }
+
+        // Stop polling as long as there are any drivers being pushed to ready queue
+        // or ready queue is not empty
+        if (once || has_ready_drivers || !_driver_queue->empty()) {
+            break;
         }
 
         if (spin_count != 0 && spin_count % 64 == 0) {
@@ -179,6 +173,7 @@ void PipelineDriverPoller::run_internal() {
             sched_yield();
         }
     }
+    return true;
 }
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {

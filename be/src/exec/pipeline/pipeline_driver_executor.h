@@ -84,7 +84,8 @@ public:
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();
-    StatusOr<DriverRawPtr> _get_next_driver(std::queue<DriverRawPtr>& local_driver_queue);
+    StatusOr<DriverRawPtr> _get_next_driver();
+    StatusOr<DriverRawPtr> _get_next_driver(bool block);
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
     void _update_profile_by_level(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool done);
     void _remove_non_core_metrics(QueryContext* query_ctx, std::vector<RuntimeProfile*>& driver_profiles);
