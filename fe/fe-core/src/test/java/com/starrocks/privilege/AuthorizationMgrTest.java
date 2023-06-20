@@ -48,10 +48,17 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 
 public class AuthorizationMgrTest {
     private ConnectContext ctx;
@@ -1568,5 +1575,22 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         setCurrentUserAndRoles(ctx, new UserIdentity("u2", "%"));
         Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.OPERATE));
+    }
+
+    @Test
+    public void testGrantStorageVolumeUsageToPublicRole() throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create user u1", ctx), ctx);
+
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        String storageVolumeId = ctx.getGlobalStateMgr().getStorageVolumeMgr()
+                .createStorageVolume("test", "S3", locations, storageParams, Optional.empty(), "");
+        manager.grantStorageVolumeUsageToPublicRole(storageVolumeId);
+        setCurrentUserAndRoles(ctx, new UserIdentity("u1", "%"));
+        Assert.assertTrue(PrivilegeActions.checkStorageVolumeAction(ctx, "test", PrivilegeType.USAGE));
     }
 }
