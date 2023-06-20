@@ -102,7 +102,7 @@ public abstract class StatisticsCollectJob {
         int maxRetryTimes = 5;
         do {
             LOG.debug("statistics collect sql : {}", sql);
-            StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             SessionVariable sessionVariable = context.getSessionVariable();
             // Statistics collecting is not user-specific, which means response latency is not that important.
