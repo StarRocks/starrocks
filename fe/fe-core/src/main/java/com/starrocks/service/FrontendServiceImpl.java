@@ -86,9 +86,13 @@ import com.starrocks.http.UnauthorizedException;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.leader.LeaderImpl;
+import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
@@ -167,6 +171,8 @@ import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
 import com.starrocks.thrift.TGetRoleEdgesResponse;
+import com.starrocks.thrift.TGetRoutineLoadJobsResult;
+import com.starrocks.thrift.TGetStreamLoadsResult;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
@@ -182,6 +188,7 @@ import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TGetTrackingLoadsResult;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
@@ -211,6 +218,7 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
@@ -218,6 +226,7 @@ import com.starrocks.thrift.TShowVariableResult;
 import com.starrocks.thrift.TSnapshotLoaderReportRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
@@ -226,6 +235,7 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTaskRunInfo;
+import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
@@ -245,6 +255,7 @@ import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -1965,6 +1976,163 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } catch (Exception e) {
             LOG.warn("Failed to getLoads", e);
             throw e;
+        }
+        return result;
+    }
+
+    @Override
+    public TGetTrackingLoadsResult getTrackingLoads(TGetLoadsParams request) throws TException {
+        LOG.debug("Receive getTrackingLoads: {}", request);
+        TGetTrackingLoadsResult result = new TGetTrackingLoadsResult();
+        List<TTrackingLoadInfo> trackingLoadInfoList = Lists.newArrayList();
+
+        // Since job_id is globally unique, when one job has been found, no need to go forward.
+        if (request.isSetJob_id()) {
+            RESULT:
+            {
+                // BROKER, INSERT
+                LoadMgr loadManager = GlobalStateMgr.getCurrentState().getLoadMgr();
+                LoadJob loadJob = loadManager.getLoadJob(request.getJob_id());
+                if (loadJob != null) {
+                    trackingLoadInfoList = convertLoadInfoList(request);
+                    break RESULT;
+                }
+
+                // ROUTINE LOAD
+                RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+                RoutineLoadJob routineLoadJob = routineLoadManager.getJob(request.getJob_id());
+                if (routineLoadJob != null) {
+                    trackingLoadInfoList = convertRoutineLoadInfoList(request);
+                    break RESULT;
+                }
+
+                // STREAM LOAD
+                StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+                StreamLoadTask streamLoadTask = streamLoadManager.getTaskById(request.getJob_id());
+                if (streamLoadTask != null) {
+                    trackingLoadInfoList = convertStreamLoadInfoList(request);
+                }
+            }
+        } else {
+            // iterate all types of loads to find the matching records
+            trackingLoadInfoList.addAll(convertLoadInfoList(request));
+            trackingLoadInfoList.addAll(convertRoutineLoadInfoList(request));
+            trackingLoadInfoList.addAll(convertStreamLoadInfoList(request));
+        }
+
+        result.setTrackingLoads(trackingLoadInfoList);
+        return result;
+    }
+
+    private List<TTrackingLoadInfo> convertLoadInfoList(TGetLoadsParams request) throws TException {
+        TGetLoadsResult loadsResult = getLoads(request);
+        List<TLoadInfo> loads = loadsResult.loads;
+        if (loads == null) {
+            return Lists.newArrayList();
+        }
+        return loads.stream().map(load -> convertToTrackingLoadInfo(load.getJob_id(),
+                                load.getDb(), load.getLabel(), load.getType(), load.getUrl()))
+                .collect(Collectors.toList());
+    }
+
+
+    private List<TTrackingLoadInfo> convertRoutineLoadInfoList(TGetLoadsParams request) throws TException {
+        TGetRoutineLoadJobsResult loadsResult = getRoutineLoadJobs(request);
+        List<TRoutineLoadJobInfo> loads = loadsResult.loads;
+        if (loads == null) {
+            return Lists.newArrayList();
+        }
+        return loads.stream().map(load -> convertToTrackingLoadInfo(load.getId(),
+                        load.getDb_name(), load.getName(), EtlJobType.ROUTINE_LOAD.name(), load.getError_log_urls()))
+                .collect(Collectors.toList());
+    }
+
+    private List<TTrackingLoadInfo> convertStreamLoadInfoList(TGetLoadsParams request) throws TException {
+        TGetStreamLoadsResult loadsResult = getStreamLoads(request);
+        List<TStreamLoadInfo> loads = loadsResult.loads;
+        if (loads == null) {
+            return Lists.newArrayList();
+        }
+        return loads.stream().map(load -> convertToTrackingLoadInfo(load.getId(),
+                        load.getDb_name(), load.getLabel(), EtlJobType.STREAM_LOAD.name(), load.getTracking_url()))
+                .collect(Collectors.toList());
+    }
+
+    private TTrackingLoadInfo convertToTrackingLoadInfo(long jobId, String dbName, String label, String type, String url) {
+        TTrackingLoadInfo trackingLoad = new TTrackingLoadInfo();
+        trackingLoad.setJob_id(jobId);
+        trackingLoad.setDb(dbName);
+        trackingLoad.setLabel(label);
+        trackingLoad.setLoad_type(type);
+        if (url != null) {
+            if (url.contains(",")) {
+                trackingLoad.setUrls(Arrays.asList(url.split(",")));
+            } else {
+                trackingLoad.addToUrls(url);
+            }
+        }
+        return trackingLoad;
+    }
+
+    @Override
+    public TGetRoutineLoadJobsResult getRoutineLoadJobs(TGetLoadsParams request) throws TException {
+        LOG.debug("Receive getRoutineLoadJobs: {}", request);
+        TGetRoutineLoadJobsResult result = new TGetRoutineLoadJobsResult();
+        RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+        List<TRoutineLoadJobInfo> loads = Lists.newArrayList();
+        try {
+            if (request.isSetJob_id()) {
+                RoutineLoadJob job = routineLoadManager.getJob(request.getJob_id());
+                if (job != null) {
+                    loads.add(job.toThrift());
+                }
+            } else {
+                List<RoutineLoadJob> loadJobList;
+                if (request.isSetDb()) {
+                    if (request.isSetLabel()) {
+                        loadJobList = routineLoadManager.getJob(request.getDb(), request.getLabel(), true);
+                    } else {
+                        loadJobList = routineLoadManager.getJob(request.getDb(), null, true);
+                    }
+                } else {
+                    if (request.isSetLabel()) {
+                        loadJobList = routineLoadManager.getJob(null, request.getLabel(), true);
+                    } else {
+                        loadJobList = routineLoadManager.getJob(null, null, true);
+                    }
+                }
+                loads.addAll(loadJobList.stream().map(RoutineLoadJob::toThrift).collect(Collectors.toList()));
+            }
+            result.setLoads(loads);
+        } catch (MetaNotFoundException e) {
+            LOG.warn("Failed to getRoutineLoadJobs", e);
+            throw new TException();
+        }
+        return result;
+    }
+
+    @Override
+    public TGetStreamLoadsResult getStreamLoads(TGetLoadsParams request) throws TException {
+        LOG.debug("Receive getStreamLoads: {}", request);
+        TGetStreamLoadsResult result = new TGetStreamLoadsResult();
+        StreamLoadMgr loadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        List<TStreamLoadInfo> loads = Lists.newArrayList();
+        try {
+            if (request.isSetJob_id()) {
+                StreamLoadTask task = loadManager.getTaskById(request.getJob_id());
+                if (task != null) {
+                    loads.add(task.toThrift());
+                }
+            } else {
+                List<StreamLoadTask> streamLoadTaskList = loadManager.getTaskByName(request.getLabel());
+                if (streamLoadTaskList != null) {
+                    loads.addAll(
+                            streamLoadTaskList.stream().map(StreamLoadTask::toThrift).collect(Collectors.toList()));
+                }
+            }
+            result.setLoads(loads);
+        } catch (Exception e) {
+            LOG.warn("Failed to getStreamLoads", e);
         }
         return result;
     }

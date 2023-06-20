@@ -96,6 +96,10 @@ public class SystemId {
 
     public static final long BE_CLOUD_NATIVE_COMPACTIONS = 39L;
 
+    public static final long ROUTINE_LOAD_JOBS_ID = 40L;
+
+    public static final long STREAM_LOADS_ID = 41L;
+
     public static final long STARROCKS_DB_ID = 100L;
 
     public static final long ROLE_EDGES_ID = 101L;

@@ -89,6 +89,7 @@ import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TransactionException;
@@ -1440,7 +1441,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 default:
                     row.add("");
             }
-            row.add(Joiner.on(", ").join(errorLogUrls));
+            // tracking url
+            if (!errorLogUrls.isEmpty()) {
+                row.add(Joiner.on(", ").join(errorLogUrls));
+                row.add("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            } else {
+                row.add("");
+                row.add("");
+            }
             row.add(otherMsg);
             return row;
         } finally {
@@ -1764,5 +1772,57 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     @Override
     public void gsonPostProcess() throws IOException {
         setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
+    }
+
+    public TRoutineLoadJobInfo toThrift() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Table tbl = null;
+        if (db != null) {
+            db.readLock();
+            try {
+                tbl = db.getTable(tableId);
+            } finally {
+                db.readUnlock();
+            }
+        }
+        readLock();
+        try {
+            TRoutineLoadJobInfo info = new TRoutineLoadJobInfo();
+            info.setId(id);
+            info.setName(name);
+            info.setCreate_time(TimeUtils.longToTimeString(createTimestamp));
+            info.setPause_time(TimeUtils.longToTimeString(pauseTimestamp));
+            info.setEnd_time(TimeUtils.longToTimeString(endTimestamp));
+            info.setDb_name(db == null ? String.valueOf(dbId) : db.getFullName());
+            info.setTable_name(tbl == null ? String.valueOf(tableId) : tbl.getName());
+            info.setState(getState().name());
+            info.setCurrent_task_num(getSizeOfRoutineLoadTaskInfoList());
+            info.setJob_properties(jobPropertiesToJsonString());
+            info.setData_source_properties(dataSourcePropertiesJsonToString());
+            info.setCustom_properties(customPropertiesJsonToString());
+            info.setData_source_type(dataSourceType.name());
+            info.setStatistic(getStatistic());
+            info.setProgress(getProgress().toJsonString());
+            switch (state) {
+                case PAUSED:
+                    info.setReasons_of_state_changed(pauseReason == null ? "" : pauseReason.toString());
+                    break;
+                case CANCELLED:
+                    info.setReasons_of_state_changed(cancelReason == null ? "" : cancelReason.toString());
+                    break;
+                default:
+                    info.setReasons_of_state_changed("");
+            }
+
+            // tracking url
+            if (!errorLogUrls.isEmpty()) {
+                info.setError_log_urls(Joiner.on(",").join(errorLogUrls));
+                info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+            info.setOther_msg(otherMsg);
+            return info;
+        } finally {
+            readUnlock();
+        }
     }
 }
