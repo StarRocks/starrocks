@@ -536,13 +536,14 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR}, returnType = DATETIME)
-    public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval, ConstantOperator unit) {
+    public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval,
+                                             ConstantOperator unit) throws AnalysisException {
         return timeSlice(datetime, interval, unit, ConstantOperator.createVarchar("floor"));
     }
 
     @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval,
-                                             ConstantOperator unit, ConstantOperator boundary) {
+                                             ConstantOperator unit, ConstantOperator boundary) throws AnalysisException {
         TemporalUnit timeUnit = TIME_SLICE_UNIT_MAPPING.get(unit.getVarchar());
         if (timeUnit == null) {
             throw new IllegalArgumentException(unit + " not supported in time_slice unit param");
@@ -559,6 +560,9 @@ public class ScalarOperatorFunctions {
                 throw new IllegalArgumentException(boundary + " not supported in time_slice boundary param");
         }
         long duration = TIME_SLICE_START.until(datetime.getDatetime(), timeUnit);
+        if (duration < 0) {
+            throw new AnalysisException("time used with time_slice can't before 0001-01-01 00:00:00");
+        }
         long epoch = duration - (duration % interval.getInt());
         if (isEnd) {
             epoch += interval.getInt();

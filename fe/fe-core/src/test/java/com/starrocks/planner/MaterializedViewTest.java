@@ -2448,7 +2448,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String mv = "select user_id, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id;");
-        // testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
     }
 
     @Test
@@ -2456,6 +2456,27 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String mv = "select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;";
         testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testBitmapRewriteBasedOnAggregateTable() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test_bitmap_rewrite_agg_tbl (\n" +
+                "ds date,\n" +
+                "sum1 bigint sum,\n" +
+                "bitmap1 bitmap bitmap_union,\n" +
+                "bitmap2 bitmap bitmap_union\n" +
+                ") ENGINE = OLAP \n" +
+                "aggregate key(ds)\n" +
+                "DISTRIBUTED BY HASH(`ds`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n");
+
+        String mv = "SELECT ds, sum(sum1), bitmap_union(bitmap1), bitmap_union(bitmap2) from test_bitmap_rewrite_agg_tbl " +
+                "group by ds";
+        testRewriteOK(mv, "select cd1 / cd2 from (select ds, bitmap_union_count(bitmap1) as cd1, " +
+                "bitmap_count(bitmap_and(bitmap_union(bitmap1), bitmap_union(bitmap2))) as cd2 " +
+                "from test_bitmap_rewrite_agg_tbl group by ds) t");
     }
 
     @Test
@@ -2658,5 +2679,31 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteFail(mv, "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
                     " left join locations on emps.locationid = locations.locationid where emps.deptno < 5 or emps.deptno > 20");
         }
+    }
+
+    @Test
+    public void testTimeSliceRewrite() throws Exception {
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t_time_slice` (\n" +
+            "    `dt` datetime NOT NULL COMMENT \"\",\n" +
+            "    `c1` int(11) NOT NULL COMMENT \"\"\n" +
+            ") ENGINE=OLAP\n" +
+            "DUPLICATE KEY(`dt`)\n" +
+            "COMMENT \"OLAP\"\n" +
+            "PARTITION BY RANGE(`dt`)\n" +
+            "(\n" +
+            "    PARTITION p1 VALUES [(\"2023-06-01\"), (\"2023-06-02\")),\n" +
+            "    PARTITION p2 VALUES [(\"2023-06-02\"), (\"2023-06-03\")),\n" +
+            "    PARTITION p3 VALUES [(\"2023-06-03\"), (\"2023-06-04\"))\n" +
+            ")\n" +
+            "DISTRIBUTED BY HASH(`c1`) BUCKETS 1\n" +
+            "PROPERTIES (\n" +
+            "    \"replication_num\" = \"1\",\n" +
+            "    \"in_memory\" = \"false\"\n" +
+            ")");
+
+        String mv = "SELECT time_slice(dt, interval 5 minute) as t, sum(c1) FROM t_time_slice GROUP BY t";
+        testRewriteOK(mv, "SELECT time_slice(dt, interval 5 minute) as t FROM t_time_slice " +
+            "WHERE dt BETWEEN '2023-06-01' AND '2023-06-02' GROUP BY t");
+        starRocksAssert.dropTable("t_time_slice");
     }
 }
