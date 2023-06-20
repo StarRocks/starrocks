@@ -32,14 +32,14 @@ statement
     : queryStatement
 
     // Warehouse Statement
+<<<<<<< HEAD
     | useWarehouseStatement
     | createWarehouseStatement
     | dropWarehouseStatement
+=======
+>>>>>>> 0cc667e79 ([Refactor]Remove unsupported warehouse operation (#25663))
     | showWarehousesStatement
-    | alterWarehouseStatement
     | showClustersStatement
-    | suspendWarehouseStatement
-    | resumeWarehouseStatement
 
     // Database Statement
     | useDatabaseStatement
