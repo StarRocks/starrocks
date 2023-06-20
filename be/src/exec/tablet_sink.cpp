@@ -174,6 +174,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
 Status OlapTableSink::prepare(RuntimeState* state) {
     _span->AddEvent("prepare");
 
+    _ts_profile->alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
     _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
     _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));

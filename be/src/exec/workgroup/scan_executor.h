@@ -74,8 +74,9 @@ public:
     virtual void wait() = 0;
 };
 
-// ExecutorToken is used to execute a group of tasks
+// ExecutorToken is used to execute a group of tasks, and scheduled by ResourceGroup
 // NOTE: it's a vanilla implementation, without concurrent execution, without priority control
+// NOTE: the underlying executor has to be a ScanExecutor, or some kinds of schedulable Executor
 class ExecutorToken final : public TaskToken {
 public:
     enum State {
