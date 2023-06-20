@@ -548,15 +548,10 @@ public class EditLog {
                 }
                 case OperationType.OP_META_VERSION_V2: {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
-                    if (metaVersion.getCommunityVersion() > FeConstants.META_VERSION) {
-                        throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
-                                + "FeConstants.meta_version. please update FeConstants.meta_version bigger or equal to "
-                                + metaVersion.getCommunityVersion() + "and restart.");
-                    }
-                    if (metaVersion.getStarRocksVersion() > FeConstants.STARROCKS_META_VERSION) {
-                        throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
-                                + "FeConstants.starrocks_meta_version. please update FeConstants.starrocks_meta_version"
-                                + " bigger or equal to " + metaVersion.getStarRocksVersion() + "and restart.");
+                    if (!MetaVersion.isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
+                        throw new JournalInconsistentException("Not compatible with meta version "
+                                + metaVersion.getStarRocksVersion()
+                                + ", current version is " + FeConstants.STARROCKS_META_VERSION);
                     }
                     MetaContext.get().setMetaVersion(metaVersion.getCommunityVersion());
                     MetaContext.get().setStarRocksMetaVersion(metaVersion.getStarRocksVersion());
