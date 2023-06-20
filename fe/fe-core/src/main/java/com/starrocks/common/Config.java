@@ -2214,6 +2214,18 @@ public class Config extends ConfigBase {
     public static int experimental_lake_publish_version_threads = 16;
 
     @ConfField(mutable = true)
+    public static int lake_autovacuum_max_previous_versions = 1;
+
+    @ConfField
+    public static int lake_autovacuum_parallel_partitions = 8;
+
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_partition_naptime_seconds = 30;
+
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_grace_period_minutes = 5;
+
+    @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
 
     /**
