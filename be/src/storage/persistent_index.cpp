@@ -3825,6 +3825,13 @@ Status PersistentIndex::_merge_compaction_advance() {
         new_l1_merged_num.emplace_back(_l1_merged_num[i]);
     }
 
+    {
+        std::unique_lock wrlock(_lock);
+        for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
+            _l1_vec[i]->destroy();
+        }
+    }
+
     const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(),
                                                           _version.minor(), new_l1_vec.size());
     RETURN_IF_ERROR(FileSystem::Default()->rename_file(idx_file_path_tmp, idx_file_path));
@@ -3841,9 +3848,6 @@ Status PersistentIndex::_merge_compaction_advance() {
     new_l1_merged_num.emplace_back((merge_l1_end_idx - merge_l1_start_idx) * merge_num);
     {
         std::unique_lock wrlock(_lock);
-        for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
-            _l1_vec[i]->destroy();
-        }
         _l1_vec.swap(new_l1_vec);
         _l1_merged_num.swap(new_l1_merged_num);
     }
