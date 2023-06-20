@@ -747,9 +747,7 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canGroupBy();
         }
-        // TODO(mofei) support group by for JSON
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
     }
 
     public boolean canOrderBy() {
@@ -808,8 +806,17 @@ public abstract class Type implements Cloneable {
                 !isJsonType() && !isOnlyMetricType() && !isFunctionType() && !isBinaryType();
     }
 
-    public static final String ONLY_METRIC_TYPE_ERROR_MSG =
-            "Type (nested) percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join";
+    public static final String NOT_SUPPORT_JOIN_ERROR_MSG =
+            "Type (nested) percentile/hll/bitmap/json/struct/map not support join";
+
+    public static final String NOT_SUPPORT_GROUP_BY_ERROR_MSG =
+            "Type (nested) percentile/hll/bitmap/json not support group-by";
+
+    public static final String NOT_SUPPORT_AGG_ERROR_MSG =
+            "Type (nested) percentile/hll/bitmap/json/struct/map not support this aggregation function";
+
+    public static final String NOT_SUPPORT_ORDER_ERROR_MSG =
+            "Type (nested) percentile/hll/bitmap/json/struct/map not support order-by";
 
     public boolean isHllType() {
         return isScalarType(PrimitiveType.HLL);
@@ -997,6 +1004,7 @@ public abstract class Type implements Cloneable {
      * fully compatible means that all possible values of this type can be represented by the other type,
      * and no null values will be produced if we cast this as the other.
      * This is closely related to the implementation by BE.
+     *
      * @TODO: the currently implementation is conservative, we can add more rules later.
      */
     public abstract boolean isFullyCompatible(Type other);
@@ -1651,7 +1659,7 @@ public abstract class Type implements Cloneable {
             case VARCHAR:
             case HLL:
             case BITMAP:
-            // Because mysql does not have a large int type, mysql will treat it as hex after exceeding bigint
+                // Because mysql does not have a large int type, mysql will treat it as hex after exceeding bigint
             case LARGEINT:
             case JSON:
                 return CHARSET_UTF8;

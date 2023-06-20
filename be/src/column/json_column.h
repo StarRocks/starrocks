@@ -48,6 +48,8 @@ public:
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
     uint32_t serialize_size(size_t idx) const override;
     uint32_t serialize(size_t idx, uint8_t* pos) override;
+    void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                         uint32_t max_one_row_size) override;
 
 private:
 };

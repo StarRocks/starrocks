@@ -209,4 +209,15 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "[/st5/ss4/s52/s421, /st5/ss3/s32]");
     }
+
+    @Test
+    public void testPruneGroupStructColumn() throws Exception {
+        String sql = "select st1.s1, st1.s2 from sc0 group by st1";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
+
+        sql = "select st1.s1, st1.s2 from sc0 group by st1.s1, st1.s2";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "[/st1/s2, /st1/s1]");
+    }
 }

@@ -20,6 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/sorting/sorting.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -234,14 +235,29 @@ void MapColumn::remove_first_n_values(size_t count) {
 }
 
 uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) {
+    DCHECK(!_keys->is_map());
     uint32_t offset = _offsets->get_data()[idx];
     uint32_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     strings::memcpy_inlined(pos, &map_size, sizeof(map_size));
     size_t ser_size = sizeof(map_size);
+
+    // unstable sort keys, map keys must be unique
+    SmallPermutation perm(map_size);
+    {
+        for (uint32_t i = 0; i < map_size; i++) {
+            perm[i].index_in_chunk = offset + i;
+        }
+        Tie tie(map_size, 1);
+        std::pair<int, int> range{0, map_size};
+        auto st = sort_and_tie_column(false, _keys, SortDesc(true, true), perm, tie, range, false);
+        DCHECK(st.ok());
+    }
+
     for (size_t i = 0; i < map_size; ++i) {
-        ser_size += _keys->serialize(offset + i, pos + ser_size);
-        ser_size += _values->serialize(offset + i, pos + ser_size);
+        uint32_t index = perm[i].index_in_chunk;
+        ser_size += _keys->serialize(index, pos + ser_size);
+        ser_size += _values->serialize(index, pos + ser_size);
     }
     return static_cast<uint32_t>(ser_size);
 }
