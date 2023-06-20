@@ -406,6 +406,10 @@ public class CreateTableAnalyzer {
             }
         }
 
+        if (hasMaterializedColum && !statement.isOlapEngine()) {
+            throw new SemanticException("Generated Column only support olap table");
+        }
+
         Map<String, Column> columnsMap = Maps.newHashMap();
         for (Column column : columns) {
             columnsMap.put(column.getName(), column);
