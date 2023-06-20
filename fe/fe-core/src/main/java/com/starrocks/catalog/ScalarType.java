@@ -39,7 +39,9 @@ import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.proto.PScalarType;
 import com.starrocks.thrift.TColumnType;
+import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
@@ -124,6 +126,27 @@ public class ScalarType extends Type implements Cloneable {
         ScalarType res = STATIC_TYPE_MAP.get(type);
         Preconditions.checkNotNull(res, "unknown type " + type);
         return res;
+    }
+
+    public static ScalarType createType(PScalarType ptype) {
+        TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(ptype.type);
+
+        switch (tPrimitiveType) {
+            case CHAR:
+                return createCharType(ptype.len);
+            case VARCHAR:
+                return createVarcharType(ptype.len);
+            case VARBINARY:
+                return createVarbinary(ptype.len);
+            case DECIMALV2:
+                return createDecimalV2Type(ptype.precision, ptype.precision);
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                return createDecimalV3Type(PrimitiveType.fromThrift(tPrimitiveType), ptype.precision, ptype.scale);
+            default:
+                return createType(PrimitiveType.fromThrift(tPrimitiveType));
+        }
     }
 
     public static ScalarType createCharType(int len) {
