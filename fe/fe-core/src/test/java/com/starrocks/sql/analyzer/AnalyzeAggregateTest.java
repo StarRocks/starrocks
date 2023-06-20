@@ -192,8 +192,8 @@ public class AnalyzeAggregateTest {
                 "No matching function with signature: multi_distinct_count(array");
 
         // group by complex types
-        analyzeFail("select count(*) from ttypes group by vm");
-        analyzeFail("select count(*) from ttypes group by vs");
+        analyzeSuccess("select count(*) from ttypes group by vm");
+        analyzeSuccess("select count(*) from ttypes group by vs");
         analyzeFail("select count(*) from ttypes group by vj");
     }
 

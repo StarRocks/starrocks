@@ -25,7 +25,9 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -191,6 +193,32 @@ public class PruneSubfieldRule implements TreeRewriteRule {
                     allComplexColumns.put(expr, expr.getUsedColumns());
                 }
             }
+        }
+
+        @Override
+        public OptExpression visitLogicalJoin(OptExpression optExpression, Void context) {
+            visitPredicate(optExpression);
+            LogicalJoinOperator join = optExpression.getOp().cast();
+            if (join.getOnPredicate() != null) {
+                ComplexExpressionCollector collector = new ComplexExpressionCollector();
+                join.getOnPredicate().accept(collector, null);
+                for (ScalarOperator expr : collector.complexExpressions) {
+                    allComplexColumns.put(expr, expr.getUsedColumns());
+                }
+            }
+            return visitChildren(optExpression, context);
+        }
+
+        @Override
+        public OptExpression visitLogicalAggregate(OptExpression optExpression, Void context) {
+            visitPredicate(optExpression);
+            LogicalAggregationOperator agg = optExpression.getOp().cast();
+            ComplexExpressionCollector collector = new ComplexExpressionCollector();
+            agg.getGroupingKeys().forEach(s -> s.accept(collector, null));
+            for (ScalarOperator expr : collector.complexExpressions) {
+                allComplexColumns.put(expr, expr.getUsedColumns());
+            }
+            return visitChildren(optExpression, context);
         }
 
         @Override

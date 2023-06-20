@@ -97,7 +97,7 @@ public class AnalyzeStructTest {
         analyzeFail("select * from struct_a order by b;");
         analyzeFail("select sum(b) from struct_a;");
         analyzeFail("select * from struct_a a join struct_a b on a.b=b.b;");
-        analyzeFail("select sum(a) from struct_a group by b;");
+        analyzeSuccess("select sum(a) from struct_a group by b;");
     }
 
     @Test

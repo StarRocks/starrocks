@@ -217,7 +217,7 @@ public class SimpleQueryAnalyzer {
                     analyzeExpression(expression, new AnalyzeState());
 
                     if (!expression.getType().canOrderBy()) {
-                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                        throw new SemanticException(Type.NOT_SUPPORT_ORDER_ERROR_MSG);
                     }
                 }
             }
@@ -271,7 +271,7 @@ public class SimpleQueryAnalyzer {
                     analyzeExpression(expression, new AnalyzeState());
 
                     if (!expression.getType().canOrderBy()) {
-                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                        throw new SemanticException(Type.NOT_SUPPORT_ORDER_ERROR_MSG);
                     }
                 }
             }

@@ -290,7 +290,16 @@ size_t StructColumn::filter_range(const Filter& filter, size_t from, size_t to) 
 }
 
 int StructColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
-    DCHECK(false) << "Dont support it";
+    const auto& rhs_struct = down_cast<const StructColumn&>(rhs);
+    DCHECK(_fields.size() != rhs_struct._fields.size());
+
+    for (int i = 0; i < _fields.size(); ++i) {
+        auto cmp = _fields[i]->compare_at(left, right, *rhs_struct._fields[i].get(), nan_direction_hint);
+        if (cmp != 0) {
+            return cmp;
+        }
+    }
+
     return 0;
 }
 
