@@ -374,7 +374,6 @@ Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** it
     return Status::OK();
 }
 
-
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
     RETURN_IF_ERROR(load_index(false));
     for (size_t i = 0; i < _sk_index_decoder->num_items(); i++) {
