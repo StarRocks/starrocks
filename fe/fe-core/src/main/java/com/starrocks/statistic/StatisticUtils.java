@@ -83,6 +83,89 @@ public class StatisticUtils {
         return context;
     }
 
+<<<<<<< HEAD
+=======
+    private static StatsConstants.AnalyzeType parseAnalyzeType(TransactionState txnState, Table table) {
+        Long loadRows = null;
+        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+        if (attachment instanceof LoadJobFinalOperation) {
+            EtlStatus loadingStatus = ((LoadJobFinalOperation) attachment).getLoadingStatus();
+            loadRows = loadingStatus.getLoadedRows(table.getId());
+        } else if (attachment instanceof InsertTxnCommitAttachment) {
+            loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
+        } else if (attachment instanceof StreamLoadTxnCommitAttachment) {
+            loadRows = ((StreamLoadTxnCommitAttachment) attachment).getNumRowsNormal();
+        }
+        if (loadRows != null && loadRows > Config.statistic_sample_collect_rows) {
+            return StatsConstants.AnalyzeType.SAMPLE;
+        }
+        return StatsConstants.AnalyzeType.FULL;
+    }
+
+    public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table, boolean sync) {
+        if (!Config.enable_statistic_collect_on_first_load) {
+            return;
+        }
+        if (statisticDatabaseBlackListCheck(db.getFullName())) {
+            return;
+        }
+
+        // check if it's first load.
+        if (txnState.getIdToTableCommitInfos() == null) {
+            return;
+        }
+        TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
+        if (tableCommitInfo == null) {
+            return;
+        }
+        // collectPartitionIds contains partition that is first loaded.
+        List<Long> collectPartitionIds = Lists.newArrayList();
+        for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+            if (table.getPartition(partitionId).isFirstLoad()) {
+                collectPartitionIds.add(partitionId);
+            }
+        }
+        if (collectPartitionIds.isEmpty()) {
+            return;
+        }
+
+        StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), null, analyzeType,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+        Future<?> future;
+        try {
+            future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+                    .submit(() -> {
+                        StatisticExecutor statisticExecutor = new StatisticExecutor();
+                        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                        statsConnectCtx.setThreadLocalInfo();
+                        statsConnectCtx.setStatisticsConnection(true);
+
+                        statisticExecutor.collectStatistics(statsConnectCtx,
+                                StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
+                                        collectPartitionIds, null, analyzeType,
+                                        StatsConstants.ScheduleType.ONCE,
+                                        analyzeStatus.getProperties()), analyzeStatus, false);
+                    });
+        } catch (Throwable e) {
+            LOG.error("failed to submit statistic collect job", e);
+            return;
+        }
+
+        if (sync) {
+            try {
+                future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                LOG.error("failed to execute statistic collect job", e);
+            }
+        }
+    }
+
+>>>>>>> 4a7030a2c ([BugFix] Fix statistcs collect bugs (#25369))
     // check database in black list
     public static boolean statisticDatabaseBlackListCheck(String databaseName) {
         if (null == databaseName) {
@@ -93,6 +176,11 @@ public class StatisticUtils {
     }
 
     public static boolean statisticTableBlackListCheck(long tableId) {
+        if (null != ConnectContext.get() && ConnectContext.get().isStatisticsConnection()) {
+            // avoid query statistics table when collect statistics
+            return true;
+        }
+
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null != db && null != db.getTable(tableId)) {
@@ -150,7 +238,16 @@ public class StatisticUtils {
     }
 
     public static boolean isEmptyTable(Table table) {
+<<<<<<< HEAD
         return table.getPartitions().stream().noneMatch(Partition::hasData);
+=======
+        if (table instanceof IcebergTable) {
+            // TODO, shall we check empty for external table?
+            return false;
+        } else {
+            return table.getPartitions().stream().noneMatch(Partition::hasData);
+        }
+>>>>>>> 4a7030a2c ([BugFix] Fix statistcs collect bugs (#25369))
     }
 
     public static List<ColumnDef> buildStatsColumnDef(String tableName) {
