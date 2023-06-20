@@ -94,7 +94,6 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=600000000
 avgRowSize=12.0
-numNodes=0
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -130,7 +129,6 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=300000000
 avgRowSize=20.0
-numNodes=0
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -164,7 +162,6 @@ rollup: orders
 tabletRatio=10/10
 cardinality=50000000
 avgRowSize=9.0
-numNodes=0
 
 PLAN FRAGMENT 5
 OUTPUT EXPRS:
@@ -199,7 +196,6 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=300000000
 avgRowSize=20.0
-numNodes=0
 
 PLAN FRAGMENT 6
 OUTPUT EXPRS:
@@ -228,7 +224,6 @@ rollup: supplier
 tabletRatio=1/1
 cardinality=1000000
 avgRowSize=33.0
-numNodes=0
 
 PLAN FRAGMENT 7
 OUTPUT EXPRS:
@@ -250,6 +245,5 @@ rollup: nation
 tabletRatio=1/1
 cardinality=1
 avgRowSize=29.0
-numNodes=0
 [end]
 

@@ -44,6 +44,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -183,6 +184,12 @@ public class Coordinator {
     private TUniqueId queryId;
     private final ConnectContext connectContext;
     private final boolean needReport;
+
+    // True indicates that the profile has been reported
+    // When `enable_load_profile` is enabled,
+    // if the time costs of stream load is less than `stream_load_profile_collect_second`,
+    // the profile will not be reported to FE to reduce the overhead of profile under high-frequency import
+    private boolean profileAlreadyReported = false;
 
     private final CoordinatorPreprocessor coordinatorPreprocessor;
 
@@ -1443,7 +1450,17 @@ public class Coordinator {
             LOG.warn("cancel execution of query, this is outside invoke");
             cancelInternal(cancelReason);
         } finally {
-            unlock();
+            try {
+                // when enable_profile is true, it disable count down profileDoneSignal for collect all backend's profile
+                // but if backend has crashed, we need count down profileDoneSignal since it will not report by itself
+                if (connectContext.getSessionVariable().isEnableProfile() && profileDoneSignal != null
+                        && cancelledMessage.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                    profileDoneSignal.countDownToZero(new Status());
+                    LOG.info("count down profileDoneSignal since backend has crashed, query id: {}", DebugUtil.printId(queryId));
+                }
+            } finally {
+                unlock();
+            }
         }
     }
 
@@ -1482,6 +1499,11 @@ public class Coordinator {
                     backendExecStates.keySet());
             return;
         }
+
+        if (params.isSetProfile()) {
+            profileAlreadyReported = true;
+        }
+
         lock();
         try {
             if (!execState.updateProfile(params)) {
@@ -1867,6 +1889,10 @@ public class Coordinator {
         return this.thriftServerHighLoad;
     }
 
+    public boolean isProfileAlreadyReported() {
+        return this.profileAlreadyReported;
+    }
+
     // record backend execute state
     // TODO(zhaochun): add profile information and others
     public class BackendExecState {
@@ -1906,11 +1932,10 @@ public class Coordinator {
             this.initiated = false;
             this.done = false;
             this.address = host;
-            this.backend = coordinatorPreprocessor.getIdToBackend().get(addressToBackendID.get(address));
+
             // if useComputeNode and it's olapScan now, backend is null ,need get from olapScanNodeIdToComputeNode
-            if (backend == null) {
-                backend = coordinatorPreprocessor.getIdToComputeNode().get(addressToBackendID.get(address));
-            }
+            this.backend = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(addressToBackendID.get(address));
+
             String name =
                     "Instance " + DebugUtil.printId(uniqueRpcParams.params.fragment_instance_id) + " (host=" + address +
                             ")";

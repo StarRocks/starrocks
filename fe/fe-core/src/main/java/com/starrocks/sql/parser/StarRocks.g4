@@ -347,6 +347,7 @@ createTableStatement
           engineDesc?
           charsetDesc?
           keyDesc?
+          withRowAccessPolicy*
           comment?
           partitionDesc?
           distributionDesc?
@@ -357,7 +358,10 @@ createTableStatement
      ;
 
 columnDesc
-    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? (defaultDesc | AUTO_INCREMENT | materializedColumnDesc)? comment?
+    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
+    (defaultDesc | AUTO_INCREMENT | materializedColumnDesc)?
+    (withMaskingPolicy)?
+    comment?
     ;
 
 charsetName
@@ -423,6 +427,14 @@ dupKeys
 
 fromRollup
     : FROM identifier
+    ;
+
+withMaskingPolicy
+    : WITH MASKING POLICY policyName=qualifiedName (USING identifierList)?
+    ;
+
+withRowAccessPolicy
+    : WITH ROW ACCESS POLICY policyName=qualifiedName (ON identifierList)?
     ;
 
 createTemporaryTableStatement
@@ -533,13 +545,14 @@ recoverPartitionStatement
 createViewStatement
     : CREATE VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+        withRowAccessPolicy*
         comment? AS queryStatement
     ;
 
 alterViewStatement
-    : ALTER VIEW qualifiedName
-    ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
-    AS queryStatement
+    : ALTER VIEW qualifiedName ('(' columnNameWithComment (',' columnNameWithComment)* ')')?  AS queryStatement
+    | ALTER VIEW qualifiedName applyMaskingPolicyClause
+    | ALTER VIEW qualifiedName applyRowAccessPolicyClause
     ;
 
 dropViewStatement
@@ -547,7 +560,7 @@ dropViewStatement
     ;
 
 columnNameWithComment
-    : columnName=identifier comment?
+    : columnName=identifier withMaskingPolicy? comment?
     ;
 
 // ------------------------------------------- Task Statement ----------------------------------------------------------
@@ -566,6 +579,7 @@ dropTaskStatement
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
     ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+    withRowAccessPolicy*
     comment?
     materializedViewDesc*
     AS queryStatement
@@ -594,6 +608,8 @@ alterMaterializedViewStatement
         modifyTablePropertiesClause |
         swapTableClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
+    | ALTER MATERIALIZED VIEW qualifiedName applyMaskingPolicyClause
+    | ALTER MATERIALIZED VIEW qualifiedName applyRowAccessPolicyClause
     ;
 
 refreshMaterializedViewStatement
@@ -792,6 +808,10 @@ alterClause
     | compactionClause
     | modifyCommentClause
 
+    //Apply Policy clause
+    | applyMaskingPolicyClause
+    | applyRowAccessPolicyClause
+
     //Alter partition clause
     | addPartitionClause
     | dropPartitionClause
@@ -914,6 +934,17 @@ rollupRenameClause
 
 compactionClause
     : (BASE | CUMULATIVE)? COMPACT (identifier | identifierList)?
+    ;
+
+applyMaskingPolicyClause
+    : MODIFY COLUMN columnName=identifier SET MASKING POLICY policyName=qualifiedName (USING identifierList)?
+    | MODIFY COLUMN columnName=identifier UNSET MASKING POLICY
+    ;
+
+applyRowAccessPolicyClause
+    : ADD ROW ACCESS POLICY policyName=qualifiedName (ON identifierList)?
+    | DROP ROW ACCESS POLICY policyName=qualifiedName
+    | DROP ALL ROW ACCESS POLICIES
     ;
 
 // ---------Alter partition clause---------
@@ -1521,7 +1552,7 @@ createMaskingPolicyStatement
     ;
 
 dropMaskingPolicyStatement
-    : DROP (IF EXISTS)? MASKING POLICY policyName=qualifiedName FORCE?
+    : DROP MASKING POLICY (IF EXISTS)? policyName=qualifiedName FORCE?
     ;
 
 alterMaskingPolicyStatement
@@ -1544,7 +1575,7 @@ createRowAccessPolicyStatement
     ;
 
 dropRowAccessPolicyStatement
-    : DROP (IF EXISTS)? ROW ACCESS POLICY policyName=qualifiedName FORCE?
+    : DROP ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName FORCE?
     ;
 
 alterRowAccessPolicyStatement
@@ -2134,6 +2165,7 @@ windowFunction
     | name = RANK '(' ')'
     | name = DENSE_RANK '(' ')'
     | name = CUME_DIST '(' ')'
+    | name = PERCENT_RANK '(' ')'
     | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
     | name = LAG '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
@@ -2463,7 +2495,7 @@ nonReserved
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
-    | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
+    | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
@@ -2479,7 +2511,7 @@ nonReserved
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
-    | PRECEDING | PROC | PROCESSLIST | PRIVILEGES | PROPERTIES | PROPERTY
+    | PERCENT_RANK | PRECEDING | PROC | PROCESSLIST | PRIVILEGES | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUEUE | QUOTA | QUALIFY
     | REMOVE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES

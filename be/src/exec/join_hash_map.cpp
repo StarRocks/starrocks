@@ -353,7 +353,7 @@ void JoinHashTable::create(const HashTableParam& param) {
     }
 }
 
-int64_t JoinHashTable::mem_usage() {
+int64_t JoinHashTable::mem_usage() const {
     int64_t usage = 0;
     if (_table_items->build_chunk != nullptr) {
         usage += _table_items->build_chunk->memory_usage();

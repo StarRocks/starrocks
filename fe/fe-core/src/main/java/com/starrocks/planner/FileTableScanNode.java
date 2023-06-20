@@ -141,9 +141,6 @@ public class FileTableScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
-
         if (detailLevel == TExplainLevel.VERBOSE) {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();

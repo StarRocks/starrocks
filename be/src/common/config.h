@@ -846,7 +846,7 @@ CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
 CONF_mBool(experimental_lake_enable_fast_gc, "true");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
-CONF_mBool(lake_enable_aggressive_gc, "true");
+CONF_mBool(lake_enable_aggressive_gc, "false");
 CONF_mBool(lake_aggressive_gc_high_priority, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
@@ -877,7 +877,7 @@ CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 // when spill occurs, whether enable skip synchronous flush
 CONF_mBool(experimental_spill_skip_sync, "true");
 // spill Initial number of partitions
-CONF_mInt32(spill_init_partition, "4");
+CONF_mInt32(spill_init_partition, "16");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB

@@ -34,7 +34,7 @@ CREATE TABLE exam (
     subject STRING,
     exam_result INT
 ) 
-DISTRIBUTED BY HASH(`subject`) BUCKETS 1;
+DISTRIBUTED BY HASH(`subject`);
 
 insert into exam values
 ('chemistry',80),

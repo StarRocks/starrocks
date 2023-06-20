@@ -43,6 +43,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private List<Long> hintsTabletIds;
 
     private List<ScalarOperator> prunedPartitionPredicates;
+    private boolean usePkIndex;
+
+    // record if this scan is derived from SplitScanORToUnionRule
+    private boolean fromSplitOR;
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -62,7 +66,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 null,
                 false,
                 Lists.newArrayList(),
-                Lists.newArrayList());
+                Lists.newArrayList(),
+                false);
     }
 
     public LogicalOlapScanOperator(
@@ -77,7 +82,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             PartitionNames partitionNames,
             boolean hasTableHints,
             List<Long> selectedTabletId,
-            List<Long> hintsTabletIds) {
+            List<Long> hintsTabletIds,
+            boolean usePkIndex) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
                 null);
 
@@ -90,6 +96,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
         this.prunedPartitionPredicates = Lists.newArrayList();
+        this.usePkIndex = usePkIndex;
     }
 
     private LogicalOlapScanOperator() {
@@ -125,8 +132,16 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return hasTableHints;
     }
 
+    public boolean isUsePkIndex() {
+        return usePkIndex;
+    }
+
     public List<ScalarOperator> getPrunedPartitionPredicates() {
         return prunedPartitionPredicates;
+    }
+
+    public boolean isFromSplitOR() {
+        return fromSplitOR;
     }
 
     @Override
@@ -182,6 +197,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.selectedTabletId = scanOperator.selectedTabletId;
             builder.hintsTabletIds = scanOperator.hintsTabletIds;
             builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
+            builder.usePkIndex = scanOperator.usePkIndex;
             return this;
         }
 
@@ -225,5 +241,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             return this;
         }
 
+        public Builder setFromSplitOR(boolean fromSplitOR) {
+            builder.fromSplitOR = fromSplitOR;
+            return this;
+        }
+
+        public Builder setUsePkIndex(boolean usePkIndex) {
+            builder.usePkIndex = usePkIndex;
+            return this;
+        }
     }
 }

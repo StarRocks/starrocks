@@ -418,14 +418,18 @@ public class VariableMgr {
             for (int i = 0; i < sessionVarSize; ++i) {
                 VariableInfo v = reader.readJson(VariableInfo.class);
                 VarContext varContext = getVarContext(v.name);
-                setValue(varContext.getObj(), varContext.getField(), v.variable);
+                if (varContext != null) {
+                    setValue(varContext.getObj(), varContext.getField(), v.variable);
+                }
             }
 
             int globalVarSize = reader.readInt();
             for (int i = 0; i < globalVarSize; ++i) {
                 VariableInfo v = reader.readJson(VariableInfo.class);
                 VarContext varContext = getVarContext(v.name);
-                setValue(varContext.getObj(), varContext.getField(), v.variable);
+                if (varContext != null) {
+                    setValue(varContext.getObj(), varContext.getField(), v.variable);
+                }
             }
         } catch (DdlException e) {
             throw new IOException(e);

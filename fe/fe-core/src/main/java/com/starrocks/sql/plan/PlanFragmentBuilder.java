@@ -86,6 +86,7 @@ import com.starrocks.planner.MysqlScanNode;
 import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
@@ -119,6 +120,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
@@ -150,6 +152,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -775,6 +778,8 @@ public class PlanFragmentBuilder {
             scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
+            scanNode.setUsePkIndex(node.isUsePkIndex());
+
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
@@ -1050,6 +1055,46 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), deltaLakeScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        public PlanFragment visitPhysicalPaimonScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalPaimonScanOperator node = (PhysicalPaimonScanOperator) optExpression.getOp();
+            ScanOperatorPredicates predicates = node.getScanOperatorPredicates();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            PaimonScanNode paimonScanNode =
+                    new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
+            paimonScanNode.computeStatistics(optExpression.getStatistics());
+            try {
+                HDFSScanNodePredicates scanNodePredicates = paimonScanNode.getScanNodePredicates();
+                scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
+                scanNodePredicates.setIdToPartitionKey(predicates.getIdToPartitionKey());
+
+                paimonScanNode.setupScanRangeLocations(context.getDescTbl());
+
+                prepareCommonExpr(scanNodePredicates, predicates, context);
+                prepareMinMaxExpr(scanNodePredicates, predicates, context);
+            } catch (Exception e) {
+                LOG.warn("Paimon scan node get scan range locations failed : " + e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            paimonScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(paimonScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), paimonScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }
@@ -2149,12 +2194,12 @@ public class PlanFragmentBuilder {
         }
 
         private List<ColumnRefOperator> getShuffleColumns(HashDistributionSpec spec) {
-            List<Integer> columnRefs = spec.getShuffleColumns();
-            Preconditions.checkState(!columnRefs.isEmpty());
+            List<DistributionCol> columns = spec.getShuffleColumns();
+            Preconditions.checkState(!columns.isEmpty());
 
             List<ColumnRefOperator> shuffleColumns = new ArrayList<>();
-            for (int columnId : columnRefs) {
-                shuffleColumns.add(columnRefFactory.getColumnRef(columnId));
+            for (DistributionCol column : columns) {
+                shuffleColumns.add(columnRefFactory.getColumnRef(column.getColId()));
             }
             return shuffleColumns;
         }

@@ -184,6 +184,7 @@ import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -215,6 +216,7 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -690,8 +692,8 @@ public class GlobalStateMgr {
         this.stat = new TabletSchedulerStat();
 
         this.globalFunctionMgr = new GlobalFunctionMgr();
-        this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
-        this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
+        this.tabletScheduler = new TabletScheduler(stat);
+        this.tabletChecker = new TabletChecker(tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
                 new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
@@ -1259,11 +1261,7 @@ public class GlobalStateMgr {
         }
 
         if (RunMode.allowCreateLakeTable()) {
-            try {
-                ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
-            } catch (DdlException | AnalysisException | AlreadyExistsException e) {
-                LOG.warn("Failed to create or update builtin storage volume", e);
-            }
+            createOrUpdateBuiltinStorageVolume();
         }
     }
 
@@ -1449,6 +1447,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
                         .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                        .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                         .build();
                 try {
                     loadHeaderV2(dis);
@@ -1457,8 +1456,8 @@ public class GlobalStateMgr {
                     Map.Entry<SRMetaBlockID, SRMetaBlockLoader> entry = iterator.next();
                     while (true) {
                         SRMetaBlockID srMetaBlockID = entry.getKey();
-                        SRMetaBlockReader reader = new SRMetaBlockReader(dis, srMetaBlockID);
-                        if (reader.getHeader().getId() != srMetaBlockID) {
+                        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+                        if (!reader.getHeader().getSrMetaBlockID().equals(srMetaBlockID)) {
                             /*
                               The expected read module does not match the module stored in the image,
                               and the json chunk is skipped directly. This usually occurs in several situations.
@@ -1467,7 +1466,7 @@ public class GlobalStateMgr {
                                  the old version ignores the functions of the new version
                              */
                             LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
-                                    "(expect %s actual %s)", srMetaBlockID.name(), reader.getHeader().getId().name()));
+                                    "(expect %s actual %s)", srMetaBlockID, reader.getHeader().getSrMetaBlockID()));
                             reader.close();
                             continue;
                         }
@@ -1475,7 +1474,7 @@ public class GlobalStateMgr {
                         try {
                             SRMetaBlockLoader imageLoader = entry.getValue();
                             imageLoader.apply(reader);
-                            LOG.info("Success load StarRocks meta block " + srMetaBlockID.name() + " from image");
+                            LOG.info("Success load StarRocks meta block " + srMetaBlockID + " from image");
                         } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
                             /*
                               The number of json expected to be read is more than the number of json actually stored
@@ -1663,15 +1662,6 @@ public class GlobalStateMgr {
         MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
 
         return checksum;
-    }
-
-    public long loadHeader(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
-            loadHeaderV2(dis);
-            return checksum;
-        } else {
-            return loadHeaderV1(dis, checksum);
-        }
     }
 
     public long loadHeaderV1(DataInputStream dis, long checksum) throws IOException {
@@ -1866,6 +1856,7 @@ public class GlobalStateMgr {
                     streamLoadMgr.save(dos);
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
+                    storageVolumeMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
@@ -2559,7 +2550,16 @@ public class GlobalStateMgr {
                 sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
             }
 
-            // enable storage cache && cache ttl & storage volume
+            String partitionDuration =
+                    olapTable.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
+            if (partitionDuration != null) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)
+                        .append("\" = \"")
+                        .append(partitionDuration).append("\"");
+            }
+
+            // enable storage cache && cache ttl
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
@@ -2873,8 +2873,8 @@ public class GlobalStateMgr {
         }
     }
 
-    public void replayCreateTable(String dbName, Table table) {
-        localMetastore.replayCreateTable(dbName, table);
+    public void replayCreateTable(CreateTableInfo info) {
+        localMetastore.replayCreateTable(info);
     }
 
     public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
@@ -3936,7 +3936,7 @@ public class GlobalStateMgr {
             LOG.warn("backup handler clean old jobs failed", t);
         }
         try {
-            streamLoadMgr.cleanOldStreamLoadTasks();
+            streamLoadMgr.cleanOldStreamLoadTasks(false);
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
         }
@@ -3971,5 +3971,18 @@ public class GlobalStateMgr {
 
     public MetaContext getMetaContext() {
         return metaContext;
+    }
+
+    public void createOrUpdateBuiltinStorageVolume() {
+        try {
+            ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
+            String builtinStorageVolumeId = storageVolumeMgr
+                    .getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
+            authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
+        } catch (DdlException | AnalysisException | AlreadyExistsException e) {
+            LOG.warn("Failed to create or update builtin storage volume", e);
+        } catch (PrivilegeException e) {
+            LOG.warn("Failed to grant builtin storage volume usage to public role", e);
+        }
     }
 }

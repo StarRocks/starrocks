@@ -31,6 +31,20 @@ import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.iceberg.types.Types;
+import org.apache.paimon.types.BigIntType;
+import org.apache.paimon.types.BooleanType;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataTypeDefaultVisitor;
+import org.apache.paimon.types.DateType;
+import org.apache.paimon.types.DecimalType;
+import org.apache.paimon.types.DoubleType;
+import org.apache.paimon.types.FloatType;
+import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.RowType;
+import org.apache.paimon.types.SmallIntType;
+import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarCharType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -370,6 +384,83 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
         return ScalarType.createType(primitiveType);
+    }
+
+    public static Type fromPaimonType(org.apache.paimon.types.DataType type) {
+        return type.accept(PaimonToHiveTypeVisitor.INSTANCE);
+    }
+
+    private static class PaimonToHiveTypeVisitor extends DataTypeDefaultVisitor<Type> {
+
+        private static final PaimonToHiveTypeVisitor INSTANCE = new PaimonToHiveTypeVisitor();
+
+        public Type visit(VarCharType varCharType) {
+            return ScalarType.createDefaultExternalTableString();
+        }
+
+        public Type visit(BooleanType booleanType) {
+            return ScalarType.createType(PrimitiveType.BOOLEAN);
+        }
+
+        public Type visit(DecimalType decimalType) {
+            return ScalarType.createUnifiedDecimalType(decimalType.getPrecision(), decimalType.getScale());
+        }
+
+        public Type visit(TinyIntType tinyIntType) {
+            return ScalarType.createType(PrimitiveType.TINYINT);
+        }
+
+        public Type visit(SmallIntType smallIntType) {
+            return ScalarType.createType(PrimitiveType.SMALLINT);
+        }
+
+        public Type visit(IntType intType) {
+            return ScalarType.createType(PrimitiveType.INT);
+        }
+
+        public Type visit(BigIntType bigIntType) {
+            return ScalarType.createType(PrimitiveType.BIGINT);
+        }
+
+        public Type visit(FloatType floatType) {
+            return ScalarType.createType(PrimitiveType.FLOAT);
+        }
+
+        public Type visit(DoubleType doubleType) {
+            return ScalarType.createType(PrimitiveType.DOUBLE);
+        }
+
+        public Type visit(DateType dateType) {
+            return ScalarType.createType(PrimitiveType.DATE);
+        }
+
+        public Type visit(TimestampType timestampType) {
+            return ScalarType.createType(PrimitiveType.DATETIME);
+        }
+
+        public Type visit(org.apache.paimon.types.ArrayType arrayType) {
+            return new ArrayType(fromPaimonType(arrayType.getElementType()));
+        }
+
+        public Type visit(org.apache.paimon.types.MapType mapType) {
+            return new MapType(fromPaimonType(mapType.getKeyType()), fromPaimonType(mapType.getValueType()));
+        }
+
+        public Type visit(RowType rowType) {
+            List<DataField> fields = rowType.getFields();
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (DataField field : fields) {
+                String fieldName = field.name();
+                Type fieldType = fromPaimonType(field.type());
+                structFields.add(new StructField(fieldName, fieldType));
+            }
+            return new StructType(structFields);
+        }
+
+        @Override
+        protected Type defaultMethod(org.apache.paimon.types.DataType dataType) {
+            return ScalarType.createType(PrimitiveType.UNKNOWN_TYPE);
+        }
     }
 
     public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {

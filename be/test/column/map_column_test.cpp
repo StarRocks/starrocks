@@ -1317,4 +1317,89 @@ PARALLEL_TEST(MapColumnTest, test_remove_duplicated_keys) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST(MapColumnTest, test_hash) {
+    ColumnPtr column = nullptr;
+    ColumnPtr column1 = nullptr;
+
+    {
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(values_data, values_null);
+
+        offsets->append(0);
+        offsets->append(3);
+
+        keys_null->append(0);
+        keys_null->append(0);
+        keys_null->append(0);
+
+        keys_data->append(1);
+        keys_data->append(2);
+        keys_data->append(3);
+
+        values_null->append(0);
+        values_null->append(0);
+        values_null->append(0);
+
+        values_data->append(11);
+        values_data->append(21);
+        values_data->append(31);
+
+        column = MapColumn::create(keys, values, offsets);
+    }
+
+    {
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(values_data, values_null);
+
+        offsets->append(0);
+        offsets->append(3);
+
+        keys_null->append(0);
+        keys_null->append(0);
+        keys_null->append(0);
+
+        keys_data->append(2);
+        keys_data->append(1);
+        keys_data->append(3);
+
+        values_null->append(0);
+        values_null->append(0);
+        values_null->append(0);
+
+        values_data->append(21);
+        values_data->append(11);
+        values_data->append(31);
+
+        column1 = MapColumn::create(keys, values, offsets);
+    }
+
+    ASSERT_EQ("{1:11,2:21,3:31}", column->debug_item(0));
+    ASSERT_EQ("{2:21,1:11,3:31}", column1->debug_item(0));
+
+    uint32_t hash = 0;
+    uint32_t hash1 = 0;
+    column->fnv_hash_at(&hash, 0);
+    column1->fnv_hash_at(&hash1, 0);
+
+    ASSERT_EQ(hash, hash1);
+
+    hash = 0;
+    hash1 = 0;
+    column->crc32_hash_at(&hash, 0);
+    column1->crc32_hash_at(&hash1, 0);
+
+    ASSERT_EQ(hash, hash1);
+}
+
 } // namespace starrocks

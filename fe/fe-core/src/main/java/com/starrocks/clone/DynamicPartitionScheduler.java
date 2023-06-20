@@ -36,7 +36,6 @@ package com.starrocks.clone;
 
 import com.google.api.client.util.Preconditions;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -58,7 +57,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.RangeUtils;
@@ -75,6 +73,7 @@ import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -515,10 +514,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         List<Map.Entry<Long, Range<PartitionKey>>> candidatePartitionList = Lists.newArrayList();
 
         if (partitionType.isDateType()) {
-            LocalDateTime currentDateTime = LocalDateTime.now();
-            PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
-            PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
-                    ImmutableList.of(currentPartitionValue), partitionColumns);
+            PartitionKey currentPartitionKey = partitionType.isDatetime() ?
+                    PartitionKey.ofDateTime(LocalDateTime.now()) : PartitionKey.ofDate(LocalDate.now());
             PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
 
             Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);

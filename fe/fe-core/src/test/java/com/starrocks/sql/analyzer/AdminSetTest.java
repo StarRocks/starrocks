@@ -34,7 +34,7 @@ public class AdminSetTest {
     public void testAdminSetConfig() {
         analyzeSuccess("admin set frontend config(\"alter_table_timeout_second\" = \"60\");");
         analyzeFail("admin set frontend config;", "Getting syntax error at line 1, column 25. " +
-                "Detail message: Input ';' is not valid at this position");
+                "Detail message: Unexpected input ';', the most similar input is {'('}.");
     }
 
     @Test

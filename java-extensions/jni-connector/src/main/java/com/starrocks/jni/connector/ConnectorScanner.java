@@ -72,8 +72,8 @@ public abstract class ConnectorScanner {
     /**
      * This method need be called before {@link ConnectorScanner#getNext()}
      *
-     * @param requiredTypes  column types
-     * @param requiredFields
+     * @param requiredTypes  column types to scan
+     * @param requiredFields columns names to scan
      * @param fetchSize      number of rows
      */
     protected void initOffHeapTableWriter(ColumnType[] requiredTypes, String[] requiredFields, int fetchSize) {

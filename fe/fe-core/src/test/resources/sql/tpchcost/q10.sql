@@ -101,7 +101,6 @@ tabletRatio=10/10
 tabletList=10162,10164,10166,10168,10170,10172,10174,10176,10178,10180
 cardinality=15000000
 avgRowSize=217.0
-numNodes=0
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -120,7 +119,6 @@ tabletRatio=1/1
 tabletList=10185
 cardinality=25
 avgRowSize=29.0
-numNodes=0
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -157,7 +155,6 @@ tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=200000000
 avgRowSize=25.0
-numNodes=0
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -181,6 +178,5 @@ tabletRatio=10/10
 tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=5738046
 avgRowSize=20.0
-numNodes=0
 [end]
 

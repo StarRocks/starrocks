@@ -49,6 +49,20 @@ class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
 
+// save the context when reading from delta column files
+struct GetDeltaColumnContext {
+    DeltaColumnGroupList dcgs;
+    // from delta column filename to segment
+    std::unordered_map<std::string, std::shared_ptr<Segment>> dcg_segments;
+    // from delta column filename to read file
+    std::unordered_map<std::string, std::unique_ptr<RandomAccessFile>> dcg_read_files;
+    // main segment
+    std::shared_ptr<Segment> segment;
+
+    Status prepareGetDeltaColumnContext(std::shared_ptr<Segment> segment, KVStore* kvstore, const TabletSegmentId& tsid,
+                                        int64_t read_version);
+};
+
 struct CompactionInfo {
     EditVersion start_version;
     std::vector<uint32_t> inputs;
@@ -265,15 +279,15 @@ public:
     //          column 2 value@rssid:6 rowid:4,
     //   ]
     // ]
-    Status get_column_values(const std::vector<uint32_t>& column_ids, bool with_default,
+    Status get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns, void* state);
 
-    Status prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upserts, EditVersion* read_version,
-                                         std::vector<uint64_t>* rss_rowids);
+    Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                std::vector<uint64_t>* rss_rowids);
 
-    Status prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upserts,
-                                                EditVersion* read_version, std::vector<uint64_t>* rss_rowids);
+    Status get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                       std::vector<uint64_t>* rss_rowids);
 
     Status get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges);
 
@@ -296,6 +310,10 @@ public:
 
     Status get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
                                          std::vector<uint32_t>* rowset_ids);
+
+    bool check_delta_column_generate_from_version(EditVersion begin_version);
+
+    Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
 private:
     friend class Tablet;
@@ -354,8 +372,8 @@ private:
 
     void _calc_compaction_score(RowsetStats* stats);
 
-    Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, std::int32_t condition_column,
-                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, std::int64_t tablet_id,
+    Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
+                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                       DeletesMap* new_deletes);
 
     // This method will acquire |_lock|.

@@ -82,7 +82,6 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
     auto scoped = trace::Scope(_span);
     ClosureGuard done_guard(done);
-    auto t0 = std::chrono::steady_clock::now();
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     int64_t index_id = request.index_id();
@@ -254,6 +253,9 @@ Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
     std::lock_guard l(_chunk_meta_lock);
     if (_has_chunk_meta.load(std::memory_order_acquire)) {
         return Status::OK();
+    }
+    if (_row_desc == nullptr) {
+        return Status::InternalError(fmt::format("load channel not open yet, load id: {}", _load_id.to_string()));
     }
     StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_row_desc, pb_chunk);
     if (!res.ok()) return res.status();

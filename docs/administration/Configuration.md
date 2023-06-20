@@ -133,13 +133,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | Parameter                                     | Unit | Default                | Description                                                  |
 | --------------------------------------------- | ---- | ---------------------- | ------------------------------------------------------------ |
 | enable_strict_storage_medium_check            | -    | FALSE                  | Whether the FE strictly checks the storage medium of BEs when users create tables. If this parameter is set to `TRUE`, the FE checks the storage medium of BEs when users create tables and returns an error if the storage medium of the BE is different from the `storage_medium` parameter specified in the CREATE TABLE statement. For example, the storage medium specified in the CREATE TABLE statement is SSD but the actual storage medium of BEs is HDD. As a result, the table creation fails. If this parameter is `FALSE`, the FE does not check the storage medium of BEs when users create table. |
+| enable_auto_tablet_distribution               | -    | TRUE                   | Whether to automatically set the number of buckets. <ul><li> If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets. For the strategy of automatically setting the number of buckets, see [Determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).</li><li>If this parameter is set to `FALSE`, you need to manually specify the the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.</li></ul>|
+Starting from version 2.5.7, StarRocks supports setting this parameter.
 | capacity_used_percent_high_water              | -    | 0.75                   | The upper limit of disk usage on a BE. If this value is exceeded, table creation or clone jobs will not be sent to this BE, until the disk usage returns to normal. |
 | storage_high_watermark_usage_percent          | %    | 85                     | The upper limit of storage space usage for BE's storage directory.  If this value is exceeded, data can no longer be stored in this storage path. |
 | storage_min_left_capacity_bytes               | Byte | 2 \* 1024 \* 1024 \* 1024 | The minimum remaining storage space allowed in the BE storage directory, in Bytes. If this value is exceeded, data can no longer be stored in this storage path. |
 | catalog_trash_expire_second                   | s    | 86400                  | The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds. |
 | alter_table_timeout_second                    | s    | 86400                  | The timeout duration for the schema change operation (ALTER TABLE). Unit: seconds. |
 | recover_with_empty_tablet                     | -    | FALSE                  | Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones and the query fails. |
-| tablet_create_timeout_second                  | s    | 1                      | The timeout duration for creating a tablet, in seconds.       |
+| tablet_create_timeout_second                  | s    | 10                      | The timeout duration for creating a tablet, in seconds.       |
 | tablet_delete_timeout_second                  | s    | 2                      | The timeout duration for deleting a tablet, in seconds.      |
 | check_consistency_default_timeout_second      | s    | 600                    | The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet. |
 | tablet_sched_slot_num_per_path                | -    | 8                      | The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. From v2.5 onwards, the default value of this parameter is changed from `4` to `8`.|
@@ -244,9 +246,10 @@ This section provides an overview of the static parameters that you can configur
 #### Query engine
 
 | Parameter                   | Default | Description                                                  |
-| --------------------------- | ------- | ------------------------------------------------------------ |
+| --------------------------- |---------| ------------------------------------------------------------ |
 | publish_version_interval_ms | 10      | The time interval at which release validation tasks are issued. Unit: ms. |
 | statistic_cache_columns     | 100000  | The number of rows that can be cached for the statistics table. |
+| statistic_cache_thread_pool_size     | 10      | The size of the thread-pool which will be used to refresh statistic caches. |
 
 #### Loading and unloading
 
@@ -504,7 +507,7 @@ BE static parameters are as follows.
 | enable_event_based_compaction_framework | 0 | N/A | |
 | enable_load_colocate_mv | 0 | N/A | |
 | enable_metric_calculator | 0 | N/A | |
-| enable_new_load_on_memory_limit_exceeded | 0 | N/A | |
+| enable_new_load_on_memory_limit_exceeded | 1 | N/A | |
 | enable_orc_late_materialization | 1 | N/A | |
 | enable_schema_change_v2 | 1 | N/A | |
 | enable_segment_overflow_read_chunk | 1 | N/A | |

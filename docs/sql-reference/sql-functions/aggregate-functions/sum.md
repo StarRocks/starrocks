@@ -43,7 +43,7 @@ Data type mapping between input value and return value:
         income        DOUBLE         COMMENT "8 bytes",
         sales       DECIMAL(12,4)  COMMENT ""
         )
-        DISTRIBUTED BY HASH(region_num) BUCKETS 8;
+        DISTRIBUTED BY HASH(region_num);
     ```
 
 2. Insert data into `employees`.

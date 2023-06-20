@@ -121,7 +121,7 @@ public class InsertAnalyzer {
             OlapTable olapTable = (OlapTable) table;
             targetPartitionNames = insertStmt.getTargetPartitionNames();
 
-            if (targetPartitionNames != null) {
+            if (insertStmt.isSpecifyPartitionNames()) {
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
                     throw new SemanticException("No partition specified in partition lists",
                             targetPartitionNames.getPos());
@@ -139,6 +139,8 @@ public class InsertAnalyzer {
                     }
                     targetPartitionIds.add(partition.getId());
                 }
+            } else if (insertStmt.isStaticKeyPartitionInsert()) {
+                checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
             } else {
                 for (Partition partition : olapTable.getPartitions()) {
                     targetPartitionIds.add(partition.getId());
@@ -161,52 +163,7 @@ public class InsertAnalyzer {
                     }
                 }
             } else if (insertStmt.isStaticKeyPartitionInsert()) {
-                List<String> partitionColNames = targetPartitionNames.getPartitionColNames();
-                List<Expr> partitionColValues = targetPartitionNames.getPartitionColValues();
-
-                Preconditions.checkState(partitionColNames.size() == partitionColValues.size(),
-                        "Partition column names size must be equal to the partition column values size. %d vs %d",
-                        partitionColNames.size(), partitionColValues.size());
-
-                if (tablePartitionColumnNames.size() > partitionColNames.size()) {
-                    throw new SemanticException("Must include all %d partition columns in the partition clause",
-                            tablePartitionColumnNames.size());
-                }
-
-                if (tablePartitionColumnNames.size() < partitionColNames.size()) {
-                    throw new SemanticException("Only %d partition columns can be included in the partition clause",
-                            tablePartitionColumnNames.size());
-                }
-
-                Map<String, Long> frequencies = partitionColNames.stream()
-                        .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
-                Optional<Map.Entry<String, Long>> duplicateKey = frequencies.entrySet().stream()
-                        .filter(entry -> entry.getValue() > 1).findFirst();
-                if (duplicateKey.isPresent()) {
-                    throw new SemanticException("Found duplicate partition column name %s", duplicateKey.get().getKey());
-                }
-
-                for (int i = 0; i < partitionColNames.size(); i++) {
-                    String actualName = partitionColNames.get(i);
-                    if (!tablePartitionColumnNames.contains(actualName)) {
-                        throw new SemanticException("Can't find partition column %s", actualName);
-                    }
-
-                    Expr partitionValue = partitionColValues.get(i);
-
-                    if (!partitionValue.isLiteral()) {
-                        throw new SemanticException("partition value should be literal expression");
-                    }
-
-                    LiteralExpr literalExpr = (LiteralExpr) partitionValue;
-                    Column column = icebergTable.getColumn(actualName);
-                    try {
-                        Expr expr = LiteralExpr.create(literalExpr.getStringValue(), column.getType());
-                        insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
-                    } catch (AnalysisException e) {
-                        throw new SemanticException(e.getMessage());
-                    }
-                }
+                checkStaticKeyPartitionInsert(insertStmt, icebergTable, targetPartitionNames);
             }
         }
 
@@ -289,6 +246,55 @@ public class InsertAnalyzer {
         session.getDumpInfo().addTable(database.getFullName(), table);
     }
 
+    private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionNames targetPartitionNames) {
+        List<String> partitionColNames = targetPartitionNames.getPartitionColNames();
+        List<Expr> partitionColValues = targetPartitionNames.getPartitionColValues();
+        List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
+
+        Preconditions.checkState(partitionColNames.size() == partitionColValues.size(),
+                "Partition column names size must be equal to the partition column values size. %d vs %d",
+                partitionColNames.size(), partitionColValues.size());
+
+        if (tablePartitionColumnNames.size() > partitionColNames.size()) {
+            throw new SemanticException("Must include all %d partition columns in the partition clause",
+                    tablePartitionColumnNames.size());
+        }
+
+        if (tablePartitionColumnNames.size() < partitionColNames.size()) {
+            throw new SemanticException("Only %d partition columns can be included in the partition clause",
+                    tablePartitionColumnNames.size());
+        }
+        Map<String, Long> frequencies = partitionColNames.stream()
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+        Optional<Map.Entry<String, Long>> duplicateKey = frequencies.entrySet().stream()
+                .filter(entry -> entry.getValue() > 1).findFirst();
+        if (duplicateKey.isPresent()) {
+            throw new SemanticException("Found duplicate partition column name %s", duplicateKey.get().getKey());
+        }
+
+        for (int i = 0; i < partitionColNames.size(); i++) {
+            String actualName = partitionColNames.get(i);
+            if (!tablePartitionColumnNames.contains(actualName)) {
+                throw new SemanticException("Can't find partition column %s", actualName);
+            }
+
+            Expr partitionValue = partitionColValues.get(i);
+
+            if (!partitionValue.isLiteral()) {
+                throw new SemanticException("partition value should be literal expression");
+            }
+
+            LiteralExpr literalExpr = (LiteralExpr) partitionValue;
+            Column column = table.getColumn(actualName);
+            try {
+                Expr expr = LiteralExpr.create(literalExpr.getStringValue(), column.getType());
+                insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+    }
+  
     private static ExternalOlapTable getOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable) {
         // copy the table, and release database lock when synchronize table meta
         ExternalOlapTable copiedTable = new ExternalOlapTable();

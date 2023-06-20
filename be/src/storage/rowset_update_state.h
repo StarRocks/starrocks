@@ -129,6 +129,7 @@ private:
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock);
 
     Status _prepare_auto_increment_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
+                                                         EditVersion latest_applied_version,
                                                          std::vector<uint32_t> column_id);
 
     Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
