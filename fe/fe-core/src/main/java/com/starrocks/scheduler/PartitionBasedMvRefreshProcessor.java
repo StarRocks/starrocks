@@ -978,8 +978,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         try {
-            executor.handleDMLStmt(execPlan, insertStmt);
+            executor.handleDMLStmt(execPlan, insertStmt, beginTimeInNanoSecond);
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(ctx.getExecutionId());
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());

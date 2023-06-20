@@ -261,7 +261,7 @@ public class InsertOverwriteJobRunner {
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
         ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
-        stmtExecutor.handleDMLStmt(newPlan, insertStmt);
+        stmtExecutor.handleDMLStmt(newPlan, insertStmt, insertStartTimestamp);
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             LOG.warn("insert overwrite failed. error message:{}", context.getState().getErrorMessage());

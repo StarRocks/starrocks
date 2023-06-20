@@ -564,7 +564,7 @@ public class StmtExecutor {
                     throw new AnalysisException("old planner does not support CTAS statement");
                 }
             } else if (parsedStmt instanceof DmlStmt) {
-                handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
+                handleDMLStmt(execPlan, (DmlStmt) parsedStmt, beginTimeInNanoSecond);
             } else if (parsedStmt instanceof DdlStmt) {
                 handleDdlStmt();
             } else if (parsedStmt instanceof ShowStmt) {
@@ -652,10 +652,7 @@ public class StmtExecutor {
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
-            handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
-            if (context.getSessionVariable().isEnableProfile()) {
-                writeProfile(beginTimeInNanoSecond);
-            }
+            handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt(), beginTimeInNanoSecond);
             if (context.getState().getStateType() == MysqlStateType.ERR) {
                 ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
             }
@@ -1382,10 +1379,10 @@ public class StmtExecutor {
         manager.executeJob(context, this, job);
     }
 
-    public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-        long beginTimeInNanoSecond = TimeUtils.getStartTime();
+    public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt, long beginTimeInNanoSecond) throws Exception {
         try {
             handleDMLStmtImpl(execPlan, stmt);
+            // TODO: Support write profile even dml aborted.
             if (context.getSessionVariable().isEnableProfile()) {
                 writeProfile(beginTimeInNanoSecond);
             }

@@ -34,6 +34,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.qe.ConnectContext;
@@ -1531,6 +1532,7 @@ public class PartitionBasedMvRefreshProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
@@ -1550,7 +1552,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                 ctx.setThreadLocalInfo();
                 ctx.setStmtId(new AtomicInteger().incrementAndGet());
                 ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-                executor.handleDMLStmt(execPlan, insertStmt);
+                executor.handleDMLStmt(execPlan, insertStmt, beginTimeInNanoSecond);
             }
         };
 
@@ -1618,6 +1620,7 @@ public class PartitionBasedMvRefreshProcessorTest {
             throws Exception {
         // drop partition p4 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
@@ -1635,7 +1638,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                 ctx.setThreadLocalInfo();
                 ctx.setStmtId(new AtomicInteger().incrementAndGet());
                 ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-                executor.handleDMLStmt(execPlan, insertStmt);
+                executor.handleDMLStmt(execPlan, insertStmt, beginTimeInNanoSecond);
             }
         };
 
