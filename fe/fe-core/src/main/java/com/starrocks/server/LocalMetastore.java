@@ -67,6 +67,7 @@ import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -208,6 +209,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -271,7 +273,7 @@ public class LocalMetastore implements ConnectorMetadata {
         this.colocateTableIndex = colocateTableIndex;
     }
 
-    boolean tryLock(boolean mustLock) {
+    public boolean tryLock(boolean mustLock) {
         return stateMgr.tryLock(mustLock);
     }
 
@@ -768,15 +770,7 @@ public class LocalMetastore implements ConnectorMetadata {
      */
     @Override
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
-        String engineName = stmt.getEngineName();
-        String dbName = stmt.getDbName();
-        String tableName = stmt.getTableName();
-
-        // check if db exists
-        Database db = getDb(stmt.getDbName());
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
+        Database db = MetaUtils.getDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, stmt.getDbName());
 
         // only internal table should check quota and cluster capacity
         if (!stmt.isExternal()) {
@@ -786,30 +780,64 @@ public class LocalMetastore implements ConnectorMetadata {
             db.checkQuota();
         }
 
-        // check if table exists in db
-        db.readLock();
-        try {
-            if (db.getTable(tableName) != null) {
-                if (stmt.isSetIfNotExists()) {
-                    LOG.info("create table[{}] which already exists", tableName);
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
-                }
-                return false;
-            }
-        } finally {
-            db.readUnlock();
+        AbstractTableFactory tableFactory = TableFactoryProvider.getFactory(stmt.getEngineName());
+        if (tableFactory == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, stmt.getEngineName());
         }
 
-        AbstractTableFactory tableFactory = TableFactoryProvider.getFactory(engineName);
-        if (tableFactory == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
-        }
         Table table = tableFactory.createTable(this, db, stmt);
-        if (!(table instanceof OlapTable)) { // Special case: OlapTable has been added into the metastore before return.
-            registerTable(db, table, stmt);
+        table.onCreate();
+        registerTable(db, table, stmt.isSetIfNotExists());
+
+        String storageVolumeId = "";
+        if (table instanceof OlapTable) {
+            storageVolumeId = buildStorageVolum(db, (OlapTable) table, stmt.getProperties());
         }
+
+        CreateTableInfo info = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
         return true;
+    }
+
+    private String buildStorageVolum(Database db, OlapTable olapTable,
+                                     Map<String, String> properties) throws DdlException {
+        RunMode runMode = RunMode.getCurrentRunMode();
+        String volume = "";
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+            volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+        }
+        if (runMode == RunMode.SHARED_DATA) {
+            if (volume.equals(StorageVolumeMgr.LOCAL)) {
+                throw new DdlException("Cannot create table " +
+                        "without persistent volume in current run mode \"" + runMode + "\"");
+            }
+
+            StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+            StorageVolume sv = null;
+            if (volume.isEmpty()) {
+                String dbStorageVolumeId = svm.getStorageVolumeIdOfDb(db.getId());
+                if (dbStorageVolumeId != null) {
+                    sv = svm.getStorageVolume(dbStorageVolumeId);
+                } else {
+                    sv = svm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+                }
+            } else if (volume.equals(StorageVolumeMgr.DEFAULT)) {
+                sv = svm.getDefaultStorageVolume();
+            } else {
+                sv = svm.getStorageVolumeByName(volume);
+            }
+            if (sv == null) {
+                throw new DdlException("Unknown storage volume \"" + volume + "\"");
+            }
+            String storageVolumeId = sv.getId();
+            setLakeStorageInfo(olapTable, storageVolumeId, properties);
+            svm.bindTableToStorageVolume(sv.getId(), olapTable.getId());
+            olapTable.setStorageVolume(sv.getName());
+            return storageVolumeId;
+        } else {
+            olapTable.setStorageVolume(StorageVolumeMgr.LOCAL);
+            return "";
+        }
     }
 
     @Override
@@ -1969,7 +1997,7 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setStorageInfo(pathInfo, storageCacheInfo);
     }
 
-    void registerTable(Database db, Table table, CreateTableStmt stmt) throws DdlException {
+    void registerTable(Database db, Table table, boolean isSetIfNotExists) throws DdlException {
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -1978,24 +2006,31 @@ public class LocalMetastore implements ConnectorMetadata {
             if (getDb(db.getFullName()) == null) {
                 throw new DdlException("Database has been dropped when creating table");
             }
-            if (!db.createTableWithLock(table, false)) {
-                if (!stmt.isSetIfNotExists()) {
+            if (!db.registerTableWithLock(table)) {
+                if (!isSetIfNotExists) {
+                    if (table instanceof OlapTable) {
+                        OlapTable olapTable = (OlapTable) table;
+                        olapTable.onErase(false);
+                    }
                     ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
                             "table already exists");
                 } else {
                     LOG.info("Create table[{}] which already exists", table.getName());
                 }
             }
+
         } finally {
             unlock();
         }
     }
 
     public void replayCreateTable(CreateTableInfo info) {
-        String dbName = info.getDbName();
         Table table = info.getTable();
-        Database db = this.fullNameToDb.get(dbName);
-        db.createTableWithLock(table, true);
+        table.onCreate();
+
+        Database db = this.fullNameToDb.get(info.getDbName());
+        db.registerTableWithLock(table);
+
 
         if (!isCheckpointThread()) {
             // add to inverted index
@@ -3204,16 +3239,21 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Same table name");
         }
 
-        // check if name is already used
-        if (db.getTable(newTableName) != null) {
-            throw new DdlException("Table name[" + newTableName + "] is already used");
+        db.writeLock();
+        try {
+            // check if name is already used
+            if (db.getTable(newTableName) != null) {
+                throw new DdlException("Table name[" + newTableName + "] is already used");
+            }
+
+            olapTable.checkAndSetName(newTableName, false);
+
+            db.dropTable(oldTableName);
+            db.registerTableUnlock(olapTable);
+            disableMaterializedViewForRenameTable(db, olapTable);
+        } finally {
+            db.writeUnlock();
         }
-
-        olapTable.checkAndSetName(newTableName, false);
-
-        db.dropTable(oldTableName);
-        db.createTable(olapTable);
-        disableMaterializedViewForRenameTable(db, olapTable);
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         GlobalStateMgr.getCurrentState().getEditLog().logTableRename(tableInfo);
@@ -3254,7 +3294,7 @@ public class LocalMetastore implements ConnectorMetadata {
             String tableName = table.getName();
             db.dropTable(tableName);
             table.setName(newTableName);
-            db.createTable(table);
+            db.registerTableUnlock(table);
             disableMaterializedViewForRenameTable(db, table);
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
@@ -3797,38 +3837,22 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Column> columns = stmt.getColumns();
 
         long tableId = getNextId();
-        View newView = new View(tableId, tableName, columns);
-        newView.setComment(stmt.getComment());
-        newView.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
+        View view = new View(tableId, tableName, columns);
+        view.setComment(stmt.getComment());
+        view.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
                 ConnectContext.get().getSessionVariable().getSqlMode());
         // init here in case the stmt string from view.toSql() has some syntax error.
         try {
-            newView.init();
+            view.init();
         } catch (UserException e) {
             throw new DdlException("failed to init view stmt", e);
         }
 
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-        try {
-            if (getDb(db.getId()) == null) {
-                throw new DdlException("database has been dropped when creating view");
-            }
-            if (!db.createTableWithLock(newView, false)) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                } else {
-                    LOG.info("create table[{}] which already exists", tableName);
-                    return;
-                }
-            }
-        } finally {
-            unlock();
-        }
+        registerTable(db, view, stmt.isSetIfNotExists());
+        CreateTableInfo info = new CreateTableInfo(db.getFullName(), view, "");
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
 
-        LOG.info("successfully create view[" + tableName + "-" + newView.getId() + "]");
+        LOG.info("successfully create view[" + tableName + "-" + view.getId() + "]");
     }
 
     public void replayCreateCluster(Cluster cluster) {
@@ -4428,20 +4452,6 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
 
-    public void onEraseTable(@NotNull OlapTable olapTable, boolean isReplay) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        Collection<Partition> allPartitions = olapTable.getAllPartitions();
-        for (Partition partition : allPartitions) {
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                for (Tablet tablet : index.getTablets()) {
-                    invertedIndex.deleteTablet(tablet.getId());
-                }
-            }
-        }
-
-        colocateTableIndex.removeTable(olapTable.getId(), olapTable, isReplay);
-    }
-
     public void onErasePartition(Partition partition) {
         // remove tablet in inverted index
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
@@ -4642,14 +4652,10 @@ public class LocalMetastore implements ConnectorMetadata {
     private String bindStorageVolumeToDb(long dbId, String volume) throws DdlException {
         StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         StorageVolume sv = null;
-        try {
-            if (volume.equals(StorageVolumeMgr.DEFAULT)) {
-                sv = svm.getDefaultStorageVolume();
-            } else {
-                sv = svm.getStorageVolumeByName(volume);
-            }
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
+        if (volume.equals(StorageVolumeMgr.DEFAULT)) {
+            sv = svm.getDefaultStorageVolume();
+        } else {
+            sv = svm.getStorageVolumeByName(volume);
         }
         if (sv == null) {
             throw new DdlException("Unknown storage volume \"" + volume + "\"");
@@ -4694,14 +4700,13 @@ public class LocalMetastore implements ConnectorMetadata {
             int tableSize = reader.readInt();
             for (int j = 0; j < tableSize; ++j) {
                 Table table = reader.readJson(Table.class);
-                db.createTableWithLock(table, true);
+                db.registerTableWithLock(table);
             }
 
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
             db.getTables().forEach(Table::onCreate);
-            db.getHiveTables().forEach(Table::onCreate);
         }
 
         // put built-in database into local metastore

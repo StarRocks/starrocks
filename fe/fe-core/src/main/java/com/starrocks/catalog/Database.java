@@ -461,8 +461,7 @@ public class Database extends MetaObject implements Writable {
         checkReplicaQuota();
     }
 
-    // return false if table already exists
-    public boolean createTableWithLock(Table table, boolean isReplay) {
+    public boolean registerTableWithLock(Table table) {
         writeLock();
         try {
             String tableName = table.getName();
@@ -473,11 +472,6 @@ public class Database extends MetaObject implements Writable {
                 nameToTable.put(table.getName(), table);
 
                 table.onCreate();
-                if (!isReplay) {
-                    // Write edit log
-                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
-                    GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
-                }
             }
             return true;
         } finally {
@@ -485,32 +479,7 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-    // return false if table already exists
-    public boolean createTableWithLock(Table table, String storageVolumeId, boolean isReplay) {
-        writeLock();
-        try {
-            String tableName = table.getName();
-            if (nameToTable.containsKey(tableName)) {
-                return false;
-            } else {
-                idToTable.put(table.getId(), table);
-                nameToTable.put(table.getName(), table);
-
-                table.onCreate();
-                if (!isReplay) {
-                    // Write edit log
-                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
-                    info.setStorageVolumeId(storageVolumeId);
-                    GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
-                }
-            }
-            return true;
-        } finally {
-            writeUnlock();
-        }
-    }
-
-    public boolean createTable(Table table) {
+    public boolean registerTableUnlock(Table table) {
         boolean result = true;
         String tableName = table.getName();
         if (nameToTable.containsKey(tableName)) {
@@ -622,7 +591,7 @@ public class Database extends MetaObject implements Writable {
                 // so it should be placed in front of the log
                 materializedView.onCreate();
                 if (!isReplay) {
-                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, materializedView);
+                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, materializedView, "");
                     GlobalStateMgr.getCurrentState().getEditLog().logCreateMaterializedView(info);
                 }
             }

@@ -67,7 +67,7 @@ public class ErrorReport {
         reportAnalysisException(null, errorCode, objs);
     }
 
-    public static void reportSemanticException(ErrorCode errorCode, Object... objs) {
+    public static void reportSemanticException(ErrorCode errorCode, Object... objs) throws SemanticException {
         reportSemanticException(null, errorCode, objs);
     }
 

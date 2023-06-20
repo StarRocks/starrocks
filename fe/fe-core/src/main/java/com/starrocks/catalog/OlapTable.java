@@ -2313,9 +2313,23 @@ public class OlapTable extends Table {
         }
     }
 
+    public void onErase(boolean isReplay) {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        Collection<Partition> allPartitions = getAllPartitions();
+        for (Partition partition : allPartitions) {
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
+            }
+        }
+
+        GlobalStateMgr.getCurrentState().getColocateTableIndex().removeTable(getId(), this, isReplay);
+    }
+
     @Override
     public Runnable delete(boolean replay) {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this, replay);
+        onErase(replay);
         return replay ? null : new DeleteOlapTableTask(this);
     }
 

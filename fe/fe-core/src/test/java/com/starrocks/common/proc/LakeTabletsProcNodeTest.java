@@ -98,7 +98,7 @@ public class LakeTabletsProcNodeTest {
 
         // Db
         Database db = new Database(dbId, "test_db");
-        db.createTable(table);
+        db.registerTableUnlock(table);
 
         // Check
         LakeTabletsProcNode procNode = new LakeTabletsProcNode(db, table, index);

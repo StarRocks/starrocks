@@ -41,8 +41,6 @@ import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -61,7 +59,6 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
-import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -188,7 +185,6 @@ public class OlapTableFactory implements AbstractTableFactory {
         // create table
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
         OlapTable table;
-        String storageVolumeId = "";
         if (stmt.isExternal()) {
             table = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
@@ -203,49 +199,14 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
                 volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
             }
-
             if (runMode == RunMode.SHARED_DATA) {
                 if (volume.equals(StorageVolumeMgr.LOCAL)) {
                     throw new DdlException("Cannot create table " +
                             "without persistent volume in current run mode \"" + runMode + "\"");
                 }
-
-                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-                StorageVolume sv = null;
-                try {
-                    if (volume.isEmpty()) {
-                        String dbStorageVolumeId = svm.getStorageVolumeIdOfDb(db.getId());
-                        if (dbStorageVolumeId != null) {
-                            sv = svm.getStorageVolume(dbStorageVolumeId);
-                        } else {
-                            sv = svm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-                        }
-                    } else if (volume.equals(StorageVolumeMgr.DEFAULT)) {
-                        sv = svm.getDefaultStorageVolume();
-                    } else {
-                        sv = svm.getStorageVolumeByName(volume);
-                    }
-                } catch (AnalysisException e) {
-                    throw new DdlException(e.getMessage());
-                }
-                if (sv == null) {
-                    throw new DdlException("Unknown storage volume \"" + volume + "\"");
-                }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                storageVolumeId = sv.getId();
-                metastore.setLakeStorageInfo(table, storageVolumeId, properties);
-                svm.bindTableToStorageVolume(sv.getId(), table.getId());
-                table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                table.setStorageVolume(StorageVolumeMgr.LOCAL);
-            }
-
-            if (table.isCloudNativeTable() && !runMode.isAllowCreateLakeTable())  {
-                throw new DdlException("Cannot create table with persistent volume in current run mode \"" + runMode + "\"");
-            }
-            if (table.isOlapTable() && !runMode.isAllowCreateOlapTable()) {
-                throw new DdlException("Cannot create table without persistent volume in current run mode \"" + runMode + "\"");
             }
         } else {
             throw new DdlException("Unrecognized engine \"" + stmt.getEngineName() + "\"");
@@ -400,7 +361,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         try {
             colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
             boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
-                                                colocateGroup, false /* expectLakeTable */);
+                    colocateGroup, false /* expectLakeTable */);
             if (table instanceof ExternalOlapTable == false && addedToColocateGroup) {
                 // Colocate table should keep the same bucket number across the partitions
                 DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
@@ -508,133 +469,96 @@ public class OlapTableFactory implements AbstractTableFactory {
         // if failed in any step, use this set to do clear things
         Set<Long> tabletIdSet = new HashSet<Long>();
 
-        boolean createTblSuccess = false;
-        boolean addToColocateGroupSuccess = false;
-        // create partition
-        try {
-            // do not create partition for external table
-            if (table.isOlapOrCloudNativeTable()) {
-                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+
+        // do not create partition for external table
+        if (table.isOlapOrCloudNativeTable()) {
+            if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                if (properties != null && !properties.isEmpty()) {
+                    // here, all properties should be checked
+                    throw new DdlException("Unknown properties: " + properties);
+                }
+
+                // this is a 1-level partitioned table, use table name as partition name
+                long partitionId = partitionNameToId.get(tableName);
+                Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet);
+                metastore.buildPartitions(db, table, Collections.singletonList(partition));
+                table.addPartition(partition);
+            } else if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+                try {
+                    // just for remove entries in stmt.getProperties(),
+                    // and then check if there still has unknown properties
+                    boolean hasMedium = false;
+                    if (properties != null) {
+                        hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                    }
+                    DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                            DataProperty.getInferredDefaultDataProperty());
+                    DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(table, properties);
+                    if (table.dynamicPartitionExists() && table.getColocateGroup() != null) {
+                        HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
+                        if (info.getBucketNum() !=
+                                table.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
+                            throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
+                                    + " if creating a colocate table");
+                        }
+                    }
+                    if (hasMedium) {
+                        table.setStorageMedium(dataProperty.getStorageMedium());
+                    }
                     if (properties != null && !properties.isEmpty()) {
                         // here, all properties should be checked
                         throw new DdlException("Unknown properties: " + properties);
                     }
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
 
-                    // this is a 1-level partitioned table, use table name as partition name
-                    long partitionId = partitionNameToId.get(tableName);
-                    Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet);
-                    metastore.buildPartitions(db, table, Collections.singletonList(partition));
+                // this is a 2-level partitioned tables
+                List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
+                for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
+                    Partition partition = metastore.createPartition(db, table, entry.getValue(), entry.getKey(), version,
+                            tabletIdSet);
+                    partitions.add(partition);
+                }
+                // It's ok if partitions is empty.
+                metastore.buildPartitions(db, table, partitions);
+                for (Partition partition : partitions) {
                     table.addPartition(partition);
-                } else if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                    try {
-                        // just for remove entries in stmt.getProperties(),
-                        // and then check if there still has unknown properties
-                        boolean hasMedium = false;
-                        if (properties != null) {
-                            hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
-                        }
-                        DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                                DataProperty.getInferredDefaultDataProperty());
-                        DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(table, properties);
-                        if (table.dynamicPartitionExists() && table.getColocateGroup() != null) {
-                            HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-                            if (info.getBucketNum() !=
-                                    table.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
-                                throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
-                                        + " if creating a colocate table");
-                            }
-                        }
-                        if (hasMedium) {
-                            table.setStorageMedium(dataProperty.getStorageMedium());
-                        }
-                        if (properties != null && !properties.isEmpty()) {
-                            // here, all properties should be checked
-                            throw new DdlException("Unknown properties: " + properties);
-                        }
-                    } catch (AnalysisException e) {
-                        throw new DdlException(e.getMessage());
-                    }
-
-                    // this is a 2-level partitioned tables
-                    List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
-                    for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
-                        Partition partition = metastore.createPartition(db, table, entry.getValue(), entry.getKey(), version,
-                                tabletIdSet);
-                        partitions.add(partition);
-                    }
-                    // It's ok if partitions is empty.
-                    metastore.buildPartitions(db, table, partitions);
-                    for (Partition partition : partitions) {
-                        table.addPartition(partition);
-                    }
-                } else {
-                    throw new DdlException("Unsupported partition method: " + partitionInfo.getType().name());
                 }
-                // if binlog_enable is true when creating table,
-                // then set binlogAvailableVersion without statistics through reportHandler
-                if (table.isBinlogEnabled()) {
-                    Map<String, String> binlogAvailableVersion = table.buildBinlogAvailableVersion();
-                    table.setBinlogAvailableVersion(binlogAvailableVersion);
-                    LOG.info("set binlog available version when create table, tableName : {}, partitions : {}",
-                            tableName, binlogAvailableVersion.toString());
-                }
+            } else {
+                throw new DdlException("Unsupported partition method: " + partitionInfo.getType().name());
             }
-
-            // process lake table colocation properties, after partition and tablet creation
-            colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* expectLakeTable */);
-
-            // check database exists again, because database can be dropped when creating table
-            if (!metastore.tryLock(false)) {
-                throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-            }
-            try {
-                if (metastore.getDb(db.getId()) == null) {
-                    throw new DdlException("database has been dropped when creating table");
-                }
-                createTblSuccess = db.createTableWithLock(table, storageVolumeId, false);
-                if (!createTblSuccess) {
-                    if (db.isSystemDatabase()) {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "create denied");
-                    } else if (!stmt.isSetIfNotExists()) {
-                        ErrorReport
-                                .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                    } else {
-                        LOG.info("Create table[{}] which already exists", tableName);
-                        return table;
-                    }
-                }
-            } finally {
-                metastore.unlock();
-            }
-
-            // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
-
-            // we have added these index to memory, only need to persist here
-            if (colocateTableIndex.isColocateTable(tableId)) {
-                ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
-                List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
-                ColocatePersistInfo info =
-                        ColocatePersistInfo.createForAddTable(groupId, tableId, backendsPerBucketSeq);
-                GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
-                addToColocateGroupSuccess = true;
-            }
-            LOG.info("Successfully create table[{};{}]", tableName, tableId);
-            // register or remove table from DynamicPartition after table created
-            DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), table);
-            DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), table);
-            stateMgr.getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
-                    tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
-        } finally {
-            if (!createTblSuccess) {
-                for (Long tabletId : tabletIdSet) {
-                    stateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-                }
-            }
-            // only remove from memory, because we have not persist it
-            if (colocateTableIndex.isColocateTable(tableId) && !addToColocateGroupSuccess) {
-                colocateTableIndex.removeTable(tableId, table, false /* isReplay */);
+            // if binlog_enable is true when creating table,
+            // then set binlogAvailableVersion without statistics through reportHandler
+            if (table.isBinlogEnabled()) {
+                Map<String, String> binlogAvailableVersion = table.buildBinlogAvailableVersion();
+                table.setBinlogAvailableVersion(binlogAvailableVersion);
+                LOG.info("set binlog available version when create table, tableName : {}, partitions : {}",
+                        tableName, binlogAvailableVersion.toString());
             }
         }
+
+        // process lake table colocation properties, after partition and tablet creation
+        colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* expectLakeTable */);
+
+        // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
+
+        // we have added these index to memory, only need to persist here
+        if (colocateTableIndex.isColocateTable(tableId)) {
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            ColocatePersistInfo info =
+                    ColocatePersistInfo.createForAddTable(groupId, tableId, backendsPerBucketSeq);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
+        }
+        LOG.info("Successfully create table[{};{}]", tableName, tableId);
+        // register or remove table from DynamicPartition after table created
+        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), table);
+        DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), table);
+        stateMgr.getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
+                tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
+
+
         if (Config.dynamic_partition_enable && table.getTableProperty().getDynamicPartitionProperty().getEnable()) {
             new Thread(() -> {
                 try {
