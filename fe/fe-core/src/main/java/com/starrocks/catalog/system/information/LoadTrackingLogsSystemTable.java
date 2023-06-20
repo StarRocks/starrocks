@@ -34,6 +34,7 @@ public class LoadTrackingLogsSystemTable {
                         .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_LOG", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_LOAD_TRACKING_LOGS);
     }
 }

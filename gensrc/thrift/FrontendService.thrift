@@ -435,10 +435,23 @@ struct TGetLoadsParams {
     2: optional i64 job_id
     3: optional i64 txn_id
     4: optional string label
+    5: optional string load_type
 }
 
 struct TGetLoadsResult {
     1: optional list<TLoadInfo> loads
+}
+
+struct TGetTrackingLoadsResult {
+    1: optional list<TTrackingLoadInfo> trackingLoads;
+}
+
+struct TTrackingLoadInfo {
+    1: optional i64 job_id
+    2: optional string label
+    3: optional string db
+    4: optional list<string> urls
+    5: optional string load_type
 }
 
 struct TLoadInfo {
@@ -466,6 +479,65 @@ struct TLoadInfo {
     22: optional i64 num_unselected_rows
     23: optional i64 num_sink_rows
     24: optional string rejected_record_path
+}
+
+struct TGetRoutineLoadJobsResult {
+    1: optional list<TRoutineLoadJobInfo> loads
+}
+
+struct TRoutineLoadJobInfo {
+    1: optional i64 id
+    2: optional string name
+    3: optional string create_time
+    4: optional string pause_time
+    5: optional string end_time
+    6: optional string db_name
+    7: optional string table_name
+    8: optional string state
+    9: optional string data_source_type
+    10: optional i64 current_task_num
+    11: optional string job_properties
+    12: optional string data_source_properties
+    13: optional string custom_properties
+    14: optional string statistic
+    15: optional string progress
+    16: optional string reasons_of_state_changed
+    17: optional string error_log_urls
+    18: optional string tracking_sql
+    19: optional string other_msg
+}
+
+struct TGetStreamLoadsResult {
+    1: optional list<TStreamLoadInfo> loads
+}
+
+struct TStreamLoadInfo {
+    1: string label,
+    2: i64 id,
+    3: string load_id,
+    4: i64 txn_id,
+    5: string db_name,
+    6: string table_name,
+    7: string state,
+    8: string error_msg,
+    9: string tracking_url,
+    10: i64 channel_num,
+    11: i64 prepared_channel_num,
+    12: i64 num_rows_normal,
+    13: i64 num_rows_ab_normal,
+    14: i64 num_rows_unselected,
+    15: i64 num_load_bytes,
+    16: i64 timeout_second,
+    17: string create_time_ms,
+    18: string before_load_time_ms,
+    19: string start_loading_time_ms,
+    20: string start_preparing_time_ms,
+    21: string finish_preparing_time_ms,
+    22: string end_time_ms,
+    23: string channel_state,
+    24: string type
+    25: string tracking_sql,
+
 }
 
 // getTableNames returns a list of unqualified table names
@@ -1296,6 +1368,10 @@ service FrontendService {
     TGetTablePrivsResult getTablePrivs(1:TGetTablePrivsParams params)
 
     TGetLoadsResult getLoads(1:TGetLoadsParams params)
+    TGetTrackingLoadsResult getTrackingLoads(1:TGetLoadsParams params)
+    TGetRoutineLoadJobsResult getRoutineLoadJobs(1:TGetLoadsParams params)
+    TGetStreamLoadsResult getStreamLoads(1:TGetLoadsParams params)
+
     TGetProfileResponse getQueryProfile(1:TGetProfileRequest request)
 
     TDescribeTableResult describeTable(1:TDescribeTableParams params)

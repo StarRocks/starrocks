@@ -51,6 +51,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadChannel;
+import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -1322,7 +1323,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             List<String> row = Lists.newArrayList();
             row.add(label);
             row.add(String.valueOf(id));
-            row.add(loadId.toString());
+            row.add(DebugUtil.printId(loadId));
             row.add(String.valueOf(txnId));
             row.add(dbName);
             row.add(tableName);
@@ -1354,6 +1355,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             row.add(channelStateBuilder.toString());
             row.add(getStringByType());
+            // tracking url
+            if (trackingUrl != null) {
+                row.add("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            } else {
+                row.add("");
+            }
             return row;
         } finally {
             readUnlock();
@@ -1405,5 +1412,55 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     public void gsonPreProcess() throws IOException {
         loadIdHi = loadId.getHi();
         loadIdLo = loadId.getLo();
+    }
+
+    public TStreamLoadInfo toThrift() {
+        readLock();
+        try {
+            TStreamLoadInfo info = new TStreamLoadInfo();
+            info.setLabel(label);
+            info.setId(id);
+            info.setLoad_id(DebugUtil.printId(loadId));
+            info.setTxn_id(txnId);
+            info.setDb_name(dbName);
+            info.setTable_name(tableName);
+            info.setState(state.name());
+            info.setError_msg(errorMsg);
+
+            // tracking url
+            if (trackingUrl != null) {
+                info.setTracking_url(trackingUrl);
+                info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+
+            info.setChannel_num(channelNum);
+            info.setPrepared_channel_num(preparedChannelNum);
+
+            info.setNum_rows_normal(numRowsNormal);
+            info.setNum_rows_ab_normal(numRowsAbnormal);
+            info.setNum_load_bytes(numLoadBytesTotal);
+            info.setNum_rows_unselected(numRowsUnselected);
+
+            info.setTimeout_second(timeoutMs / 1000);
+            info.setCreate_time_ms(TimeUtils.longToTimeString(createTimeMs));
+            info.setBefore_load_time_ms(TimeUtils.longToTimeString(beforeLoadTimeMs));
+            info.setStart_loading_time_ms(TimeUtils.longToTimeString(startLoadingTimeMs));
+            info.setStart_preparing_time_ms(TimeUtils.longToTimeString(startPreparingTimeMs));
+            info.setFinish_preparing_time_ms(TimeUtils.longToTimeString(finishPreparingTimeMs));
+            info.setEnd_time_ms(TimeUtils.longToTimeString(endTimeMs));
+
+            StringBuilder channelStateBuilder = new StringBuilder();
+            for (int i = 0; i < channels.size(); i++) {
+                if (i > 0) {
+                    channelStateBuilder.append(" | ");
+                }
+                channelStateBuilder.append(channels.get(i).name());
+            }
+            info.setChannel_state(channelStateBuilder.toString());
+            info.setType(getStringByType());
+            return info;
+        } finally {
+            readUnlock();
+        }
     }
 }
