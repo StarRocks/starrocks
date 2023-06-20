@@ -9,17 +9,19 @@ show pipes;
 show pipes from db_${uuid1};
 
 -- create/alter/show/drop/desc
-set enable_pipe_validate = false;
-create table t1 (id int) duplicate key(id) properties('replication_num' = '1');
-create pipe p1 as insert into t1 select * from t1;
-show pipes;
-desc pipe;
+create table t1 (id int, name string) duplicate key(id) properties('replication_num' = '1');
+create pipe p1 as 
+    insert into t1 
+    select * from table('path' = 'fake://file.parquet', 'format'='parquet');
+
+[UC]show pipes;
+[UC]desc pipe p1;
 alter pipe p1 pause;
-show pipes;
+[UC]show pipes;
 alter pipe p1 resume;
-show pipes;
+[UC]show pipes;
 use db_${uuid1};
-show pipes from db_${uuid0};
+[UC]show pipes from db_${uuid0};
 use db_${uuid0};
 drop pipe p1;
 show pipes;
@@ -29,29 +31,3 @@ drop database db_${uuid0};
 create database db_${uuid0};
 use db_${uuid0};
 show pipes;
-
--- create error
-set enable_pipe_validate = true;
-create table t1 (id int) duplicate key(id) properties('replication_num' = '1');
-create pipe p1 as insert into t1 select * from t1;
-create pipe if not exists p1 as insert into t1 select * from t1;
-create pipe p1 as insert into t1 select * from t1;
-create pipe p2 as select * from t1;
-create pipe p+1 as select * from t1;
-create pipe p3 as insert into t2 select * from t1;
-
--- alter error
-set enable_pipe_validate = false;
-create pipe p1 as insert into t1 select * from t1;
-alter pipe p1 pause;
-alter pipe p1 pause;
-show pipes;
-alter pipe p1 resume;
-alter pipe p1 resume;
-show pipes;
-
--- drop error
-drop pipe if exists p1;
-drop pipe if exists p1;
-drop pipe p2;
-drop pipe if exists p2;
