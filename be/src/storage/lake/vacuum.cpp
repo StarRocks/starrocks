@@ -90,15 +90,21 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             return true;
         }
         auto [tablet_id, version] = parse_tablet_metadata_filename(entry.name);
-        if (version >= min_retain_version) {
-            return true;
-        }
         if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
             return true;
         }
-        expired_tablets[tablet_id].emplace_back(version);
-        *vacuumed_files += 1;
-        *vacuumed_file_size += entry.size.value_or(0);
+        if (version < min_retain_version) {
+            expired_tablets[tablet_id].emplace_back(version);
+            *vacuumed_files += 1;
+            *vacuumed_file_size += entry.size.value_or(0);
+        } else if (version == min_retain_version) {
+            // We need to retain metadata files with version |min_retain_version|, but garbage files
+            // recorded in the |min_retain_version| can be deleted. So metadata file with |min_retain_version| will
+            // also be read.
+            expired_tablets[tablet_id].emplace_back(version);
+        } else {
+            // nothing to do
+        }
         return true;
     }));
 
@@ -133,6 +139,10 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                     break;
                 }
             }
+        }
+
+        if (versions.back() == min_retain_version) {
+            versions.pop_back();
         }
 
         // TODO: batch delete

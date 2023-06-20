@@ -83,6 +83,61 @@ protected:
 };
 
 // NOLINTNEXTLINE
+TEST_F(LakeVacuumTest, test_vacuum_2) {
+    create_data_file("00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec");
+    create_data_file("00000000000159e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec");
+    create_data_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 500,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat",
+                    "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "orphan_files": [
+            {
+                "name": "00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec",
+                "size": 128
+            },
+            {
+                "name": "00000000000159e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec",
+                "size": 128
+            }
+        ]
+        }
+        )DEL")));
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(500);
+        request.set_min_retain_version(2);
+        request.set_grace_timestamp(::time(nullptr) + 10);
+        request.set_min_active_txn_id(12345);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(2, response.vacuumed_files());
+        ASSERT_GT(response.vacuumed_file_size(), 0);
+
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(500, 2)));
+
+        EXPECT_FALSE(file_exist("00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec"));
+        EXPECT_FALSE(file_exist("00000000000159e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec"));
+        EXPECT_TRUE(file_exist("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_TRUE(file_exist("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    }
+}
+
+// NOLINTNEXTLINE
 TEST_F(LakeVacuumTest, test_vacuum) {
     create_data_file("00000000000059e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec");
     create_data_file("00000000000059e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec");
