@@ -18,6 +18,7 @@
 #include <fmt/core.h>
 #include <glog/logging.h>
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -38,8 +39,10 @@
 #include "serde/column_array_serde.h"
 
 namespace starrocks::spill {
-SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
+
+SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
     _spiller_metrics = std::make_shared<RuntimeProfile>("SpillerMetrics");
+    total_spill_bytes = total_spill_bytes_;
     profile->add_child(_spiller_metrics.get(), true, nullptr);
 
     append_data_timer = ADD_TIMER(_spiller_metrics.get(), "AppendDataTime");

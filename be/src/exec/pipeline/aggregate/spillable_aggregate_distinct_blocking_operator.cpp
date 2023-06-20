@@ -65,7 +65,8 @@ void SpillableAggregateDistinctBlockingSinkOperator::close(RuntimeState* state) 
 Status SpillableAggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::prepare(state));
     DCHECK(!_aggregator->is_none_group_by_exprs());
-    _aggregator->spiller()->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
+    _aggregator->spiller()->set_metrics(
+            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
     }

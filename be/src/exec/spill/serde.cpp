@@ -155,6 +155,7 @@ Status ColumnarSerde::serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockP
         RETURN_IF_ERROR(block->append(data));
     }
     COUNTER_UPDATE(_parent->metrics().flush_bytes, meta_len + serialize_buffer.size());
+    _parent->metrics().total_spill_bytes->fetch_add(meta_len + serialize_buffer.size());
     TRACE_SPILL_LOG << "serialize chunk to block: " << block->debug_string()
                     << ", original size: " << chunk->bytes_usage() << ", encoded size: " << serialize_buffer.size();
     return Status::OK();
