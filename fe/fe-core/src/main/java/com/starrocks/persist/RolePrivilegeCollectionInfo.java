@@ -19,8 +19,11 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.ObjectTypeDeprecate;
+import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollection;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -45,7 +48,7 @@ public class RolePrivilegeCollectionInfo implements Writable {
     private Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModifiedV2;
 
     public RolePrivilegeCollectionInfo(
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified,
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
         this.rolePrivCollectionModifiedV2 = rolePrivCollectionModified;

@@ -185,6 +185,7 @@ import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -216,6 +217,7 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -1262,11 +1264,7 @@ public class GlobalStateMgr {
         }
 
         if (RunMode.allowCreateLakeTable()) {
-            try {
-                ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
-            } catch (DdlException | AnalysisException | AlreadyExistsException e) {
-                LOG.warn("Failed to create or update builtin storage volume", e);
-            }
+            createOrUpdateBuiltinStorageVolume();
         }
     }
 
@@ -1453,6 +1451,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
                         .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                        .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                         .build();
                 try {
                     loadHeaderV2(dis);
@@ -1862,6 +1861,7 @@ public class GlobalStateMgr {
                     streamLoadMgr.save(dos);
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
+                    storageVolumeMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
@@ -2888,8 +2888,8 @@ public class GlobalStateMgr {
         }
     }
 
-    public void replayCreateTable(String dbName, Table table) {
-        localMetastore.replayCreateTable(dbName, table);
+    public void replayCreateTable(CreateTableInfo info) {
+        localMetastore.replayCreateTable(info);
     }
 
     public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
@@ -3990,5 +3990,18 @@ public class GlobalStateMgr {
 
     public MetaContext getMetaContext() {
         return metaContext;
+    }
+
+    public void createOrUpdateBuiltinStorageVolume() {
+        try {
+            ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
+            String builtinStorageVolumeId = storageVolumeMgr
+                    .getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
+            authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
+        } catch (DdlException | AnalysisException | AlreadyExistsException e) {
+            LOG.warn("Failed to create or update builtin storage volume", e);
+        } catch (PrivilegeException e) {
+            LOG.warn("Failed to grant builtin storage volume usage to public role", e);
+        }
     }
 }

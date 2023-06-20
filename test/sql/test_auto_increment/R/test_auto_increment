@@ -11,7 +11,7 @@ E: (1064, 'Getting syntax error at line 1, column 17. Detail message: AUTO_INCRE
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT DEFAULT "100",  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
 -- result:
-E: (1064, "Getting syntax error at line 1, column 51. Detail message: Input 'DEFAULT' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 51. Detail message: Unexpected input 'DEFAULT', the most similar input is {',', ')'}.")
 -- !result
 CREATE TABLE t ( id INT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
 -- result:

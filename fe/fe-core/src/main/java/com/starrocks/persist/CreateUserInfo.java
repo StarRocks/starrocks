@@ -22,14 +22,10 @@ import com.starrocks.authentication.UserProperty;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-<<<<<<< HEAD
-import com.starrocks.privilege.UserPrivilegeCollection;
-=======
 import com.starrocks.privilege.ObjectTypeDeprecate;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
->>>>>>> d93ef4aeb ([BugFix] Fix create user and create role log compatibility bug (#25559))
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
@@ -48,15 +44,11 @@ public class CreateUserInfo implements Writable {
 
     //Deprecated attribute, can be removed in version 3.2
     @SerializedName(value = "c")
-<<<<<<< HEAD
-    UserPrivilegeCollection userPrivilegeCollection;
-=======
     @Deprecated
     UserPrivilegeCollection userPrivilegeCollection;
 
     @SerializedName(value = "c2")
     UserPrivilegeCollectionV2 userPrivilegeCollectionV2;
->>>>>>> d93ef4aeb ([BugFix] Fix create user and create role log compatibility bug (#25559))
 
     @SerializedName(value = "i")
     short pluginId;
@@ -68,7 +60,7 @@ public class CreateUserInfo implements Writable {
             UserIdentity userIdentity,
             UserAuthenticationInfo authenticationInfo,
             UserProperty userProperty,
-            UserPrivilegeCollection privilegeCollection,
+            UserPrivilegeCollectionV2 privilegeCollection,
             short pluginId,
             short pluginVersion) {
         this.userIdentity = userIdentity;
@@ -91,10 +83,6 @@ public class CreateUserInfo implements Writable {
         return userProperty;
     }
 
-<<<<<<< HEAD
-    public UserPrivilegeCollection getUserPrivilegeCollection() {
-        return userPrivilegeCollection;
-=======
     public UserPrivilegeCollectionV2 getUserPrivilegeCollection() {
         if (userPrivilegeCollectionV2 == null) {
             UserPrivilegeCollectionV2 collection = new UserPrivilegeCollectionV2();
@@ -109,7 +97,6 @@ public class CreateUserInfo implements Writable {
         } else {
             return userPrivilegeCollectionV2;
         }
->>>>>>> d93ef4aeb ([BugFix] Fix create user and create role log compatibility bug (#25559))
     }
 
     public short getPluginId() {
