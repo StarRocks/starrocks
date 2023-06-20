@@ -40,9 +40,6 @@ public class ShowWarehousesStmtTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
-        String createWarehouse = "CREATE WAREHOUSE warehouse_1";
-        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(createWarehouse);
-        Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         starRocksAssert = new StarRocksAssert();
