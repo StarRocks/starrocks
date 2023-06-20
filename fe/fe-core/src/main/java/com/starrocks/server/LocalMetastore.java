@@ -768,7 +768,6 @@ public class LocalMetastore implements ConnectorMetadata {
      */
     @Override
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
-        String engineName = stmt.getEngineName();
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
 
@@ -801,14 +800,56 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
 
-        AbstractTableFactory tableFactory = TableFactoryProvider.getFactory(engineName);
+        AbstractTableFactory tableFactory = TableFactoryProvider.getFactory(stmt.getEngineName());
         if (tableFactory == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, stmt.getEngineName());
         }
         Table table = tableFactory.createTable(this, db, stmt);
-        if (!(table instanceof OlapTable)) { // Special case: OlapTable has been added into the metastore before return.
-            registerTable(db, table, stmt);
+        registerTable(db, table, stmt.isSetIfNotExists());
+
+        String storageVolumeId = "";
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            RunMode runMode = RunMode.getCurrentRunMode();
+            String volume = "";
+            Map<String, String> properties = stmt.getProperties();
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+            }
+            if (runMode == RunMode.SHARED_DATA) {
+                if (volume.equals(StorageVolumeMgr.LOCAL)) {
+                    throw new DdlException("Cannot create table " +
+                            "without persistent volume in current run mode \"" + runMode + "\"");
+                }
+
+                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                StorageVolume sv = null;
+                if (volume.isEmpty()) {
+                    String dbStorageVolumeId = svm.getStorageVolumeIdOfDb(db.getId());
+                    if (dbStorageVolumeId != null) {
+                        sv = svm.getStorageVolume(dbStorageVolumeId);
+                    } else {
+                        sv = svm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+                    }
+                } else if (volume.equals(StorageVolumeMgr.DEFAULT)) {
+                    sv = svm.getDefaultStorageVolume();
+                } else {
+                    sv = svm.getStorageVolumeByName(volume);
+                }
+                if (sv == null) {
+                    throw new DdlException("Unknown storage volume \"" + volume + "\"");
+                }
+                storageVolumeId = sv.getId();
+                setLakeStorageInfo(olapTable, storageVolumeId, properties);
+                svm.bindTableToStorageVolume(sv.getId(), olapTable.getId());
+                olapTable.setStorageVolume(sv.getName());
+            } else {
+                olapTable.setStorageVolume(StorageVolumeMgr.LOCAL);
+            }
         }
+
+        CreateTableInfo info = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
         return true;
     }
 
@@ -1969,7 +2010,7 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setStorageInfo(pathInfo, storageCacheInfo);
     }
 
-    void registerTable(Database db, Table table, CreateTableStmt stmt) throws DdlException {
+    void registerTable(Database db, Table table, boolean isSetIfNotExists) throws DdlException {
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -1978,14 +2019,15 @@ public class LocalMetastore implements ConnectorMetadata {
             if (getDb(db.getFullName()) == null) {
                 throw new DdlException("Database has been dropped when creating table");
             }
-            if (!db.createTableWithLock(table, false)) {
-                if (!stmt.isSetIfNotExists()) {
+            if (!db.createTableWithLock(table, "", false)) {
+                if (!isSetIfNotExists) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
                             "table already exists");
                 } else {
                     LOG.info("Create table[{}] which already exists", table.getName());
                 }
             }
+
         } finally {
             unlock();
         }
@@ -1995,7 +2037,8 @@ public class LocalMetastore implements ConnectorMetadata {
         String dbName = info.getDbName();
         Table table = info.getTable();
         Database db = this.fullNameToDb.get(dbName);
-        db.createTableWithLock(table, true);
+        db.registerTable(table);
+
 
         if (!isCheckpointThread()) {
             // add to inverted index
@@ -3816,7 +3859,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating view");
             }
-            if (!db.createTableWithLock(newView, false)) {
+            if (!db.createTableWithLock(newView, "", false)) {
                 if (!stmt.isSetIfNotExists()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
                 } else {
@@ -4694,7 +4737,7 @@ public class LocalMetastore implements ConnectorMetadata {
             int tableSize = reader.readInt();
             for (int j = 0; j < tableSize; ++j) {
                 Table table = reader.readJson(Table.class);
-                db.createTableWithLock(table, true);
+                db.registerTable(table);
             }
 
             idToDb.put(db.getId(), db);

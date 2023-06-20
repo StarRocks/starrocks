@@ -203,6 +203,15 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
                 volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
             }
+            if (runMode == RunMode.SHARED_DATA) {
+                if (volume.equals(StorageVolumeMgr.LOCAL)) {
+                    throw new DdlException("Cannot create table " +
+                            "without persistent volume in current run mode \"" + runMode + "\"");
+                }
+                table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+            } else {
+                table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+            }
 
             if (runMode == RunMode.SHARED_DATA) {
                 if (volume.equals(StorageVolumeMgr.LOCAL)) {
@@ -235,10 +244,10 @@ public class OlapTableFactory implements AbstractTableFactory {
                 storageVolumeId = sv.getId();
                 metastore.setLakeStorageInfo(table, storageVolumeId, properties);
                 svm.bindTableToStorageVolume(sv.getId(), table.getId());
-                table.setStorageVolume(sv.getName());
+                //table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                table.setStorageVolume(StorageVolumeMgr.LOCAL);
+                //table.setStorageVolume(StorageVolumeMgr.LOCAL);
             }
 
             if (table.isCloudNativeTable() && !runMode.isAllowCreateLakeTable())  {
@@ -591,7 +600,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 if (metastore.getDb(db.getId()) == null) {
                     throw new DdlException("database has been dropped when creating table");
                 }
-                createTblSuccess = db.createTableWithLock(table, storageVolumeId, false);
+                createTblSuccess = db.registerTable(table);
                 if (!createTblSuccess) {
                     if (db.isSystemDatabase()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "create denied");
