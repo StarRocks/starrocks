@@ -40,7 +40,7 @@ namespace starrocks::pipeline {
 Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperator::prepare(state));
     _need_post_probe = has_post_probe(_join_prober->join_type());
-    _probe_spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
+    _probe_spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     metrics.hash_partitions = ADD_COUNTER(_unique_metrics.get(), "SpillPartitions", TUnit::UNIT);
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
     auto wg = state->fragment_ctx()->workgroup();

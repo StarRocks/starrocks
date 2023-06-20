@@ -52,7 +52,7 @@ public class CurrentQueryHostProcNode implements ProcNodeInterface {
             rowData.add(host);
             rowData.add(QueryStatisticsFormatter.getBytes(statistics.scanBytes));
             rowData.add(QueryStatisticsFormatter.getRowsReturned(statistics.scanRows));
-            rowData.add(QueryStatisticsFormatter.getCPUCostSeconds(statistics.cpuCostNs));
+            rowData.add(QueryStatisticsFormatter.getSecondsFromNano(statistics.cpuCostNs));
             rowData.add(QueryStatisticsFormatter.getBytes(statistics.memUsageBytes));
             sortedRowDatas.add(rowData);
         }

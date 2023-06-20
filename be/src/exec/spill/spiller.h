@@ -43,10 +43,27 @@ namespace starrocks::spill {
 
 // some metrics for spill
 struct SpillProcessMetrics {
+<<<<<<< HEAD
     SpillProcessMetrics() = default;
     SpillProcessMetrics(RuntimeProfile* profile);
 
     RuntimeProfile::Counter* spill_timer = nullptr;
+=======
+private:
+    // For profile
+    std::shared_ptr<RuntimeProfile> _spiller_metrics;
+
+public:
+    SpillProcessMetrics() = default;
+    SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes);
+
+    // For query statistics
+    std::atomic_int64_t* total_spill_bytes;
+
+    // time spent to append data into Spiller
+    RuntimeProfile::Counter* append_data_timer = nullptr;
+    // the number of rows appended to Spiller
+>>>>>>> fdc805697 ([Enhancement] add disk_spill in runtime query statistics  (#25462))
     RuntimeProfile::Counter* spill_rows = nullptr;
     RuntimeProfile::Counter* flush_timer = nullptr;
     RuntimeProfile::Counter* restore_timer = nullptr;
