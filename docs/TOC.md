@@ -246,6 +246,7 @@
       + [CANCEL REFRESH MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md)
       + [CREATE ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)
       + [DELETE](./sql-reference/sql-statements/data-manipulation/DELETE.md)
+      + [DROP TASK](./sql-reference/sql-statements/data-manipulation/DROP%20TASK.md)
       + [EXPORT](./sql-reference/sql-statements/data-manipulation/EXPORT.md)
       + [GROUP BY](./sql-reference/sql-statements/data-manipulation/GROUP%20BY.md)
       + [INSERT](./sql-reference/sql-statements/data-manipulation/insert.md)
