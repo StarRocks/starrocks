@@ -14,7 +14,7 @@ SHOW DATABASES [FROM <catalog_name>]
 
 | **参数**          | **必选** | **说明**                                                     |
 | ----------------- | -------- | ------------------------------------------------------------ |
-| catalog_name | 否       | Internal catalog 或 external catalog 的名称。<ul><li>如不指定或指定为 internal catalog 名称，即 `default_catalog`，则查看当前 StarRocks 集群中的数据库。</li><li>如指定 external catalog 名称，则查看外部数据源中的数据库。</li></ul> |
+| catalog_name | 否       | Internal catalog 或 external catalog 的名称。<ul><li>如不指定或指定为 internal catalog 名称，即 `default_catalog`，则查看当前 StarRocks 集群中的数据库。</li><li>如指定 external catalog 名称，则查看外部数据源中的数据库。您可以使用 [SHOW CATALOGS](SHOW%20CATALOGS.md) 命令查看当前集群的内外部 catalog。</li></ul> |
 
 ## 示例
 

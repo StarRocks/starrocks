@@ -8,13 +8,11 @@
 
 ## 前提条件
 
-如需使用 StarRocks 的 Java UDF 功能，您需要[安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。同时，必须在服务器上安装 JDK 1.8。
+使用 StarRocks 的 Java UDF 功能前，您需要:
 
-## 开启 UDF
-
-使用 StarRocks 的 Java UDF 功能前，您需要在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true` 以开启 UDF 功能，并重启 FE 节点使配置项生效。
-
-详细操作以及配置项列表参考 [配置参数](../../administration/Configuration.md)。
+- [安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。
+- 在服务器上安装 JDK 1.8。
+- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/Configuration.md)。
 
 ## 开发并使用 UDF
 
@@ -359,6 +357,25 @@ mvn deploy
 
 上传完成后，您需要在 StarRocks 中创建相对应的 UDF。
 
+#### 语法
+
+```SQL
+CREATE [AGGREGATE | TABLE] FUNCTION function_name(arg_type [, ...])
+RETURNS return_type
+[PROPERTIES ("key" = "value" [, ...]) ]
+```
+
+#### 参数说明
+
+| **参数**      | **必选** | **说明**                                                     |
+| ------------- | -------- | -----------------------------------------------------------|
+| AGGREGATE     | 否       | 如要创建 UDAF 和 UDWF，需指定该关键字。                         |
+| TABLE         | 否       | 如要创建 UDTF，需指定该关键字。                              |
+| function_name | 是       | 函数名，可以包含数据库名称，比如，`db1.my_func`。如果 `function_name` 中包含了数据库名称，那么该 UDF 会创建在对应的数据库中，否则该 UDF 会创建在当前数据库。新函数名和参数不能与目标数据库中已有的函数相同，否则会创建失败；如只有函数名相同，参数不同，则可以创建成功。 |
+| arg_type      | 是       | 函数的参数类型。具体支持的数据类型，请参见[类型映射关系](#类型映射关系)。 |
+| return_type      | 是       | 函数的返回值类型。具体支持的数据类型，请参见[类型映射关系](#类型映射关系)。 |
+| properties    | 是       | 函数相关属性。创建不同类型的 UDF 需配置不同的属性，详情和示例请参考以下示例。 |
+
 #### 创建 Scalar UDF
 
 执行如下命令，在 StarRocks 中创建先前示例中的 Scalar UDF。
@@ -394,11 +411,7 @@ PROPERTIES
 );
 ```
 
-|参数|描述|
-|---|----|
-|symbol|UDF 所在项目的类名。格式为`<package_name>.<class_name>`。|
-|type|用于标记所创建的 UDF 类型。取值为 `StarrocksJar`，表示基于 Java 的 UDF。|
-|file|UDF 所在 Jar 包的 HTTP 路径。格式为`http://<http_server_ip>:<http_server_port>/<jar_package_name>`。|
+PROPERTIES 里的参数说明与 [创建 Scalar UDF](#创建-scalar-udf) 相同。
 
 #### 创建 UDWF
 
@@ -416,12 +429,7 @@ properties
 );
 ```
 
-|参数|描述|
-|---|----|
-|Analytic|所创建的函数是否为窗口函数，固定取值为 `true`。|
-|symbol|UDF 所在项目的类名。格式为 `<package_name>.<class_name>`。|
-|type|用于标记所创建的 UDF 类型。取值为 `StarrocksJar`，表示基于 Java 的 UDF。|
-|file|UDF 所在 Jar 包的 HTTP 路径。格式为 `http://<http_server_ip>:<http_server_port>/<jar_package_name>`。|
+`analytic`：所创建的函数是否为窗口函数，固定取值为 `true`。其他参数说明与 [创建 Scalar UDF](#创建-scalar-udf) 相同。
 
 #### 创建 UDTF
 
@@ -438,11 +446,7 @@ properties
 );
 ```
 
-|参数|描述|
-|---|----|
-|symbol|UDF 所在项目的类名。格式为`<package_name>.<class_name>`。|
-|type|用于标记所创建的 UDF 类型。取值为 `StarrocksJar`，表示基于 Java 的 UDF。|
-|file|UDF 所在 Jar 包的 HTTP 路径。格式为`http://<http_server_ip>:<http_server_port>/<jar_package_name>`。|
+PROPERTIES 里的参数说明与 [创建 Scalar UDF](#创建-scalar-udf) 相同。
 
 ### 步骤七：使用 UDF
 
