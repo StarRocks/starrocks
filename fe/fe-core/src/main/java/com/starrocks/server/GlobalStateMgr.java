@@ -309,6 +309,7 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1451,6 +1452,16 @@ public class GlobalStateMgr {
                         .build();
                 try {
                     loadHeaderV2(dis);
+                    try {
+                        for (Field field : OperationType.class.getDeclaredFields()) {
+                            short s = field.getShort(null);
+                            if (s > 20000) {
+                                throw new IOException(field.getName() + " value " + s);
+                            }
+                        }
+                    } catch (IllegalAccessException e) {
+                        throw new RuntimeException(e);
+                    }
 
                     Iterator<Map.Entry<SRMetaBlockID, SRMetaBlockLoader>> iterator = loadImages.entrySet().iterator();
                     Map.Entry<SRMetaBlockID, SRMetaBlockLoader> entry = iterator.next();
