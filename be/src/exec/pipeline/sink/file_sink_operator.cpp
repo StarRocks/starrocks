@@ -120,7 +120,8 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
 }
 
 void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    --_num_pending_chunks;
+    DeferOp op([&]() { --_num_pending_chunks; });
+
     // close is already done, just skip
     if (_is_finished) {
         return;
