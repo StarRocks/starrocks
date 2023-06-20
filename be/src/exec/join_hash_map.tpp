@@ -765,6 +765,13 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht(RuntimeState* state, Chun
 
         auto& build_data = BuildFunc().get_key_data(*_table_items);
         auto& probe_data = ProbeFunc().get_key_data(*_probe_state);
+        if (state->query_options().transmission_encode_level == 31) {
+            auto ScalarStateSize = 10;
+            _probe_state->handles.clear();
+            for (int i = 0; i < ScalarStateSize; ++i) {
+                _probe_state->handles.insert(_probe_coroutine(state, build_data, probe_data).handle);
+            }
+        }
         _search_ht_impl<true>(state, build_data, probe_data);
     } else {
         auto& build_data = BuildFunc().get_key_data(*_table_items);
@@ -836,9 +843,19 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
         case TJoinOp::FULL_OUTER_JOIN:
             _probe_from_ht_for_full_outer_join<first_probe>(state, build_data, data);
             break;
-        default:
-            _probe_from_ht<first_probe>(state, build_data, data);
-            break;
+        default: {
+            auto encode_level = state->query_options().transmission_encode_level;
+            switch (encode_level) {
+            case 15: {
+                _probe_from_ht_no_opt(state, build_data, data);
+            } break;
+            case 31: {
+                _probe_from_ht_coro(state, build_data, data);
+            } break;
+            default:
+                _probe_from_ht<first_probe>(state, build_data, data);
+            }
+        } break;
         }
     } else {
         switch (_table_items->join_type) {
@@ -898,6 +915,23 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
         return;                                                  \
     }
 
+#define RETURN_IF_CHUNK_EQUAL_FULL()                             \
+    if (match_count == state->chunk_size()) {                    \
+        _probe_state->next[i] = _table_items->next[build_index]; \
+        _probe_state->cur_probe_index = i;                       \
+        _probe_state->has_remain = true;                         \
+        _probe_state->count = state->chunk_size();               \
+        return;                                                  \
+    }
+
+#define RETURN_IF_CHUNK_EQUAL_FULL_CORO()                        \
+    if (_probe_state->match_count == state->chunk_size()) {      \
+        _probe_state->next[i] = _table_items->next[build_index]; \
+        _probe_state->has_remain = true;                         \
+        _probe_state->count = state->chunk_size();               \
+        co_await std::suspend_always{};                          \
+    }
+
 // When a probe row corresponds to multiple Build rows,
 // a Probe Chunk may generate multiple ResultChunks,
 // so each probe will have search one more row to determine whether it has reached the boundary,
@@ -926,6 +960,88 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     _probe_state->cur_row_match_count++;
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
+HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_coroutine(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
+         i = _probe_state->cur_probe_index++) {
+        size_t build_index = _probe_state->next[i];
+        if (build_index != 0) {
+            /// TODO (fzh): calculate hash distribution, skew or not.
+            do {
+                /// prefetch and co_wait()
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+                _mm_prefetch((const char*)(build_data.data() + build_index), _MM_HINT_NTA);
+                _mm_prefetch((const char*)(_table_items->next.data() + build_index), _MM_HINT_NTA);
+#elif defined(__GNUC__)
+                __builtin_prefetch(static_cast<const void*>(build_data.data() + build_index));
+                __builtin_prefetch(static_cast<const void*>(_table_items->next.data() + build_index));
+#endif // __GNUC__
+                co_await std::suspend_always{};
+                if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                    _probe_state->probe_index[_probe_state->match_count] = i;
+                    _probe_state->build_index[_probe_state->match_count] = build_index;
+                    _probe_state->match_count++;
+                    RETURN_IF_CHUNK_EQUAL_FULL_CORO()
+                }
+                /// incur more cache misses, prefer colocate with build_data.
+                build_index = _table_items->next[build_index];
+            } while (build_index != 0);
+        }
+    }
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_coro(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                                const Buffer<CppType>& probe_data) {
+    _probe_state->match_flag = JoinMatchFlag::NORMAL;
+    _probe_state->match_count = 0;
+    while (!_probe_state->handles.empty()) {
+        for (auto it = _probe_state->handles.begin(); it != _probe_state->handles.end();) {
+            if (it->done()) {
+                it->destroy();
+                it = _probe_state->handles.erase(it);
+            } else {
+                it->resume();
+                it++;
+            }
+            if (_probe_state->match_count == state->chunk_size()) {
+                return;
+            }
+        }
+    }
+    auto match_count = _probe_state->match_count;
+    PROBE_OVER()
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
+void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_no_opt(RuntimeState* state,
+                                                                  const Buffer<CppType>& build_data,
+                                                                  const Buffer<CppType>& probe_data) {
+    _probe_state->match_flag = JoinMatchFlag::NORMAL;
+    size_t match_count = 0;
+    size_t i = _probe_state->cur_probe_index;
+    size_t probe_row_count = _probe_state->probe_row_count;
+    for (; i < probe_row_count; i++) {
+        size_t build_index = _probe_state->next[i];
+        if (build_index != 0) {
+            /// TODO (fzh): calculate hash distribution, skew or not.
+            do {
+                /// prefetch and co_wait()
+                if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                    _probe_state->probe_index[match_count] = i;
+                    _probe_state->build_index[match_count] = build_index;
+                    match_count++;
+                    RETURN_IF_CHUNK_EQUAL_FULL()
+                }
+                /// incur more cache misses, prefer colocate with build_data.
+                build_index = _table_items->next[build_index];
+            } while (build_index != 0);
+        }
+    }
+    PROBE_OVER()
+}
+
+template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                                            const Buffer<CppType>& probe_data) {
@@ -951,7 +1067,9 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
         }
         size_t build_index = _probe_state->next[i];
         if (build_index != 0) {
+            /// TODO (fzh): calculate hash distribution, skew or not.
             do {
+                /// prefetch and co_wait()
                 if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                     _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
@@ -963,6 +1081,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
                     }
                     RETURN_IF_CHUNK_FULL()
                 }
+
+                /// incur more cache misses, prefer colocate with build_data.
                 build_index = _table_items->next[build_index];
             } while (build_index != 0);
 
