@@ -719,6 +719,19 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             jobInfo.add(id);
             // label
             jobInfo.add(label);
+            // database_name
+            try {
+                jobInfo.add(getDb().getFullName());
+            } catch (MetaNotFoundException e) {
+                jobInfo.add("");
+            }
+            // table_names
+            Set<String> tableNames = getTableNamesForShow();
+            if (tableNames != null) {
+                jobInfo.add(Joiner.on(',').join(tableNames));
+            } else {
+                jobInfo.add("");
+            }
             // state
             if (state == JobState.COMMITTED) {
                 jobInfo.add("PREPARED");
@@ -806,6 +819,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 info.setDb("");
             }
             info.setTxn_id(transactionId);
+
+            Set<String> tableNames = getTableNamesForShow();
+            if (tableNames != null) {
+                info.setTables(Joiner.on(',').join(tableNames));
+            }
 
             if (state == JobState.COMMITTED) {
                 info.setState("PREPARED");
