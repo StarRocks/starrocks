@@ -101,6 +101,10 @@ public:
 
     Status set_cached_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, const DeltaColumnGroupPtr& dcg);
 
+    Status set_cached_empty_delta_column_group(KVStore* meta, const TabletSegmentId& tsid);
+
+    bool get_cached_delta_column_group(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* dcgs);
+
     void clear_cache();
 
     void clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids);
