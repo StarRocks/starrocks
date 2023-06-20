@@ -16,9 +16,6 @@
 
 #include <fmt/format.h>
 
-#include <coroutine>
-#include <iostream>
-
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -33,29 +30,6 @@
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
-struct HelloCoroutine {
-    struct HelloPromise {
-        HelloCoroutine get_return_object() {
-            return std::coroutine_handle<HelloPromise>::from_promise(*this);
-        }
-        std::suspend_never initial_suspend() { return {}; }
-        // 在 final_suspend() 挂起了协程，所以要手动 destroy
-        std::suspend_always final_suspend() noexcept(true) { return {}; }
-        void unhandled_exception() {}
-    };
-
-    using promise_type = HelloPromise;
-    HelloCoroutine(std::coroutine_handle<HelloPromise> h) : handle(h) {}
-
-    std::coroutine_handle<HelloPromise> handle;
-};
-
-HelloCoroutine hello() {
-    std::cout << "Hello " << std::endl;
-    co_await std::suspend_always{};
-    std::cout << "world!" << std::endl;
-}
-
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
 
 ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {}
@@ -64,14 +38,6 @@ ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {
 // The result of lambda expressions do not change the offsets of the current array and the null map.
 // NOTE the return column must be of the return type.
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
-    HelloCoroutine coro = hello();
-
-    std::cout << "calling resume" << std::endl;
-    coro.handle.resume();
-
-    std::cout << "destroy" << std::endl;
-    coro.handle.destroy();
-
     std::vector<ColumnPtr> input_elements;
     NullColumnPtr input_null_map = nullptr;
     ArrayColumn* input_array = nullptr;
