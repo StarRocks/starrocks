@@ -468,7 +468,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
     auto& mem_resource_mgr = op->mem_resource_manager();
     if (state->enable_spill() && mem_resource_mgr.releaseable() &&
         op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
-        auto request_reserved = 0;
+        int64_t request_reserved = 0;
         if (chunk == nullptr) {
             request_reserved = op->estimated_memory_reserved();
         } else {
