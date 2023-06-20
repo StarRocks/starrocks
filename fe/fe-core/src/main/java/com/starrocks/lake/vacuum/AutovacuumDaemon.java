@@ -188,10 +188,9 @@ public class AutovacuumDaemon extends Daemon {
             }
         }
 
-        long endTime = System.currentTimeMillis();
-        partition.setNextVacuumTime(endTime + Config.lake_autovacuum_partition_naptime_seconds * 1000);
-        LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} cost={}",
+        partition.setNextVacuumTime(startTime + Config.lake_autovacuum_partition_naptime_seconds * 1000);
+        LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getName(), hasError, vacuumedFiles, vacuumedFileSize,
-                endTime - startTime);
+                System.currentTimeMillis() - startTime);
     }
 }
