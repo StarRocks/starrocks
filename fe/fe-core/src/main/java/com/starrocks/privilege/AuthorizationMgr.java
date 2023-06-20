@@ -1825,6 +1825,18 @@ public class AuthorizationMgr {
         LOG.info("upgrade role {}[{}]", collection.getName(), roleId);
     }
 
+    public void grantStorageVolumeUsageToPublicRole(String storageVolumeId) throws PrivilegeException {
+        roleWriteLock();
+        try {
+            RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(PrivilegeBuiltinConstants.PUBLIC_ROLE_ID,
+                    true);
+            List<PEntryObject> object = Collections.singletonList(new StorageVolumePEntryObject(storageVolumeId));
+            collection.grant(ObjectType.STORAGE_VOLUME, Collections.singletonList(PrivilegeType.USAGE), object, false);
+        } finally {
+            roleWriteUnlock();
+        }
+    }
+
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         AuthorizationMgr ret = null;
 
