@@ -42,10 +42,10 @@ public:
 
     // NOTE: can only used for low-priority tasks, like materialized view
     int submit(void* (*fn)(void*), void* args) override;
-    int submit(std::function<void()> fun);
+    bool submit(std::function<void()> fun);
 
     // submit urgent task to break the deadlock
-    void submit_urgent(void* (*fn)(void*), void* args);
+    bool submit_urgent(void* (*fn)(void*), void* args);
 
     std::unique_ptr<TaskToken> new_token(const std::string& name);
 

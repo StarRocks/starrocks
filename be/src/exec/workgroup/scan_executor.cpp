@@ -89,15 +89,15 @@ int ScanExecutor::submit(void* (*fn)(void*), void* args) {
     return _task_queue->try_offer(std::move(task)) ? 0 : 1;
 }
 
-int ScanExecutor::submit(std::function<void()> fun) {
+bool ScanExecutor::submit(std::function<void()> fun) {
     // TODO: specify the workgroup through parameter
     auto wg = WorkGroupManager::instance()->get_default_mv_workgroup();
     ScanTask task(wg.get(), std::move(fun));
-    return _task_queue->try_offer(std::move(task)) ? 0 : 1;
+    return _task_queue->try_offer(std::move(task));
 }
 
-void ScanExecutor::submit_urgent(void* (*fn)(void*), void* args) {
-    _thread_pool->submit_func([=]() { fn(args); }, ThreadPool::Priority::HIGH_PRIORITY);
+bool ScanExecutor::submit_urgent(void* (*fn)(void*), void* args) {
+    return _thread_pool->submit_func([=]() { fn(args); }, ThreadPool::Priority::HIGH_PRIORITY).ok();
 }
 
 std::unique_ptr<TaskToken> ScanExecutor::new_token(const std::string& name) {
