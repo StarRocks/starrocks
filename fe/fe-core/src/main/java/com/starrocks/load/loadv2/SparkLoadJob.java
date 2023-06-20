@@ -139,16 +139,22 @@ public class SparkLoadJob extends BulkLoadJob {
 
     // --- members below need persist ---
     // create from resourceDesc when job created
+    @SerializedName("spkr")
     private SparkResource sparkResource;
     // members below updated when job state changed to etl
+    @SerializedName("etlt")
     private long etlStartTimestamp = -1;
     // for spark yarn
+    @SerializedName("appi")
     private String appId = "";
     // spark job outputPath
+    @SerializedName("etlo")
     private String etlOutputPath = "";
     // members below updated when job state changed to loading
     // { tableId.partitionId.indexId.bucket.schemaHash -> (etlFilePath, etlFileSize) }
+    @SerializedName("tbtm")
     private Map<String, Pair<String, Long>> tabletMetaToFileInfo = Maps.newHashMap();
+    @SerializedName("spkh")
     private SparkLoadAppHandle sparkLoadAppHandle = new SparkLoadAppHandle();
 
     // --- members below not persist ---
