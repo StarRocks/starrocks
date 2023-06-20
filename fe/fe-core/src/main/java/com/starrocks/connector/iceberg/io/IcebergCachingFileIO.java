@@ -133,7 +133,8 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
             switch (type.toLowerCase(Locale.ROOT)) {
                 case "hive":
                 case "rest":
-                    if (properties.getOrDefault(KEY_ENABLE_TABULAR_SUPPORT, "false").equals("true")) {
+                    // Not all rest catalog is tabular, we need to make a distinction here.
+                    if (properties.getOrDefault(KEY_ENABLE_TABULAR_SUPPORT, "false").equalsIgnoreCase("true")) {
                         // If we are using tabular, we must use S3FileIO
                         wrappedIO = new S3FileIO();
                     } else {
