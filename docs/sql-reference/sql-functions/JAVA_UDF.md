@@ -12,11 +12,7 @@ Currently, StarRocks supports scalar UDFs, user-defined aggregate functions (UDA
 
 - You have installed JDK 1.8 on your servers.
 
-## Enable UDFs
-
-Before you can develop and use UDFs, you must set the configuration item `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf** to enable the Java UDF feature, and then restart the FE nodes to make the settings take effect.
-
-For more information, see [Parameter configuration](../../administration/Configuration.md).
+- The Java UDF feature is enabled. You can set the FE configuration item `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf** to enable this feature, and then restart the FE nodes to make the settings take effect. For more information, see [Parameter configuration](../../administration/Configuration.md).
 
 ## Develop and use UDFs
 
@@ -351,6 +347,26 @@ You can set up a simple HTTP server by using Python and upload the JAR file to t
 
 After you upload the JAR file mentioned above, you can create the UDF you have compiled in StarRocks.
 
+#### Syntax
+
+```sql
+CREATE [AGGREGATE | TABLE] FUNCTION function_name
+(arg_type [, ...])
+RETURNS return_type
+PROPERTIES ("key" = "value" [, ...])
+```
+
+#### Parameters
+
+| **Parameter**      | **Required** | **Description**                                                     |
+| ------------- | -------- | ------------------------------------------------------------ |
+| AGGREGATE     | No       | Whether to create a UDAF or UDWF.       |
+| TABLE         | No       | Whether to create a UDTF. If both `AGGREGATE` and `TABLE` are not specified, a Scalar function is created.               |
+| function_name | Yes       | The name of the function you want to create. You can include the name of the database in this parameter, for example,`db1.my_func`. If `function_name` includes the database name, the UDF is created in that database. Otherwise, the UDF is created in the current database. The name of the new function and its parameters cannot be the same as an existing name in the destination database. Otherwise, the function cannot be created. The creation succeeds if the function name is the same but the parameters are different. |
+| arg_type      | Yes       | Argument type of the function. The added argument can be represented by `, ...`. For the supported data types, see [Mapping between SQL data types and Java data types](#mapping-between-sql-data-types-and-java-data-types).|
+| return_type      | Yes       | The return type of the function. For the supported data types, see [Java UDF](#mapping-between-sql-data-types-and-java-data-types). |
+| PROPERTIES    | Yes       | Properties of the function, which vary depending on the type of the UDF to create. |
+
 #### Create a scalar UDF
 
 Run the following command to create the scalar UDF you have compiled in the preceding example:
@@ -386,11 +402,7 @@ PROPERTIES
 );
 ```
 
-| Parameter | Description                                                  |
-| --------- | ------------------------------------------------------------ |
-| symbol    | The name of the class for the Maven project to which the UDF belongs. The value of this parameter is in the `<package_name>.<class_name>` format. |
-| type      | The type of the UDF. Set the value to `StarrocksJar`, which specifies that the UDF is a Java-based function. |
-| file      | The HTTP URL from which you can download the JAR file that contains the code for the UDF. The value of this parameter is in the `http://<http_server_ip>:<http_server_port>/<jar_package_name>` format. |
+The descriptions of the parameters in PROPERTIES are the same as those in [Create a scalar UDF](#create-a-scalar-udf).
 
 #### Create a UDWF
 
@@ -408,12 +420,7 @@ properties
 );
 ```
 
-| Parameter | Description                                                  |
-| --------- | ------------------------------------------------------------ |
-| Analytic  | Specifies whether the UDF is a window function. Set the value to `true`. |
-| symbol    | The name of the class for the Maven project to which the UDF belongs. The value of this parameter is in the `<package_name>.<class_name>` format. |
-| type      | The type of the UDF. Set the value to `StarrocksJar`, which specifies that the UDF is a Java-based function. |
-| file      | The HTTP URL from which you can download the JAR file that contains the code for the UDF. The value of this parameter is in the `http://<http_server_ip>:<http_server_port>/<jar_package_name>` format. |
+`analytic`: Whether the UDF is a window function. Set the value to `true`. The descriptions of other properties are the same as those in [Create a scalar UDF](#create-a-scalar-udf).
 
 #### Create a UDTF
 
@@ -430,11 +437,7 @@ properties
 );
 ```
 
-| Parameter | Description                                                  |
-| --------- | ------------------------------------------------------------ |
-| symbol    | The name of the class for the Maven project to which the UDF belongs. The value of this parameter is in the `<package_name>.<class_name>` format. |
-| type      | The type of the UDF. Set the value to `StarrocksJar`, which specifies that the UDF is a Java-based function. |
-| file      | The HTTP URL from which you can download the JAR file that contains the code for the UDF. The value of this parameter is in the `http://<http_server_ip>:<http_server_port>/<jar_package_name>` format. |
+The descriptions of the parameters in PROPERTIES are the same as those in [Create a scalar UDF](#create-a-scalar-udf).
 
 ### Step 7: Use the UDF
 
