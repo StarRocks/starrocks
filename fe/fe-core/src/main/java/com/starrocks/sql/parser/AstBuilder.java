@@ -134,7 +134,6 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -176,7 +175,6 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
-import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -209,7 +207,6 @@ import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropUserStmt;
-import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -278,7 +275,6 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
-import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.RollupRenameClause;
@@ -371,7 +367,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
-import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.SyncStmt;
@@ -1722,21 +1717,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ---------------------------------------- Warehouse Statement -----------------------------------------------------
 
     @Override
-    public ParseNode visitCreateWarehouseStatement(StarRocksParser.CreateWarehouseStatementContext context) {
-        Identifier identifier = (Identifier) visit(context.identifierOrString());
-        String whName = identifier.getValue();
-        Map<String, String> properties = null;
-        if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-        return new CreateWarehouseStmt(context.IF() != null, whName, properties, createPos(context));
-    }
-
-    @Override
     public ParseNode visitShowWarehousesStatement(StarRocksParser.ShowWarehousesStatementContext context) {
         String pattern = null;
         if (context.pattern != null) {
@@ -1758,50 +1738,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowClustersStmt(whName, createPos(context));
     }
 
-    @Override
-    public ParseNode visitAlterWarehouseStatement(StarRocksParser.AlterWarehouseStatementContext context) {
-        String whName = ((Identifier) visit(context.identifier())).getValue();
-        NodePosition pos = createPos(context);
-        if (context.CLUSTER() != null) {
-            if (context.ADD() != null) {
-                // add cluster clause
-                return new AlterWarehouseStmt(whName,
-                        AlterWarehouseStmt.OpType.ADD_CLUSTER, null, pos);
-            } else {
-                // remove cluster clause
-                return new AlterWarehouseStmt(whName,
-                        AlterWarehouseStmt.OpType.REMOVE_CLUSTER, null, pos);
-            }
-        } else {
-            // set property clause
-            Map<String, String> properties = new HashMap<>();
-            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-            return new AlterWarehouseStmt(whName,
-                    AlterWarehouseStmt.OpType.SET_PROPERTY,
-                    properties, pos);
-        }
-    }
-
-    @Override
-    public ParseNode visitSuspendWarehouseStatement(StarRocksParser.SuspendWarehouseStatementContext context) {
-        String whName = ((Identifier) visit(context.identifier())).getValue();
-        return new SuspendWarehouseStmt(whName, createPos(context));
-    }
-
-    public ParseNode visitResumeWarehouseStatement(StarRocksParser.ResumeWarehouseStatementContext context) {
-        String whName = ((Identifier) visit(context.identifier())).getValue();
-        return new ResumeWarehouseStmt(whName, createPos(context));
-    }
-
-    @Override
-    public ParseNode visitDropWarehouseStatement(StarRocksParser.DropWarehouseStatementContext context) {
-        Identifier identifier = (Identifier) visit(context.identifierOrString());
-        String whName = identifier.getValue();
-        return new DropWarehouseStmt(context.IF() != null, whName, createPos(context));
-    }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
     @Override

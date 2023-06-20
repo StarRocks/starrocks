@@ -18,13 +18,11 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
@@ -42,9 +40,6 @@ public class ShowWarehousesStmtTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
-        String createWarehouse = "CREATE WAREHOUSE warehouse_1";
-        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(createWarehouse);
-        Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         starRocksAssert = new StarRocksAssert();
