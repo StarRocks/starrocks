@@ -466,6 +466,10 @@ std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
     return _query_ctx->maintained_query_recv();
 }
 
+std::atomic_int64_t* RuntimeState::mutable_total_spill_bytes() {
+    return _query_ctx->mutable_total_spill_bytes();
+}
+
 Status RuntimeState::reset_epoch() {
     std::lock_guard<std::mutex> l(_tablet_infos_lock);
     _tablet_commit_infos.clear();

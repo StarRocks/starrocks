@@ -47,8 +47,8 @@ ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprCo
 
 ChunksSorterTopn::~ChunksSorterTopn() = default;
 
-void ChunksSorterTopn::setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
-    ChunksSorter::setup_runtime(profile, parent_mem_tracker);
+void ChunksSorterTopn::setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
+    ChunksSorter::setup_runtime(state, profile, parent_mem_tracker);
     _sort_filter_timer = ADD_TIMER(profile, "SortFilterTime");
     _sort_filter_rows = ADD_COUNTER(profile, "SortFilterRows", TUnit::UNIT);
 }

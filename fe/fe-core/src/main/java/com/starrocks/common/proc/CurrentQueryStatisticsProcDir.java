@@ -54,9 +54,17 @@ import java.util.Map;
 public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(CurrentQueryStatisticsProcDir.class);
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("QueryId").add("ConnectionId").add("Database").add("User")
-            .add("ScanBytes").add("ProcessRows").add("CPUCostSeconds").add("MemoryUsageBytes")
-            .add("ExecTime").build();
+                                                                    .add("QueryId")
+                                                                    .add("ConnectionId")
+                                                                    .add("Database")
+                                                                    .add("User")
+                                                                    .add("ScanBytes")
+                                                                    .add("ScanRows")
+                                                                    .add("MemoryUsage")
+                                                                    .add("DiskSpillSize")
+                                                                    .add("CPUTime")
+                                                                    .add("ExecTime")
+                                                                    .build();
 
     private static final int EXEC_TIME_INDEX = 8;
 
@@ -99,13 +107,12 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
             values.add(item.getConnId());
             values.add(item.getDb());
             values.add(item.getUser());
-            values.add(QueryStatisticsFormatter.getBytes(
-                    statistics.getScanBytes()));
-            values.add(QueryStatisticsFormatter.getRowsReturned(
-                    statistics.getScanRows()));
-            values.add(QueryStatisticsFormatter.getCPUCostSeconds(statistics.getCpuCostNs()));
+            values.add(QueryStatisticsFormatter.getBytes(statistics.getScanBytes()));
+            values.add(QueryStatisticsFormatter.getRowsReturned(statistics.getScanRows()));
             values.add(QueryStatisticsFormatter.getBytes(statistics.getMemUsageBytes()));
-            values.add(item.getQueryExecTime());
+            values.add(QueryStatisticsFormatter.getBytes(statistics.getSpillBytes()));
+            values.add(QueryStatisticsFormatter.getSecondsFromNano(statistics.getCpuCostNs()));
+            values.add(QueryStatisticsFormatter.getSecondsFromMilli(item.getQueryExecTime()));
             sortedRowData.add(values);
         }
         // sort according to ExecTime

@@ -318,7 +318,8 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     std::vector<SlotId> slots{_expr_region->slot_id(), _expr_cust_key->slot_id()};
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1024000, 16777216,
                                 slots);
-    sorter.setup_runtime(pool->add(new RuntimeProfile("", false)), pool->add(new MemTracker(1L << 62, "", nullptr)));
+    sorter.setup_runtime(_runtime_state.get(), pool->add(new RuntimeProfile("", false)),
+                         pool->add(new MemTracker(1L << 62, "", nullptr)));
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     sorter.update(_runtime_state.get(), _chunk_1);
     sorter.update(_runtime_state.get(), _chunk_2);
@@ -527,7 +528,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
     std::vector<SlotId> slots{_expr_region->slot_id(), _expr_cust_key->slot_id()};
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1024000, 16777216,
                                 slots);
-    sorter.setup_runtime(pool->add(new RuntimeProfile("", false)), pool->add(new MemTracker(1L << 62, "", nullptr)));
+    sorter.setup_runtime(_runtime_state.get(), pool->add(new RuntimeProfile("", false)),
+                         pool->add(new MemTracker(1L << 62, "", nullptr)));
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     sorter.update(_runtime_state.get(), _chunk_1);
     sorter.update(_runtime_state.get(), _chunk_2);
@@ -566,7 +568,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
     std::vector<SlotId> slots{_expr_region->slot_id(), _expr_cust_key->slot_id()};
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1024000, 16777216,
                                 slots);
-    sorter.setup_runtime(pool->add(new RuntimeProfile("", false)), pool->add(new MemTracker(1L << 62, "", nullptr)));
+    sorter.setup_runtime(_runtime_state.get(), pool->add(new RuntimeProfile("", false)),
+                         pool->add(new MemTracker(1L << 62, "", nullptr)));
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     sorter.update(_runtime_state.get(), _chunk_1);
     sorter.update(_runtime_state.get(), _chunk_2);
@@ -608,7 +611,8 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
     std::vector<SlotId> slots{_expr_region->slot_id(), _expr_cust_key->slot_id()};
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1024000, 16777216,
                                 slots);
-    sorter.setup_runtime(pool->add(new RuntimeProfile("", false)), pool->add(new MemTracker(1L << 62, "", nullptr)));
+    sorter.setup_runtime(_runtime_state.get(), pool->add(new RuntimeProfile("", false)),
+                         pool->add(new MemTracker(1L << 62, "", nullptr)));
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     sorter.update(_runtime_state.get(), _chunk_1);
     sorter.update(_runtime_state.get(), _chunk_2);
@@ -653,7 +657,8 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
     std::vector<SlotId> slots{_expr_region->slot_id(), _expr_cust_key->slot_id()};
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1024000, 16777216,
                                 slots);
-    sorter.setup_runtime(pool->add(new RuntimeProfile("", false)), pool->add(new MemTracker(1L << 62, "", nullptr)));
+    sorter.setup_runtime(_runtime_state.get(), pool->add(new RuntimeProfile("", false)),
+                         pool->add(new MemTracker(1L << 62, "", nullptr)));
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     sorter.update(_runtime_state.get(), _chunk_1);
     sorter.update(_runtime_state.get(), _chunk_2);

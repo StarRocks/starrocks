@@ -111,7 +111,7 @@ public:
                                                             const SortExecExprs& sort_exec_exprs,
                                                             const std::vector<OrderByType>& order_by_types);
 
-    virtual void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker);
+    virtual void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
 

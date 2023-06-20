@@ -139,6 +139,8 @@ public:
     int64_t cpu_cost() const { return _total_cpu_cost_ns; }
     int64_t cur_scan_rows_num() const { return _total_scan_rows_num; }
     int64_t get_scan_bytes() const { return _total_scan_bytes; }
+    std::atomic_int64_t* mutable_total_spill_bytes() { return &_total_spill_bytes; }
+    int64_t get_spill_bytes() { return _total_spill_bytes; }
 
     // Query start time, used to check how long the query has been running
     // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
@@ -198,6 +200,7 @@ private:
     std::atomic<int64_t> _total_cpu_cost_ns = 0;
     std::atomic<int64_t> _total_scan_rows_num = 0;
     std::atomic<int64_t> _total_scan_bytes = 0;
+    std::atomic<int64_t> _total_spill_bytes = 0;
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;

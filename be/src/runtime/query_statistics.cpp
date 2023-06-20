@@ -43,6 +43,7 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     statistics->set_returned_rows(returned_rows);
     statistics->set_cpu_cost_ns(cpu_ns);
     statistics->set_mem_cost_bytes(mem_cost_bytes);
+    statistics->set_spill_bytes(spill_bytes);
     *statistics->mutable_stats_items() = {_stats_items.begin(), _stats_items.end()};
 }
 
@@ -51,6 +52,7 @@ void QueryStatistics::clear() {
     scan_bytes = 0;
     cpu_ns = 0;
     returned_rows = 0;
+    spill_bytes = 0;
     _stats_items.clear();
 }
 
@@ -82,6 +84,10 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     int64_t mem_cost_bytes = other.mem_cost_bytes.load();
     this->mem_cost_bytes = std::max<int64_t>(this->mem_cost_bytes, mem_cost_bytes);
 
+    int64_t spill_bytes = other.spill_bytes.load();
+    this->spill_bytes += spill_bytes;
+    other.spill_bytes -= spill_bytes;
+
     _stats_items.insert(_stats_items.end(), other._stats_items.begin(), other._stats_items.end());
 }
 
@@ -89,6 +95,7 @@ void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
     scan_rows += statistics.scan_rows();
     scan_bytes += statistics.scan_bytes();
     cpu_ns += statistics.cpu_cost_ns();
+    spill_bytes += statistics.spill_bytes();
     mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
     _stats_items.insert(_stats_items.end(), statistics.stats_items().begin(), statistics.stats_items().end());
 }

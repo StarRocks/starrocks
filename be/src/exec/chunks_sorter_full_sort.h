@@ -56,7 +56,8 @@ public:
 
     int64_t mem_usage() const override;
 
-    void setup_runtime(starrocks::RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
+    void setup_runtime(RuntimeState* state, starrocks::RuntimeProfile* profile,
+                       MemTracker* parent_mem_tracker) override;
 
 private:
     // Three stages of sorting procedure:

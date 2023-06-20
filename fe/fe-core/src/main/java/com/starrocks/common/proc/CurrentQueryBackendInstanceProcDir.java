@@ -66,7 +66,7 @@ public class CurrentQueryBackendInstanceProcDir implements ProcDirInterface {
                         .toString();
                 content.setHost(address);
                 content.setInstanceId(DebugUtil.printId(info.getInstanceId()));
-                content.setExecTime(item.getQueryExecTime());
+                content.setExecTime(String.valueOf(item.getQueryExecTime()));
                 final String hostWithPort = info.getAddress().toString();
                 List<RowData> list = hostInstances.get(hostWithPort);
                 if (list == null) {

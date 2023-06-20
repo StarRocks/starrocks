@@ -19,9 +19,10 @@
 #include "exec/spillable_chunks_sorter_sort.h"
 
 namespace starrocks {
-void SpillableChunksSorterFullSort::setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
-    ChunksSorterFullSort::setup_runtime(profile, parent_mem_tracker);
-    _spiller->set_metrics(spill::SpillProcessMetrics(profile));
+void SpillableChunksSorterFullSort::setup_runtime(RuntimeState* state, RuntimeProfile* profile,
+                                                  MemTracker* parent_mem_tracker) {
+    ChunksSorterFullSort::setup_runtime(state, profile, parent_mem_tracker);
+    _spiller->set_metrics(spill::SpillProcessMetrics(profile, state->mutable_total_spill_bytes()));
 }
 
 Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {

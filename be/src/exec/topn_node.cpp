@@ -236,7 +236,7 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     }
 
     bool eos = false;
-    _chunks_sorter->setup_runtime(runtime_profile(), runtime_state()->instance_mem_tracker());
+    _chunks_sorter->setup_runtime(state, runtime_profile(), runtime_state()->instance_mem_tracker());
     do {
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;

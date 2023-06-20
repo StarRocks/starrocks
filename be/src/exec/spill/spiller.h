@@ -43,10 +43,16 @@ namespace starrocks::spill {
 
 // some metrics for spill
 struct SpillProcessMetrics {
-    SpillProcessMetrics() = default;
-    SpillProcessMetrics(RuntimeProfile* profile);
-
+private:
+    // For profile
     std::shared_ptr<RuntimeProfile> _spiller_metrics;
+
+public:
+    SpillProcessMetrics() = default;
+    SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes);
+
+    // For query statistics
+    std::atomic_int64_t* total_spill_bytes;
 
     // time spent to append data into Spiller
     RuntimeProfile::Counter* append_data_timer = nullptr;
