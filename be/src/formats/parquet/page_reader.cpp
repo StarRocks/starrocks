@@ -33,7 +33,9 @@ Status PageReader::next_header() {
     }
 
     DCHECK(_num_values_read <= _num_values_total);
-    if (_num_values_read == _num_values_total) {
+    if (_num_values_read >= _num_values_total) {
+        LOG_IF(WARNING, _num_values_read > _num_values_total)
+                << "Read more values than expected, read=" << _num_values_read << ", expect=" << _num_values_total;
         return Status::EndOfFile("");
     }
 
