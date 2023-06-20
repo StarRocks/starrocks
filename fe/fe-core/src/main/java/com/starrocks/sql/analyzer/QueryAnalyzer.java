@@ -652,7 +652,7 @@ public class QueryAnalyzer {
                 analyzeExpression(expression, new AnalyzeState(), scope);
 
                 if (!expression.getType().canOrderBy()) {
-                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                    throw new SemanticException(Type.NOT_SUPPORT_ORDER_ERROR_MSG);
                 }
 
                 orderByElement.setExpr(expression);
@@ -954,7 +954,7 @@ public class QueryAnalyzer {
         if (expr instanceof BinaryPredicate) {
             for (Expr child : expr.getChildren()) {
                 if (!child.getType().canJoinOn()) {
-                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                    throw new SemanticException(Type.NOT_SUPPORT_JOIN_ERROR_MSG);
                 }
             }
         } else {
