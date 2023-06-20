@@ -244,6 +244,7 @@ public class AnalyzeManager implements Writable {
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setThreadLocalInfo();
+        statsConnectCtx.setStatisticsConnection(true);
 
         dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
         dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
@@ -265,6 +266,7 @@ public class AnalyzeManager implements Writable {
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setThreadLocalInfo();
+        statsConnectCtx.setStatisticsConnection(true);
 
         List<Long> pids = dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
 
@@ -302,6 +304,7 @@ public class AnalyzeManager implements Writable {
         List<Pair<Long, Long>> checkDbTableIds = Lists.newArrayList();
         List<Long> checkPartitionIds = Lists.newArrayList();
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setStatisticsConnection(true);
 
         int exprLimit = Config.expr_children_limit / 2;
         for (Pair<Long, Long> dbTableId : checkTableIds) {
@@ -324,7 +327,6 @@ public class AnalyzeManager implements Writable {
                 checkPartitionIds.clear();
                 checkDbTableIds.add(dbTableId);
                 checkPartitionIds.addAll(pids);
-                statsConnectCtx.getSessionVariable().setExprChildrenLimit(pids.size() * 3);
                 break;
             } else if ((checkDbTableIds.size() + checkPartitionIds.size() + pids.size()) > exprLimit) {
                 break;
@@ -342,6 +344,7 @@ public class AnalyzeManager implements Writable {
         StatisticExecutor executor = new StatisticExecutor();
         List<Long> tables = checkDbTableIds.stream().map(p -> p.second).collect(Collectors.toList());
 
+        statsConnectCtx.getSessionVariable().setExprChildrenLimit(checkPartitionIds.size() * 3);
         if (executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tables, checkPartitionIds)) {
             checkDbTableIds.forEach(checkTableIds::remove);
         }
