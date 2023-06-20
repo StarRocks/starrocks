@@ -58,7 +58,8 @@ public:
                              ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool, bool strict_mode);
 
     static Status build_dest(const arrow::DataType* arrow_type, const TypeDescriptor* type_desc, bool is_nullable,
-                             TypeDescriptor* raw_type_desc, ConvertFuncTree* conv_func, bool& need_cast, bool strict_mode);
+                             TypeDescriptor* raw_type_desc, ConvertFuncTree* conv_func, bool& need_cast,
+                             bool strict_mode);
 
 private:
     // Read next buffer from reader

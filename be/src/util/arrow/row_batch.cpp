@@ -45,8 +45,8 @@
 #include <arrow/type.h>
 #include <arrow/visitor.h>
 #include <arrow/visitor_inline.h>
-
 #include <fmt/format.h>
+
 #include <memory>
 
 #include "common/logging.h"
