@@ -36,7 +36,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
-#include "testutil/sync_point.h"
 #include "util/raw_container.h"
 
 namespace starrocks::lake {
@@ -66,8 +65,6 @@ static Status delete_rowset_files(FileSystem* fs, std::string_view data_dir, con
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
                                      const std::vector<int64_t>& tablet_ids, int64_t min_retain_version,
                                      int64_t grace_timestamp, int64_t* vacuumed_files, int64_t* vacuumed_file_size) {
-    TEST_SYNC_POINT("CloudNative::GC::delete_tablet_metadata:enter");
-
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
     DCHECK(min_retain_version >= 0);
@@ -152,8 +149,6 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             RETURN_IF_ERROR(delete_file_ignore_not_found(fs.get(), path));
         }
     }
-
-    TEST_SYNC_POINT("CloudNative::GC::delete_tablet_metadata:return");
 
     return Status::OK();
 }
