@@ -23,7 +23,8 @@
 namespace starrocks::pipeline {
 Status SpillableNLJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(NLJoinBuildOperator::prepare(state));
-    _spill_channel->spiller()->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
+    _spill_channel->spiller()->set_metrics(
+            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     RETURN_IF_ERROR(_spill_channel->spiller()->prepare(state));
     _cross_join_context->input_channel(_driver_sequence).set_spiller(_spill_channel->spiller());
     if (state->spill_mode() == TSpillMode::FORCE) {
