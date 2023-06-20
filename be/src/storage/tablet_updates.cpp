@@ -1302,6 +1302,8 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         for (auto& delvec_pair : new_del_vecs) {
             tsid.segment_id = delvec_pair.first;
             manager->set_cached_del_vec(tsid, delvec_pair.second);
+            // try to set empty dcg cache, for improving latency when reading
+            manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
         }
         // 5. apply memory
         _next_log_id++;
@@ -1836,6 +1838,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         for (auto& delvec_pair : delvecs) {
             tsid.segment_id = delvec_pair.first;
             manager->set_cached_del_vec(tsid, delvec_pair.second);
+            // try to set empty dcg cache, for improving latency when reading
+            manager->set_cached_empty_delta_column_group(_tablet.data_dir()->get_meta(), tsid);
         }
         // 5. apply memory
         _next_log_id++;
