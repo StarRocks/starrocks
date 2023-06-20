@@ -126,6 +126,10 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_prober.prepare(state, _unique_metrics.get()));
     _spill_factory = std::make_shared<spill::SpillerFactory>();
     _spiller = _spill_factory->create({});
+<<<<<<< HEAD
+=======
+    _spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+>>>>>>> fdc805697 ([Enhancement] add disk_spill in runtime query statistics  (#25462))
     _cross_join_context->incr_prober();
     return Status::OK();
 }

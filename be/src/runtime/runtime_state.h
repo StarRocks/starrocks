@@ -292,6 +292,8 @@ public:
         load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
     }
 
+    std::atomic_int64_t* mutable_total_spill_bytes();
+
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
 
     int per_fragment_instance_idx() const { return _per_fragment_instance_idx; }
