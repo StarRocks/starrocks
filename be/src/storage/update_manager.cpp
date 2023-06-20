@@ -243,7 +243,7 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
     std::vector<std::pair<TabletSegmentId, int64_t>> clear_dcgs;
     const int64_t begin_ms = UnixMillis();
     auto is_timeout = [begin_ms]() {
-        if (UnixMillis() > begin_ms + 100) { // only hold cache_clock for 100ms max.
+        if (UnixMillis() > begin_ms + 10) { // only hold cache_clock for 10ms max.
             return true;
         } else {
             return false;
@@ -281,6 +281,46 @@ void UpdateManager::clear_cached_delta_column_group(const std::vector<TabletSegm
             _delta_column_group_cache.erase(itr);
         }
     }
+}
+
+Status UpdateManager::set_cached_empty_delta_column_group(KVStore* meta, const TabletSegmentId& tsid) {
+    {
+        std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+        auto itr = _delta_column_group_cache.find(tsid);
+        if (itr != _delta_column_group_cache.end()) {
+            // already exist, not need to cache
+            return Status::OK();
+        }
+    }
+    // find from rocksdb
+    DeltaColumnGroupList new_dcgs;
+    RETURN_IF_ERROR(
+            TabletMetaManager::get_delta_column_group(meta, tsid.tablet_id, tsid.segment_id, INT64_MAX, &new_dcgs));
+    std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+    auto itr = _delta_column_group_cache.find(tsid);
+    if (itr != _delta_column_group_cache.end()) {
+        // already exist, not need to cache
+        return Status::OK();
+    }
+    if (new_dcgs.empty()) {
+        // only set empty dcgs
+        _delta_column_group_cache[tsid] = new_dcgs;
+    }
+    return Status::OK();
+}
+
+bool UpdateManager::get_cached_delta_column_group(const TabletSegmentId& tsid, int64_t version,
+                                                  DeltaColumnGroupList* dcgs) {
+    // find in delta column group cache
+    std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+    auto itr = _delta_column_group_cache.find(tsid);
+    if (itr != _delta_column_group_cache.end()) {
+        search_delta_column_groups_by_version(itr->second, version, dcgs);
+        // hit cache
+        return true;
+    }
+    // miss cache
+    return false;
 }
 
 Status UpdateManager::set_cached_delta_column_group(KVStore* meta, const TabletSegmentId& tsid,
