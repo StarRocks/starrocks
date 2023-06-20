@@ -15,16 +15,16 @@
 #include "exec/schema_scanner/schema_charsets_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaCharsetsScanner::_s_css_columns[] = {
         //   name,       type,          size
-        {"CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFAULT_COLLATE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DESCRIPTION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DEFAULT_COLLATE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DESCRIPTION", TYPE_VARCHAR, sizeof(Slice), false},
         {"MAXLEN", TYPE_BIGINT, sizeof(int64_t), false},
 };
 

@@ -16,24 +16,24 @@
 
 #include "common/logging.h"
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTablesConfigScanner::_s_table_tables_config_columns[] = {
         //   name,       type,          size,     is_null
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_ENGINE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_MODEL", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PRIMARY_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PARTITION_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DISTRIBUTE_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DISTRIBUTE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_ENGINE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_MODEL", TYPE_VARCHAR, sizeof(Slice), false},
+        {"PRIMARY_KEY", TYPE_VARCHAR, sizeof(Slice), false},
+        {"PARTITION_KEY", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DISTRIBUTE_KEY", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DISTRIBUTE_TYPE", TYPE_VARCHAR, sizeof(Slice), false},
         {"DISTRIBUTE_BUCKET", TYPE_INT, sizeof(int32_t), false},
-        {"SORT_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"SORT_KEY", TYPE_VARCHAR, sizeof(Slice), false},
+        {"PROPERTIES", TYPE_VARCHAR, sizeof(Slice), false},
         {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
 };
 

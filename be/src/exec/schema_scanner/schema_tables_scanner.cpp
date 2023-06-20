@@ -17,8 +17,8 @@
 #include "column/nullable_column.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -26,13 +26,13 @@ const int32_t DEF_NULL_NUM = -1;
 
 SchemaScanner::ColumnDesc SchemaTablesScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ENGINE", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(Slice), true},
+        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_TYPE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"ENGINE", TYPE_VARCHAR, sizeof(Slice), true},
         {"VERSION", TYPE_BIGINT, sizeof(int64_t), true},
-        {"ROW_FORMAT", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"ROW_FORMAT", TYPE_VARCHAR, sizeof(Slice), true},
         {"TABLE_ROWS", TYPE_BIGINT, sizeof(int64_t), true},
         {"AVG_ROW_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
         {"DATA_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
@@ -43,10 +43,10 @@ SchemaScanner::ColumnDesc SchemaTablesScanner::_s_tbls_columns[] = {
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"UPDATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"CHECK_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"TABLE_COLLATION", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"TABLE_COLLATION", TYPE_VARCHAR, sizeof(Slice), true},
         {"CHECKSUM", TYPE_BIGINT, sizeof(int64_t), true},
-        {"CREATE_OPTIONS", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_COMMENT", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"CREATE_OPTIONS", TYPE_VARCHAR, sizeof(Slice), true},
+        {"TABLE_COMMENT", TYPE_VARCHAR, sizeof(Slice), false},
 };
 
 SchemaTablesScanner::SchemaTablesScanner()

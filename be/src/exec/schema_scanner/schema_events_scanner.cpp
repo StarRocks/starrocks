@@ -15,37 +15,37 @@
 #include "exec/schema_scanner/schema_events_scanner.h"
 
 #include "runtime/datetime_value.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaEventsScanner::_s_cols_events[] = {
         //   name,       type,          size,                     is_null
-        {"EVENT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EVENT_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EVENT_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINER", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TIME_ZONE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EVENT_BODY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EVENT_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EVENT_TYPE", TYPE_BIGINT, sizeof(StringValue), false},
+        {"EVENT_CATALOG", TYPE_VARCHAR, sizeof(Slice), false},
+        {"EVENT_SCHEMA", TYPE_VARCHAR, sizeof(Slice), false},
+        {"EVENT_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DEFINER", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TIME_ZONE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"EVENT_BODY", TYPE_VARCHAR, sizeof(Slice), false},
+        {"EVENT_DEFINITION", TYPE_VARCHAR, sizeof(Slice), false},
+        {"EVENT_TYPE", TYPE_BIGINT, sizeof(Slice), false},
         {"EXECUTE_AT", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"INTERVAL_VALUE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"INTERVAL_FIELD", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"SQL_MODE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"INTERVAL_VALUE", TYPE_VARCHAR, sizeof(Slice), true},
+        {"INTERVAL_FIELD", TYPE_VARCHAR, sizeof(Slice), true},
+        {"SQL_MODE", TYPE_VARCHAR, sizeof(Slice), false},
         {"STARTS", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"ENDS", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ON_COMPLETION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"STATUS", TYPE_VARCHAR, sizeof(Slice), false},
+        {"ON_COMPLETION", TYPE_VARCHAR, sizeof(Slice), false},
         {"CREATED", TYPE_DATETIME, sizeof(DateTimeValue), false},
         {"LAST_ALTERED", TYPE_DATETIME, sizeof(DateTimeValue), false},
         {"LAST_EXECUTED", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"EVENT_COMMENT", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ORIGINATOR", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHARACTER_SET_CLIENT", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLLATION_CONNECTION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE_COLLATION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"EVENT_COMMENT", TYPE_VARCHAR, sizeof(Slice), false},
+        {"ORIGINATOR", TYPE_VARCHAR, sizeof(Slice), false},
+        {"CHARACTER_SET_CLIENT", TYPE_VARCHAR, sizeof(Slice), false},
+        {"COLLATION_CONNECTION", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DATABASE_COLLATION", TYPE_VARCHAR, sizeof(Slice), false},
 };
 
 SchemaEventsScanner::SchemaEventsScanner()

@@ -19,16 +19,16 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaLoadTrackingLogsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
         {"JOB_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"LABEL", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TRACKING_LOG", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"LABEL", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TRACKING_LOG", TYPE_VARCHAR, sizeof(Slice), true}};
 
 SchemaLoadTrackingLogsScanner::SchemaLoadTrackingLogsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

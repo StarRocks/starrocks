@@ -51,7 +51,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
-#include "runtime/string_value.hpp"
 #include "storage/tuple.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
@@ -205,7 +204,6 @@ using ColumnValueRangeType =  std::variant<
         ColumnValueRange<int32_t>,
         ColumnValueRange<int64_t>,
         ColumnValueRange<__int128>,
-        ColumnValueRange<StringValue>, // TODO: remove
         ColumnValueRange<Slice>,
         ColumnValueRange<DateTimeValue>,
         ColumnValueRange<DecimalV2Value>,

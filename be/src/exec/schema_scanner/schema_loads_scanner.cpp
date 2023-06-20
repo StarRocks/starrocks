@@ -17,35 +17,35 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaLoadsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
         {"JOB_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"LABEL", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PRIORITY", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"LABEL", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DATABASE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"STATE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"PROGRESS", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TYPE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"PRIORITY", TYPE_VARCHAR, sizeof(Slice), false},
         {"SCAN_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
         {"FILTERED_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
         {"UNSELECTED_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
         {"SINK_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
-        {"ETL_INFO", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TASK_INFO", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"ETL_INFO", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TASK_INFO", TYPE_VARCHAR, sizeof(Slice), false},
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"ETL_START_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"ETL_FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"LOAD_START_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"LOAD_FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"JOB_DETAILS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ERROR_MSG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TRACKING_URL", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TRACKING_SQL", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"REJECTED_RECORD_PATH", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"JOB_DETAILS", TYPE_VARCHAR, sizeof(Slice), false},
+        {"ERROR_MSG", TYPE_VARCHAR, sizeof(Slice), true},
+        {"TRACKING_URL", TYPE_VARCHAR, sizeof(Slice), true},
+        {"TRACKING_SQL", TYPE_VARCHAR, sizeof(Slice), true},
+        {"REJECTED_RECORD_PATH", TYPE_VARCHAR, sizeof(Slice), true}};
 
 SchemaLoadsScanner::SchemaLoadsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

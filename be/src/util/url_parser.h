@@ -35,7 +35,7 @@
 #pragma once
 
 #include "runtime/string_search.hpp"
-#include "runtime/string_value.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -64,30 +64,30 @@ public:
     // Tries to parse the part from url. Places the result in result.
     // Returns false if the URL is malformed or if part is invalid. True otherwise.
     // If false is returned the contents of results are undefined.
-    static bool parse_url(const StringValue& url, UrlPart part, StringValue* result);
+    static bool parse_url(const Slice& url, UrlPart part, Slice* result);
 
     // Compares part against url_authority, url_file, url_host, etc.,
     // and returns the corresponding enum.
     // If part did not match any of the url part constants, returns INVALID.
-    static UrlPart get_url_part(const StringValue& part);
+    static UrlPart get_url_part(const Slice& part);
 
 private:
     // Constants representing parts of a URL.
-    static const StringValue _s_url_authority;
-    static const StringValue _s_url_file;
-    static const StringValue _s_url_host;
-    static const StringValue _s_url_path;
-    static const StringValue _s_url_protocol;
-    static const StringValue _s_url_query;
-    static const StringValue _s_url_ref;
-    static const StringValue _s_url_userinfo;
+    static const Slice _s_url_authority;
+    static const Slice _s_url_file;
+    static const Slice _s_url_host;
+    static const Slice _s_url_path;
+    static const Slice _s_url_protocol;
+    static const Slice _s_url_query;
+    static const Slice _s_url_ref;
+    static const Slice _s_url_userinfo;
     // Constants used in searching for URL parts.
-    static const StringValue _s_protocol;
-    static const StringValue _s_at;
-    static const StringValue _s_slash;
-    static const StringValue _s_colon;
-    static const StringValue _s_question;
-    static const StringValue _s_hash;
+    static const Slice _s_protocol;
+    static const Slice _s_at;
+    static const Slice _s_slash;
+    static const Slice _s_colon;
+    static const Slice _s_question;
+    static const Slice _s_hash;
     static const StringSearch _s_protocol_search;
     static const StringSearch _s_at_search;
     static const StringSearch _s_slash_search;

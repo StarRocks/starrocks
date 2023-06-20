@@ -20,12 +20,12 @@
 #include "runtime/datetime_value.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "types/logical_type.h"
 #include "util/metrics.h"
+#include "util/slice.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -40,7 +40,7 @@ SchemaScanner::ColumnDesc SchemaBeCloudNativeCompactionsScanner::_s_columns[] = 
         {"START_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"PROGRESS", TYPE_INT, sizeof(int32_t), false},
-        {"STATUS", TYPE_VARCHAR, sizeof(StringValue), false}};
+        {"STATUS", TYPE_VARCHAR, sizeof(Slice), false}};
 
 SchemaBeCloudNativeCompactionsScanner::SchemaBeCloudNativeCompactionsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

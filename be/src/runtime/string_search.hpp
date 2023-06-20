@@ -53,12 +53,12 @@
 
 #pragma once
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 #include <cstring>
 #include <vector>
 
 #include "common/logging.h"
-#include "runtime/string_value.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -67,45 +67,45 @@ namespace starrocks {
 class StringSearch {
 public:
     virtual ~StringSearch() = default;
-    StringSearch() {}
+    StringSearch() = default;
 
     // Initialize/Precompute a StringSearch object from the pattern
-    StringSearch(const StringValue* pattern) : _pattern(pattern), _mask(0) {
+    StringSearch(const Slice* pattern) : _pattern(pattern) {
         // Special cases
-        if (_pattern->len <= 1) {
+        if (_pattern->size <= 1) {
             return;
         }
 
         // Build compressed lookup table
-        int mlast = _pattern->len - 1;
+        int mlast = _pattern->size - 1;
         _skip = mlast - 1;
 
         for (int i = 0; i < mlast; ++i) {
-            bloom_add(_pattern->ptr[i]);
+            bloom_add(_pattern->data[i]);
 
-            if (_pattern->ptr[i] == _pattern->ptr[mlast]) {
+            if (_pattern->data[i] == _pattern->data[mlast]) {
                 _skip = mlast - i - 1;
             }
         }
 
-        bloom_add(_pattern->ptr[mlast]);
+        bloom_add(_pattern->data[mlast]);
     }
 
     // search for this pattern in str.
     //   Returns the offset into str if the pattern exists
     //   Returns -1 if the pattern is not found
-    int search(const StringValue* str) const {
+    int search(const Slice str) const {
         // Special cases
-        if (!str || !_pattern || _pattern->len == 0) {
+        if (!_pattern || _pattern->size == 0) {
             return -1;
         }
 
-        int mlast = _pattern->len - 1;
-        int w = str->len - _pattern->len;
-        int n = str->len;
-        int m = _pattern->len;
-        const char* s = str->ptr;
-        const char* p = _pattern->ptr;
+        int mlast = _pattern->size - 1;
+        int w = str.size - _pattern->size;
+        int n = str.size;
+        int m = _pattern->size;
+        const char* s = str.data;
+        const char* p = _pattern->data;
 
         // Special case if pattern->len == 1
         if (m == 1) {
@@ -160,7 +160,7 @@ private:
 
     bool bloom_query(char c) const { return _mask & (1UL << (c & (BLOOM_WIDTH - 1))); }
 
-    const StringValue* _pattern{nullptr};
+    const Slice* _pattern{nullptr};
     int64_t _mask{0};
     int64_t _skip = 0;
 };

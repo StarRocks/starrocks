@@ -17,22 +17,22 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "types/logical_type.h"
 #include "util/metrics.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeTxnsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},          {"LOAD_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TXN_ID", TYPE_BIGINT, sizeof(int64_t), false},         {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},      {"CREATE_TIME", TYPE_BIGINT, sizeof(int64_t), false},
-        {"COMMIT_TIME", TYPE_BIGINT, sizeof(int64_t), false},    {"PUBLISH_TIME", TYPE_BIGINT, sizeof(int64_t), false},
-        {"ROWSET_ID", TYPE_VARCHAR, sizeof(StringValue), false}, {"NUM_SEGMENT", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NUM_DELFILE", TYPE_BIGINT, sizeof(int64_t), false},    {"NUM_ROW", TYPE_BIGINT, sizeof(int64_t), false},
-        {"DATA_SIZE", TYPE_BIGINT, sizeof(int64_t), false},      {"VERSION", TYPE_BIGINT, sizeof(int64_t), false},
+        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},       {"LOAD_ID", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TXN_ID", TYPE_BIGINT, sizeof(int64_t), false},      {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},   {"CREATE_TIME", TYPE_BIGINT, sizeof(int64_t), false},
+        {"COMMIT_TIME", TYPE_BIGINT, sizeof(int64_t), false}, {"PUBLISH_TIME", TYPE_BIGINT, sizeof(int64_t), false},
+        {"ROWSET_ID", TYPE_VARCHAR, sizeof(Slice), false},    {"NUM_SEGMENT", TYPE_BIGINT, sizeof(int64_t), false},
+        {"NUM_DELFILE", TYPE_BIGINT, sizeof(int64_t), false}, {"NUM_ROW", TYPE_BIGINT, sizeof(int64_t), false},
+        {"DATA_SIZE", TYPE_BIGINT, sizeof(int64_t), false},   {"VERSION", TYPE_BIGINT, sizeof(int64_t), false},
 };
 
 SchemaBeTxnsScanner::SchemaBeTxnsScanner()

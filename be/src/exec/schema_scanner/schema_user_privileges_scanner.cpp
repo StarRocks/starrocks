@@ -15,17 +15,17 @@
 #include "exec/schema_scanner/schema_user_privileges_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaUserPrivilegesScanner::_s_user_privs_columns[] = {
         //   name,       type,          size
-        {"GRANTEE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"GRANTEE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(Slice), true},
+        {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(Slice), false},
 };
 
 SchemaUserPrivilegesScanner::SchemaUserPrivilegesScanner()

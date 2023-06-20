@@ -15,18 +15,18 @@
 #include "exec/schema_scanner/schema_schemata_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaSchemataScanner::_s_columns[] = {
         //   name,       type,          size
-        {"CATALOG_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"SCHEMA_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFAULT_CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFAULT_COLLATION_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"SQL_PATH", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"CATALOG_NAME", TYPE_VARCHAR, sizeof(Slice), true},
+        {"SCHEMA_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DEFAULT_CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DEFAULT_COLLATION_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"SQL_PATH", TYPE_VARCHAR, sizeof(Slice), true},
 };
 
 SchemaSchemataScanner::SchemaSchemataScanner()

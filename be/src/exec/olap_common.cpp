@@ -152,9 +152,6 @@ std::string cast_to_string(__int128 value) {
 }
 
 template <>
-void ColumnValueRange<StringValue>::convert_to_fixed_value() {}
-
-template <>
 void ColumnValueRange<Slice>::convert_to_fixed_value() {}
 
 template <>
@@ -716,7 +713,6 @@ template class ColumnValueRange<int16_t>;
 template class ColumnValueRange<int32_t>;
 template class ColumnValueRange<int64_t>;
 template class ColumnValueRange<__int128>;
-template class ColumnValueRange<StringValue>;
 template class ColumnValueRange<Slice>;
 template class ColumnValueRange<DateTimeValue>;
 template class ColumnValueRange<DecimalV2Value>;
@@ -730,8 +726,6 @@ template Status OlapScanKeys::extend_scan_key<int16_t>(ColumnValueRange<int16_t>
 template Status OlapScanKeys::extend_scan_key<int32_t>(ColumnValueRange<int32_t>& range, int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<int64_t>(ColumnValueRange<int64_t>& range, int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<__int128>(ColumnValueRange<__int128>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<StringValue>(ColumnValueRange<StringValue>& range,
-                                                           int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<Slice>(ColumnValueRange<Slice>& range, int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<DateTimeValue>(ColumnValueRange<DateTimeValue>& range,
                                                              int32_t max_scan_key_num);

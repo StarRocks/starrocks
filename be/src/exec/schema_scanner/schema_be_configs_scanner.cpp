@@ -17,17 +17,17 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 #include "util/metrics.h"
+#include "util/slice.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeConfigsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},        {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VALUE", TYPE_VARCHAR, sizeof(StringValue), false},   {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFAULT", TYPE_VARCHAR, sizeof(StringValue), false}, {"MUTABLE", TYPE_BOOLEAN, sizeof(bool), false},
+        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},  {"NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"VALUE", TYPE_VARCHAR, sizeof(Slice), false},   {"TYPE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DEFAULT", TYPE_VARCHAR, sizeof(Slice), false}, {"MUTABLE", TYPE_BOOLEAN, sizeof(bool), false},
 };
 
 SchemaBeConfigsScanner::SchemaBeConfigsScanner()

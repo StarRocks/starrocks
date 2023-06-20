@@ -15,19 +15,16 @@
 #include "exec/schema_scanner/schema_table_privileges_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTablePrivilegesScanner::_s_table_privs_columns[] = {
         //   name,       type,          size
-        {"GRANTEE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"GRANTEE", TYPE_VARCHAR, sizeof(Slice), false},        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(Slice), true},
+        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(Slice), false},   {"TABLE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(Slice), false}, {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(Slice), false},
 };
 
 SchemaTablePrivilegesScanner::SchemaTablePrivilegesScanner()

@@ -43,7 +43,6 @@
 
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "util/coding.h"
 #include "util/phmap/phmap.h"
 

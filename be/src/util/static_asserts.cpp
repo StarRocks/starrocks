@@ -18,7 +18,6 @@
 #include <boost/static_assert.hpp>
 
 #include "runtime/datetime_value.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 // This class is unused.  It contains static (compile time) asserts.
@@ -26,8 +25,6 @@ namespace starrocks {
 // at compile time.  If these asserts fail, the compile will fail.
 class UnusedClass {
 private:
-    BOOST_STATIC_ASSERT(sizeof(StringValue) == 16);
-    BOOST_STATIC_ASSERT(offsetof(StringValue, len) == 8);
     // Datetime value
     BOOST_STATIC_ASSERT(sizeof(DateTimeValue) == 16);
 };

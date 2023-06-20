@@ -15,38 +15,38 @@
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 // Keep tracks with `information_schema.materialized_views` table's schema.
 SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"MATERIALIZED_VIEW_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"REFRESH_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_ACTIVE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"INACTIVE_REASON", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PARTITION_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TASK_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"MATERIALIZED_VIEW_ID", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"REFRESH_TYPE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"IS_ACTIVE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"INACTIVE_REASON", TYPE_VARCHAR, sizeof(Slice), false},
+        {"PARTITION_TYPE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TASK_ID", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TASK_NAME", TYPE_VARCHAR, sizeof(Slice), false},
 
-        {"LAST_REFRESH_START_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_FINISHED_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_DURATION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_FORCE_REFRESH", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_START_PARTITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_END_PARTITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_BASE_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_MV_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"LAST_REFRESH_START_TIME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"LAST_REFRESH_FINISHED_TIME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"LAST_REFRESH_DURATION", TYPE_VARCHAR, sizeof(Slice), false},
+        {"LAST_REFRESH_STATE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"LAST_REFRESH_FORCE_REFRESH", TYPE_VARCHAR, sizeof(Slice), false},
+        {"LAST_REFRESH_START_PARTITION", TYPE_VARCHAR, sizeof(Slice), false},
+        {"LAST_REFRESH_END_PARTITION", TYPE_VARCHAR, sizeof(Slice), false},
+        {"LAST_REFRESH_BASE_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(Slice), false},
+        {"LAST_REFRESH_MV_REFRESH_PARTITIONS", TYPE_VARCHAR, sizeof(Slice), false},
 
-        {"LAST_REFRESH_ERROR_CODE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LAST_REFRESH_ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"LAST_REFRESH_ERROR_CODE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"LAST_REFRESH_ERROR_MESSAGE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_ROWS", TYPE_VARCHAR, sizeof(Slice), false},
+        {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(Slice), false},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()

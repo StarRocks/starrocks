@@ -17,17 +17,17 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 #include "util/metrics.h"
+#include "util/slice.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeMetricsScanner::_s_columns[] = {
         {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LABELS", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"LABELS", TYPE_VARCHAR, sizeof(Slice), false},
         {"VALUE", TYPE_BIGINT, sizeof(int64_t), false},
 };
 

@@ -3145,7 +3145,7 @@ Status StringFunctions::parse_url_prepare(FunctionContext* context, FunctionCont
     auto column = context->get_constant_column(1);
     auto part = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     state->url_part.reset(new UrlParser::UrlPart);
-    *(state->url_part) = UrlParser::get_url_part(StringValue::from_slice(part));
+    *(state->url_part) = UrlParser::get_url_part(part);
 
     if (*(state->url_part) == UrlParser::INVALID) {
         std::stringstream error;
@@ -3180,7 +3180,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
         }
 
         auto part = part_viewer.value(row);
-        UrlParser::UrlPart url_part = UrlParser::get_url_part(StringValue::from_slice(part));
+        UrlParser::UrlPart url_part = UrlParser::get_url_part(part);
 
         if (url_part == UrlParser::INVALID) {
             std::stringstream ss;
@@ -3190,15 +3190,15 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
             continue;
         }
         auto str_value = str_viewer.value(row);
-        StringValue value;
-        if (!UrlParser::parse_url(StringValue::from_slice(str_value), url_part, &value)) {
+        Slice value;
+        if (!UrlParser::parse_url(str_value, url_part, &value)) {
             std::stringstream ss;
             ss << "Could not parse URL: " << str_value.to_string();
             context->add_warning(ss.str().c_str());
             result.append_null();
             continue;
         }
-        result.append(Slice(value.ptr, value.len));
+        result.append(value);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -3217,8 +3217,8 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_const(UrlParser::UrlPart* url_par
         }
 
         auto str_value = str_viewer.value(row);
-        StringValue value;
-        if (!UrlParser::parse_url(StringValue::from_slice(str_value), *url_part, &value)) {
+        Slice value;
+        if (!UrlParser::parse_url(str_value, *url_part, &value)) {
             std::stringstream ss;
             ss << "Could not parse URL: " << str_value.to_string();
             context->add_warning(ss.str().c_str());
@@ -3226,7 +3226,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_const(UrlParser::UrlPart* url_par
             continue;
         }
 
-        result.append(Slice(value.ptr, value.len));
+        result.append(value);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));

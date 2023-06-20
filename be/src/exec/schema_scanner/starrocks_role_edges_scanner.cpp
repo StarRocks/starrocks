@@ -15,16 +15,16 @@
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksRoleEdgesScanner::_s_role_edges_columns[] = {
         //   name,       type,          size
-        {"FROM_ROLE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TO_ROLE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TO_USER", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"FROM_ROLE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TO_ROLE", TYPE_VARCHAR, sizeof(Slice), true},
+        {"TO_USER", TYPE_VARCHAR, sizeof(Slice), true},
 };
 
 StarrocksRoleEdgesScanner::StarrocksRoleEdgesScanner()

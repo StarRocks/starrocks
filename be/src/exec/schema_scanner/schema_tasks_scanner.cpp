@@ -16,18 +16,15 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"SCHEDULE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true}};
+        {"TASK_NAME", TYPE_VARCHAR, sizeof(Slice), false},  {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
+        {"SCHEDULE", TYPE_VARCHAR, sizeof(Slice), false},   {"DATABASE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DEFINITION", TYPE_VARCHAR, sizeof(Slice), false}, {"EXPIRE_TIME", TYPE_DATETIME, sizeof(Slice), true}};
 
 SchemaTasksScanner::SchemaTasksScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

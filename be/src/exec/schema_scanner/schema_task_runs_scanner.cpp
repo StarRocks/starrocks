@@ -18,25 +18,25 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
+#include "util/slice.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"QUERY_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"QUERY_ID", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TASK_NAME", TYPE_VARCHAR, sizeof(Slice), false},
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
-        {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
-        {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"STATE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DATABASE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DEFINITION", TYPE_VARCHAR, sizeof(Slice), false},
+        {"EXPIRE_TIME", TYPE_DATETIME, sizeof(Slice), true},
+        {"ERROR_CODE", TYPE_BIGINT, sizeof(Slice), true},
+        {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(Slice), true},
+        {"PROGRESS", TYPE_VARCHAR, sizeof(Slice), true},
+        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(Slice), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

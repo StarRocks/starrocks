@@ -86,6 +86,8 @@ public:
     //   Number of bytes in the array.
     Slice(const uint8_t* s, size_t n) : data(const_cast<char*>(reinterpret_cast<const char*>(s))), size(n) {}
 
+    Slice(std::string_view view) : Slice(view.data(), view.size()) {}
+
     /// Create a slice that refers to the contents of the given string.
     Slice(const std::string& s)
             : // NOLINT(runtime/explicit)

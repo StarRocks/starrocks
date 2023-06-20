@@ -16,22 +16,22 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_vars_columns[] = {
         //   name,       type,          size
-        {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(Slice), false},
 };
 
 SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_verbose_vars_columns[] = {
         //   name,       type,          size
-        {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFAULT_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DEFAULT_VALUE", TYPE_VARCHAR, sizeof(Slice), false},
         {"IS_CHANGED", TYPE_BOOLEAN, 1, false},
 };
 

@@ -15,18 +15,18 @@
 #include "exec/schema_scanner/schema_collations_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaCollationsScanner::_s_cols_columns[] = {
         //   name,       type,          size
-        {"COLLATION_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"COLLATION_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(Slice), false},
         {"ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"IS_DEFAULT", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_COMPILED", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"IS_DEFAULT", TYPE_VARCHAR, sizeof(Slice), false},
+        {"IS_COMPILED", TYPE_VARCHAR, sizeof(Slice), false},
         {"SORTLEN", TYPE_BIGINT, sizeof(int64_t), false},
 };
 

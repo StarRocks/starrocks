@@ -17,23 +17,23 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},         {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},  {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NUM_VERSION", TYPE_BIGINT, sizeof(int64_t), false},   {"MAX_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
-        {"MIN_VERSION", TYPE_BIGINT, sizeof(int64_t), false},   {"NUM_ROWSET", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NUM_ROW", TYPE_BIGINT, sizeof(int64_t), false},       {"DATA_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
-        {"INDEX_MEM", TYPE_BIGINT, sizeof(int64_t), false},     {"CREATE_TIME", TYPE_BIGINT, sizeof(int64_t), false},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},    {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATA_DIR", TYPE_VARCHAR, sizeof(StringValue), false}, {"SHARD_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},        {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false}, {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"NUM_VERSION", TYPE_BIGINT, sizeof(int64_t), false},  {"MAX_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
+        {"MIN_VERSION", TYPE_BIGINT, sizeof(int64_t), false},  {"NUM_ROWSET", TYPE_BIGINT, sizeof(int64_t), false},
+        {"NUM_ROW", TYPE_BIGINT, sizeof(int64_t), false},      {"DATA_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
+        {"INDEX_MEM", TYPE_BIGINT, sizeof(int64_t), false},    {"CREATE_TIME", TYPE_BIGINT, sizeof(int64_t), false},
+        {"STATE", TYPE_VARCHAR, sizeof(Slice), false},         {"TYPE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DATA_DIR", TYPE_VARCHAR, sizeof(Slice), false},      {"SHARD_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"SCHEMA_HASH", TYPE_BIGINT, sizeof(int64_t), false},
 };
 

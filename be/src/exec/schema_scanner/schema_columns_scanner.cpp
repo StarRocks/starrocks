@@ -18,36 +18,36 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaColumnsScanner::_s_col_columns[] = {
         //   name,       type,          size,                     is_null
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(Slice), true},
+        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"COLUMN_NAME", TYPE_VARCHAR, sizeof(Slice), false},
         {"ORDINAL_POSITION", TYPE_BIGINT, sizeof(int64_t), false},
-        {"COLUMN_DEFAULT", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"IS_NULLABLE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATA_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"COLUMN_DEFAULT", TYPE_VARCHAR, sizeof(Slice), true},
+        {"IS_NULLABLE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DATA_TYPE", TYPE_VARCHAR, sizeof(Slice), false},
         {"CHARACTER_MAXIMUM_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
         {"CHARACTER_OCTET_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
         {"NUMERIC_PRECISION", TYPE_BIGINT, sizeof(int64_t), true},
         {"NUMERIC_SCALE", TYPE_BIGINT, sizeof(int64_t), true},
         {"DATETIME_PRECISION", TYPE_BIGINT, sizeof(int64_t), true},
-        {"CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"COLLATION_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"COLUMN_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EXTRA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PRIVILEGES", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLUMN_COMMENT", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(Slice), true},
+        {"COLLATION_NAME", TYPE_VARCHAR, sizeof(Slice), true},
+        {"COLUMN_TYPE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"COLUMN_KEY", TYPE_VARCHAR, sizeof(Slice), false},
+        {"EXTRA", TYPE_VARCHAR, sizeof(Slice), false},
+        {"PRIVILEGES", TYPE_VARCHAR, sizeof(Slice), false},
+        {"COLUMN_COMMENT", TYPE_VARCHAR, sizeof(Slice), false},
         {"COLUMN_SIZE", TYPE_BIGINT, sizeof(int64_t), true},
         {"DECIMAL_DIGITS", TYPE_BIGINT, sizeof(int64_t), true},
-        {"GENERATION_EXPRESSION", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"GENERATION_EXPRESSION", TYPE_VARCHAR, sizeof(Slice), true},
         {"SRS_ID", TYPE_BIGINT, sizeof(int64_t), true},
 };
 

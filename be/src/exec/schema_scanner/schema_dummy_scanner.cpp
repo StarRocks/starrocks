@@ -14,7 +14,7 @@
 
 #include "exec/schema_scanner/schema_dummy_scanner.h"
 
-#include "runtime/string_value.h"
+#include "util/slice.h"
 
 namespace starrocks {
 

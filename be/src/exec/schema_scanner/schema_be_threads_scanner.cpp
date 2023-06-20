@@ -17,16 +17,16 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 #include "util/thread.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeThreadsScanner::_s_columns[] = {
         {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"GROUP", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"GROUP", TYPE_VARCHAR, sizeof(Slice), false},
+        {"NAME", TYPE_VARCHAR, sizeof(Slice), false},
         {"PTHREAD_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"TID", TYPE_BIGINT, sizeof(int64_t), false},
         {"IDLE", TYPE_BOOLEAN, 1, false},

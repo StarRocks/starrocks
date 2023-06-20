@@ -15,23 +15,23 @@
 #include "exec/schema_scanner/schema_views_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaViewsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHECK_OPTION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"IS_UPDATABLE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINER", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"SECURITY_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CHARACTER_SET_CLIENT", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"COLLATION_CONNECTION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(Slice), true},
+        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(Slice), false},
+        {"TABLE_NAME", TYPE_VARCHAR, sizeof(Slice), false},
+        {"VIEW_DEFINITION", TYPE_VARCHAR, sizeof(Slice), false},
+        {"CHECK_OPTION", TYPE_VARCHAR, sizeof(Slice), false},
+        {"IS_UPDATABLE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"DEFINER", TYPE_VARCHAR, sizeof(Slice), false},
+        {"SECURITY_TYPE", TYPE_VARCHAR, sizeof(Slice), false},
+        {"CHARACTER_SET_CLIENT", TYPE_VARCHAR, sizeof(Slice), false},
+        {"COLLATION_CONNECTION", TYPE_VARCHAR, sizeof(Slice), false},
 };
 
 SchemaViewsScanner::SchemaViewsScanner()

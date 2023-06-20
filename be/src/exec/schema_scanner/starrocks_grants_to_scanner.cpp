@@ -16,20 +16,17 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksGrantsToScanner::_s_grants_to_columns[] = {
         //   name,       type,          size
-        {"GRANTEE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"OBJECT_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"OBJECT_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"GRANTEE", TYPE_VARCHAR, sizeof(Slice), false},        {"OBJECT_CATALOG", TYPE_VARCHAR, sizeof(Slice), true},
+        {"OBJECT_DATABASE", TYPE_VARCHAR, sizeof(Slice), true}, {"OBJECT_NAME", TYPE_VARCHAR, sizeof(Slice), true},
+        {"OBJECT_TYPE", TYPE_VARCHAR, sizeof(Slice), true},     {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(Slice), true},
+        {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(Slice), true},
 };
 
 StarrocksGrantsToScanner::StarrocksGrantsToScanner(TGrantsToType::type type)

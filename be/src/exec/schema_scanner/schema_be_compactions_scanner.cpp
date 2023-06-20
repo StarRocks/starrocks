@@ -17,11 +17,11 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "storage/compaction_manager.h"
 #include "storage/storage_engine.h"
 #include "types/logical_type.h"
 #include "util/metrics.h"
+#include "util/slice.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
