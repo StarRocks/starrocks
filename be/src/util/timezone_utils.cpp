@@ -105,15 +105,17 @@ bool TimezoneUtils::_match_cctz_time_zone(std::string_view timezone, cctz::time_
     // GMT+8:00
     static RE2 reg2(R"(^GMT[+-]{1}\d{2}\:\d{2}$)", re2::RE2::Quiet);
 
-    if (!reg1.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(), RE2::UNANCHORED, &value,
-                    1) &&
-        !reg2.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(), RE2::UNANCHORED, &value,
-                    1)) {
+    if (reg1.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(), RE2::UNANCHORED, &value,
+                   1)) {
+        // Do nothing.
+    } else if (reg2.Match(re2::StringPiece(timezone.data(), timezone.size()), 0, timezone.size(), RE2::UNANCHORED,
+                          &value, 1)) {
+        // remove GMT header.
+        value = value.substr(3);
+    } else {
         // all regular expressions return empty.
         return false;
     }
-
-    if (value.starts_with("GMT")) value = value.substr(3);
 
     bool positive = (value[0] != '-');
 
