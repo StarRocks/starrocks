@@ -26,6 +26,7 @@ public class ShowWarehousesStmt extends ShowStmt {
     private static final String WH_COL = "Warehouse";
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
+                    .addColumn(new Column("Id", ScalarType.createVarchar(20)))
                     .addColumn(new Column(WH_COL, ScalarType.createVarchar(256)))
                     .addColumn(new Column("State", ScalarType.createVarchar(20)))
                     .addColumn(new Column("ClusterCount", ScalarType.createVarchar(20)))
