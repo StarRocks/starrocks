@@ -147,7 +147,8 @@ TEST_F(ParquetPageReaderTest, ExtraBytes) {
     }
 
     size_t extra_nbytes = 10;
-    size_t total_size = buffer.size() + extra_nbytes;
+    buffer.resize(buffer.size() + extra_nbytes);
+    size_t total_size = buffer.size();
 
     RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(buffer)), "string-file");
 
