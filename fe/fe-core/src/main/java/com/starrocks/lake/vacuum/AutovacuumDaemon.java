@@ -137,10 +137,6 @@ public class AutovacuumDaemon extends Daemon {
             db.readUnlock();
         }
 
-        LOG.info("Vacuuming {}.{}.{}. visibleVersion={} minRetainVersion={} minActiveTxnId={} ", db.getFullName(),
-                table.getName(),
-                partition.getName(), visibleVersion, minRetainVersion, minActiveTxnId);
-
         for (Tablet tablet : tablets) {
             ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
             if (node == null) {
@@ -181,7 +177,9 @@ public class AutovacuumDaemon extends Daemon {
                     vacuumedFileSize += response.vacuumedFileSize;
                 }
             } catch (InterruptedException e) {
+                LOG.warn("thread interrupted");
                 Thread.currentThread().interrupt();
+                hasError = true;
             } catch (ExecutionException e) {
                 LOG.warn(e.getMessage());
                 hasError = true;
@@ -189,8 +187,9 @@ public class AutovacuumDaemon extends Daemon {
         }
 
         partition.setNextVacuumTime(startTime + Config.lake_autovacuum_partition_naptime_seconds * 1000);
-        LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} cost={}ms",
+        LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
+                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getName(), hasError, vacuumedFiles, vacuumedFileSize,
-                System.currentTimeMillis() - startTime);
+                visibleVersion, minRetainVersion, minActiveTxnId, System.currentTimeMillis() - startTime);
     }
 }

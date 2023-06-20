@@ -2214,7 +2214,7 @@ public class Config extends ConfigBase {
     public static int experimental_lake_publish_version_threads = 16;
 
     @ConfField(mutable = true)
-    public static int lake_autovacuum_max_previous_versions = 1;
+    public static int lake_autovacuum_max_previous_versions = 0;
 
     @ConfField
     public static int lake_autovacuum_parallel_partitions = 8;
