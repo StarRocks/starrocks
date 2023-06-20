@@ -455,6 +455,7 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
             query_statistics->set_scan_rows(scan_rows);
             query_statistics->set_scan_bytes(scan_bytes);
             query_statistics->set_mem_usage_bytes(mem_usage_bytes);
+            query_statistics->set_spill_bytes(query_ctx->get_spill_bytes());
         }
     }
 }

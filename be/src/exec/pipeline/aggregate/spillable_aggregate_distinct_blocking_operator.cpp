@@ -65,7 +65,8 @@ void SpillableAggregateDistinctBlockingSinkOperator::close(RuntimeState* state) 
 Status SpillableAggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::prepare(state));
     DCHECK(!_aggregator->is_none_group_by_exprs());
-    _aggregator->spiller()->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
+    _aggregator->spiller()->set_metrics(
+            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
     }
@@ -121,7 +122,7 @@ Status SpillableAggregateDistinctBlockingSinkOperatorFactory::prepare(RuntimeSta
     // init spill options
     _spill_options = std::make_shared<spill::SpilledOptions>(&_sort_exprs, &_sort_desc);
 
-    _spill_options->spill_file_size = state->spill_mem_table_size();
+    _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();

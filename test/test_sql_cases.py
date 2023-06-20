@@ -267,7 +267,7 @@ Start to run: %s
             for sql in sql_list:
                 db_name = self._get_db_name(sql)
                 if len(db_name) > 0:
-                    all_db_dict.setdefault(db_name, list()).append(case.name)
+                    all_db_dict.setdefault(db_name, set()).add(case.name)
         error_info_dict = {db: cases for db, cases in all_db_dict.items() if len(cases) > 1}
         tools.assert_true(len(error_info_dict) <= 0, "Pre Check Failed, Duplicate DBs: \n%s" % json.dumps(error_info_dict, indent=2))
 

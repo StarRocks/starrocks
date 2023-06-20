@@ -180,7 +180,7 @@ public:
 
         dummy_rt_st.set_chunk_size(config::vector_chunk_size);
 
-        metrics = SpillProcessMetrics(&dummy_profile);
+        metrics = SpillProcessMetrics(&dummy_profile, &spill_bytes);
     }
     void TearDown() override {}
     std::unique_ptr<spill::DirManager> dummy_dir_mgr;
@@ -188,6 +188,7 @@ public:
     RuntimeState dummy_rt_st;
     RuntimeProfile dummy_profile{"dummy"};
     std::vector<std::string> clean_up;
+    std::atomic_int64_t spill_bytes;
     SpillProcessMetrics metrics;
 };
 
@@ -290,7 +291,7 @@ TEST_F(SpillTest, unsorted_process) {
     // 4 buffer chunk
     spill_options.mem_table_pool_size = 4;
     // file size: 1M
-    spill_options.spill_file_size = 1 * 1024 * 1024;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
     // spill format type
     spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
 
@@ -384,7 +385,7 @@ TEST_F(SpillTest, order_by_process) {
     // 4 buffer chunk
     spill_options.mem_table_pool_size = 2;
     // file size: 1M
-    spill_options.spill_file_size = 1 * 1024 * 1024;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
     // spill format type
     spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
 

@@ -277,12 +277,12 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
 
-    if (operators.back()->has_runtime_filters()) {
-        may_add_chunk_accumulate_operator(operators, context, id());
-    }
-
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
+    if (operators.back()->has_runtime_filters()) {
+        may_add_chunk_accumulate_operator(operators, context, id());
     }
 
     operators = context->maybe_interpolate_collect_stats(runtime_state(), operators);
