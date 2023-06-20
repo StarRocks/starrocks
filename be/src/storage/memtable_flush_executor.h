@@ -122,53 +122,6 @@ private:
     FlushStatistic _stats;
 };
 
-// bthread::ExecutionQueue based executor
-class FlushQueue {
-public:
-    using SegmentCallback = std::function<void(std::unique_ptr<SegmentPB>, bool)>;
-
-    Status init(bthread::Executor* executor);
-
-    Status submit(std::unique_ptr<MemTable> memtable, bool eos = false, SegmentCallback cb = nullptr);
-
-    Status wait();
-
-    void cancel(const Status& st);
-
-    void close();
-
-    const FlushStatistic& get_stats() const { return _stats; }
-
-    void set_status(Status st) {
-        std::lock_guard<SpinLock> guard(_status_lock);
-        _status = st;
-    }
-    Status status() const {
-        std::lock_guard<SpinLock> guard(_status_lock);
-        return _status;
-    }
-
-    struct FlushTask {
-        FlushTask(std::unique_ptr<MemTable> i_memtable) : memtable(std::move(i_memtable)) {}
-        FlushTask() = delete;
-
-        std::shared_ptr<MemTable> memtable;
-        SegmentCallback callback;
-        bool abort = false;
-        bool eos = false;
-    };
-
-private:
-    Status _flush_memtable(MemTable* memtable, SegmentPB* segment);
-
-    static int _execute(void* meta, bthread::TaskIterator<FlushTask>& iter);
-
-    bthread::ExecutionQueueId<FlushTask> _queue_id;
-    FlushStatistic _stats;
-    mutable SpinLock _status_lock;
-    Status _status;
-};
-
 // MemTableFlushExecutor is responsible for flushing memtables to disk.
 // It encapsulate a ThreadPool to handle all tasks.
 // Usage Example:

@@ -187,6 +187,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // we need use is_vectorized to make other BE open vectorized delta writer
     request.set_is_vectorized(true);
     request.set_timeout_ms(_rpc_timeout_ms);
+    request.set_enable_resource_group(_parent->_enable_resource_group);
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();

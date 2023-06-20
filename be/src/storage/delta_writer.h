@@ -185,7 +185,6 @@ private:
     const TabletSchema* _tablet_schema;
 
     std::unique_ptr<FlushToken> _flush_token;
-    // std::unique_ptr<FlushQueue> _flush_queue;
     std::unique_ptr<ReplicateToken> _replicate_token;
     bool _with_rollback_log;
     // initial value is max value
