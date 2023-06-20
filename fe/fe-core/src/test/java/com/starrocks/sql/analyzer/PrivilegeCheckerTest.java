@@ -2858,7 +2858,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testStorageVolumeStatement() throws Exception {
-        String createSql = "create storage volume sv type = s3 " +
+        String createSql = "create storage volume local type = s3 " +
                 "locations = ('s3://starrocks-cloud-data-zhangjiakou/luzijie/') comment 'comment' properties " +
                 "(\"aws.s3.endpoint\"=\"endpoint\", \"aws.s3.region\"=\"us-test-2\", " +
                 "\"aws.s3.use_aws_sdk_default_behavior\" = \"false\", \"aws.s3.access_key\"=\"accesskey\", " +
@@ -2876,20 +2876,20 @@ public class PrivilegeCheckerTest {
 
         // test drop storage volume
         verifyGrantRevoke(
-                "drop storage volume sv",
-                "grant DROP on storage volume sv to test",
-                "revoke DROP on storage volume sv from test",
+                "drop storage volume local",
+                "grant DROP on storage volume local to test",
+                "revoke DROP on storage volume local from test",
                 "Access denied; you need (at least one of) the DROP STORAGE VOLUME privilege(s) for this operation");
 
         String sql = "" +
-                "ALTER STORAGE VOLUME sv \n" +
+                "ALTER STORAGE VOLUME local \n" +
                 "SET \n" +
                 "   (\"aws.s3.region\"=\"us-west-1\", \"aws.s3.endpoint\"=\"endpoint1\", \"enabled\"=\"true\")";
         // test drop resource group
         verifyGrantRevoke(
                 sql,
-                "grant ALTER on storage volume sv to test",
-                "revoke ALTER on storage volume sv from test",
+                "grant ALTER on storage volume local to test",
+                "revoke ALTER on storage volume local from test",
                 "Access denied; you need (at least one of) the ALTER STORAGE VOLUME privilege(s) for this operation");
 
         // test create storage volume
@@ -2908,11 +2908,11 @@ public class PrivilegeCheckerTest {
         String grantCreateDb = "grant create database on catalog default_catalog to test";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantCreateDb, ctx), ctx);
         ctxToTestUser();
-        String createDbSql = "create database testdb properties (\"storage_volume\"=\"sv\")";
+        String createDbSql = "create database testdb properties (\"storage_volume\"=\"local\")";
         verifyGrantRevoke(
                 createDbSql,
-                "grant USAGE on storage volume sv to test",
-                "revoke USAGE ON storage volume sv from test",
+                "grant USAGE on storage volume local to test",
+                "revoke USAGE ON storage volume local from test",
                 "Access denied; you need (at least one of) the USAGE ON STORAGE VOLUME privilege(s) for this operation");
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createDbSql, ctx), ctx);
@@ -2920,11 +2920,11 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantCreateTable, ctx), ctx);
         ctxToTestUser();
         String createTableSql = "create table testdb.t2(c0 INT) duplicate key(c0) distributed " +
-                "by hash(c0) buckets 1 properties(\"storage_volume\" = \"sv\");";
+                "by hash(c0) buckets 1 properties(\"storage_volume\" = \"local\");";
         verifyGrantRevoke(
                 createTableSql,
-                "grant USAGE on storage volume sv to test",
-                "revoke USAGE ON storage volume sv from test",
+                "grant USAGE on storage volume local to test",
+                "revoke USAGE ON storage volume local from test",
                 "Access denied; you need (at least one of) the USAGE ON STORAGE VOLUME privilege(s) for this operation");
 
         ctxToRoot();
