@@ -115,8 +115,16 @@ public class SqlParser {
         return parse(originSql, sessionVariable);
     }
 
+    /**
+     * Please use {@link #parse(String, SessionVariable)}
+     */
+    @Deprecated
     public static StatementBase parseFirstStatement(String originSql, long sqlMode) {
         return parse(originSql, sqlMode).get(0);
+    }
+
+    public static StatementBase parseOneWithStarRocksDialect(String originSql, SessionVariable sessionVariable) {
+        return parseWithStarRocksDialect(originSql, sessionVariable).get(0);
     }
 
     /**

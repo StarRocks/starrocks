@@ -152,6 +152,7 @@ public class StatisticUtils {
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                         statsConnectCtx.setThreadLocalInfo();
+                        statsConnectCtx.setStatisticsConnection(true);
 
                         statisticExecutor.collectStatistics(statsConnectCtx,
                                 StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
@@ -183,6 +184,11 @@ public class StatisticUtils {
     }
 
     public static boolean statisticTableBlackListCheck(long tableId) {
+        if (null != ConnectContext.get() && ConnectContext.get().isStatisticsConnection()) {
+            // avoid query statistics table when collect statistics
+            return true;
+        }
+
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null != db && null != db.getTable(tableId)) {
@@ -241,7 +247,7 @@ public class StatisticUtils {
 
     public static boolean isEmptyTable(Table table) {
         if (table instanceof IcebergTable) {
-            //TODO, shall we check empty for external table?
+            // TODO, shall we check empty for external table?
             return false;
         } else {
             return table.getPartitions().stream().noneMatch(Partition::hasData);
