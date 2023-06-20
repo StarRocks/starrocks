@@ -185,18 +185,21 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             sort_column_idx_by_column_index[column_index] = i;
         }
     }
-    for (auto& column_idx : _tablet_schema->sort_key_idxes()) {
-        auto iter = sort_column_idx_by_column_index.find(column_idx);
-        if (iter != sort_column_idx_by_column_index.end()) {
-            _sort_column_indexes.emplace_back(iter->second);
-        } else {
-            // Currently we have the following two scenarios：
-            //  1. data load or horizontal compaction, we will write the whole row data once a time
-            //  2. vertical compaction, we will first write all sort key columns and write value columns by group
-            // So the all sort key columns should be found in `_column_indexes` so far.
-            std::string err_msg =
-                    strings::Substitute("column $0 is sort key but not find while init segment writer", column_idx);
-            return Status::InternalError(err_msg);
+    if (!sort_column_idx_by_column_index.empty()) {
+        for (auto& column_idx : _tablet_schema->sort_key_idxes()) {
+            auto iter = sort_column_idx_by_column_index.find(column_idx);
+            if (iter != sort_column_idx_by_column_index.end()) {
+                _sort_column_indexes.emplace_back(iter->second);
+            } else {
+                // Currently we have the following two scenarios：
+                //  1. data load or horizontal compaction, we will write the whole row data once a time
+                //  2. vertical compaction, we will first write all sort key columns and write value columns by group
+                // So the all sort key columns should be found in `_column_indexes` so far.
+                std::string err_msg =
+                        strings::Substitute("column[$0]: $1 is sort key but not find while init segment writer",
+                                            column_idx, _tablet_schema->column(column_idx).name().data());
+                return Status::InternalError(err_msg);
+            }
         }
     }
 
