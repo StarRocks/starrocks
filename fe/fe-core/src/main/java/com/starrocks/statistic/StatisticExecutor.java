@@ -35,8 +35,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
@@ -177,7 +175,7 @@ public class StatisticExecutor {
 
         ConnectContext context = StatisticUtils.buildConnectContext();
         context.setThreadLocalInfo();
-        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
 
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
@@ -303,26 +301,8 @@ public class StatisticExecutor {
     }
 
     private List<TResultBatch> executeDQL(ConnectContext context, String sql) {
-        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
-
-        if (LOG.isDebugEnabled()) {
-            List<PhysicalOlapScanOperator> pos = Utils.extractPhysicalOlapScanOperator(execPlan.getPhysicalPlan());
-            StringBuilder stringBuilder = new StringBuilder();
-            for (PhysicalOlapScanOperator scan : pos) {
-                Table table = scan.getTable();
-                stringBuilder.append("[table: ").append(table.getName()).append(", ");
-                for (Partition partition : table.getPartitions()) {
-                    stringBuilder.append(partition.getName()).append(": ");
-                    stringBuilder.append(partition.getCommittedVersion()).append(", ");
-                    stringBuilder.append(partition.getVisibleVersion()).append(", ");
-                    stringBuilder.append(partition.getVisibleVersionTime());
-                }
-                stringBuilder.append("]");
-            }
-            LOG.debug("statistics DQL plan tables: " + stringBuilder);
-        }
-
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
@@ -339,7 +319,7 @@ public class StatisticExecutor {
     private boolean executeDML(ConnectContext context, String sql) {
         StatementBase parsedStmt;
         try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());

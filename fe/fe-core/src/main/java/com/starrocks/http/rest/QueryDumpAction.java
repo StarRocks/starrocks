@@ -100,7 +100,7 @@ public class QueryDumpAction extends RestBaseAction {
 
         StatementBase parsedStmt;
         try {
-            parsedStmt = SqlParser.parseFirstStatement(query, context.getSessionVariable().getSqlMode());
+            parsedStmt = SqlParser.parse(query, context.getSessionVariable()).get(0);
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             executor.execute();
         } catch (Exception e) {

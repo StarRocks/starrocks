@@ -182,6 +182,8 @@ public class ConnectContext {
     // set true when user dump query through HTTP
     protected boolean isQueryDump = false;
 
+    protected boolean isStatisticsConnection = false;
+
     protected DumpInfo dumpInfo;
 
     // The related db ids for current sql
@@ -599,6 +601,14 @@ public class ConnectContext {
 
     public void setParentConnectContext(ConnectContext parent) {
         this.parent = parent;
+    }
+
+    public boolean isStatisticsConnection() {
+        return isStatisticsConnection;
+    }
+
+    public void setStatisticsConnection(boolean statisticsConnection) {
+        isStatisticsConnection = statisticsConnection;
     }
 
     public ConnectContext getParent() {
