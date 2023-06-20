@@ -1603,6 +1603,7 @@ public class GlobalStateMgr {
         } else {
             // when flag is positive, this is new version format
             starrocksMetaVersion = flag;
+            MetaContext.get().setMetaVersion(FeConstants.META_VERSION);
         }
 
         if (!MetaVersion.isCompatible(starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION)) {
