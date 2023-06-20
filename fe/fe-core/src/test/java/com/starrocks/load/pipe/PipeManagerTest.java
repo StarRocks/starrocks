@@ -254,9 +254,12 @@ public class PipeManagerTest {
 
         // clear the error and resume the pipe
         resumePipe(pipeName);
+        p3.setLastPolledTime(0);
         Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
         p3.poll();
+        p3.schedule();
         Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
+        Assert.assertEquals(1, p3.getRunningTasks().size());
 
         // execute error
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -267,16 +270,19 @@ public class PipeManagerTest {
             }
         };
 
+        Thread.sleep(1000);
+        Assert.assertEquals(1, p3.getRunningTasks().size());
         // retry several times, until failed
         for (int i = 0; i < Pipe.FAILED_TASK_THRESHOLD; i++) {
             p3.schedule();
             Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
-            Assert.assertTrue(p3.getRunningTasks().toString(),
+            Assert.assertEquals(1, p3.getRunningTasks().size());
+            Assert.assertTrue(String.format("iteration %d: %s", i, p3.getRunningTasks()),
                     p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isError));
 
             p3.schedule();
             Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
-            Assert.assertTrue(p3.getRunningTasks().toString(),
+            Assert.assertTrue(String.format("iteration %d: %s", i, p3.getRunningTasks()),
                     p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isRunnable));
         }
         p3.schedule();

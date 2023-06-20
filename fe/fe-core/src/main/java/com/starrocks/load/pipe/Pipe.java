@@ -15,6 +15,7 @@
 
 package com.starrocks.load.pipe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
@@ -246,8 +247,7 @@ public class Pipe implements GsonPostProcessable {
                     FilePipePiece piece = task.getPiece();
                     loadStatus.loadFiles++;
                     loadStatus.loadBytes += piece.getTotalBytes();
-                    // TODO: fill data rows
-                    loadStatus.loadRows += 1;
+                    loadStatus.loadRows += piece.getTotalRows();
                 }
             }
             for (long taskId : removeTaskId) {
@@ -472,6 +472,11 @@ public class Pipe implements GsonPostProcessable {
 
     public long getLastPolledTime() {
         return lastPolledTime;
+    }
+
+    @VisibleForTesting
+    public void setLastPolledTime(long value) {
+        this.lastPolledTime = value;
     }
 
     @Override
