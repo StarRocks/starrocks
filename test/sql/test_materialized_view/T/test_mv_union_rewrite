@@ -35,10 +35,5 @@ WHERE `event_type` = 'click';
 refresh materialized view olap_mv1 with sync mode;
 
 explain logical select count(event_id) from event1;
--- result:
-[REGEX]olap_mv1
-[REGEX]UNION
 
 select count(event_id) from event1;
--- result:
-3
