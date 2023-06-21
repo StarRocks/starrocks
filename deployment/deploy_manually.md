@@ -358,6 +358,9 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 
    如果字段 `Alive` 为 `true`，说明该 CN 节点正常启动并加入集群。
 
+   如果执行查询时需要使用 CN 节点扩展算力，则需要设置系统变量 `SET
+prefer_compute_node = true;` 和 `SET use_compute_nodes = -1;`。系统变量的更多信息，请参见[系统变量](../reference/System_variable.md#支持的变量)。
+
 ## 第五步：（可选）部署高可用 FE 集群
 
 高可用的 FE 集群需要在 StarRocks 集群中部署至少三个 Follower FE 节点。如需部署高可用的 FE 集群，您需要额外再启动两个新的 FE 节点。
