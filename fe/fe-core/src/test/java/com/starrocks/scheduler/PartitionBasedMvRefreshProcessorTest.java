@@ -34,7 +34,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.qe.ConnectContext;
@@ -260,7 +259,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testUnionAllMvWithPartition() {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -305,7 +304,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testWithPartition() {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -410,7 +409,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testMvWithoutPartition() {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -452,7 +451,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testRangePartitionRefresh() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -587,7 +586,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testRefreshWithHiveTableJoin() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -622,7 +621,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testAutoPartitionRefreshWithHiveTable() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -654,7 +653,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testAutoPartitionRefreshWithPartitionChanged() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -1134,7 +1133,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testRangePartitionRefreshWithHiveTable() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -1181,7 +1180,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testRefreshPartitionWithMulParColumnsHiveTable1() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -1220,7 +1219,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testRefreshPartitionWithMulParColumnsHiveTable2() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -1260,7 +1259,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         final AtomicInteger taskRunCounter = new AtomicInteger();
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 taskRunCounter.incrementAndGet();
             }
         };
@@ -1287,7 +1286,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testClearQueryInfo() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 System.out.println("register query id: " + DebugUtil.printId(connectContext.getExecutionId()));
@@ -1532,7 +1531,6 @@ public class PartitionBasedMvRefreshProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
@@ -1552,7 +1550,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                 ctx.setThreadLocalInfo();
                 ctx.setStmtId(new AtomicInteger().incrementAndGet());
                 ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-                executor.handleDMLStmt(execPlan, insertStmt, beginTimeInNanoSecond);
+                executor.handleDMLStmtImpl(execPlan, insertStmt);
             }
         };
 
@@ -1620,7 +1618,6 @@ public class PartitionBasedMvRefreshProcessorTest {
             throws Exception {
         // drop partition p4 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
@@ -1638,7 +1635,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                 ctx.setThreadLocalInfo();
                 ctx.setStmtId(new AtomicInteger().incrementAndGet());
                 ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-                executor.handleDMLStmt(execPlan, insertStmt, beginTimeInNanoSecond);
+                executor.handleDMLStmtImpl(execPlan, insertStmt);
             }
         };
 
@@ -1696,7 +1693,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testSyncPartitionWithSsdStorage() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
@@ -1746,7 +1743,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testSyncPartitionWithSsdStorageAndCooldownTime() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();

@@ -660,8 +660,6 @@ public class StmtExecutor {
             LOG.warn("handle create table as select stmt fail", t);
             ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
             throw t;
-        } finally {
-            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
     }
 
