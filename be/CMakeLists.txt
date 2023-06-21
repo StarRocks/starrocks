@@ -94,6 +94,8 @@ option(USE_AVX2 "Build with AVX2 instruction" ON)
 
 option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
+option(WITH_CLANG_TIDY "Use clang-tidy static analyzer" OFF)
+
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
@@ -480,8 +482,10 @@ if ("${USE_STAROS}" STREQUAL "ON")
        )
 endif()
 
-# Check Clang-Tidy
-include(cmake_modules/FindClangTidy.cmake)
+if (${WITH_CLANG_TIDY})
+    # Check Clang-Tidy
+    include(cmake_modules/FindClangTidy.cmake)
+endif()
 
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.

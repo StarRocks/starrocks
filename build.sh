@@ -179,6 +179,10 @@ if [[ -z ${USE_JEMALLOC} ]]; then
     USE_JEMALLOC=ON
 fi
 
+if [[ -z ${WITH_CLANG_TIDY} ]]; then
+    WITH_CLANG_TIDY=OFF
+fi
+
 HELP=0
 if [ $# == 1 ] ; then
     # default
@@ -328,6 +332,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DUSE_JEMALLOC=$USE_JEMALLOC                          \
                   -DWITH_BENCH=${WITH_BENCH}                            \
+                  -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_CACHELIB=${WITH_CACHELIB}                      \
                   -DUSE_STAROS=${USE_STAROS}                            \
