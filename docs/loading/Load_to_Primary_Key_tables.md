@@ -4,6 +4,10 @@
 
 StarRocks also supports partial updates and conditional updates.
 
+> **NOTICE**
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+
 This topic uses CSV data as an example to describe how to make data changes to a StarRocks table through loading. The data file formats that are supported vary depending on the loading method of your choice.
 
 > **NOTE**
@@ -457,7 +461,7 @@ As shown in the preceding query result, the record whose `id` is `101` in `examp
 
 ## Partial updates
 
-Since v2.2, StarRocks supports updating only the specified columns of a table that uses the Primary Key table. This section uses CSV as an example to describe how to perform partial updates.
+Since v2.2, StarRocks supports updating only the specified columns of a Primary Key table. This section uses CSV as an example to describe how to perform partial updates.
 
 ### Data examples
 
