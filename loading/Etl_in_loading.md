@@ -4,6 +4,10 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 目前支持的导入方式有 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/BrokerLoad.md) 和 [Routine Load](/loading/RoutineLoad.md)。暂不支持 [Spark Load](/loading/SparkLoad.md) 导入方式。
 
+> **注意**
+>
+> 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+
 本文以 CSV 格式的数据文件为例介绍如何在导入过程中实现数据转换。具体支持哪些格式的数据文件的转换，跟您选择的导入方式有关。
 
 > **说明**
