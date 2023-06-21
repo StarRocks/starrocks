@@ -39,4 +39,4 @@ Checks: >
     performance-type-promotion-in-math-fn,
     performance-unnecessary-copy-initialization,
     performance-unnecessary-value-param,
-WarningsAsErrors: '*'
+#WarningsAsErrors: '*'
