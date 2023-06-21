@@ -56,6 +56,8 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -339,6 +341,11 @@ public class ExternalOlapTable extends OlapTable {
         super.copyOnlyForQuery(olapTable);
         ExternalOlapTable externalOlapTable = (ExternalOlapTable) olapTable;
         externalOlapTable.externalTableInfo = this.externalTableInfo;
+    }
+
+    @Override
+    public Collection<Partition> getPartitions() {
+        return Collections.emptyList();
     }
 
     public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
