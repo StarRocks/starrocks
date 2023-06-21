@@ -6,6 +6,10 @@
 
 这是一个异步操作，任务提交成功后返回结果。执行后可使用 [SHOW EXPORT](../../../sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md) 命令查看进度。
 
+> **注意**
+>
+> 导出操作需要目标表的 EXPORT 权限。如果您的用户账号没有 EXPORT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+
 ## 语法
 
 ```sql

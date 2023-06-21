@@ -2,6 +2,10 @@
 
 本文介绍如何把 StarRocks 集群中指定表或分区上的数据，以 CSV 的格式，通过 [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md) 语句导出到外部云存储系统，如 HDFS、阿里云 OSS、AWS S3、或其他兼容 S3 协议的对象存储服务。
 
+> **注意**
+>
+> 导出操作需要目标表的 EXPORT 权限。如果您的用户账号没有 EXPORT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+
 ## 背景信息
 
 在 v2.4 及以前版本，StarRocks 在使用 EXPORT 导出数据时需要借助 Broker 才能访问外部存储系统，称为“有 Broker 的导出”。导出语句中需要通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。Broker 是一个独立的无状态服务，封装了文件系统接口，能够帮助 StarRocks 将数据导出到外部存储系统。

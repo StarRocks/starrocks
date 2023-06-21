@@ -16,7 +16,10 @@ Stream Load 适用于以下业务场景：
 
 Stream Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
 
-> 注意：Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
+> **注意**
+>
+> - Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
+> - Stream Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ## 支持的数据文件格式
 
@@ -104,6 +107,10 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
+> **说明**
+>
+> 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+
 `example1.csv` 文件中包含三列，跟 `table1` 表的 `id`、`name`、`score` 三列一一对应，并用逗号 (,) 作为列分隔符。因此，需要通过 `column_separator` 参数指定列分隔符为逗号 (,)，并且在 `columns` 参数中按顺序把 `example1.csv` 文件中的三列临时命名为 `id`、`name`、`score`。`columns` 参数中声明的三列，按名称对应 `table1` 表中的三列。
 
 ##### 查询数据
@@ -164,6 +171,10 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
     -T example2.json -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
 ```
+
+> **说明**
+>
+> 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
 
 `example2.json` 文件中包含 `name` 和 `code` 两个键，跟 `table2` 表中的列之间的对应关系如下图所示。
 
