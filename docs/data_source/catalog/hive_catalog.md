@@ -73,6 +73,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "hive",
+    GeneralParams,
     MetastoreParams,
     StorageCredentialParams,
     MetadataUpdateParams
@@ -97,6 +98,16 @@ The description of the Hive catalog. This parameter is optional.
 #### type
 
 The type of your data source. Set the value to `hive`.
+
+#### GeneralParams
+
+A set of general parameters.
+
+The following table describes the parameters you can configure in `GeneralParams`.
+
+| Parameter                | Required | Description                                                  |
+| ------------------------ | -------- | ------------------------------------------------------------ |
+| enable_recursive_listing | No       | Specifies whether StarRocks reads data from a table and its partitions and from the subdirectories within the physical locations of the table and its partitions. Valid values: `true` and `false`. Default value: `false`. The value `true` specifies to recursively list subdirectories, and the value `false` specifies to ignore subdirectories. |
 
 #### MetastoreParams
 
