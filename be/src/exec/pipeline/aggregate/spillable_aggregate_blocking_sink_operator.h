@@ -58,6 +58,9 @@ public:
     }
 
 private:
+    bool spilled() const { return _aggregator->spiller()->spilled(); }
+
+private:
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
     std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state);
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
