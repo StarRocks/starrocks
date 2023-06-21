@@ -361,6 +361,8 @@ vectorized_functions = [
 
     [50110, 'years_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_add'],
     [50111, 'years_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_sub'],
+    [50115, 'quarters_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::quarters_add'],
+    [50116, 'quarters_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::quarters_sub'],
     [50120, 'months_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::months_add'],
     [50121, 'months_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::months_sub'],
     [50122, 'add_months', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::months_add'],
@@ -381,6 +383,8 @@ vectorized_functions = [
     [50161, 'minutes_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::minutes_sub'],
     [50170, 'seconds_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::seconds_add'],
     [50171, 'seconds_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::seconds_sub'],
+    [50175, 'milliseconds_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::millis_add'],
+    [50176, 'milliseconds_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::millis_sub'],
     [50180, 'microseconds_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::micros_add'],
     [50181, 'microseconds_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::micros_sub'],
     [50190, 'years_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::years_diff'],

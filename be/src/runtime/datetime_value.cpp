@@ -1466,6 +1466,7 @@ bool DateTimeValue::date_add_interval(const TimeInterval& interval, TimeUnit uni
     int sign = interval.is_neg ? -1 : 1;
     switch (unit) {
     case MICROSECOND:
+    case MILLISECOND:
     case SECOND:
     case MINUTE:
     case HOUR:

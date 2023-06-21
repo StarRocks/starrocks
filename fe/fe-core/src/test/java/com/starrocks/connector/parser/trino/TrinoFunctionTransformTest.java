@@ -176,6 +176,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select date_add('year', 2, th) from tall;";
         assertPlanContains(sql, "years_add(8: th, 2)");
+
+        sql = "select date_add('quarter', 2, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', 2)");
+
+        sql = "select date_add('quarter', -1, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', -1)");
+
+        sql = "select date_add('millisecond', 20, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', 20)");
+
+        sql = "select date_add('millisecond', -100, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', -100)");
     }
 
     @Test
