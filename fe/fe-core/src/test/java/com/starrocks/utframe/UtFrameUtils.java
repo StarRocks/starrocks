@@ -508,12 +508,12 @@ public class UtFrameUtils {
         // mock replay external table info
         if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
             ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
-                    connectContext.getGlobalStateMgr().getLocalMetastore(),
-                    connectContext.getGlobalStateMgr().getConnectorMgr(),
-                    connectContext.getGlobalStateMgr().getResourceMgr(),
+                    GlobalStateMgr.getCurrentState().getLocalMetastore(),
+                    GlobalStateMgr.getCurrentState().getConnectorMgr(),
+                    GlobalStateMgr.getCurrentState().getResourceMgr(),
                     replayDumpInfo.getHmsTableMap(),
                     replayDumpInfo.getTableStatisticsMap());
-            connectContext.getGlobalStateMgr().setMetadataMgr(replayMetadataMgr);
+            GlobalStateMgr.getCurrentState().setMetadataMgr(replayMetadataMgr);
         }
 
         // create table
@@ -566,7 +566,7 @@ public class UtFrameUtils {
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("" + dbName)
+            OlapTable replayTable = (OlapTable) GlobalStateMgr.getCurrentState().getDb("" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
 
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
@@ -577,7 +577,7 @@ public class UtFrameUtils {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
                 .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            Table replayTable = connectContext.getGlobalStateMgr().getDb("" + dbName)
+            Table replayTable = GlobalStateMgr.getCurrentState().getDb("" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
                 GlobalStateMgr.getCurrentStatisticStorage()
