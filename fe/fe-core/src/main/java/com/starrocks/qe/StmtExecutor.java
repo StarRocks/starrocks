@@ -1379,6 +1379,10 @@ public class StmtExecutor {
         manager.executeJob(context, this, job);
     }
 
+    /**
+     * `handleDMLStmt` executes DML statement and write profile at the end.
+     * NOTE: `writeProfile` can only be called once, otherwise the profile detail will be lost.
+     */
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt, long beginTimeInNanoSecond) throws Exception {
         try {
             handleDMLStmtImpl(execPlan, stmt);
@@ -1394,6 +1398,9 @@ public class StmtExecutor {
         }
     }
 
+    /**
+     * `handleDMLStmtImpl` only executes DML statement and no write profile at the end.
+     */
     public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));

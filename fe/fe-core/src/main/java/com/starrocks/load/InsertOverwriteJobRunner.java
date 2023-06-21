@@ -262,11 +262,12 @@ public class InsertOverwriteJobRunner {
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
         ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
         // Use `handleDMLStmtImpl` instead of `handleDMLStmt` because cannot call `writeProfile` in InsertOverwriteJobRunner.
-        // InsertOver is executed as:
+        // InsertOverWriteJob is executed as below:
         // - StmtExecutor#handleDMLStmt
         //    - StmtExecutor#executeInsert
         //  - StmtExecutor#handleInsertOverwrite#InsertOverwriteJobMgr#run
         //  - InsertOverwriteJobRunner#executeInsert
+        //  - StmtExecutor#handleDMLStmtImpl <- no call `handleDMLStmt` again.
         // `writeProfile` is called in `handleDMLStmt`, and no need call it again later.
         stmtExecutor.handleDMLStmtImpl(newPlan, insertStmt);
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
