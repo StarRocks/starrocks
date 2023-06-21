@@ -277,7 +277,7 @@ public class LakeMaterializedViewTest {
         StringBuilder sb = new StringBuilder();
         Deencapsulation.invoke(newMv2, "appendUniqueProperties", sb);
         String baseProperties = sb.toString();
-        Assert.assertTrue(baseProperties.contains("\"datacache.enabled\" = \"true\""));
+        Assert.assertTrue(baseProperties.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(baseProperties.contains("\"storage_cache_ttl\" = \"3600\""));
         Assert.assertTrue(baseProperties.contains("\"enable_async_write_back\" = \"true\""));
 
@@ -290,7 +290,7 @@ public class LakeMaterializedViewTest {
         starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "PROPERTIES(\n" +
-                        "   'datacache.enabled' = 'true',\n" +
+                        "   'datacache.enable' = 'true',\n" +
                         "   'storage_cache_ttl' = '3600',\n" +
                         "   'enable_async_write_back' = 'true'\n" +
                         ")\n" +
@@ -318,7 +318,7 @@ public class LakeMaterializedViewTest {
         String ddlStmt = lakeMv.getMaterializedViewDdlStmt(true);
         System.out.println(ddlStmt);
         Assert.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
-        Assert.assertTrue(ddlStmt.contains("\"datacache.enabled\" = \"true\""));
+        Assert.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(ddlStmt.contains("\"storage_cache_ttl\" = \"3600\""));
         Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"true\""));
 

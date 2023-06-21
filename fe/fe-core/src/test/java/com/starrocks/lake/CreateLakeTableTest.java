@@ -208,7 +208,7 @@ public class CreateLakeTableTest {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key_cache (key1 int, key2 varchar(10))\n" +
                         "distributed by hash(key1) buckets 3\n" +
-                        "properties('datacache.enabled' = 'true', 'storage_cache_ttl' = '3600');"));
+                        "properties('datacache.enable' = 'true', 'storage_cache_ttl' = '3600');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "single_partition_duplicate_key_cache");
             // check table property
@@ -230,7 +230,7 @@ public class CreateLakeTableTest {
                         "(partition p1 values less than (\"2022-03-01\"),\n" +
                         " partition p2 values less than (\"2022-04-01\"))\n" +
                         "distributed by hash(key2) buckets 2\n" +
-                        "properties('datacache.enabled' = 'true', 'storage_cache_ttl' = '7200'," +
+                        "properties('datacache.enable' = 'true', 'storage_cache_ttl' = '7200'," +
                         "'enable_async_write_back' = 'true');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_aggregate_key_cache");
@@ -257,14 +257,14 @@ public class CreateLakeTableTest {
                         "unique key (key1, key2)\n" +
                         "partition by range(key1)\n" +
                         "(partition p1 values less than (\"10\"),\n" +
-                        " partition p2 values less than (\"20\") ('datacache.enabled' = 'false'))\n" +
+                        " partition p2 values less than (\"20\") ('datacache.enable' = 'false'))\n" +
                         "distributed by hash(key2) buckets 1\n" +
                         "properties('replication_num' = '1');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_unique_key_cache");
             // check table property
             StorageInfo storageInfo = lakeTable.getTableProperty().getStorageInfo();
-            // enabled by default if property key `datacache.enabled` is absent
+            // enabled by default if property key `datacache.enable` is absent
             Assert.assertTrue(storageInfo.isEnableStorageCache());
             Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds, storageInfo.getStorageCacheTtlS());
             // check partition property
@@ -299,7 +299,7 @@ public class CreateLakeTableTest {
                 () -> createTable(
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
                                 "distributed by hash(key1) buckets 3\n" +
-                                " properties('datacache.enabled' = 'false', 'storage_cache_ttl' = '0'," +
+                                " properties('datacache.enable' = 'false', 'storage_cache_ttl' = '0'," +
                                 "'enable_async_write_back' = 'true');"));
 
         // storage_cache disabled but storage_cache_ttl is not 0
@@ -308,7 +308,7 @@ public class CreateLakeTableTest {
                 () -> createTable(
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
                                 "distributed by hash(key1) buckets 3\n" +
-                                " properties('datacache.enabled' = 'false', 'storage_cache_ttl' = '2592000');"));
+                                " properties('datacache.enable' = 'false', 'storage_cache_ttl' = '2592000');"));
     }
 
     @Test
