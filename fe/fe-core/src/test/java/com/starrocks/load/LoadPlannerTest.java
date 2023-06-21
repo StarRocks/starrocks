@@ -80,7 +80,6 @@ public class LoadPlannerTest {
 
     // config
     private int loadParallelInstanceNum;
-    private int maxBrokerConcurrency;
 
     // backends
     private ImmutableMap<Long, Backend> idToBackend;
@@ -109,7 +108,6 @@ public class LoadPlannerTest {
         brokerDesc = new BrokerDesc("broker0", null);
 
         loadParallelInstanceNum = Config.load_parallel_instance_num;
-        maxBrokerConcurrency = Config.max_broker_concurrency;
         Config.eliminate_shuffle_load_by_replicated_storage = false;
 
         // backends
@@ -127,7 +125,6 @@ public class LoadPlannerTest {
     @After
     public void tearDown() {
         Config.load_parallel_instance_num = loadParallelInstanceNum;
-        Config.max_broker_concurrency = maxBrokerConcurrency;
         Config.eliminate_shuffle_load_by_replicated_storage = true;
     }
 
@@ -205,26 +202,24 @@ public class LoadPlannerTest {
         locationsList = scanNode.getScanRangeLocations(0);
         Assert.assertEquals(4, locationsList.size());
 
-        // load_parallel_instance_num: 2, max_broker_concurrency: 3, non pipeline
+        // load_parallel_instance_num: 2, non pipeline
         Config.enable_pipeline_load = false;
         ctx.getSessionVariable().setEnablePipelineEngine(false);
         Config.load_parallel_instance_num = 2;
-        Config.max_broker_concurrency = 3;
         planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusesList, 2);
         planner.plan();
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(3, locationsList.size());
+        Assert.assertEquals(4, locationsList.size());
         Assert.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
         Assert.assertEquals(2, planner.getFragments().get(0).getParallelExecNum());
 
-        // load_parallel_instance_num: 2, max_broker_concurrency: 3, pipeline
+        // load_parallel_instance_num: 2, pipeline
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         Config.enable_pipeline_load = true;
         Config.load_parallel_instance_num = 2;
-        Config.max_broker_concurrency = 3;
         planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusesList, 2);
@@ -232,7 +227,7 @@ public class LoadPlannerTest {
         planner.plan();
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(3, locationsList.size());
+        Assert.assertEquals(4, locationsList.size());
         Assert.assertEquals(2, planner.getFragments().get(0).getPipelineDop());
         Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
     }
