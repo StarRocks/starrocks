@@ -151,8 +151,8 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t v
         }
         rowset_queue.pop();
     }
-    LOG(INFO) << strings::Substitute("lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2",
-                                     _tablet->id(), version, input_infos.str());
+    VLOG(2) << strings::Substitute("lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2",
+                                   _tablet->id(), version, input_infos.str());
 
     return input_rowsets;
 }
