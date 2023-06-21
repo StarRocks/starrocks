@@ -52,7 +52,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
@@ -192,7 +192,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                                                  DataProperty dataProperty,
                                                  short replicationNum,
                                                  boolean isInMemory,
-                                                 StorageCacheInfo storageCacheInfo) {
+                                                 DataCacheInfo dataCacheInfo) {
         if (idToPartition.containsKey(partition.getId())) {
             LOG.error("partition[{}-{}] already in recycle bin.", partition.getId(), partition.getName());
             return false;
@@ -203,7 +203,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         // recycle partition
         RecyclePartitionInfo partitionInfo = new RecycleRangePartitionInfo(dbId, tableId, partition,
-                range, dataProperty, replicationNum, isInMemory, storageCacheInfo);
+                range, dataProperty, replicationNum, isInMemory, dataCacheInfo);
 
         idToRecycleTime.put(partition.getId(), System.currentTimeMillis());
         idToPartition.put(partition.getId(), partitionInfo);
@@ -662,8 +662,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         partitionInfo.setReplicationNum(partitionId, recoverPartitionInfo.getReplicationNum());
         partitionInfo.setIsInMemory(partitionId, recoverPartitionInfo.isInMemory());
         if (table.isCloudNativeTable()) {
-            partitionInfo.setStorageCacheInfo(partitionId,
-                    ((RecyclePartitionInfoV2) recoverPartitionInfo).getStorageCacheInfo());
+            partitionInfo.setDataCacheInfo(partitionId,
+                    ((RecyclePartitionInfoV2) recoverPartitionInfo).getDataCacheInfo());
         }
 
         // remove from recycle bin
@@ -700,8 +700,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
 
             if (table.isCloudNativeTable()) {
-                rangePartitionInfo.setStorageCacheInfo(partitionId,
-                        ((RecyclePartitionInfoV2) partitionInfo).getStorageCacheInfo());
+                rangePartitionInfo.setDataCacheInfo(partitionId,
+                        ((RecyclePartitionInfoV2) partitionInfo).getDataCacheInfo());
             }
 
             iterator.remove();
@@ -1099,17 +1099,17 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
     public static class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
         @SerializedName(value = "storageCacheInfo")
-        private StorageCacheInfo storageCacheInfo;
+        private DataCacheInfo dataCacheInfo;
 
         public RecyclePartitionInfoV2(long dbId, long tableId, Partition partition,
                                       DataProperty dataProperty, short replicationNum, boolean isInMemory,
-                                      StorageCacheInfo storageCacheInfo) {
+                                      DataCacheInfo dataCacheInfo) {
             super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
-            this.storageCacheInfo = storageCacheInfo;
+            this.dataCacheInfo = dataCacheInfo;
         }
 
-        public StorageCacheInfo getStorageCacheInfo() {
-            return storageCacheInfo;
+        public DataCacheInfo getDataCacheInfo() {
+            return dataCacheInfo;
         }
 
         public static RecyclePartitionInfoV2 read(DataInput in) throws IOException {
@@ -1136,9 +1136,9 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         public RecycleRangePartitionInfo(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
                                          DataProperty dataProperty, short replicationNum, boolean isInMemory,
-                                         StorageCacheInfo storageCacheInfo) {
+                                         DataCacheInfo dataCacheInfo) {
             super(dbId, tableId, partition, dataProperty, replicationNum,
-                    isInMemory, storageCacheInfo);
+                    isInMemory, dataCacheInfo);
             this.range = range;
         }
 
