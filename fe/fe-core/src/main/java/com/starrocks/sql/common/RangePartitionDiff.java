@@ -22,7 +22,7 @@ import com.starrocks.catalog.PartitionKey;
 import java.util.Map;
 import java.util.Set;
 
-public class PartitionDiff {
+public class RangePartitionDiff {
 
     Map<String, Range<PartitionKey>> adds = Maps.newHashMap();
 
@@ -30,10 +30,10 @@ public class PartitionDiff {
 
     Map<String, Range<PartitionKey>> deletes = Maps.newHashMap();
 
-    public PartitionDiff() {
+    public RangePartitionDiff() {
     }
 
-    public PartitionDiff(Map<String, Range<PartitionKey>> adds, Map<String, Range<PartitionKey>> deletes) {
+    public RangePartitionDiff(Map<String, Range<PartitionKey>> adds, Map<String, Range<PartitionKey>> deletes) {
         this.adds = adds;
         this.deletes = deletes;
     }

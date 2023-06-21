@@ -14,11 +14,15 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.sql.plan.ExecPlan;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -26,7 +30,12 @@ public class MvTaskRunContext extends TaskRunContext {
 
     Map<String, Set<String>> baseToMvNameRef;
     Map<String, Set<String>> mvToBaseNameRef;
-    Map<String, Range<PartitionKey>> basePartitionMap;
+    Map<String, Range<PartitionKey>> baseRangePartitionMap;
+
+    Map<String, List<List<String>>> baseListPartitionMap;
+
+    Table partitionBaseTable;
+    Column partitionColumn;
 
     String nextPartitionStart = null;
     String nextPartitionEnd = null;
@@ -79,12 +88,20 @@ public class MvTaskRunContext extends TaskRunContext {
         this.nextPartitionEnd = nextPartitionEnd;
     }
 
-    public void setBasePartitionMap(Map<String, Range<PartitionKey>> basePartitionMap) {
-        this.basePartitionMap = basePartitionMap;
+    public Map<String, Range<PartitionKey>> getBaseRangePartitionMap() {
+        return baseRangePartitionMap;
     }
 
-    public Map<String, Range<PartitionKey>> getBasePartitionMap() {
-        return this.basePartitionMap;
+    public void setBaseRangePartitionMap(Map<String, Range<PartitionKey>> baseRangePartitionMap) {
+        this.baseRangePartitionMap = baseRangePartitionMap;
+    }
+
+    public Map<String, List<List<String>>> getBaseListPartitionMap() {
+        return baseListPartitionMap;
+    }
+
+    public void setBaseListPartitionMap(Map<String, List<List<String>>> baseListPartitionMap) {
+        this.baseListPartitionMap = baseListPartitionMap;
     }
 
     public ExecPlan getExecPlan() {
@@ -105,5 +122,23 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setPartitionTTLNumber(int partitionTTLNumber) {
         this.partitionTTLNumber = partitionTTLNumber;
+    }
+
+    public Table getPartitionBaseTable() {
+        return partitionBaseTable;
+    }
+
+    public void setPartitionBaseTable(Table partitionBaseTable) {
+        Preconditions.checkNotNull(partitionBaseTable);
+        this.partitionBaseTable = partitionBaseTable;
+    }
+
+    public Column getPartitionColumn() {
+        return partitionColumn;
+    }
+
+    public void setPartitionColumn(Column partitionColumn) {
+        Preconditions.checkNotNull(partitionColumn);
+        this.partitionColumn = partitionColumn;
     }
 }
