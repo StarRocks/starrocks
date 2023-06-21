@@ -214,6 +214,17 @@ size_t AggHashMapVariant::size() const {
     });
 }
 
+<<<<<<< HEAD
+=======
+bool AggHashMapVariant::need_expand(size_t increasement) const {
+    size_t capacity = this->capacity();
+    // TODO: think about two-level hashmap
+    size_t size = this->size() + increasement;
+    // see detail implement in reset_growth_left
+    return size >= capacity - capacity / 8;
+}
+
+>>>>>>> 9563b549c ([BugFix] Fix top node cannot ref agg output when it has grouping set (#25697))
 size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
     return visit([pool](const auto& hash_map_with_key) {
         size_t pool_bytes = (pool != nullptr) ? pool->total_reserved_bytes() : 0;
@@ -284,6 +295,16 @@ size_t AggHashSetVariant::size() const {
     });
 }
 
+<<<<<<< HEAD
+=======
+bool AggHashSetVariant::need_expand(size_t increasement) const {
+    size_t capacity = this->capacity();
+    size_t size = this->size() + increasement;
+    // see detail implement in reset_growth_left
+    return size >= capacity - capacity / 8;
+}
+
+>>>>>>> 9563b549c ([BugFix] Fix top node cannot ref agg output when it has grouping set (#25697))
 size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
     return visit([&](auto& hash_set_with_key) {
         size_t pool_bytes = pool != nullptr ? pool->total_reserved_bytes() : 0;
