@@ -72,6 +72,29 @@ public class StructType extends Type {
             }
         }
         selectedFields = new Boolean[fields.size()];
+<<<<<<< HEAD
+=======
+        this.isNamed = isNamed;
+        Arrays.fill(selectedFields, false);
+    }
+
+    // Used to construct an unnamed struct type, for example, to create a struct type
+    // row(1, 'b') to create an unnamed struct type struct<int, string>
+    public StructType(List<Type> fieldTypes) {
+        Preconditions.checkNotNull(fieldTypes);
+        Preconditions.checkArgument(fieldTypes.size() > 0);
+        isNamed = false;
+        this.fields = new ArrayList<>();
+        for (int i = 0; i < fieldTypes.size(); i++) {
+            Type fieldType = fieldTypes.get(i);
+            // unnamed struct, default column name is col1, ...
+            StructField field = new StructField("col" + (i + 1), fieldType);
+            this.fields.add(field);
+            field.setPosition(i);
+            fieldMap.put(field.getName(), field);
+        }
+        selectedFields = new Boolean[fields.size()];
+>>>>>>> 345c4b619 ([BugFix] check subfield not empty when create unamed structType (#25714))
         Arrays.fill(selectedFields, false);
     }
 
