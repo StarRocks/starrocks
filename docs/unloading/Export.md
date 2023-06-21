@@ -4,7 +4,7 @@ This topic describes how to export data from specified tables or partitions in y
 
 > **NOTICE**
 >
-> You can export data out of StarRocks only as a user who has the EXPORT privilege. If you do not have the EXPORT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the EXPORT privilege to the user that you use to connect to your StarRocks cluster.
+> You can export data out of StarRocks tables only as a user who has the EXPORT privilege on those StarRocks tables. If you do not have the EXPORT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the EXPORT privilege to the user that you use to connect to your StarRocks cluster.
 
 ## Background information
 
