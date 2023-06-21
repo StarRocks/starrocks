@@ -32,61 +32,49 @@ bool SpillableAggregateBlockingSinkOperator::need_input() const {
 }
 
 bool SpillableAggregateBlockingSinkOperator::is_finished() const {
-    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
-        return AggregateBlockingSinkOperator::is_finished();
+    if (!spilled()) {
+        return _is_finished || AggregateBlockingSinkOperator::is_finished();
     }
-    return _is_finished;
+    return _is_finished || _aggregator->is_finished();
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
-    auto defer_set_finishing = DeferOp([this]() { _aggregator->spill_channel()->set_finishing(); });
-    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
+    auto defer_set_finishing = DeferOp([this]() {
+        _aggregator->spill_channel()->set_finishing();
         _is_finished = true;
+    });
+
+    // cancel spill task
+    if (state->is_cancelled()) {
+        _aggregator->spiller()->cancel();
+    }
+
+    if (!_aggregator->spiller()->spilled()) {
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         return Status::OK();
     }
 
-    if (state->is_cancelled()) {
-        _aggregator->spiller()->cancel();
-    }
-    // ugly code
-    // TODO: fixme
     auto io_executor = _aggregator->spill_channel()->io_executor();
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
         return _aggregator->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
+    _aggregator->ref();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this, state]() {
-                    _is_finished = true;
+                    auto defer = DeferOp([&]() { _aggregator->unref(state); });
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
                 state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
-    if (_aggregator->spill_channel()->is_working()) {
-        DCHECK(_spill_strategy == spill::SpillStrategy::SPILL_ALL);
-        std::function<StatusOr<ChunkPtr>()> flush_task = [state, io_executor, flush_function]() -> StatusOr<ChunkPtr> {
-            RETURN_IF_ERROR(flush_function(state, io_executor));
-            return Status::EndOfFile("eos");
-        };
-        _aggregator->spill_channel()->add_spill_task({flush_task});
-        std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
-                                                    set_call_back_function]() -> StatusOr<ChunkPtr> {
-            RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-            return Status::EndOfFile("eos");
-        };
-        _aggregator->spill_channel()->add_spill_task({task});
-    } else {
-        if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
-            // if spilling happens, should flush data
-            RETURN_IF_ERROR(flush_function(state, io_executor));
-        }
-        RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-    }
+    SpillProcessTasksBuilder task_builder(state, io_executor);
+    task_builder.then(flush_function).finally(set_call_back_function);
+
+    RETURN_IF_ERROR(_aggregator->spill_channel()->execute(task_builder));
 
     return Status::OK();
 }
