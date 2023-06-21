@@ -71,11 +71,13 @@ static Status create_hdfs_fs_handle(const std::string& namenode, const std::shar
     }
 
     // Set for hdfs client hedged read
+    std::string hedged_read_threadpool_size = std::to_string(config::hdfs_client_hedged_read_threadpool_size);
+    std::string hedged_read_threshold_millis = std::to_string(config::hdfs_client_hedged_read_threshold_millis);
     if (config::hdfs_client_enable_hedged_read) {
         hdfsBuilderConfSetStr(hdfs_builder, "dfs.client.hedged.read.threadpool.size",
-                              std::to_string(config::hdfs_client_hedged_read_threadpool_size).data());
+                              hedged_read_threadpool_size.data());
         hdfsBuilderConfSetStr(hdfs_builder, "dfs.client.hedged.read.threshold.millis",
-                              std::to_string(config::hdfs_client_hedged_read_threshold_millis).data());
+                              hedged_read_threshold_millis.data());
     }
 
     hdfs_client->hdfs_fs = hdfsBuilderConnect(hdfs_builder);

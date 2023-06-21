@@ -239,7 +239,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     if (config::hdfs_client_enable_hedged_read) {
         // Set hdfs client hedged read pool size
-        config::hdfs_client_hedged_read_threadpool_size = std::min(connector_num_io_threads * 2, 128);
+        config::hdfs_client_hedged_read_threadpool_size =
+                std::min(connector_num_io_threads * 2, config::hdfs_client_hedged_read_threadpool_size);
         CHECK_GT(config::hdfs_client_hedged_read_threadpool_size, 0)
                 << "hdfs_client_hedged_read_threadpool_size should greater than 0";
     }
