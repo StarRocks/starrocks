@@ -115,9 +115,9 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
 
     _has_update_index = true;
 
-    LOG(INFO) << fmt::format("MetaFileBuilder apply_opcompaction, id:{} input range:{} delvec del cnt:{} output:{}",
-                             _tablet_meta->id(), del_range_ss.str(), delvec_erase_cnt,
-                             op_compaction.output_rowset().ShortDebugString());
+    VLOG(2) << fmt::format("MetaFileBuilder apply_opcompaction, id:{} input range:{} delvec del cnt:{} output:{}",
+                           _tablet_meta->id(), del_range_ss.str(), delvec_erase_cnt,
+                           op_compaction.output_rowset().ShortDebugString());
 }
 
 Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
