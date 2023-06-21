@@ -1,0 +1,27 @@
+-- name: test_grouping_set
+
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT "",
+  `v4` varchar NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into t0 values(1, 2, 3, 'a'), (1, 3, 4, 'b'), (2, 3, 4, 'a'), (null, 1, null, 'c'), (4, null, 1 , null),
+(5, 1 , 3, 'c'), (2, 2, null, 'a'), (4, null, 4, 'c'), (null, null, 2, null);
+
+select v1, sum(v2), min(v2 + v3) from t0 group by grouping sets((v1, v2));
+select v1, sum(v2), min(v2 + v3) from t0 group by grouping sets((v1, v2), (v3));
+select xx, v2, max(v2 + v3) / sum(if(xx < 1, v2, v1 + 1)) from (select if(v1=1, 2, 3) as xx, * from t0) ff group by grouping sets ((xx, v2), (v2));
+select v2, sum(if(xx < 1, v2, v1 + 1)), max(v2 + v3) / sum(if(xx < 1, v2, v1 + 1)) from (select if(v1=1, 2, 3) as xx, * from t0) ff group by grouping sets ((xx, v2), (v2, v4));
+select v2, min(if(xx < 1, v2, v1 + 1)), sum(if(xx < 1, v2, v1 + 1)), max(v2 + v3) / sum(if(xx < 1, v2, v1 + 1)) from (select if(v1=1, 2, 3) as xx, * from t0) ff group by grouping sets ((xx, v2), (v2, v4));
+select v2, sum(if(xx < 1, v2, v1 + 1)), max(v2 + v3) / sum(if(xx < 1, v2, v1 + 1)) from (select if(v1=1, 2, 3) as xx, * from t0) ff group by rollup(xx, v2, v4);
