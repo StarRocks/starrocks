@@ -979,7 +979,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         try {
-            executor.handleDMLStmt(execPlan, insertStmt, beginTimeInNanoSecond);
+            executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
         } finally {
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }

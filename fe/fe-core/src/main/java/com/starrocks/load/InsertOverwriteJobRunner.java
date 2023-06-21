@@ -261,15 +261,16 @@ public class InsertOverwriteJobRunner {
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
         ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
-        // Use `handleDMLStmtImpl` instead of `handleDMLStmt` because cannot call `writeProfile` in InsertOverwriteJobRunner.
+        // Use `handleDMLStmt` instead of `handleDMLStmtWithProfile` because cannot call `writeProfile` in
+        // InsertOverwriteJobRunner.
         // InsertOverWriteJob is executed as below:
-        // - StmtExecutor#handleDMLStmt
+        // - StmtExecutor#handleDMLStmtWithProfile
         //    - StmtExecutor#executeInsert
         //  - StmtExecutor#handleInsertOverwrite#InsertOverwriteJobMgr#run
         //  - InsertOverwriteJobRunner#executeInsert
-        //  - StmtExecutor#handleDMLStmtImpl <- no call `handleDMLStmt` again.
+        //  - StmtExecutor#handleDMLStmt <- no call `handleDMLStmt` again.
         // `writeProfile` is called in `handleDMLStmt`, and no need call it again later.
-        stmtExecutor.handleDMLStmtImpl(newPlan, insertStmt);
+        stmtExecutor.handleDMLStmt(newPlan, insertStmt);
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             LOG.warn("insert overwrite failed. error message:{}", context.getState().getErrorMessage());
