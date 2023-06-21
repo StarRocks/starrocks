@@ -50,10 +50,16 @@ public:
 
     void close() override;
 
-    static Status convert_array_to_column(ConvertFunc func, size_t num_elements, const arrow::Array* array,
-                                          const TypeDescriptor* type_desc, const ColumnPtr& column,
-                                          size_t batch_start_idx, size_t column_start_idx, Filter* chunk_filter,
-                                          ArrowConvertContext* conv_ctx);
+    static Status convert_array_to_column(ConvertFuncTree* func, size_t num_elements, const arrow::Array* array,
+                                          const ColumnPtr& column, size_t batch_start_idx, size_t column_start_idx,
+                                          Filter* chunk_filter, ArrowConvertContext* conv_ctx);
+
+    static Status new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc, ColumnPtr* column,
+                             ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool, bool strict_mode);
+
+    static Status build_dest(const arrow::DataType* arrow_type, const TypeDescriptor* type_desc, bool is_nullable,
+                             TypeDescriptor* raw_type_desc, ConvertFuncTree* conv_func, bool& need_cast,
+                             bool strict_mode);
 
 private:
     // Read next buffer from reader
@@ -65,9 +71,6 @@ private:
     bool batch_is_exhausted();
     Status finalize_src_chunk(ChunkPtr* chunk);
 
-    Status new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc, ColumnPtr* column,
-                      ConvertFunc* conv_func, Expr** expr);
-
     const TBrokerScanRange& _scan_range;
     int _next_file;
     std::shared_ptr<ParquetChunkReader> _curr_file_reader;
@@ -77,7 +80,7 @@ private:
     size_t _batch_start_idx;
     size_t _chunk_start_idx;
     int _num_of_columns_from_file = 0;
-    std::vector<ConvertFunc> _conv_funcs;
+    std::vector<std::unique_ptr<ConvertFuncTree>> _conv_funcs;
     std::vector<Expr*> _cast_exprs;
     ObjectPool _pool;
     Filter _chunk_filter;
