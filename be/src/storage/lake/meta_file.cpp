@@ -50,6 +50,7 @@ void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
         DCHECK(_delvecs.find(segment_id) == _delvecs.end());
         _delvecs[segment_id].set_offset(offset);
         _delvecs[segment_id].set_size(size);
+        _segmentid_to_delvec[segment_id] = delvec;
     }
 }
 
@@ -129,6 +130,8 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
             each_delvec.second.set_version(version);
             each_delvec.second.set_offset(iter->second.offset());
             each_delvec.second.set_size(iter->second.size());
+            // record from cache key to segment id, so we can fill up cache later
+            _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = iter->first;
             _delvecs.erase(iter);
         }
     }
@@ -137,6 +140,8 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     for (auto&& each_delvec : _delvecs) {
         each_delvec.second.set_version(version);
         (*_tablet_meta->mutable_delvec_meta()->mutable_delvecs())[each_delvec.first] = each_delvec.second;
+        // record from cache key to segment id, so we can fill up cache later
+        _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = each_delvec.first;
     }
 
     // 3. write to delvec file
@@ -193,6 +198,7 @@ Status MetaFileBuilder::finalize(int64_t txn_id) {
         LOG(INFO) << "MetaFileBuilder finalize cost(ms): " << watch.elapsed_time() / 1000000;
     }
     _update_mgr->update_primary_index_data_version(_tablet, version);
+    _fill_delvec_cache();
     _has_finalized = true;
     return Status::OK();
 }
@@ -208,6 +214,16 @@ StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVect
         return true;
     }
     return false;
+}
+
+void MetaFileBuilder::_fill_delvec_cache() {
+    for (const auto& cache_item : _cache_key_to_segment_id) {
+        // find delvec ptr by segment id
+        auto delvec_iter = _segmentid_to_delvec.find(cache_item.second);
+        if (delvec_iter != _segmentid_to_delvec.end() && delvec_iter->second != nullptr) {
+            _tablet.tablet_mgr()->cache_delvec(cache_item.first, delvec_iter->second);
+        }
+    }
 }
 
 void MetaFileBuilder::handle_failure() {
@@ -253,6 +269,18 @@ Status MetaFileReader::load() {
         LOG(INFO) << "MetaFileReader load cost(ms): " << watch.elapsed_time() / 1000000;
     }
     return Status::OK();
+}
+
+Status MetaFileReader::load_by_cache(const std::string& filepath, TabletManager* tablet_mgr) {
+    // 1. lookup meta cache first
+    if (auto ptr = tablet_mgr->lookup_tablet_metadata(filepath); ptr != nullptr) {
+        _tablet_meta = ptr;
+        _load = true;
+        return Status::OK();
+    } else {
+        // 2. load directly
+        return load();
+    }
 }
 
 Status MetaFileReader::get_del_vec(TabletManager* tablet_mgr, uint32_t segment_id, DelVector* delvec) {
