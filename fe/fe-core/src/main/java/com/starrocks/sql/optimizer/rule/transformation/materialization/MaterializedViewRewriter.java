@@ -1434,8 +1434,9 @@ public class MaterializedViewRewriter {
 
         mvToQueryRefSet.except(queryScanOutputColRefs);
 
+        OptExpression expr = newQuery.getOp() instanceof LogicalAggregationOperator ? newQuery.inputAt(0) : newQuery;
         final Map<ColumnRefOperator, ScalarOperator> queryExprMap =
-                MvUtils.getColumnRefMap(newQuery, rewriteContext.getQueryRefFactory());
+                MvUtils.getColumnRefMap(expr, rewriteContext.getQueryRefFactory());
 
         ScalarOperator newPredicate = rewriteScalarOperatorToTarget(Utils.compoundAnd(predicatesToEnforce), queryExprMap,
                 rewriteContext, mvToQueryRefSet, false, false, null);
@@ -1494,6 +1495,7 @@ public class MaterializedViewRewriter {
             deriveLogicalProperty(newQueryExpr);
             if (mvRewriteContext.getEnforcedColumns() != null && !mvRewriteContext.getEnforcedColumns().isEmpty()) {
                 newQueryExpr = pruneEnforcedColumns(newQueryExpr);
+                deriveLogicalProperty(newQueryExpr);
             }
             return newQueryExpr;
 
@@ -1502,6 +1504,16 @@ public class MaterializedViewRewriter {
     }
 
     private OptExpression pruneEnforcedColumns(OptExpression queryExpr) {
+        List<OptExpression> newInputs = Lists.newArrayList();
+        for (OptExpression input : queryExpr.getInputs()) {
+            OptExpression newInput = pruneEnforcedColumns(input);
+            newInputs.add(newInput);
+        }
+        Operator newOp = doPruneEnforcedColumns(queryExpr);
+        return OptExpression.create(newOp, newInputs);
+    }
+
+    private Operator doPruneEnforcedColumns(OptExpression queryExpr) {
         Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
         if (queryExpr.getOp().getProjection() != null) {
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = queryExpr.getOp().getProjection().getColumnRefMap();
@@ -1522,9 +1534,7 @@ public class MaterializedViewRewriter {
         Operator.Builder builder = OperatorBuilderFactory.build(queryExpr.getOp());
         builder.withOperator(queryExpr.getOp());
         builder.setProjection(newProjection);
-        OptExpression newOptExpression = OptExpression.create(builder.build(), queryExpr.getInputs());
-        newOptExpression.deriveLogicalPropertyItself();
-        return newOptExpression;
+        return builder.build();
     }
 
     // pushdown predicates on join nodes
