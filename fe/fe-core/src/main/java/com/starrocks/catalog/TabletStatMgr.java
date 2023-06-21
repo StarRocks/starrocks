@@ -224,7 +224,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 }
 
                 partitionToVersion.put(partitionId, version);
-                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         Long beId = Utils.chooseBackend((LakeTablet) tablet);
                         if (beId == null) {
@@ -293,7 +293,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 }
 
                 boolean allTabletsUpdated = true;
-                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         TabletStat stat = idToStat.get(tablet.getId());
                         if (stat == null) {
