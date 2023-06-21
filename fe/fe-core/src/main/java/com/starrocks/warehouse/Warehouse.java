@@ -19,6 +19,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
@@ -79,7 +80,11 @@ public abstract class Warehouse implements Writable {
 
     public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
 
-    public abstract List<List<String>> getClusterInfo();
+    public List<List<String>> getClusterInfo() {
+        return getClusterProcData().getRows();
+    }
+
+    public abstract ProcResult getClusterProcData();
 
     @Override
     public void write(DataOutput out) throws IOException {
