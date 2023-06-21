@@ -44,7 +44,7 @@
 // each execute node.
 
 namespace arrow {
-
+class DataType;
 class RecordBatch;
 class Schema;
 
@@ -53,6 +53,8 @@ class Schema;
 namespace starrocks {
 
 class RowDescriptor;
+
+Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result);
 
 // Convert StarRocks RowDescriptor to Arrow Schema.
 Status convert_to_arrow_schema(const RowDescriptor& row_desc,
