@@ -40,13 +40,13 @@ Status SpillProcessChannel::execute(SpillProcessTasksBuilder& task_builder) {
     } else {
         for (auto& task : task_builder.tasks()) {
             auto st = task();
-            if (!st.status().ok_or_eof()) {
+            if (!st.status().is_ok_or_eof()) {
                 res = st.status();
                 break;
             }
         }
         auto st = task_builder.final_task()();
-        if (!st.status().ok_or_eof()) {
+        if (!st.status().is_ok_or_eof()) {
             res = st.status();
         }
     }

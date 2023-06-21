@@ -64,8 +64,8 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this, state]() {
+                    auto defer = DeferOp([&]() { _aggregator->unref(state); });
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
-                    _aggregator->unref(state);
                     return Status::OK();
                 },
                 state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
