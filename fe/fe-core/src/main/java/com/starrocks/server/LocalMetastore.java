@@ -273,7 +273,7 @@ public class LocalMetastore implements ConnectorMetadata {
         this.colocateTableIndex = colocateTableIndex;
     }
 
-    public boolean tryLock(boolean mustLock) {
+    boolean tryLock(boolean mustLock) {
         return stateMgr.tryLock(mustLock);
     }
 

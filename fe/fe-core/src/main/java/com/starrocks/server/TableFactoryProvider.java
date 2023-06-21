@@ -14,8 +14,6 @@
 
 package com.starrocks.server;
 
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.sql.common.EngineType;
 
 import javax.annotation.Nullable;
@@ -25,23 +23,28 @@ public class TableFactoryProvider {
     public static AbstractTableFactory getFactory(String engineName) {
         if (EngineType.OLAP.name().equalsIgnoreCase(engineName)) {
             return OlapTableFactory.INSTANCE;
-        } else if (EngineType.FILE.name().equalsIgnoreCase(engineName)) {
-            return FileTableFactory.INSTANCE;
-        } else if (EngineType.HIVE.name().equalsIgnoreCase(engineName)) {
-            return HiveTableFactory.INSTANCE;
-        } else if (EngineType.HUDI.name().equalsIgnoreCase(engineName)) {
-            return HudiTableFactory.INSTANCE;
-        } else if (EngineType.ICEBERG.name().equalsIgnoreCase(engineName)) {
-            return IcebergTableFactory.INSTANCE;
-        } else if (EngineType.JDBC.name().equalsIgnoreCase(engineName)) {
-            return JDBCTableFactory.INSTANCE;
-        } else if (EngineType.MYSQL.name().equalsIgnoreCase(engineName)) {
-            return MysqlTableFactory.INSTANCE;
-        } else if (EngineType.ELASTICSEARCH.name().equalsIgnoreCase(engineName) || "es".equalsIgnoreCase(engineName)) {
-            return ElasticSearchTableFactory.INSTANCE;
-        } else {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
-            return null;
         }
+        if (EngineType.FILE.name().equalsIgnoreCase(engineName)) {
+            return FileTableFactory.INSTANCE;
+        }
+        if (EngineType.HIVE.name().equalsIgnoreCase(engineName)) {
+            return HiveTableFactory.INSTANCE;
+        }
+        if (EngineType.HUDI.name().equalsIgnoreCase(engineName)) {
+            return HudiTableFactory.INSTANCE;
+        }
+        if (EngineType.ICEBERG.name().equalsIgnoreCase(engineName)) {
+            return IcebergTableFactory.INSTANCE;
+        }
+        if (EngineType.JDBC.name().equalsIgnoreCase(engineName)) {
+            return JDBCTableFactory.INSTANCE;
+        }
+        if (EngineType.MYSQL.name().equalsIgnoreCase(engineName)) {
+            return MysqlTableFactory.INSTANCE;
+        }
+        if (EngineType.ELASTICSEARCH.name().equalsIgnoreCase(engineName) || "es".equalsIgnoreCase(engineName)) {
+            return ElasticSearchTableFactory.INSTANCE;
+        }
+        return null;
     }
 }

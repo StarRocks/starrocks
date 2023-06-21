@@ -12,29 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast;
+#pragma once
 
-import com.starrocks.sql.parser.NodePosition;
+#include <glog/logging.h>
 
-public class ResumeWarehouseStmt extends DdlStmt {
-    private String whName;
+#include <orc/OrcFile.hh>
 
-    public ResumeWarehouseStmt(String whName) {
-        this(whName, NodePosition.ZERO);
-    }
+namespace starrocks {
 
-    public ResumeWarehouseStmt(String whName, NodePosition pos) {
-        super(pos);
-        this.whName = whName;
-    }
+orc::MemoryPool* getOrcMemoryPool();
 
-    public String getFullWhName() {
-        return whName;
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitResumeWarehouseStatement(this, context);
-    }
-
-}
+} // namespace starrocks

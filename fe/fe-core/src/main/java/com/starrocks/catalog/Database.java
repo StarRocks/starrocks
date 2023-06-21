@@ -470,8 +470,6 @@ public class Database extends MetaObject implements Writable {
             } else {
                 idToTable.put(table.getId(), table);
                 nameToTable.put(table.getName(), table);
-
-                table.onCreate();
             }
             return true;
         } finally {
