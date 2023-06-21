@@ -472,6 +472,72 @@ show partitions from ss;
 .*p203409.*
 .*p203410.*
 -- !result
+-- name: test_multi_fragment_open_new_node_channel
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss values('2023-02-14', 2),('2033-03-01',2);
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+insert into ss select date(add_months(event_day, 1)),pv from ss;
+-- result:
+-- !result
+select count(*) from ss;
+-- result:
+64
+-- !result
+show partitions from ss;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p202304.*
+.*p202305.*
+.*p202306.*
+.*p202307.*
+.*p203303.*
+.*p203304.*
+.*p203305.*
+.*p203306.*
+.*p203307.*
+.*p203308.*
+-- !result
+CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into dt_month select * from ss;
+-- result:
+-- !result
+select count(*) from dt_month;
+-- result:
+64
+-- !result
+show partitions from dt_month;
+-- result:
+[REGEX].*p202302.*
+.*p202303.*
+.*p202304.*
+.*p202305.*
+.*p202306.*
+.*p202307.*
+.*p203303.*
+.*p203304.*
+.*p203305.*
+.*p203306.*
+.*p203307.*
+.*p203308.*
+-- !result
 -- name: test_time_slice
 CREATE TABLE ss_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 month) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:

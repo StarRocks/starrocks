@@ -338,6 +338,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         std::string msg = fmt::format("LocalTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
         auto remain = request.timeout_ms();
         remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+
+        // unlock write lock so that incremental open can aquire read lock
+        lk.unlock();
         // wait for all senders closed, may be timed out
         drain_senders(remain * 1000, msg);
     }

@@ -36,7 +36,7 @@ bool TabletsChannel::drain_senders(int64_t timeout, const std::string& log_msg) 
     };
 
     Awaitility wait;
-    auto cond = [&]() { return _num_remaining_senders.load(std::memory_order_acquire) != 0; };
+    auto cond = [&]() { return _num_remaining_senders.load(std::memory_order_acquire) == 0; };
     auto ret = wait.timeout(timeout).interval(check_interval).interval_callback(cb).until(cond);
     if (!ret) {
         LOG(INFO) << log_msg << " wait all sender close timeout " << timeout / 1000 << "ms still has "
