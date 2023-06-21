@@ -221,6 +221,10 @@ Status DeltaWriter::_init() {
         }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
         writer_context.partial_update_mode = _opt.partial_update_mode;
+        if (config::disable_delta_column_group &&
+            writer_context.partial_update_mode == PartialUpdateMode::COLUMN_MODE) {
+            return Status::NotSupported("BE disable partial update by column");
+        }
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
         if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {

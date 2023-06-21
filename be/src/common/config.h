@@ -984,6 +984,8 @@ CONF_mBool(enable_pk_value_column_zonemap, "true");
 CONF_Double(default_mv_resource_group_memory_limit, "0.8");
 CONF_Int32(default_mv_resource_group_cpu_limit, "1");
 
+CONF_mBool(disable_delta_column_group, "true");
+
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
 
