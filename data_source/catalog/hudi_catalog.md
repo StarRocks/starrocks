@@ -71,16 +71,15 @@ PROPERTIES
 )
 ```
 
-参见 [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)。
-
 ### 参数说明
 
 #### catalog_name
 
-Hudi Catalog 的名称。命名规则如下：
+Hudi Catalog 的名称。命名要求如下：
 
-- 可以包含字母、数字 0 到 9 和下划线 (_)，并且必须以字母开头。
-- 长度不能超过 64 个字符。
+- 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
+- 总长度不能超过 1023 个字符。
+- Catalog 名称大小写敏感。
 
 #### comment
 
