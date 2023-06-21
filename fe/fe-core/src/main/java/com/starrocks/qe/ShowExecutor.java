@@ -45,6 +45,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.backup.AbstractJob;
@@ -99,6 +100,12 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.epack.privilege.Policy;
+import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.PolicyName;
+import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
+import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -199,6 +206,7 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -358,6 +366,10 @@ public class ShowExecutor {
             handleShowResourceGroup();
         } else if (stmt instanceof ShowUserStmt) {
             handleShowUser();
+        } else if (stmt instanceof ShowPolicyStmt) {
+            handleShowPolicy();
+        } else if (stmt instanceof ShowCreatePolicyStmt) {
+            handleShowCreatePolicy();
         } else if (stmt instanceof ShowCatalogsStmt) {
             handleShowCatalogs();
         } else if (stmt instanceof ShowComputeNodesStmt) {
@@ -2213,6 +2225,48 @@ public class ShowExecutor {
         }
 
         resultSet = new ShowResultSet(stmt.getMetaData(), rowSet);
+    }
+
+    private void handleShowPolicy() {
+        ShowPolicyStmt showPolicyStmt = (ShowPolicyStmt) stmt;
+        Map<String, Policy> policies = GlobalStateMgr.getCurrentState().getSecurityPolicyManager().getNameToPolicy(
+                showPolicyStmt.getCatalog(), showPolicyStmt.getDbName(), showPolicyStmt.getPolicyType());
+        List<List<String>> rows = new ArrayList<>();
+        if (policies != null) {
+            for (Map.Entry<String, Policy> policyEntry : policies.entrySet()) {
+                List<String> row = new ArrayList<>();
+                row.add(policyEntry.getKey());
+                Policy policy = policyEntry.getValue();
+                if (policy.getPolicyType().equals(PolicyType.ROW_ACCESS)) {
+                    row.add("ROW ACCESS");
+                } else {
+                    row.add("MASKING");
+                }
+                row.add(showPolicyStmt.getCatalog());
+                row.add(showPolicyStmt.getDbName());
+
+                rows.add(row);
+            }
+        }
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowCreatePolicy() {
+        ShowCreatePolicyStmt describePolicyStmt = (ShowCreatePolicyStmt) stmt;
+        Policy policy = GlobalStateMgr.getCurrentState().getSecurityPolicyManager()
+                .getPolicyByName(describePolicyStmt.getPolicyType(), describePolicyStmt.getPolicyName());
+
+        List<String> row = new ArrayList<>();
+        row.add(policy.getName());
+
+        row.add(AstToSQLBuilder.toSQL(new CreatePolicyStmt(false, false, policy.getPolicyType(),
+                new PolicyName("", "", policy.getName(), NodePosition.ZERO),
+                policy.getArgNames(),
+                policy.getArgTypes().stream().map(TypeDef::new).collect(Collectors.toList()),
+                new TypeDef(policy.getRetType()),
+                policy.getPolicyExpression(), policy.getComment(), NodePosition.ZERO)));
+
+        resultSet = new ShowResultSet(stmt.getMetaData(), Collections.singletonList(row));
     }
 
     private void handleAdminShowTabletStatus() throws AnalysisException {

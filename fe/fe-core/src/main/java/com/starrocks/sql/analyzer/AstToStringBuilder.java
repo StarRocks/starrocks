@@ -50,6 +50,8 @@ import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
@@ -232,6 +234,32 @@ public class AstToStringBuilder {
             }
 
             return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitCreatePolicyStatement(CreatePolicyStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE");
+            if (stmt.getPolicyType().equals(PolicyType.COLUMN_MASKING)) {
+                sb.append(" MASKING POLICY ");
+            } else {
+                sb.append(" ROW ACCESS POLICY ");
+            }
+
+            sb.append(stmt.getPolicyName());
+            sb.append(" AS ");
+
+            sb.append("(");
+            List<String> arg = new ArrayList<>();
+            for (int i = 0; i < stmt.getArgNames().size(); ++i) {
+                arg.add(stmt.getArgNames().get(i) + " " + stmt.getArgTypeDefs().get(i).toSql());
+            }
+            sb.append(Joiner.on(",").join(arg));
+            sb.append(")");
+            sb.append(" RETURNS ").append(stmt.getReturnType().toSql());
+            sb.append(" -> ");
+            sb.append(visit(stmt.getExpression()));
+            return sb.toString();
         }
 
         // --------------------------------------------Set Statement -------------------------------------------------------

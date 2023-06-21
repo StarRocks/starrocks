@@ -141,6 +141,7 @@ import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.epack.privilege.SecurityPolicyManager;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -445,6 +446,8 @@ public class GlobalStateMgr {
     private AuthorizationMgr authorizationMgr;
 
     private DomainResolver domainResolver;
+
+    private SecurityPolicyManager securityPolicyManager;
 
     private TabletSchedulerStat stat;
 
@@ -836,6 +839,10 @@ public class GlobalStateMgr {
         return authorizationMgr;
     }
 
+    public SecurityPolicyManager getSecurityPolicyManager() {
+        return securityPolicyManager;
+    }
+
     public ResourceGroupMgr getResourceGroupMgr() {
         return resourceGroupMgr;
     }
@@ -1079,6 +1086,7 @@ public class GlobalStateMgr {
             this.authenticationMgr = new AuthenticationMgr();
             this.domainResolver = new DomainResolver(authenticationMgr);
             this.authorizationMgr = new AuthorizationMgr(this, null);
+            this.securityPolicyManager = new SecurityPolicyManager();
             LOG.info("using new privilege framework..");
         } else {
             this.domainResolver = new DomainResolver(auth);

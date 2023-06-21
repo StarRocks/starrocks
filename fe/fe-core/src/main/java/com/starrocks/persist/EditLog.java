@@ -60,6 +60,9 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.epack.persist.CreatePolicyLog;
+import com.starrocks.epack.persist.OperationTypeEPack;
+import com.starrocks.epack.privilege.Policy;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
@@ -1038,6 +1041,12 @@ public class EditLog {
                     globalStateMgr.replayAuthUpgrade(info);
                     break;
                 }
+                case OperationTypeEPack.OP_CREATE_MASKING_POLICY:
+                case OperationTypeEPack.OP_CREATE_ROW_ACCESS_POLICY: {
+                    CreatePolicyLog policy = (CreatePolicyLog) journal.getData();
+                    globalStateMgr.getSecurityPolicyManager().replayCreatePolicy(policy);
+                    break;
+                }
                 case OperationType.OP_MV_JOB_STATE: {
                     MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
                     MaterializedViewMgr.getInstance().replay(job);
@@ -2006,6 +2015,16 @@ public class EditLog {
 
     public void logAuthUpgrade(Map<String, Long> roleNameToId) {
         logEdit(OperationType.OP_AUTH_UPGRADE_V2, new AuthUpgradeInfo(roleNameToId));
+    }
+
+    public void logCreateMaskingPolicy(Policy policy) {
+        CreatePolicyLog createPolicyInfo = new CreatePolicyLog(policy);
+        logEdit(OperationTypeEPack.OP_CREATE_MASKING_POLICY, createPolicyInfo);
+    }
+
+    public void logCreateRowAccessPolicy(Policy policy) {
+        CreatePolicyLog createPolicyInfo = new CreatePolicyLog(policy);
+        logEdit(OperationTypeEPack.OP_CREATE_ROW_ACCESS_POLICY, createPolicyInfo);
     }
 
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {

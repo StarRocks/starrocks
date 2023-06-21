@@ -14,11 +14,12 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.epack.sql.analyzer.AnalyzerVisitorEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.StatementBase;
 
 public class Analyzer {
-    private static final Analyzer INSTANCE = new Analyzer(new AnalyzerVisitor());
+    private static final Analyzer INSTANCE = new Analyzer(new AnalyzerVisitorEPack());
 
     public static Analyzer getInstance() {
         return INSTANCE;

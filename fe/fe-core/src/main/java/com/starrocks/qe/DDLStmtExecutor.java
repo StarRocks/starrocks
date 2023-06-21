@@ -25,6 +25,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.epack.privilege.SecurityPolicyManager;
+import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -509,6 +511,16 @@ public class DDLStmtExecutor {
                         stmt.getName(), stmt.getPropertyMap());
             });
 
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreatePolicyStatement(CreatePolicyStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                SecurityPolicyManager securityPolicyManagerEE =
+                        context.getGlobalStateMgr().getSecurityPolicyManager();
+                securityPolicyManagerEE.createMaskingPolicy(stmt);
+            });
             return null;
         }
 
