@@ -109,7 +109,8 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
     @Override
     public String getCredentialString() {
         return "AzureBlobCloudCredential{" +
-                "storageAccount='" + storageAccount + '\'' +
+                "endpoint='" + endpoint + '\'' +
+                ", storageAccount='" + storageAccount + '\'' +
                 ", sharedKey='" + sharedKey + '\'' +
                 ", container='" + container + '\'' +
                 ", sasToken='" + sasToken + '\'' +
