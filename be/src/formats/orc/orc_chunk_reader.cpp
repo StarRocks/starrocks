@@ -19,8 +19,12 @@
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_mapping.h"
+<<<<<<< HEAD
 #include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
+=======
+#include "formats/orc/orc_memory_pool.h"
+>>>>>>> 6966a29cf5 ([Enhancement] Memory pool for orc reader to detect bad alloc (#25396))
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
@@ -61,6 +65,7 @@ OrcChunkReader::OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*>
 
 Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
     try {
+        _reader_options.setMemoryPool(*getOrcMemoryPool());
         auto reader = orc::createReader(std::move(input_stream), _reader_options);
         return init(std::move(reader));
     } catch (std::exception& e) {

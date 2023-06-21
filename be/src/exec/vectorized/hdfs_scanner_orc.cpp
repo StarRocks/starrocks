@@ -8,8 +8,13 @@
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
+#include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/orc_min_max_decoder.h"
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_orc.cpp
 #include "gen_cpp/orc_proto.pb.h"
+=======
+#include "simd/simd.h"
+>>>>>>> 6966a29cf5 ([Enhancement] Memory pool for orc reader to detect bad alloc (#25396)):be/src/exec/hdfs_scanner_orc.cpp
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 #include "util/timezone_utils.h"
@@ -291,6 +296,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     std::unique_ptr<orc::Reader> reader;
     try {
         orc::ReaderOptions options;
+        options.setMemoryPool(*getOrcMemoryPool());
         reader = orc::createReader(std::move(input_stream), options);
     } catch (std::exception& e) {
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
