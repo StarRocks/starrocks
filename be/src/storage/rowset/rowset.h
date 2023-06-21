@@ -286,6 +286,9 @@ public:
 
     uint64_t refs_by_reader() { return _refs_by_reader; }
 
+    // only used in unit test
+    Status get_segment_sk_index(std::vector<std::string>* sk_index_values);
+
     static StatusOr<size_t> get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
         size_t num_segments = 0;
         for (int i = 0; i < rowsets.size(); i++) {

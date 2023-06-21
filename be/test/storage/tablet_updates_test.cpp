@@ -1581,6 +1581,29 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+
+    auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    auto sk_chunk = ChunkHelper::new_chunk(schema, loop);
+    auto& cols = sk_chunk->columns();
+    for (int i = 0; i < loop; i++) {
+        int64_t key = sorted_keys[i * 100];
+        cols[0]->append_datum(Datum(key));
+        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+        cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(loop + 1, &rowsets).ok());
+    std::vector<std::string> sk_index_values;
+    for (auto& rowset : rowsets) {
+        ASSERT_TRUE(rowset->get_segment_sk_index(&sk_index_values).ok());
+    }
+    ASSERT_EQ(sk_index_values.size(), loop);
+    size_t keys = _tablet->tablet_schema().num_short_key_columns();
+    for (size_t i = 0; i < loop; i++) {
+        SeekTuple tuple(schema, sk_chunk->get(i).datums());
+        std::string encoded_key = tuple.short_key_encode(keys, {1, 2}, 0);
+        ASSERT_EQ(encoded_key, sk_index_values[i]);
+    }
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key_error_encode_case) {
@@ -1682,6 +1705,29 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+
+    auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    auto sk_chunk = ChunkHelper::new_chunk(schema, loop);
+    auto& cols = sk_chunk->columns();
+    for (int i = 0; i < loop; i++) {
+        int64_t key = sorted_keys[i * 100];
+        cols[0]->append_datum(Datum(key));
+        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+        cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(loop + 1, &rowsets).ok());
+    std::vector<std::string> sk_index_values;
+    for (auto& rowset : rowsets) {
+        ASSERT_TRUE(rowset->get_segment_sk_index(&sk_index_values).ok());
+    }
+    ASSERT_EQ(sk_index_values.size(), loop);
+    size_t keys = _tablet->tablet_schema().num_short_key_columns();
+    for (size_t i = 0; i < loop; i++) {
+        SeekTuple tuple(schema, sk_chunk->get(i).datums());
+        std::string encoded_key = tuple.short_key_encode(keys, {1, 2}, 0);
+        ASSERT_EQ(encoded_key, sk_index_values[i]);
+    }
 }
 
 void TabletUpdatesTest::test_compaction_with_empty_rowset(bool enable_persistent_index, bool vertical,
