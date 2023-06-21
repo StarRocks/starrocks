@@ -65,6 +65,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "hive",
+    GeneralParams,
     MetastoreParams,
     StorageCredentialParams,
     MetadataUpdateParams
@@ -87,6 +88,16 @@ Hive Catalog 的描述。此参数为可选。
 #### type
 
 数据源的类型。设置为 `hive`。
+
+#### GeneralParams
+
+指定通用设置的一组参数。
+
+`GeneralParams` 包含如下参数。
+
+| 参数                      | 是否必须  | 说明                                                         |
+| ------------------------ | -------- | ------------------------------------------------------------ |
+| enable_recursive_listing | 否       | 指定 StarRocks 是否递归读取表或者分区目录（包括子目录）中文件的数据。取值范围：`true` 和 `false`。默认值：`false`。取值为 `true` 表示递归遍历，取值为 `false` 表示只读取表或者分区目录当前层级中文件的数据。 |
 
 #### MetastoreParams
 
