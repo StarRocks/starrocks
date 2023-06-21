@@ -35,7 +35,6 @@ import com.starrocks.system.HeartbeatMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +49,9 @@ public class AutovacuumDaemon extends Daemon {
     private static final Logger LOG = LogManager.getLogger(AutovacuumDaemon.class);
 
     private static final long MILLISECONDS_PER_SECOND = 1000;
+    private static final long SECONDS_PER_MINUTE = 60;
+    private static final long MINUTES_PER_HOUR = 60;
+    private static final long MILLISECONDS_PER_HOUR = MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 
     private final ConcurrentHashMap<Long, Boolean> vacuumingPartitions = new ConcurrentHashMap<>();
     private final Executor executor = Executors.newFixedThreadPool(Config.lake_autovacuum_parallel_partitions);
@@ -60,7 +62,6 @@ public class AutovacuumDaemon extends Daemon {
 
     @Override
     protected void runOneCycle() {
-        long minActiveTxnId = HeartbeatMgr.computeMinActiveTxnId();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -77,31 +78,30 @@ public class AutovacuumDaemon extends Daemon {
             }
 
             for (Table table : tables) {
-                vacuumTable(db, table, minActiveTxnId);
+                vacuumTable(db, table);
             }
         }
     }
 
-    private void vacuumTable(Database db, Table baseTable, long minActiveTxnId) {
+    private void vacuumTable(Database db, Table baseTable) {
         OlapTable table = (OlapTable) baseTable;
         List<Partition> partitions;
         long current = System.currentTimeMillis();
+        long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
 
         db.readLock();
         try {
-            partitions = new ArrayList<>(table.getPartitions());
+            partitions = table.getPartitions().stream()
+                    .filter(p -> p.getVisibleVersionTime() > staleTime)
+                    .filter(p -> p.getVisibleVersion() > 1) // filter out empty partition
+                    .filter(p -> current >= p.getNextVacuumTime())
+                    .collect(Collectors.toList());
         } finally {
             db.readUnlock();
         }
 
         for (Partition partition : partitions) {
             if (vacuumingPartitions.containsKey(partition.getId())) {
-                continue;
-            }
-            if (current < partition.getNextVacuumTime()) {
-                continue;
-            }
-            if (partition.getVisibleVersion() == 1) { // empty partition
                 continue;
             }
             vacuumingPartitions.put(partition.getId(), true);

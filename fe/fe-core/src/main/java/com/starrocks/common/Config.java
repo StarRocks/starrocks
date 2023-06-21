@@ -2225,6 +2225,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long lake_autovacuum_grace_period_minutes = 5;
 
+    /**
+     * time threshold in hours, if a partition has not been updated for longer than this
+     * threshold, auto vacuum operations will no longer be triggered for that partition.
+     */
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_stale_partition_threshold = 12;
+
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
 
