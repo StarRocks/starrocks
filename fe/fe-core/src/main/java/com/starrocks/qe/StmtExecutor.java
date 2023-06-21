@@ -1394,7 +1394,7 @@ public class StmtExecutor {
         }
     }
 
-    private void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+    public void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;
