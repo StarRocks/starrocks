@@ -58,7 +58,6 @@ namespace starrocks {
 
 namespace {
 constexpr size_t DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE = 2048;
-constexpr size_t MIN_CLONE_TASK_THREADS_IN_POOL = 2;
 } // namespace
 
 using TTaskTypeHash = std::hash<std::underlying_type<TTaskType::type>::type>;
@@ -179,45 +178,39 @@ void AgentServer::Impl::init_or_die() {
                                        config::create_tablet_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_create_tablet);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("alter_tablet", config::alter_tablet_worker_count,
-                                       config::alter_tablet_worker_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_alter_tablet);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("alter_tablet", 0, config::alter_tablet_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_alter_tablet);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("clear_transaction", config::clear_transaction_task_worker_count,
-                                       config::clear_transaction_task_worker_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_clear_transaction);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("clear_transaction", 0, config::clear_transaction_task_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_clear_transaction);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("storage_medium_migrate", config::storage_medium_migrate_count,
-                                       config::storage_medium_migrate_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_storage_medium_migrate);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("storage_medium_migrate", 0, config::storage_medium_migrate_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_storage_medium_migrate);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("check_consistency", config::check_consistency_worker_count,
-                                       config::check_consistency_worker_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_check_consistency);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("check_consistency", 0, config::check_consistency_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_check_consistency);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("manual_compaction", 0, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_compaction);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("upload", config::upload_worker_count, config::upload_worker_count,
-                                       std::numeric_limits<int>::max(), _thread_pool_upload);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("upload", 0, config::upload_worker_count, std::numeric_limits<int>::max(),
+                                       _thread_pool_upload);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("download", config::download_worker_count, config::download_worker_count,
-                                       std::numeric_limits<int>::max(), _thread_pool_download);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("download", 0, config::download_worker_count, std::numeric_limits<int>::max(),
+                                       _thread_pool_download);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("make_snapshot", config::make_snapshot_worker_count,
-                                       config::make_snapshot_worker_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_make_snapshot);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("make_snapshot", 0, config::make_snapshot_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_make_snapshot);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("release_snapshot", config::release_snapshot_worker_count,
-                                       config::release_snapshot_worker_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_release_snapshot);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("release_snapshot", 0, config::release_snapshot_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_release_snapshot);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("move_dir", 1, 1, std::numeric_limits<int>::max(), _thread_pool_move_dir);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("move_dir", 0, 1, std::numeric_limits<int>::max(), _thread_pool_move_dir);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("update_tablet_meta_info", 1, 1, std::numeric_limits<int>::max(),
+        BUILD_DYNAMIC_TASK_THREAD_POOL("update_tablet_meta_info", 0, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_update_tablet_meta_info);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("drop_auto_increment_map_dir", 1, 1, std::numeric_limits<int>::max(),
+        BUILD_DYNAMIC_TASK_THREAD_POOL("drop_auto_increment_map_dir", 0, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_drop_auto_increment_map);
 
 #ifndef BE_TEST
@@ -230,7 +223,7 @@ void AgentServer::Impl::init_or_die() {
         // need to modify many interfaces. So for now we still use TaskThreadPool to submit clone tasks, but with
         // only a single worker thread, then we use dynamic thread pool to handle the task concurrently in clone task
         // callback, so that we can match the dop of FE clone task scheduling.
-        BUILD_DYNAMIC_TASK_THREAD_POOL("clone", MIN_CLONE_TASK_THREADS_IN_POOL,
+        BUILD_DYNAMIC_TASK_THREAD_POOL("clone", 0,
                                        _exec_env->store_paths().size() * config::parallel_clone_task_per_path,
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 #endif
