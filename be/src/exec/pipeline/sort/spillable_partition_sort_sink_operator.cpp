@@ -84,19 +84,9 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
 
     Status ret_status;
     auto defer = DeferOp([&]() {
-        Status st = [&]() {
-            if (_chunks_sorter->spill_channel()->is_working()) {
-                std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
-                                                            set_call_back_function]() -> StatusOr<ChunkPtr> {
-                    RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-                    return Status::EndOfFile("eos");
-                };
-                _chunks_sorter->spill_channel()->add_spill_task({task});
-            } else {
-                RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-            }
-            return Status::OK();
-        }();
+        SpillProcessTasksBuilder task_builder(state, io_executor);
+        task_builder.finally(set_call_back_function);
+        Status st = _chunks_sorter->spill_channel()->execute(task_builder);
         ret_status = ret_status.ok() ? st : ret_status;
     });
 
