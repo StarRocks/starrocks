@@ -783,13 +783,6 @@ public class Config extends ConfigBase {
     public static long min_bytes_per_broker_scanner = 67108864L; // 64MB
 
     /**
-     * Maximal concurrency of broker scanners.
-     * Do not set this if you know what you are doing.
-     */
-    @ConfField(mutable = true)
-    public static int max_broker_concurrency = 100;
-
-    /**
      * Default insert load timeout
      */
     @ConfField(mutable = true)
