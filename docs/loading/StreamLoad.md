@@ -16,9 +16,10 @@ Stream Load is suitable for the following business scenarios:
 
 Stream Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
-> **NOTE**
+> **NOTICE**
 >
-> After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
+> - After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
+> - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 
 ## Supported data file formats
 
@@ -107,6 +108,10 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
+> **NOTE**
+>
+> You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+
 `example1.csv` consists of three columns, which are separated by commas (,) and can be mapped in sequence onto the `id`, `name`, and `score` columns of `table1`. Therefore, you need to use the `column_separator` parameter to specify the comma (,) as the column separator. You also need to use the `columns` parameter to temporarily name the three columns of `example1.csv` as `id`, `name`, and `score`, which are mapped in sequence onto the three columns of `table1`.
 
 ##### Query data
@@ -165,6 +170,10 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
     -T example2.json -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
 ```
+
+> **NOTE**
+>
+> You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
 `example2.json` consists of two keys, `name` and `code`, which are mapped onto the `id` and `city` columns of `table2`, as shown in the following figure.
 
