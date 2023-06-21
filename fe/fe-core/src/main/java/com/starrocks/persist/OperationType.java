@@ -482,5 +482,9 @@ public class OperationType {
     public static final short OP_UPDATE_STORAGE_VOLUME = 13102;
     public static final short OP_DROP_STORAGE_VOLUME = 13103;
 
-    public static final short OP_A = 20005;
+
+    /**
+     * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds
+     */
+    public static final short OP_TYPE_EOF = 20000;
 }
