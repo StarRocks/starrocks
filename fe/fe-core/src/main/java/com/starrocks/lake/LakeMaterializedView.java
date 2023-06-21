@@ -129,7 +129,7 @@ public class LakeMaterializedView extends MaterializedView {
             StorageInfo storageInfo = tableProperty.getStorageInfo();
             if (storageInfo != null) {
                 // datacache.enable
-                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLED,
+                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
                         String.valueOf(storageInfo.isEnableStorageCache()));
 
                 // storage_cache_ttl
@@ -152,8 +152,8 @@ public class LakeMaterializedView extends MaterializedView {
 
         // datacache.enable
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                .append(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLED).append("\" = \"");
-        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLED)).append("\"");
+                .append(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).append("\" = \"");
+        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)).append("\"");
 
         // storage_cache_ttl
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)

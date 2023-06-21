@@ -193,8 +193,8 @@ public class InformationSchemaDataSource {
 
         if (table.isCloudNativeTable()) {
             Map<String, String> storageProperties = olapTable.getProperties();
-            propsMap.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLED,
-                    storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLED));
+            propsMap.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                    storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE));
             propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL));
             propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,

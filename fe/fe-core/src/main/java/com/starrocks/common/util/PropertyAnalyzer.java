@@ -159,7 +159,7 @@ public class PropertyAnalyzer {
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
-    public static final String PROPERTIES_DATACACHE_ENABLED = "datacache.enable";
+    public static final String PROPERTIES_DATACACHE_ENABLE = "datacache.enable";
     public static final String PROPERTIES_DATACACHE_PARTITION_DURATION = "datacache.partition_duration";
 
     public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
@@ -940,7 +940,7 @@ public class PropertyAnalyzer {
 
     public static DataCacheInfo analyzeDataCacheInfo(Map<String, String> properties) throws AnalysisException {
         boolean enableStorageCache =
-                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLED, true);
+                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
 
         long storageCacheTtlS = 0;
         boolean isTtlSet = properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL);
