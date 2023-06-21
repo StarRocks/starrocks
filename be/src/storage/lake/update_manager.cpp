@@ -389,7 +389,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
                                                   auto_increment_state->schema.get(), rowids));
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();
-    LOG(INFO) << "UpdateManager get_column_values " << cost_str.str();
+    VLOG(2) << "UpdateManager get_column_values " << cost_str.str();
     return Status::OK();
 }
 
@@ -528,7 +528,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     builder->apply_opcompaction(op_compaction);
     cost_str << " [apply meta] " << watch.elapsed_time();
 
-    LOG(INFO) << strings::Substitute(
+    VLOG(2) << strings::Substitute(
             "lake publish_primary_compaction: tablet_id:$0 input_rowset_size:$1 max_rowset_id:$2"
             " total_deletes:$3 total_rows:$4 base_ver:$5 new_ver:$6 cost:$7",
             tablet->id(), op_compaction.input_rowsets_size(), max_rowset_id, total_deletes, total_rows, base_version,
