@@ -107,7 +107,7 @@ The following table describes the parameters you can configure in `GeneralParams
 
 | Parameter                | Required | Description                                                  |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| enable_recursive_listing | No       | Specifies whether StarRocks recursively reads the data of the table queried or the data of files in the partition directories of the table queried. Valid values: `true` and `false`. Default value: `false`. The value `true` enables the recursive reading, and the value `false` specifies that StarRocks only lists the table queried or the files in the partition directories of the table queried. |
+| enable_recursive_listing | No       | Specifies whether StarRocks reads data from a table and its partitions and from the subdirectories within the physical locations of the table and its partitions. Valid values: `true` and `false`. Default value: `false`. The value `true` specifies to recursively list subdirectories, and the value `false` specifies to ignore subdirectories. |
 
 #### MetastoreParams
 
