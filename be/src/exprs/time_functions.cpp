@@ -657,6 +657,10 @@ TimestampValue timestamp_add(TimestampValue tsv, int count) {
 // years_sub
 DEFINE_TIME_ADD_AND_SUB_FN(years, TimeUnit::YEAR);
 
+// quarters_add
+// quarters_sub
+DEFINE_TIME_ADD_AND_SUB_FN(quarters, TimeUnit::QUARTER);
+
 // months_add
 // months_sub
 DEFINE_TIME_ADD_AND_SUB_FN(months, TimeUnit::MONTH);
@@ -680,6 +684,10 @@ DEFINE_TIME_ADD_AND_SUB_FN(minutes, TimeUnit::MINUTE);
 // seconds_add
 // seconds_sub
 DEFINE_TIME_ADD_AND_SUB_FN(seconds, TimeUnit::SECOND);
+
+// millis_add
+// millis_sub
+DEFINE_TIME_ADD_AND_SUB_FN(millis, TimeUnit::MILLISECOND);
 
 // micros_add
 // micros_sub
