@@ -67,7 +67,6 @@ import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -209,7 +208,6 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -770,7 +768,11 @@ public class LocalMetastore implements ConnectorMetadata {
      */
     @Override
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
-        Database db = MetaUtils.getDatabase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, stmt.getDbName());
+        // check if db exists
+        Database db = getDb(stmt.getDbName());
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDbName());
+        }
 
         // only internal table should check quota and cluster capacity
         if (!stmt.isExternal()) {
@@ -786,16 +788,18 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         Table table = tableFactory.createTable(this, db, stmt);
-        table.onCreate();
-        registerTable(db, table, stmt.isSetIfNotExists());
+        db.writeLock();
+        try {
+            registerTable(db, table, stmt.isSetIfNotExists());
+            table.onCreate();
 
-        String storageVolumeId = "";
-        if (table instanceof OlapTable) {
-            storageVolumeId = buildStorageVolum(db, (OlapTable) table, stmt.getProperties());
+            String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                    .getStorageVolumeIdOfTable(table.getId());
+            CreateTableInfo info = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
+        } finally {
+            db.writeUnlock();
         }
-
-        CreateTableInfo info = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
         return true;
     }
 
@@ -2006,7 +2010,11 @@ public class LocalMetastore implements ConnectorMetadata {
             if (getDb(db.getFullName()) == null) {
                 throw new DdlException("Database has been dropped when creating table");
             }
-            if (!db.registerTableWithLock(table)) {
+            if (!db.registerTableUnlock(table)) {
+                if (db.isSystemDatabase()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), "create denied");
+                }
+
                 if (!isSetIfNotExists) {
                     if (table instanceof OlapTable) {
                         OlapTable olapTable = (OlapTable) table;
@@ -2026,11 +2034,14 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayCreateTable(CreateTableInfo info) {
         Table table = info.getTable();
-        table.onCreate();
-
         Database db = this.fullNameToDb.get(info.getDbName());
-        db.registerTableWithLock(table);
-
+        db.writeUnlock();
+        try {
+            db.registerTableUnlock(table);
+            table.onCreate();
+        } finally {
+            db.writeUnlock();
+        }
 
         if (!isCheckpointThread()) {
             // add to inverted index
@@ -4700,7 +4711,7 @@ public class LocalMetastore implements ConnectorMetadata {
             int tableSize = reader.readInt();
             for (int j = 0; j < tableSize; ++j) {
                 Table table = reader.readJson(Table.class);
-                db.registerTableWithLock(table);
+                db.registerTableUnlock(table);
             }
 
             idToDb.put(db.getId(), db);

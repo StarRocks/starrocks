@@ -461,23 +461,10 @@ public class Database extends MetaObject implements Writable {
         checkReplicaQuota();
     }
 
-    public boolean registerTableWithLock(Table table) {
-        writeLock();
-        try {
-            String tableName = table.getName();
-            if (nameToTable.containsKey(tableName)) {
-                return false;
-            } else {
-                idToTable.put(table.getId(), table);
-                nameToTable.put(table.getName(), table);
-            }
-            return true;
-        } finally {
-            writeUnlock();
-        }
-    }
-
     public boolean registerTableUnlock(Table table) {
+        if (table == null) {
+            return false;
+        }
         boolean result = true;
         String tableName = table.getName();
         if (nameToTable.containsKey(tableName)) {

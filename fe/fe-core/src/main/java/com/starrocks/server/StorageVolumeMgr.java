@@ -224,6 +224,12 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
+    public String getStorageVolumeIdOfTable(long tableId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return tableToStorageVolume.get(tableId);
+        }
+    }
+
     public String getStorageVolumeIdOfDb(long dbId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return dbToStorageVolume.get(dbId);
