@@ -82,6 +82,8 @@ public class StructType extends Type {
     // Used to construct an unnamed struct type, for example, to create a struct type
     // row(1, 'b') to create an unnamed struct type struct<int, string>
     public StructType(List<Type> fieldTypes) {
+        Preconditions.checkNotNull(fieldTypes);
+        Preconditions.checkArgument(fieldTypes.size() > 0);
         isNamed = false;
         this.fields = new ArrayList<>();
         for (int i = 0; i < fieldTypes.size(); i++) {
