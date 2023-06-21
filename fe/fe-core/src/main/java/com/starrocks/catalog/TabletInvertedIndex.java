@@ -569,7 +569,6 @@ public class TabletInvertedIndex {
     public Replica getReplica(long tabletId, long backendId) {
         readLock();
         try {
-            Preconditions.checkState(tabletMetaMap.containsKey(tabletId), tabletId);
             return replicaMetaTable.get(tabletId, backendId);
         } finally {
             readUnlock();
