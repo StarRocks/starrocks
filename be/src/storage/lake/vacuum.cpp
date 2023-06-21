@@ -36,6 +36,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
+#include "testutil/sync_point.h"
 #include "util/raw_container.h"
 
 namespace starrocks::lake {
@@ -74,11 +75,14 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
 
-    std::unordered_map<int64_t, std::vector<int64_t>> expired_tablets;
+    std::unordered_map<int64_t, std::vector<std::pair<int64_t, int64_t>>> expired_tablets;
+    //                 ^^^^^^^ tablet id
+    //                                                ^^^^^^^^^^^^^^^^ version number and file size
 
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
     RETURN_IF_ERROR(fs->iterate_dir2(meta_dir, [&](DirEntry entry) {
+        TEST_SYNC_POINT_CALLBACK("vacuum_tablet_metadata:iterate_metadata", &entry);
         if (!is_tablet_metadata(entry.name)) {
             return true;
         }
@@ -90,15 +94,11 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
             return true;
         }
-        if (version < min_retain_version) {
-            expired_tablets[tablet_id].emplace_back(version);
-            *vacuumed_files += 1;
-            *vacuumed_file_size += entry.size.value_or(0);
-        } else if (version == min_retain_version) {
+        if (version <= min_retain_version) {
             // We need to retain metadata files with version |min_retain_version|, but garbage files
             // recorded in the |min_retain_version| can be deleted. So metadata file with |min_retain_version| will
             // also be read.
-            expired_tablets[tablet_id].emplace_back(version);
+            expired_tablets[tablet_id].emplace_back(version, entry.size.value_or(0));
         } else {
             // nothing to do
         }
@@ -110,7 +110,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         std::sort(versions.begin(), versions.end());
 
         // Find metadata files that has garbage data files and delete all those files
-        for (int64_t garbage_version = versions.back(); garbage_version >= versions[0]; /**/) {
+        for (int64_t garbage_version = versions.back().first; garbage_version >= versions[0].first; /**/) {
             auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, garbage_version));
             auto res = tablet_mgr->get_tablet_metadata(path, false);
             if (res.status().is_not_found()) {
@@ -138,15 +138,18 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             }
         }
 
-        if (versions.back() == min_retain_version) {
-            versions.pop_back();
-        }
+        // Do not delete the last version created before grace_timestamp.
+        // Assuming grace_timestamp is the earliest possible initiation time of queries still in process, then the
+        // earliest version to be accessed is the last version created before grace_timestamp. So retain this version.
+        versions.pop_back();
 
         // TODO: batch delete
         // Note: Delete files with smaller version numbers first
         for (auto version : versions) {
-            auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
+            auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version.first));
             RETURN_IF_ERROR(delete_file_ignore_not_found(fs.get(), path));
+            *vacuumed_files += 1;
+            *vacuumed_file_size += version.second;
         }
     }
 
@@ -184,6 +187,9 @@ static Status vacuum_txn_log(std::string_view root_location, const std::vector<i
 }
 
 Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response) {
+    if (UNLIKELY(tablet_mgr == nullptr)) {
+        return Status::InvalidArgument("tablet_mgr is null");
+    }
     if (UNLIKELY(request.tablet_ids_size() == 0)) {
         return Status::InvalidArgument("tablet_ids is empty");
     }
@@ -219,6 +225,9 @@ void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumRespo
 }
 
 Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response) {
+    if (UNLIKELY(tablet_mgr == nullptr)) {
+        return Status::InvalidArgument("tablet_mgr is null");
+    }
     if (UNLIKELY(request.tablet_ids_size() == 0)) {
         return Status::InvalidArgument("tablet_ids is empty");
     }

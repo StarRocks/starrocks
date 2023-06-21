@@ -189,7 +189,9 @@ message VacuumRequest {
     // min_retaion_version, decide whether they should be deleted by comparing the create time
     // against the grace_timestamp.
     optional int64 min_retain_version = 2;
-    // the timestamp after which created tablet metadata files will not be vacuumed
+    // the timestamp after which created tablet metadata files will not be vacuumed.
+    // In addition to retaining all versions after grace_timestamp, retain the last version before
+    // grace_timestamp.
     optional int64 grace_timestamp = 3;
     // Delete txn log files with txn IDs less than min_active_txn_id
     optional int64 min_active_txn_id = 4;
