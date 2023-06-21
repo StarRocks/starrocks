@@ -364,6 +364,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         auto remain = request.timeout_ms();
         remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
         LOG(INFO) << msg << ", wait for all senders closed ...";
+
+        // unlock write lock so that incremental open can aquire read lock
+        rolk.unlock();
         drain_senders(remain * 1000, msg);
     }
 }
