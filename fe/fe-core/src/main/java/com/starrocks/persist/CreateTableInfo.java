@@ -35,6 +35,7 @@
 package com.starrocks.persist;
 
 import com.google.common.base.Objects;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.FeMetaVersion;
@@ -51,7 +52,9 @@ import java.io.IOException;
 public class CreateTableInfo implements Writable {
     public static final Logger LOG = LoggerFactory.getLogger(CreateTableInfo.class);
 
+    @SerializedName(value = "d")
     private String dbName;
+    @SerializedName(value = "t")
     private Table table;
 
     public CreateTableInfo() {
