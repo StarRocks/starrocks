@@ -500,11 +500,9 @@ public class FileScanNode extends LoadScanNode {
 
         // numInstances:
         // min(totalBytes / min_bytes_per_broker_scanner,
-        //     backends_size * parallelInstanceNum,
-        //     max_broker_concurrency)
+        //     backends_size * parallelInstanceNum)
         numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
         numInstances = Math.min(nodes.size() * parallelInstanceNum, numInstances);
-        numInstances = Math.min(numInstances, Config.max_broker_concurrency);
         numInstances = Math.max(1, numInstances);
 
         bytesPerInstance = (totalBytes + numInstances - 1) / (numInstances != 0 ? numInstances : 1);
