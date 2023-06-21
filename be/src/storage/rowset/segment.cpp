@@ -217,7 +217,7 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
 }
 
 bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_options) {
-    if (!read_options.is_primary_keys || read_options.dcg_loader == nullptr) {
+    if (!read_options.is_primary_keys || read_options.dcg_loader == nullptr || config::disable_delta_column_group) {
         return true;
     }
     SCOPED_RAW_TIMER(&read_options.stats->get_delta_column_group_ns);

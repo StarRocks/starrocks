@@ -343,7 +343,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
                 }
             }
         }
-        if (_opts.dcg_loader != nullptr) {
+        if (_opts.dcg_loader != nullptr && !config::disable_delta_column_group) {
             SCOPED_RAW_TIMER(&_opts.stats->get_delta_column_group_ns);
             _get_dcg_st = _opts.dcg_loader->load(tsid, _opts.version, &_dcgs);
         }
