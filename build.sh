@@ -180,7 +180,7 @@ if [[ -z ${USE_JEMALLOC} ]]; then
 fi
 
 if [[ -z ${WITH_CLANG_TIDY} ]]; then
-    WITH_CLANG_TIDY=OFF
+    WITH_CLANG_TIDY=ON
 fi
 
 HELP=0
