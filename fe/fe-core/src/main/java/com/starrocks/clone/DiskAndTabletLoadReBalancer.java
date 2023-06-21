@@ -853,8 +853,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             if (pathHash != -1) {
+<<<<<<< HEAD
                 Replica replica = invertedIndex.getReplica(tabletId, beId);
                 if (replica.getPathHash() != pathHash) {
+=======
+                Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, beId);
+                if (replica == null || replica.getPathHash() != pathHash) {
+>>>>>>> 0a1d30e38 ([BugFix] Fix IllegalState Exception thrown from TabletScheduler (#25349))
                     continue;
                 }
             }
@@ -869,6 +874,25 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         return partitionTablets;
     }
 
+<<<<<<< HEAD
+=======
+    private Map<Pair<Long, Long>, Double> getPartitionAvgReplicaSize(long beId,
+                                                                     Map<Pair<Long, Long>, Set<Long>> partitionTablets) {
+        Map<Pair<Long, Long>, Double> result = new HashMap<>();
+        for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : partitionTablets.entrySet()) {
+            long totalSize = 0;
+            for (Long tabletId : entry.getValue()) {
+                Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, beId);
+                if (replica != null) {
+                    totalSize += replica.getDataSize();
+                }
+            }
+            result.put(entry.getKey(), (double) totalSize / (entry.getValue().size() > 0 ? entry.getValue().size() : 1));
+        }
+        return result;
+    }
+
+>>>>>>> 0a1d30e38 ([BugFix] Fix IllegalState Exception thrown from TabletScheduler (#25349))
     private int getPartitionTabletNumOnBePath(long dbId, long tableId, long partitionId, long indexId, long beId,
                                               long pathHash) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -1616,6 +1640,152 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static class BackendBalanceState {
+        long backendId;
+        BackendLoadStatistic statistic;
+        TStorageMedium medium;
+        List<Pair<Long, Long>> sortedPartitions;
+        TabletInvertedIndex tabletInvertedIndex;
+        // <partitionId, mvId> => tablets in that partition
+        // tablets is sorted by data size in desc order for the BE in high load group
+        Map<Pair<Long, Long>, List<Long>> partitionTablets;
+        // total data used capacity
+        long usedCapacity;
+        // pathHash => usedCapacity
+        Map<Long, Long> pathUsedCapacity;
+        int tabletSelected = 0;
+        // Min heap of <pathHash, usedPercent>, only used for low load group
+        PriorityQueue<Pair<Long, Double>> pathLoadHeap;
+        // sorted path in desc order, only used for high load group
+        List<Long> sortedPath;
+        // pathHash => index of sortedPath, only used for high load group
+        Map<Long, Integer> pathSortIndex;
+
+        BackendBalanceState(long backendId,
+                            BackendLoadStatistic statistic,
+                            TabletInvertedIndex tabletInvertedIndex,
+                            TStorageMedium medium,
+                            Map<Pair<Long, Long>, List<Long>> partitionTablets,
+                            List<Pair<Long, Long>> partitions) {
+            this.backendId = backendId;
+            this.statistic = statistic;
+            this.tabletInvertedIndex = tabletInvertedIndex;
+            this.medium = medium;
+            this.partitionTablets = partitionTablets;
+            this.sortedPartitions = partitions;
+        }
+
+        void init() {
+            this.usedCapacity = statistic.getTotalUsedCapacityB(medium);
+            this.pathLoadHeap = new PriorityQueue<>(Pair.comparingBySecond());
+            this.pathUsedCapacity = new HashMap<>();
+            this.sortedPath = new ArrayList<>();
+            this.pathSortIndex = new HashMap<>();
+            for (RootPathLoadStatistic pathStatistic : statistic.getPathStatistics()) {
+                if (pathStatistic.getStorageMedium() != this.medium
+                        || pathStatistic.getDiskState() == DiskInfo.DiskState.OFFLINE
+                        || pathStatistic.getCapacityB() <= 0) {
+                    continue;
+                }
+
+                this.pathLoadHeap.add(new Pair<>(pathStatistic.getPathHash(), pathStatistic.getUsedPercent()));
+                this.pathUsedCapacity.put(pathStatistic.getPathHash(), pathStatistic.getUsedCapacityB());
+                this.sortedPath.add(pathStatistic.getPathHash());
+            }
+            sortedPath.sort((p1, p2) -> {
+                double skew = statistic.getPathStatistic(p1).getUsedPercent()
+                        - statistic.getPathStatistic(p2).getUsedPercent();
+                if (Math.abs(skew) < 1e-6) {
+                    return 0;
+                }
+                return skew > 0 ? -1 : 1;
+            });
+            for (int i = 0; i < sortedPath.size(); i++) {
+                pathSortIndex.put(sortedPath.get(i), i);
+            }
+        }
+
+        // used for low load group
+        public Long getLowestLoadPath() {
+            return this.pathLoadHeap.poll().first;
+        }
+
+        // used for low load group
+        public void addUsedCapacity(long pathHash, long deltaCap) {
+            this.usedCapacity += deltaCap;
+            long newPathUsedCap = this.pathUsedCapacity.compute(pathHash, (path, cap) -> cap + deltaCap);
+            this.pathLoadHeap.add(new Pair<>(pathHash,
+                    (double) newPathUsedCap / statistic.getPathStatistic(pathHash).getCapacityB()));
+        }
+
+        // used for high load group
+        public List<Long> getTabletsInHighLoadPath(List<Long> tablets) {
+            double avgUsedPercent = pathUsedCapacity.values().stream().mapToLong(Long::longValue).sum()
+                    / (double) statistic.getTotalCapacityB(medium);
+            // find the last high load index, we only choose tablet in the high load paths
+            int lastHighLoadIndex = -1;
+            for (long pathHash : sortedPath) {
+                double usedPercent = pathUsedCapacity.get(pathHash)
+                        / (double) statistic.getPathStatistic(pathHash).getCapacityB();
+                if (usedPercent - avgUsedPercent > -Config.tablet_sched_balance_load_score_threshold) {
+                    lastHighLoadIndex++;
+                } else {
+                    break;
+                }
+            }
+            Preconditions.checkState(lastHighLoadIndex >= 0, "there is no high load path");
+
+            // group the tablet by path, put tablets in sortedPath[i] to tabletGroups[i]
+            ArrayList<Long>[] tabletGroups = new ArrayList[lastHighLoadIndex + 1];
+            for (int i = 0; i < tabletGroups.length; i++) {
+                tabletGroups[i] = new ArrayList<>();
+            }
+            for (long tabletId : tablets) {
+                Replica replica = tabletInvertedIndex.getReplica(tabletId, this.backendId);
+                if (replica == null) {
+                    continue;
+                }
+                int sortIndex = pathSortIndex.get(replica.getPathHash());
+                if (sortIndex > lastHighLoadIndex) {
+                    continue;
+                }
+
+                tabletGroups[sortIndex].add(tabletId);
+            }
+
+            List<Long> highLoadPathTablets = new ArrayList<>();
+            for (ArrayList<Long> group : tabletGroups) {
+                highLoadPathTablets.addAll(group);
+            }
+            return highLoadPathTablets;
+        }
+
+        // used for high load group
+        public void minusUsedCapacity(long pathHash, long deltaCap) {
+            this.usedCapacity -= deltaCap;
+            long pathUsedCap = this.pathUsedCapacity.compute(pathHash, (path, cap) -> cap - deltaCap);
+            double usedPercent = (double) pathUsedCap / this.statistic.getPathStatistic(pathHash).getCapacityB();
+
+            // adjust the sort order
+            for (int i = this.pathSortIndex.get(pathHash); i < this.sortedPath.size() - 1; i++) {
+                long nextPathHash = this.sortedPath.get(i + 1);
+                double nextUsedPercent = (double) this.pathUsedCapacity.get(nextPathHash)
+                        / this.statistic.getPathStatistic(nextPathHash).getCapacityB();
+                if (usedPercent < nextUsedPercent) {
+                    this.sortedPath.set(i, nextPathHash);
+                    this.sortedPath.set(i + 1, pathHash);
+                    this.pathSortIndex.put(nextPathHash, i);
+                    this.pathSortIndex.put(pathHash, i + 1);
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
+>>>>>>> 0a1d30e38 ([BugFix] Fix IllegalState Exception thrown from TabletScheduler (#25349))
     public enum BalanceType {
         DISK,
         TABLET
