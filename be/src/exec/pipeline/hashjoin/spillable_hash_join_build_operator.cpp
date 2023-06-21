@@ -65,7 +65,6 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     }
 
     auto io_executor = _join_builder->spill_channel()->io_executor();
-    RETURN_IF_ERROR(_join_builder->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         return _join_builder->spiller()->set_flush_all_call_back(
                 [this]() {
