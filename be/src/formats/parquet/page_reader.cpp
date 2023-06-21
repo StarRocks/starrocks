@@ -22,8 +22,8 @@ namespace starrocks::parquet {
 
 static constexpr size_t kHeaderInitSize = 1024;
 
-PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length)
-        : _stream(stream), _finish_offset(start_offset + length) {}
+PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length, uint64_t num_values)
+        : _stream(stream), _finish_offset(start_offset + length), _num_values_total(num_values) {}
 
 Status PageReader::next_header() {
     if (_offset != _next_header_pos) {
@@ -31,7 +31,11 @@ Status PageReader::next_header() {
                 strings::Substitute("Try to parse parquet column header in wrong position, offset=$0 vs expect=$1",
                                     _offset, _next_header_pos));
     }
-    if (_offset >= _finish_offset) {
+
+    DCHECK(_num_values_read <= _num_values_total);
+    if (_num_values_read >= _num_values_total) {
+        LOG_IF(WARNING, _num_values_read > _num_values_total)
+                << "Read more values than expected, read=" << _num_values_read << ", expect=" << _num_values_total;
         return Status::EndOfFile("");
     }
 
@@ -61,6 +65,7 @@ Status PageReader::next_header() {
 
     _offset += header_length;
     _next_header_pos = _offset + _cur_header.compressed_page_size;
+    _num_values_read += _cur_header.data_page_header.num_values;
     return Status::OK();
 }
 
