@@ -206,6 +206,7 @@ jobs:
           source_pr: ${{ inputs.PR_ID }}
           source_commit_id: ${{ inputs.COMMIT_ID }}
           action_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
         run: |
           cd ${{ github.workspace }}
           git clone https://${{ secrets.SYNC_PAT }}@github.com/StarRocks/elastic-service.git
