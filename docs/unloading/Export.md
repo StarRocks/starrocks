@@ -2,6 +2,10 @@
 
 This topic describes how to export data from specified tables or partitions in your StarRocks cluster as CSV data files by using the [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md) statement to HDFS, Alibaba Cloud OSS, AWS S3, or other S3-compatible object storage systems.
 
+> **NOTICE**
+>
+> You can export data out of StarRocks tables only as a user who has the EXPORT privilege on those StarRocks tables. If you do not have the EXPORT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the EXPORT privilege to the user that you use to connect to your StarRocks cluster.
+
 ## Background information
 
 In v2.4 and earlier, StarRocks depends on brokers to set up connections between your StarRocks cluster and your external storage system when it uses the EXPORT statement to export data. Therefore, you need to input `WITH BROKER "<broker_name>"` to specify the broker you want to use in the EXPORT statement. This is called "broker-based unloading." A broker is an independent, stateless service that is integrated with a file-system interface, helping StarRocks export data to your external storage system.

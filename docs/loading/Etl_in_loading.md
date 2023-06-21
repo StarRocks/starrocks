@@ -4,6 +4,10 @@ StarRocks supports data transformation at loading.
 
 This feature supports [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), and [Routine Load](../loading/RoutineLoad.md) but does not support [Spark Load](../loading/SparkLoad.md).
 
+> **NOTICE**
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+
 This topic uses CSV data as an example to describe how to extract and transform data at loading. The data file formats that are supported vary depending on the loading method of your choice.
 
 > **NOTE**
