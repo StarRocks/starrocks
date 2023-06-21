@@ -29,31 +29,40 @@ bool SpillableAggregateDistinctBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
-    auto defer_set_finishing = DeferOp([this]() { _aggregator->spill_channel()->set_finishing(); });
-    _is_finished = true;
+    auto defer_set_finishing = DeferOp([this]() {
+        _aggregator->spill_channel()->set_finishing();
+        _is_finished = true;
+    });
+
     if (state->is_cancelled()) {
         _aggregator->spiller()->cancel();
     }
-    // ugly code
-    // TODO: FIXME after refactor cancel
-    auto io_executor = _aggregator->spill_channel()->io_executor();
-    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+
+    if (!_aggregator->spiller()->spilled()) {
         RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::set_finishing(state));
-        RETURN_IF_ERROR(_aggregator->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
-        return _aggregator->spiller()->set_flush_all_call_back([]() { return Status::OK(); }, state, *io_executor,
-                                                               RESOURCE_TLS_MEMTRACER_GUARD(state));
+        return Status::OK();
+    }
+
+    auto io_executor = _aggregator->spill_channel()->io_executor();
+    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+        return _aggregator->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
-    if (_aggregator->spill_channel()->is_working()) {
-        std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
-                                                    set_call_back_function]() -> StatusOr<ChunkPtr> {
-            RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-            return Status::EndOfFile("eos");
-        };
-        _aggregator->spill_channel()->add_last_task({task});
-    } else {
-        RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-    }
+    _aggregator->ref();
+    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+        return _aggregator->spiller()->set_flush_all_call_back(
+                [this, state]() {
+                    auto defer = DeferOp([&]() { _aggregator->unref(state); });
+                    RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::set_finishing(state));
+                    return Status::OK();
+                },
+                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+    };
+
+    SpillProcessTasksBuilder task_builder(state, io_executor);
+    task_builder.then(flush_function).finally(set_call_back_function);
+
+    RETURN_IF_ERROR(_aggregator->spill_channel()->execute(task_builder));
 
     return Status::OK();
 }
