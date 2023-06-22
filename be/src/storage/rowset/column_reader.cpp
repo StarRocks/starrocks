@@ -279,8 +279,8 @@ Status ColumnReader::_load_ordinal_index() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto fs = file_system();
     auto meta = _ordinal_index_meta.get();
-    auto use_page_cache = !config::disable_storage_page_cache;
-    auto kept_in_memory = keep_in_memory();
+    auto use_page_cache = config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache;
+    auto kept_in_memory = config::enable_ordinal_index_memory_page_cache;
     ASSIGN_OR_RETURN(auto first_load,
                      _ordinal_index->load(fs, file_name(), *meta, num_rows(), use_page_cache, kept_in_memory));
     if (UNLIKELY(first_load)) {
@@ -296,8 +296,8 @@ Status ColumnReader::_load_zonemap_index() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto fs = file_system();
     auto meta = _zonemap_index_meta.get();
-    auto use_page_cache = !config::disable_storage_page_cache;
-    auto kept_in_memory = keep_in_memory();
+    auto use_page_cache = config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache;
+    auto kept_in_memory = config::enable_zonemap_index_memory_page_cache;
     ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory));
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
@@ -312,8 +312,8 @@ Status ColumnReader::_load_bitmap_index() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto fs = file_system();
     auto meta = _bitmap_index_meta.get();
-    auto use_page_cache = !config::disable_storage_page_cache;
-    auto kept_in_memory = keep_in_memory();
+    auto use_page_cache = config::enable_bitmap_memory_page_cache || !config::disable_storage_page_cache;
+    auto kept_in_memory = config::enable_bitmap_memory_page_cache;
     ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory));
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
