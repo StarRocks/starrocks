@@ -78,8 +78,11 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         _join_builder->spiller()->cancel();
     }
 
+    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+        return _join_builder->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+    };
+
     auto io_executor = _join_builder->spill_channel()->io_executor();
-    RETURN_IF_ERROR(_join_builder->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         return _join_builder->spiller()->set_flush_all_call_back(
                 [this]() {
@@ -90,26 +93,13 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
-    Status ret_status;
-    auto defer = DeferOp([&]() {
-        Status st = [&]() {
-            if (_join_builder->spill_channel()->is_working()) {
-                std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
-                                                            set_call_back_function]() -> StatusOr<ChunkPtr> {
-                    RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-                    return Status::EndOfFile("eos");
-                };
-                _join_builder->spill_channel()->add_spill_task({task});
-            } else {
-                RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-            }
-            return Status::OK();
-        }();
-        ret_status = ret_status.ok() ? st : ret_status;
-    });
-    ret_status = publish_runtime_filters(state);
+    publish_runtime_filters(state);
+    SpillProcessTasksBuilder task_builder(state, io_executor);
+    task_builder.then(flush_function).finally(set_call_back_function);
 
-    return ret_status;
+    RETURN_IF_ERROR(_join_builder->spill_channel()->execute(task_builder));
+
+    return Status::OK();
 }
 
 Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* state) {
@@ -152,7 +142,7 @@ Status SpillableHashJoinBuildOperator::append_hash_columns(const ChunkPtr& chunk
 }
 
 bool SpillableHashJoinBuildOperator::is_finished() const {
-    return _is_finished;
+    return _is_finished || _join_builder->is_finished();
 }
 
 Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {

@@ -31,13 +31,8 @@ statement
     : queryStatement
 
     // Warehouse Statement
-    | createWarehouseStatement
-    | dropWarehouseStatement
     | showWarehousesStatement
-    | alterWarehouseStatement
     | showClustersStatement
-    | suspendWarehouseStatement
-    | resumeWarehouseStatement
 
     // Database Statement
     | useDatabaseStatement

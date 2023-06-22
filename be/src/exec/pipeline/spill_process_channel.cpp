@@ -29,4 +29,28 @@ SpillProcessChannelPtr SpillProcessChannelFactory::get_or_create(int32_t sequenc
     }
     return _channels[sequence];
 }
+
+Status SpillProcessChannel::execute(SpillProcessTasksBuilder& task_builder) {
+    Status res;
+    if (is_working()) {
+        for (auto&& task : task_builder.tasks()) {
+            add_spill_task(std::move(task));
+        }
+        add_last_task(std::move(task_builder.final_task()));
+    } else {
+        for (auto& task : task_builder.tasks()) {
+            auto st = task();
+            if (!st.status().is_ok_or_eof()) {
+                res = st.status();
+                break;
+            }
+        }
+        auto st = task_builder.final_task()();
+        if (!st.status().is_ok_or_eof()) {
+            res = st.status();
+        }
+    }
+    return res;
+}
+
 } // namespace starrocks

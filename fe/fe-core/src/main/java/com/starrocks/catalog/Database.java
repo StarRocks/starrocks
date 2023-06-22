@@ -462,6 +462,10 @@ public class Database extends MetaObject implements Writable {
     }
 
     public boolean registerTableWithLock(Table table) {
+        if (table == null) {
+            return false;
+        }
+
         writeLock();
         try {
             String tableName = table.getName();
@@ -470,8 +474,6 @@ public class Database extends MetaObject implements Writable {
             } else {
                 idToTable.put(table.getId(), table);
                 nameToTable.put(table.getName(), table);
-
-                table.onCreate();
             }
             return true;
         } finally {
@@ -480,6 +482,9 @@ public class Database extends MetaObject implements Writable {
     }
 
     public boolean registerTableUnlock(Table table) {
+        if (table == null) {
+            return false;
+        }
         boolean result = true;
         String tableName = table.getName();
         if (nameToTable.containsKey(tableName)) {

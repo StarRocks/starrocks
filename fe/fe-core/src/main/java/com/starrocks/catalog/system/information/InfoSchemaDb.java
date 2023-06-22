@@ -73,6 +73,11 @@ public class InfoSchemaDb extends Database {
     }
 
     @Override
+    public boolean registerTableWithLock(Table table) {
+        return false;
+    }
+
+    @Override
     public void dropTableWithLock(String name) {
         // Do nothing.
     }

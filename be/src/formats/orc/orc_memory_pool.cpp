@@ -12,28 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast;
+#include <glog/logging.h>
 
-import com.starrocks.sql.parser.NodePosition;
+#include <orc/OrcFile.hh>
 
-public class SuspendWarehouseStmt extends DdlStmt {
-    private String whName;
+namespace starrocks {
 
-    public SuspendWarehouseStmt(String whName) {
-        this(whName, NodePosition.ZERO);
+class OrcMemoryPoolImpl : public orc::MemoryPool {
+public:
+    ~OrcMemoryPoolImpl() override = default;
+
+    char* malloc(uint64_t size) override {
+        auto p = static_cast<char*>(std::malloc(size));
+        if (p == nullptr) {
+            LOG(WARNING) << "malloc failed, size=" << size;
+            throw std::bad_alloc();
+        }
+        return p;
     }
 
-    public SuspendWarehouseStmt(String whName, NodePosition pos) {
-        super(pos);
-        this.whName = whName;
-    }
+    void free(char* p) override { std::free(p); }
+};
 
-    public String getFullWhName() {
-        return whName;
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSuspendWarehouseStatement(this, context);
-    }
+orc::MemoryPool* getOrcMemoryPool() {
+    static OrcMemoryPoolImpl internal;
+    return &internal;
 }
+
+} // namespace starrocks

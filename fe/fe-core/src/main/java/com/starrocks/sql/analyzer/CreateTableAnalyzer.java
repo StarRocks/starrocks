@@ -88,7 +88,7 @@ public class CreateTableAnalyzer {
                 try {
                     return EngineType.valueOf(engineName.toUpperCase()).name();
                 } catch (IllegalArgumentException e) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, engineName);
+                    throw new SemanticException("Unknown engine name: %s", engineName);
                 }
             }
         } else {

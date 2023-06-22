@@ -59,6 +59,7 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -204,9 +205,31 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Cannot create table " +
                             "without persistent volume in current run mode \"" + runMode + "\"");
                 }
+                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                StorageVolume sv = null;
+                if (volume.isEmpty()) {
+                    String dbStorageVolumeId = svm.getStorageVolumeIdOfDb(db.getId());
+                    if (dbStorageVolumeId != null) {
+                        sv = svm.getStorageVolume(dbStorageVolumeId);
+                    } else {
+                        sv = svm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+                    }
+                } else if (volume.equals(StorageVolumeMgr.DEFAULT)) {
+                    sv = svm.getDefaultStorageVolume();
+                } else {
+                    sv = svm.getStorageVolumeByName(volume);
+                }
+                if (sv == null) {
+                    throw new DdlException("Unknown storage volume \"" + volume + "\"");
+                }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+                String storageVolumeId = sv.getId();
+                metastore.setLakeStorageInfo(table, storageVolumeId, properties);
+                svm.bindTableToStorageVolume(sv.getId(), table.getId());
+                table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+                table.setStorageVolume(StorageVolumeMgr.LOCAL);
             }
         } else {
             throw new DdlException("Unrecognized engine \"" + stmt.getEngineName() + "\"");
