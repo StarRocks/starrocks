@@ -15,6 +15,7 @@
 #pragma once
 
 #include <map>
+#include <vector>
 
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -203,10 +204,13 @@ public:
         return Status::OK();
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) override {
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, const std::vector<uint8_t>& nulls,
+                           Column* column) override {
         std::vector<Slice> slices(dict_codes.size());
         for (size_t i = 0; i < dict_codes.size(); i++) {
-            slices[i] = _dict[dict_codes[i]];
+            if (!nulls[i]) {
+                slices[i] = _dict[dict_codes[i]];
+            }
         }
         auto ret = column->append_strings_overflow(slices, _max_value_length);
         if (UNLIKELY(!ret)) {
@@ -215,10 +219,13 @@ public:
         return Status::OK();
     }
 
-    Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) override {
-        for (auto& dict_value : dict_values) {
-            // dict value always exists in _dict_code_by_value
-            dict_codes->emplace_back(_dict_code_by_value[dict_value]);
+    Status get_dict_codes(const std::vector<Slice>& dict_values, const std::vector<uint8_t>& nulls,
+                          std::vector<int32_t>* dict_codes) override {
+        for (size_t i = 0; i < dict_values.size(); i++) {
+            if (!nulls[i]) {
+                // dict value always exists in _dict_code_by_value
+                dict_codes->emplace_back(_dict_code_by_value[dict_values[i]]);
+            }
         }
         return Status::OK();
     }
