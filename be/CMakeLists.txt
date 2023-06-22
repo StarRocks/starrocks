@@ -482,10 +482,8 @@ if ("${USE_STAROS}" STREQUAL "ON")
        )
 endif()
 
-if (${WITH_CLANG_TIDY})
-    # Check Clang-Tidy
-    include(cmake_modules/FindClangTidy.cmake)
-endif()
+# Check Clang-Tidy
+include(cmake_modules/FindClangTidy.cmake)
 
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.
