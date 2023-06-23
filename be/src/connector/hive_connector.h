@@ -127,6 +127,7 @@ private:
 
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
+    bool _can_use_any_column = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     // ======================================

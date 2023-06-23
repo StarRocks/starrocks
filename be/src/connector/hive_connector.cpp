@@ -207,6 +207,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.case_sensitive) {
         _case_sensitive = hdfs_scan_node.case_sensitive;
     }
+    if (hdfs_scan_node.__isset.can_use_any_column) {
+        _can_use_any_column = hdfs_scan_node.can_use_any_column;
+    }
 }
 
 Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
@@ -483,6 +486,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     scanner_params.use_block_cache = _use_block_cache;
     scanner_params.enable_populate_block_cache = _enable_populate_block_cache;
+    scanner_params.can_use_any_column = _can_use_any_column;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

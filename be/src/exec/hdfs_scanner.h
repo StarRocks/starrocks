@@ -172,6 +172,7 @@ struct HdfsScannerParams {
     bool enable_populate_block_cache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
+    bool can_use_any_column = false;
 };
 
 struct HdfsScannerContext {
@@ -212,6 +213,8 @@ struct HdfsScannerContext {
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
     bool case_sensitive = false;
+
+    bool can_use_any_column = false;
 
     std::string timezone;
 
