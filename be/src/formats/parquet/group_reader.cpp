@@ -72,15 +72,17 @@ void GroupReader::_init_use_any_column() {
     UseAnyColumnContext& ctx = _use_any_column_ctx;
     ctx.row_count = _row_group_metadata->num_rows;
 
-    DCHECK_EQ(_param.read_cols.size(), 1);
-    const auto& c = _param.read_cols[0];
-    const auto& slots = _param.tuple_desc->slots();
-    ctx.slot_desc = slots[c.col_idx_in_chunk];
+    if (_param.read_cols.size() != 0) {
+        DCHECK_EQ(_param.read_cols.size(), 1);
+        const auto& c = _param.read_cols[0];
+        const auto& slots = _param.tuple_desc->slots();
+        ctx.slot_desc = slots[c.col_idx_in_chunk];
+    }
 }
 
 Status GroupReader::_build_chunk_on_use_any_column(ChunkPtr* chunk, size_t* row_count) {
     UseAnyColumnContext& ctx = _use_any_column_ctx;
-    if (ctx.row_count == 0) {
+    if (ctx.row_count == 0 || ctx.slot_desc == nullptr) {
         *row_count = 0;
         return Status::EndOfFile("");
     }
@@ -88,7 +90,7 @@ Status GroupReader::_build_chunk_on_use_any_column(ChunkPtr* chunk, size_t* row_
     size_t count = std::min(ctx.row_count, *row_count);
     ctx.row_count -= count;
     *row_count = count;
-    
+
     ColumnPtr c = ColumnHelper::create_const_null_column(count);
     (*chunk)->update_column(c, ctx.slot_desc->id());
     return Status::OK();
