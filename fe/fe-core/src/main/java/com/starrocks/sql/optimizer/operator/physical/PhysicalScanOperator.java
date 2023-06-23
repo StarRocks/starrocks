@@ -44,6 +44,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
      */
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -93,6 +94,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public Map<ColumnRefOperator, Column> getColRefToColumnMetaMap() {
         return colRefToColumnMetaMap;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
     }
 
     public Table getTable() {

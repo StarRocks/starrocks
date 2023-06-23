@@ -56,6 +56,7 @@ public abstract class ScanNode extends PlanNode {
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -68,6 +69,14 @@ public abstract class ScanNode extends PlanNode {
 
     public void setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
         this.columnAccessPaths = columnAccessPaths;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
     }
 
     /**

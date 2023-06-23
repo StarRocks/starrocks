@@ -1003,6 +1003,8 @@ struct THdfsScanNode {
     12: optional bool case_sensitive;
 
     13: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
+
+    14: optional bool can_use_any_column;
 }
 
 struct TProjectNode {
