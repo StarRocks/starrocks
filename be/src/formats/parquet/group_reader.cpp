@@ -17,6 +17,7 @@
 #include <memory>
 #include <sstream>
 
+#include "column/column.h"
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
@@ -42,6 +43,11 @@ GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const st
 }
 
 Status GroupReader::init() {
+    if (_can_use_any_column()) {
+        _init_use_any_column();
+        return Status::OK();
+    }
+
     // the calling order matters, do not change unless you know why.
     RETURN_IF_ERROR(_init_column_readers());
     _dict_filter_ctx.init(_param.read_cols.size());
@@ -57,7 +63,42 @@ Status GroupReader::prepare() {
     return Status::OK();
 }
 
+bool GroupReader::_can_use_any_column() const {
+    return _param.can_use_any_column && (_need_skip_rowids == nullptr || _need_skip_rowids->empty());
+}
+
+void GroupReader::_init_use_any_column() {
+    VLOG_FILE << "[xxx] init_use_any_column = OK";
+    UseAnyColumnContext& ctx = _use_any_column_ctx;
+    ctx.row_count = _row_group_metadata->num_rows;
+
+    DCHECK_EQ(_param.read_cols.size(), 1);
+    const auto& c = _param.read_cols[0];
+    const auto& slots = _param.tuple_desc->slots();
+    ctx.slot_desc = slots[c.col_idx_in_chunk];
+}
+
+Status GroupReader::_build_chunk_on_use_any_column(ChunkPtr* chunk, size_t* row_count) {
+    UseAnyColumnContext& ctx = _use_any_column_ctx;
+    if (ctx.row_count == 0) {
+        *row_count = 0;
+        return Status::EndOfFile("");
+    }
+
+    size_t count = std::min(ctx.row_count, *row_count);
+    ctx.row_count -= count;
+    *row_count = count;
+    
+    ColumnPtr c = ColumnHelper::create_const_null_column(count);
+    (*chunk)->update_column(c, ctx.slot_desc->id());
+    return Status::OK();
+}
+
 Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
+    if (_can_use_any_column()) {
+        return _build_chunk_on_use_any_column(chunk, row_count);
+    }
+
     if (_is_group_filtered) {
         *row_count = 0;
         return Status::EndOfFile("");
@@ -65,7 +106,6 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
     _read_chunk->reset();
     size_t count = *row_count;
-    bool has_more_filter = !_left_conjunct_ctxs.empty();
     Status status;
 
     ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
@@ -112,6 +152,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         }
     }
 
+    bool has_more_filter = !_left_conjunct_ctxs.empty();
     // other filter that not dict
     if (has_more_filter) {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);

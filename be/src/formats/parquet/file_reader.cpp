@@ -451,6 +451,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
+    _group_reader_param.can_use_any_column = fd_scanner_ctx.can_use_any_column;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.
