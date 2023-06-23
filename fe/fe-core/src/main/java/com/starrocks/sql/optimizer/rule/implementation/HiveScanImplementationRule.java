@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
@@ -44,7 +43,7 @@ public class HiveScanImplementationRule extends ImplementationRule {
                     scan.getLimit(),
                     scan.getPredicate(),
                     scan.getProjection());
-
+            physicalHiveScan.setCanUseAnyColumn(scan.getCanUseAnyColumn());
             result = new OptExpression(physicalHiveScan);
         }
         return Lists.newArrayList(result);

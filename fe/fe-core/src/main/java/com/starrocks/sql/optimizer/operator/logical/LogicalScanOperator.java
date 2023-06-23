@@ -57,6 +57,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -108,6 +109,14 @@ public abstract class LogicalScanOperator extends LogicalOperator {
                 .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
         cachedColumnNameToColRefMap = Optional.of(columnRefOperatorMap);
         return columnRefOperatorMap;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
     }
 
     @Override
