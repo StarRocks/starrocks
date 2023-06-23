@@ -208,6 +208,7 @@ public class HdfsScanNode extends ScanNode {
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
+        msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
     }
 
     @Override
