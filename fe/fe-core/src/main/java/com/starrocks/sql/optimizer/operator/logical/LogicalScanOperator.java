@@ -208,6 +208,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
             builder.columnFilters = scanOperator.columnFilters;
             builder.columnAccessPaths = scanOperator.columnAccessPaths;
+            builder.canUseAnyColumn = scanOperator.canUseAnyColumn;
             return (B) this;
         }
 
