@@ -8,6 +8,10 @@ Routine Load 支持 Exactly-Once 语义，能够保证数据不丢不重。
 
 Routine Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
 
+> **注意**
+>
+> Routine Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+
 ## 支持的数据文件格式
 
 Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON、Avro (自 v3.0.1) 格式的数据。

@@ -48,6 +48,8 @@ CloudCanal 提供了完整的产品化能力，用户在可视化界面完成数
 > - Client 地址：为 StarRocks 提供给 MySQL Client 的服务端口，CloudCanal 主要用其查询库表的元数据信息。
 >
 > - Http 地址：Http 地址主要用于接收 CloudCanal 数据导入的请求。
+>
+> - 账号：导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ### 任务创建
 

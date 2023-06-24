@@ -10,7 +10,8 @@ Routine Load 支持消费 Kafka 中 CSV、JSON、Avro (自 v3.0.1) 格式数据�
 
 > **说明**
 >
-> Routine Load 的应用场景、基本原理和基本操作，请参见 [从 Apache Kafka® 持续导入](../../../loading/RoutineLoad.md)。
+> - Routine Load 的应用场景、基本原理和基本操作，请参见 [从 Apache Kafka® 持续导入](../../../loading/RoutineLoad.md)。
+> - Routine Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../account-management/GRANT.md) 给用户赋权。
 
 ## 语法
 

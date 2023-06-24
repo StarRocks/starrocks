@@ -6,6 +6,10 @@ Spark load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 
 Spark load 是一种异步导入方式，用户需要通过 MySQL 协议创建 Spark 类型导入任务，并通过 `SHOW LOAD` 查看导入结果。
 
+> **注意**
+>
+> Spark Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../account-management/GRANT.md) 给用户赋权。
+
 ## 语法
 
 ```sql

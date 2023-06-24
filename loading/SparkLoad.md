@@ -4,6 +4,10 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 
 本文介绍导入任务的操作流程（包括相关客户端配置、创建和查看任务等）、系统配置、最佳实践和常见问题。
 
+> **注意**
+>
+> Spark Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+
 ## 背景信息
 
 在 StarRocks v2.4 及以前版本，Spark Load 需要借助 Broker 进程访问外部存储系统。配置执行 ETL 任务的 Spark 集群时需要指定 Broker 组。Broker 是一个独立的无状态进程，封装了文件系统接口。通过 Broker 进程，StarRocks 能够访问和读取外部存储系统上的数据文件。

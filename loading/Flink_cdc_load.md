@@ -2,6 +2,10 @@
 
 本文介绍如何将 MySQL 的数据实时（秒级）同步至 StarRocks，支撑企业实时分析和处理海量数据的需求。
 
+> **注意**
+>
+> 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+
 ## 基本原理
 
 ![MySQL 同步](../assets/4.9.2.png)
