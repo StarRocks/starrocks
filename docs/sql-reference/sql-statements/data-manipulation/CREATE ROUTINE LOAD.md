@@ -6,7 +6,8 @@ Routine Load is an asynchronous loading method based on the MySQL protocol. It c
 
 > **NOTE**
 >
-> For information about the application scenarios, principles, and basic operations of Routine Load, see [Continuously load data from Apache Kafka®](../../../loading/RoutineLoad.md).
+> - For information about the application scenarios, principles, and basic operations of Routine Load, see [Continuously load data from Apache Kafka®](../../../loading/RoutineLoad.md).
+> - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 
 ## Syntax
 
