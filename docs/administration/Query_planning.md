@@ -197,9 +197,9 @@ By removing the specific expressions (only keep the operators), the query plan c
 
 Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Hints only take effect within a single query.
 
-### System variables hint
+### System variable hint
 
-You can set one or more system variable hints by using the `/*+ ... */` comment syntax in SELECT and SUBMIT TASK statements. You can also use system variable hints in SELECT clauses that included in other statements such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
+You can set one or more system variable hints by using the `/*+ ... */` comment syntax in SELECT and SUBMIT TASK statements, or in SELECT clauses that are included in other statements such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
 
 #### Syntax
 
@@ -222,7 +222,7 @@ Hint the query's task execution timeout period by setting the system variable `q
 SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ~~~
 
-Hint the query's execution timeout period by setting the system variable `query_timeout` in the  SELECT clause when creating a materialized view.
+Hint the query's execution timeout period by setting the system variable `query_timeout` in the SELECT clause when creating a materialized view.
 
 ~~~ SQL
 CREATE MATERIALIZED VIEW mv 
@@ -235,7 +235,7 @@ AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 
 ### Join hint
 
-For multi-table join queries, the optimizer usually automatically selects the optimal join execution method. In special cases, you can use join hint to explicitly suggest the join execution method to the optimizer or disable Join Reorder. Currently, join hint supports suggesting Shuffle Join, Broadcast Join, Bucket Shuffle Join, and Colocate Join as a join execution method. When join hint is used, the optimizer does not perform Join Reorder. So you need to select the smaller table as the right table. Additionally, when suggesting Colocate Join or Bucket Shuffle Join as the join execution method, make sure that the data distribution of the joined table meets the requirements of these join execution methods. Otherwise, the suggested join execution method cannot take effect.
+For multi-table join queries, the optimizer usually selects the optimal join execution method. In special cases, you can use join hint to explicitly suggest the join execution method to the optimizer or disable Join Reorder. Currently, a join hint supports suggesting Shuffle Join, Broadcast Join, Bucket Shuffle Join, or Colocate Join as a join execution method. When join hint is used, the optimizer does not perform Join Reorder. So you need to select the smaller table as the right table. Additionally, when suggesting Colocate Join or Bucket Shuffle Join as the join execution method, make sure that the data distribution of the joined table meets the requirements of these join execution methods. Otherwise, the suggested join execution method cannot take effect.
 
 #### Syntax
 
