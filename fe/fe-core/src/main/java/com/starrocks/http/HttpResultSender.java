@@ -53,7 +53,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
 public class HttpResultSender {
@@ -83,22 +82,13 @@ public class HttpResultSender {
         while (true) {
             batch = coord.getNext();
             if (batch.getBatch() != null) {
-                // channal is closed by client or connectScheduler
-                if (!nettyChannel.channel().isActive()) {
-                    // if context is killed, query was already canceled
-                    if (!context.isKilled()) {
-                        // channel is closed by client or network problem, cancel query
-                        context.getExecutor().cancel();
-                    }
-                    return batch;
-                }
                 writeResultBatch(batch.getBatch(), nettyChannel);
                 context.updateReturnRows(batch.getBatch().getRows().size());
             }
             if (batch.isEos()) {
                 ByteBuf statisticData = JsonSerializer.getStatistic(batch.getQueryStatistics());
                 nettyChannel.writeAndFlush(statisticData);
-                nettyChannel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).addListener(ChannelFutureListener.CLOSE);
+                sendEmptyLastContent();
                 break;
             }
         }
@@ -132,19 +122,12 @@ public class HttpResultSender {
             } else {
                 channel.writeAndFlush(Unpooled.copiedBuffer(row));
             }
-            Charset charset = StandardCharsets.UTF_8;
-            String str = charset.decode(row).toString();
-            if (!charset.newEncoder().canEncode(str)) {
-                LOG.error("can't decode by utf-8");
-            }
-            LOG.info("writen row: {}", str);
-            //            channel.writeAndFlush(Unpooled.copiedBuffer(str.getBytes()));
-            //            channel.writeAndFlush(Unpooled.wrappedBuffer(row)).addListener((ChannelFutureListener) future -> {
-            //                if (!future.isSuccess()) {
-            //                    LOG.info("Write failed: " + future.cause());
-            //                }
-            //            });
-            // channel.writeAndFlush(Unpooled.copiedBuffer("test".getBytes()));
+            //            Charset charset = StandardCharsets.UTF_8;
+            //            String str = charset.decode(row).toString();
+            //            if (!charset.newEncoder().canEncode(str)) {
+            //                LOG.error("can't decode by utf-8");
+            //            }
+            //            LOG.info("writen row: {}", str);
         }
     }
 
@@ -158,6 +141,16 @@ public class HttpResultSender {
 
     private void sendFinalChunk(ChannelHandlerContext nettyChannel, ByteBuf json) {
         nettyChannel.writeAndFlush(json);
-        nettyChannel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).addListener(ChannelFutureListener.CLOSE);
+        sendEmptyLastContent();
     }
+
+    private void sendEmptyLastContent() {
+        if (context.isKeepAlive()) {
+            context.getNettyChannel().writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+        } else {
+            context.getNettyChannel().writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT)
+                    .addListener(ChannelFutureListener.CLOSE);
+        }
+    }
+
 }

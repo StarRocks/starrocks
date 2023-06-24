@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -121,6 +120,11 @@ public class ExecuteSqlAction extends RestBaseAction {
         String catalogName = request.getSingleParameter(CATALOG_KEY);
         String databaseName = request.getSingleParameter(DB_KEY);
 
+        boolean keepAlive = HttpUtil.isKeepAlive(request.getRequest());
+        if (keepAlive) {
+            context.setKeepAlive(true);
+        }
+
         try {
             changeCatalogAndDB(catalogName, databaseName);
             SqlRequest requestBody = validatePostBody(request.getContent());
@@ -145,11 +149,6 @@ public class ExecuteSqlAction extends RestBaseAction {
 
             // finalize just send 200 for kill, and throw StarRocksHttpException if context's error is set
             finalize(request, response, parsedStmt);
-
-            if (context.isKilled()) {
-                context.getNettyChannel().close();
-                LOG.info("connection is killed!");
-            }
 
         } catch (StarRocksHttpException e) {
             // send {"exception","error message"}
@@ -249,7 +248,7 @@ public class ExecuteSqlAction extends RestBaseAction {
 
     // when connect is closed, this function will be called
     protected void handleChannelInactive(ChannelHandlerContext ctx) {
-        LOG.info("ExecuteSql:channel closed");
+        LOG.info("Netty channel is closed");
         ConnectContext context = ConnectContext.get();
         context.setKilled();
         context.getConnectScheduler().unregisterConnection(context);
@@ -286,6 +285,7 @@ public class ExecuteSqlAction extends RestBaseAction {
                 context.getNettyChannel().close();
                 return;
             }
+            // send error message：500 {"exception":"error message"}
             throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, context.getState().getErrorMessage());
         }
 

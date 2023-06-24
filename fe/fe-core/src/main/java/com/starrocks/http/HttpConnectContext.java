@@ -66,6 +66,8 @@ public class HttpConnectContext extends ConnectContext {
     // ip + port
     private String remoteAddres;
 
+    private boolean isKeepAlive;
+
     public HttpConnectContext() {
         super();
         sendDate = false;
@@ -124,6 +126,14 @@ public class HttpConnectContext extends ConnectContext {
 
     public String getRemoteAddres() {
         return remoteAddres;
+    }
+
+    public boolean isKeepAlive() {
+        return isKeepAlive;
+    }
+
+    public void setKeepAlive(boolean keepAlive) {
+        isKeepAlive = keepAlive;
     }
 
     @Override
