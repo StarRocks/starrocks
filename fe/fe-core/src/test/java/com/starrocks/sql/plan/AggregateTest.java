@@ -2302,4 +2302,39 @@ public class AggregateTest extends PlanTestBase {
                 "Detail message: percentile_disc 's second parameter's data type is wrong .");
         getCostExplain(sql);
     }
+
+    @Test
+    public void testSplitTheTopGlobalAgg() throws Exception {
+        String sql = "select count(distinct v2), count(v3) from t0 join t1 group by v3";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 07\n" +
+                "    HASH_PARTITIONED: 2: v2, 3: v3",
+                "9:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: count(2: v2), count(8: count)\n" +
+                        "  |  group by: 3: v3");
+
+        // no need to split the top global agg for the below cases
+        sql = "select count(distinct v2), count(v3) from t0 join t1";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "STREAM DATA SINK\n" +
+                        "    EXCHANGE ID: 07\n" +
+                        "    HASH_PARTITIONED: 2: v2",
+                "9:AGGREGATE (update serialize)\n" +
+                        "  |  output: count(2: v2), count(8: count)\n" +
+                        "  |  group by: ");
+
+
+        sql = "select count(distinct v2), count(v3) from t0 join t1 group by 'a'";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertCContains(plan, "STREAM DATA SINK\n" +
+                        "    EXCHANGE ID: 07\n" +
+                        "    HASH_PARTITIONED: 2: v2",
+                "10:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: count(2: v2), count(9: count)\n" +
+                        "  |  group by: 7: expr");
+    }
 }

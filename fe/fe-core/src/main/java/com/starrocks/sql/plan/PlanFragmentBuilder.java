@@ -1691,6 +1691,9 @@ public class PlanFragmentBuilder {
 
             AggregationNode aggregationNode;
             if (node.getType().isLocal() && node.isSplit()) {
+                if (node.hasSingleDistinct()) {
+                    setMergeAggFn(aggregateExprList, node.getSingleDistinctFunctionPos());
+                }
                 AggregateInfo aggInfo = AggregateInfo.create(
                         groupingExpressions,
                         aggregateExprList,
@@ -1714,14 +1717,7 @@ public class PlanFragmentBuilder {
                 // Local && un-split aggregate meanings only execute local pre-aggregation, we need promise
                 // output type match other node, so must use `update finalized` phase
                 if (node.hasSingleDistinct()) {
-                    // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
-                    // sum function is update function, but count is merge function
-                    for (int i = 0; i < aggregateExprList.size(); i++) {
-                        if (i != node.getSingleDistinctFunctionPos()) {
-                            aggregateExprList.get(i).setMergeAggFn();
-                        }
-                    }
-
+                    setMergeAggFn(aggregateExprList, node.getSingleDistinctFunctionPos());
                     AggregateInfo aggInfo = AggregateInfo.create(
                             groupingExpressions,
                             aggregateExprList,
@@ -1785,12 +1781,7 @@ public class PlanFragmentBuilder {
             } else if (node.getType().isDistinctLocal()) {
                 // For SQL: select count(distinct id_bigint), sum(id_int) from test_basic;
                 // count function is update function, but sum is merge function
-                for (int i = 0; i < aggregateExprList.size(); i++) {
-                    if (i != node.getSingleDistinctFunctionPos()) {
-                        aggregateExprList.get(i).setMergeAggFn();
-                    }
-                }
-
+                setMergeAggFn(aggregateExprList, node.getSingleDistinctFunctionPos());
                 AggregateInfo aggInfo = AggregateInfo.create(
                         groupingExpressions,
                         aggregateExprList,
@@ -1874,6 +1865,16 @@ public class PlanFragmentBuilder {
                 ExpressionAnalyzer.analyzeExpressionIgnoreSlot(replaceExpr, ConnectContext.get());
 
                 aggregateExprList.set(singleDistinctIndex, replaceExpr);
+            }
+        }
+
+        // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
+        //
+        private void setMergeAggFn(List<FunctionCallExpr> aggregateExprList, int singleDistinctFunctionPos) {
+            for (int i = 0; i < aggregateExprList.size(); i++) {
+                if (i != singleDistinctFunctionPos) {
+                    aggregateExprList.get(i).setMergeAggFn();
+                }
             }
         }
 
