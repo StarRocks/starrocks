@@ -477,17 +477,11 @@ fi
 echo "Finished patching $SERDES_SOURCE"
 cd -
 
-# patch arrows
+# patch arrows to use our built jemalloc
 if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
-    # use our built jemalloc
     if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-5.0.0" ] ; then
         patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-force-use-external-jemalloc.patch
-        touch $PATCHED_MARK
-    fi
-    # fix arrow parquet exception handling
-    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-5.0.0" ] ; then
-        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-fix-exception-handling.patch
         touch $PATCHED_MARK
     fi
     cd -
