@@ -33,10 +33,10 @@ insert into array_test values
 (6,[1,null], ['1',null], [1, null], [1.0, null], [1.00, null], [1.00, null], [1.00, null], [1.00, null], [1.00, null], [1.00, null], [[1, null], [50, 2, 6, 4]], [['1', null], ['50', '2', '6', '4']], [[['1', null],['3'],null], [['50', '2', '6', '4']]], [[[1, null],[3],null], [[50, 2, 6, 4]]]);
 
 
-select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 = t.i_1;
-select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 <=> t.i_1;
-select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 > t.i_1;
-select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 < t.i_1;
+select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 = t.i_1 order by 1, 2;
+select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 <=> t.i_1 order by 1, 2;
+select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 > t.i_1 order by 1, 2;
+select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 < t.i_1 order by 1, 2;
 
 select s.s_1, t.d_1 from array_test s join array_test t on s.s_1 = t.d_1 order by 1, 2;
 select s.s_1, t.d_2 from array_test s join array_test t on s.s_1 = t.d_2 order by 1, 2;
@@ -96,7 +96,7 @@ select s.aad_1, t.aas_1 from array_test s join array_test t on s.aad_1 != t.aas_
 select s.aad_1, t.aad_1 from array_test s join array_test t on s.aad_1 != t.aad_1 order by 1, 2;
 select s.aas_1, t.aas_1 from array_test s join array_test t on s.aas_1 != t.aas_1 order by 1, 2;
 
-select s.i_1, t.i_1 from array_test s join array_test t on s.i_1 = t.i_1 and array_length(s.i_1) > 3;
+select s.i_1, t.i_1 from array_test s join array_test t on s.i_1 = t.i_1 and array_length(s.i_1) > 3 order by 1, 2;
 
 select count(*) from array_test s join array_test t on s.i_1 <=> t.s_1;
 select count(*) from array_test s join array_test t on s.i_1 = t.s_1;

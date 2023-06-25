@@ -261,15 +261,46 @@ std::string TypeDescriptor::debug_string() const {
 }
 
 bool TypeDescriptor::support_join() const {
+    if (type == TYPE_ARRAY) {
+        return children[0].support_join();
+    }
+    if (type == TYPE_MAP) {
+        return children[0].support_join() && children[1].support_join();
+    }
+    if (type == TYPE_STRUCT) {
+        for (auto& c : children) {
+            if (!c.support_join()) {
+                return false;
+            }
+        }
+        return true;
+    }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
 
 bool TypeDescriptor::support_orderby() const {
+    if (type == TYPE_ARRAY) {
+        return children[0].support_orderby();
+    }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
            type != TYPE_MAP && type != TYPE_STRUCT;
 }
 
 bool TypeDescriptor::support_groupby() const {
+    if (type == TYPE_ARRAY) {
+        return children[0].support_groupby();
+    }
+    if (type == TYPE_MAP) {
+        return children[0].support_groupby() && children[1].support_groupby();
+    }
+    if (type == TYPE_STRUCT) {
+        for (auto& c : children) {
+            if (!c.support_groupby()) {
+                return false;
+            }
+        }
+        return true;
+    }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
 

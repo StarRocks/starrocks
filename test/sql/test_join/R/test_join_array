@@ -33,45 +33,45 @@ insert into array_test values
 (6,[1,null], ['1',null], [1, null], [1.0, null], [1.00, null], [1.00, null], [1.00, null], [1.00, null], [1.00, null], [1.00, null], [[1, null], [50, 2, 6, 4]], [['1', null], ['50', '2', '6', '4']], [[['1', null],['3'],null], [['50', '2', '6', '4']]], [[[1, null],[3],null], [[50, 2, 6, 4]]]);
 -- result:
 -- !result
-select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 = t.i_1;
+select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 = t.i_1 order by 1, 2;
 -- result:
-["1","2"]	[1,2]
 ["1",null]	[1,null]
+["1","2"]	[1,2]
 -- !result
-select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 <=> t.i_1;
+select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 <=> t.i_1 order by 1, 2;
 -- result:
 None	None
-["1","2"]	[1,2]
 ["1",null]	[1,null]
+["1","2"]	[1,2]
 -- !result
-select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 > t.i_1;
+select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 > t.i_1 order by 1, 2;
 -- result:
-["a","b","c"]	[1,2,3,4,10]
-["a","b","c"]	[1,2]
-["a","b","c"]	[1,null]
-["a","b","c"]	[1,2,3,4,10]
-["a","b","c"]	[1,2,3,4,10]
-["a",null,"c","e","d"]	[1,2,3,4,10]
-["a",null,"c","e","d"]	[1,2]
-["a",null,"c","e","d"]	[1,null]
-["a",null,"c","e","d"]	[1,2,3,4,10]
-["a",null,"c","e","d"]	[1,2,3,4,10]
-["1",null]	[1,2,3,4,10]
 ["1",null]	[1,2]
 ["1",null]	[1,2,3,4,10]
 ["1",null]	[1,2,3,4,10]
+["1",null]	[1,2,3,4,10]
+["a",null,"c","e","d"]	[1,null]
+["a",null,"c","e","d"]	[1,2]
+["a",null,"c","e","d"]	[1,2,3,4,10]
+["a",null,"c","e","d"]	[1,2,3,4,10]
+["a",null,"c","e","d"]	[1,2,3,4,10]
+["a","b","c"]	[1,null]
+["a","b","c"]	[1,2]
+["a","b","c"]	[1,2,3,4,10]
+["a","b","c"]	[1,2,3,4,10]
+["a","b","c"]	[1,2,3,4,10]
 -- !result
-select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 < t.i_1;
+select s.s_1, t.i_1 from array_test s join array_test t on s.s_1 < t.i_1 order by 1, 2;
 -- result:
-["-1","10","1","100","2"]	[1,2,3,4,10]
-["-1","10","1","100","2"]	[1,2,3,4,10]
-["-1","10","1","100","2"]	[1,2,3,4,10]
-["-1","10","1","100","2"]	[1,2]
 ["-1","10","1","100","2"]	[1,null]
-["1","2"]	[1,2,3,4,10]
-["1","2"]	[1,2,3,4,10]
-["1","2"]	[1,2,3,4,10]
+["-1","10","1","100","2"]	[1,2]
+["-1","10","1","100","2"]	[1,2,3,4,10]
+["-1","10","1","100","2"]	[1,2,3,4,10]
+["-1","10","1","100","2"]	[1,2,3,4,10]
 ["1","2"]	[1,null]
+["1","2"]	[1,2,3,4,10]
+["1","2"]	[1,2,3,4,10]
+["1","2"]	[1,2,3,4,10]
 -- !result
 select s.s_1, t.d_1 from array_test s join array_test t on s.s_1 = t.d_1 order by 1, 2;
 -- result:
@@ -717,7 +717,7 @@ select s.aas_1, t.aas_1 from array_test s join array_test t on s.aas_1 != t.aas_
 [[["10"],["20"],["30"]],[["60"],["5"],["4"]],[["-100","-2"],["-20","10"],["100","23"]]]	[[["1",null],["3"],null],[["50","2","6","4"]]]
 [[["10"],["20"],["30"]],[["60"],["5"],["4"]],[["-100","-2"],["-20","10"],["100","23"]]]	[[["1","2"],["3"]],[["50","2","6","4"]]]
 -- !result
-select s.i_1, t.i_1 from array_test s join array_test t on s.i_1 = t.i_1 and array_length(s.i_1) > 3;
+select s.i_1, t.i_1 from array_test s join array_test t on s.i_1 = t.i_1 and array_length(s.i_1) > 3 order by 1, 2;
 -- result:
 [1,2,3,4,10]	[1,2,3,4,10]
 [1,2,3,4,10]	[1,2,3,4,10]
