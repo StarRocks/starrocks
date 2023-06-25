@@ -1088,18 +1088,23 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 5. calc short key
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(alterIndexId);
-            List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
             List<Integer> sortKeyIdxes = new ArrayList<>();
-            for (Integer colIdx : originSortKeyIdxes) {
-                String columnName = index.getSchema().get(colIdx).getName();
-                Optional<Column> oneCol = alterSchema.stream().filter(c -> c.getName().equalsIgnoreCase(columnName)).findFirst();
-                if (!oneCol.isPresent()) {
-                    LOG.warn("Sort Key Column[" + columnName + "] not exists in new schema");
-                    throw new DdlException("Sort Key Column[" + columnName + "] not exists in new schema");
+            if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
+                MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(alterIndexId);
+                if (index.getSortKeyIdxes() != null) {
+                    List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
+                    for (Integer colIdx : originSortKeyIdxes) {
+                        String columnName = index.getSchema().get(colIdx).getName();
+                        Optional<Column> oneCol = 
+                                alterSchema.stream().filter(c -> c.getName().equalsIgnoreCase(columnName)).findFirst();
+                        if (!oneCol.isPresent()) {
+                            LOG.warn("Sort Key Column[" + columnName + "] not exists in new schema");
+                            throw new DdlException("Sort Key Column[" + columnName + "] not exists in new schema");
+                        }
+                        int sortKeyIdx = alterSchema.indexOf(oneCol.get());
+                        sortKeyIdxes.add(sortKeyIdx);
+                    }
                 }
-                int sortKeyIdx = alterSchema.indexOf(oneCol.get());
-                sortKeyIdxes.add(sortKeyIdx);
             }
             if (!sortKeyIdxes.isEmpty()) {
                 short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema, 
