@@ -352,10 +352,7 @@ StatusOr<ColumnPtr> CastArrayToString::evaluate_checked(ExprContext* context, Ch
                     row += "NULL";
                 } else {
                     auto slice = array_string->get_slice(j);
-                    StringPiece piece(slice.data, slice.size);
-                    row += '"';
-                    strings::BackslashEscape(piece, "\"", &row);
-                    row += '"';
+                    row += std::string_view(slice.data, slice.size);
                 }
             }
             row += ']';
