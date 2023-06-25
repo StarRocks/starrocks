@@ -121,12 +121,13 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* p
         return nullptr;
     }
     size_t current_max_value_row_id = _topn_type == TTopNType::RANK ? order_by_column->size() - 1 : max_value_row_id;
+    // _topn_type != TTopNType::RANK means we need reserve the max_value
+    bool is_close_interval = _topn_type == TTopNType::RANK || _sort_desc.num_columns() != 1;
 
     if (_runtime_filter.empty()) {
-        auto rf = type_dispatch_predicate<JoinRuntimeFilter*>((*_sort_exprs)[0]->root()->type().type, false,
-                                                              detail::SortRuntimeFilterBuilder(), pool, order_by_column,
-                                                              current_max_value_row_id, _sort_desc.descs[0].asc_order(),
-                                                              _topn_type == TTopNType::RANK);
+        auto rf = type_dispatch_predicate<JoinRuntimeFilter*>(
+                (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
+                order_by_column, current_max_value_row_id, _sort_desc.descs[0].asc_order(), is_close_interval);
         _runtime_filter.emplace_back(rf);
     } else {
         type_dispatch_predicate<std::nullptr_t>(
