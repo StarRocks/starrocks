@@ -879,6 +879,18 @@ static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::Predicate
 Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     TExprNodeType::type node_type = conjunct->node_type();
     TExprOpcode::type op_type = conjunct->op();
+
+    // If conjunct is slot ref, like SELECT * FROM tbl where col;
+    // We build SearchArgument about col=true directly.
+    if (node_type == TExprNodeType::type::SLOT_REF) {
+        auto* ref = down_cast<const ColumnRef*>(conjunct);
+        DCHECK(conjunct->type().type == LogicalType::TYPE_BOOLEAN);
+        SlotId slot_id = ref->slot_id();
+        std::string name = _slot_id_to_desc[slot_id]->col_name();
+        builder->equals(name, orc::PredicateDataType::BOOLEAN, true);
+        return Status::OK();
+    }
+
     if (node_type == TExprNodeType::type::COMPOUND_PRED) {
         if (op_type == TExprOpcode::COMPOUND_AND) {
             builder->startAnd();
