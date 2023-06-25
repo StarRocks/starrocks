@@ -62,16 +62,19 @@ abstract class AzureStorageCloudCredential implements CloudCredential {
 }
 
 class AzureBlobCloudCredential extends AzureStorageCloudCredential {
+    private final String endpoint;
     private final String storageAccount;
     private final String sharedKey;
     private final String container;
     private final String sasToken;
 
-    AzureBlobCloudCredential(String storageAccount, String sharedKey, String container, String sasToken) {
+    AzureBlobCloudCredential(String endpoint, String storageAccount, String sharedKey, String container, String sasToken) {
+        Preconditions.checkNotNull(endpoint);
         Preconditions.checkNotNull(storageAccount);
         Preconditions.checkNotNull(sharedKey);
         Preconditions.checkNotNull(container);
         Preconditions.checkNotNull(sasToken);
+        this.endpoint = endpoint;
         this.storageAccount = storageAccount;
         this.sharedKey = sharedKey;
         this.container = container;
@@ -81,20 +84,33 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
 
     @Override
     void tryGenerateConfigurationMap() {
-        if (!storageAccount.isEmpty() && !sharedKey.isEmpty()) {
-            String key = String.format("fs.azure.account.key.%s.blob.core.windows.net", storageAccount);
-            generatedConfigurationMap.put(key, sharedKey);
-        } else if (!storageAccount.isEmpty() && !container.isEmpty() && !sasToken.isEmpty()) {
-            String key =
-                    String.format("fs.azure.sas.%s.%s.blob.core.windows.net", container, storageAccount);
-            generatedConfigurationMap.put(key, sasToken);
+        if (!endpoint.isEmpty()) {
+            // If user specific endpoint, they don't need to specific storage account anymore
+            // Like if user is using Azurite, they need to specific endpoint
+            if (!sharedKey.isEmpty()) {
+                String key = String.format("fs.azure.account.key.%s", endpoint);
+                generatedConfigurationMap.put(key, sharedKey);
+            } else if (!container.isEmpty() && !sasToken.isEmpty()) {
+                String key = String.format("fs.azure.sas.%s.%s", container, endpoint);
+                generatedConfigurationMap.put(key, sasToken);
+            }
+        } else {
+            if (!storageAccount.isEmpty() && !sharedKey.isEmpty()) {
+                String key = String.format("fs.azure.account.key.%s.blob.core.windows.net", storageAccount);
+                generatedConfigurationMap.put(key, sharedKey);
+            } else if (!storageAccount.isEmpty() && !container.isEmpty() && !sasToken.isEmpty()) {
+                String key =
+                        String.format("fs.azure.sas.%s.%s.blob.core.windows.net", container, storageAccount);
+                generatedConfigurationMap.put(key, sasToken);
+            }
         }
     }
 
     @Override
     public String getCredentialString() {
         return "AzureBlobCloudCredential{" +
-                "storageAccount='" + storageAccount + '\'' +
+                "endpoint='" + endpoint + '\'' +
+                ", storageAccount='" + storageAccount + '\'' +
                 ", sharedKey='" + sharedKey + '\'' +
                 ", container='" + container + '\'' +
                 ", sasToken='" + sasToken + '\'' +
