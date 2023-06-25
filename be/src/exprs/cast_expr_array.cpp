@@ -26,6 +26,7 @@
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/memory/memory_resource.h"
+#include "runtime/types.h"
 #include "types/logical_type.h"
 #include "util/slice.h"
 #include "velocypack/Iterator.h"
@@ -321,10 +322,11 @@ StatusOr<ColumnPtr> CastArrayToString::evaluate_checked(ExprContext* context, Ch
         SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
         chunk->append_column(array_elements, slot_id);
         ASSIGN_OR_RETURN(auto element_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
+        element_res = ColumnHelper::unfold_const_column(_to_type, array_elements->size(), element_res);
         if (element_res->is_nullable()) {
-            string_nulls = ColumnHelper::as_column<NullableColumn>(element_res)->null_column();
-            array_string = ColumnHelper::cast_to<TYPE_VARCHAR>(
-                    ColumnHelper::as_column<NullableColumn>(element_res)->data_column());
+            auto nullable_element = ColumnHelper::as_column<NullableColumn>(element_res);
+            string_nulls = nullable_element->null_column();
+            array_string = ColumnHelper::cast_to<TYPE_VARCHAR>(nullable_element->data_column());
         } else {
             array_string = ColumnHelper::cast_to<TYPE_VARCHAR>(element_res);
             string_nulls = NullColumn::create();

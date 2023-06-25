@@ -91,8 +91,11 @@ private:
 // Cast Array to String
 class CastArrayToString final : public Expr {
 public:
-    CastArrayToString(const TExprNode& node, Expr* cast_element, TypeDescriptor type_desc)
-            : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(std::move(type_desc)) {}
+    CastArrayToString(const TExprNode& node, Expr* cast_element, TypeDescriptor from_type, TypeDescriptor to_type)
+            : Expr(node),
+              _cast_elements_expr(cast_element),
+              _from_type(std::move(from_type)),
+              _to_type(std::move(to_type)) {}
 
     ~CastArrayToString() override = default;
 
@@ -101,8 +104,8 @@ public:
 
 private:
     Expr* _cast_elements_expr;
-    TypeDescriptor _cast_to_type_desc;
-    bool _throw_exception_if_err;
+    TypeDescriptor _from_type;
+    TypeDescriptor _to_type;
 };
 
 // cast one ARRAY to another ARRAY.
