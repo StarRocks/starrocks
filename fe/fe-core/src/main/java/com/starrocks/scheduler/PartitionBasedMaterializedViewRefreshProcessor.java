@@ -58,7 +58,6 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
@@ -929,6 +928,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     @VisibleForTesting
     public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt)
             throws Exception {
+        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         Preconditions.checkNotNull(execPlan);
         Preconditions.checkNotNull(insertStmt);
         ConnectContext ctx = mvContext.getCtx();
@@ -937,9 +937,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         try {
-            executor.handleDMLStmt(execPlan, insertStmt);
+            executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
         } finally {
-            QeProcessorImpl.INSTANCE.unregisterQuery(ctx.getExecutionId());
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }
     }
