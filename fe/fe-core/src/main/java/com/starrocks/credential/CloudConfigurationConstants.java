@@ -58,6 +58,9 @@ public class CloudConfigurationConstants {
 
     // Credential for Azure storage
     // For Azure Blob Storage
+
+    // Endpoint already contains storage account, so if user set endpoint, they don't need to set storage account anymore
+    public static final String AZURE_BLOB_ENDPOINT = "azure.blob.endpoint";
     public static final String AZURE_BLOB_STORAGE_ACCOUNT = "azure.blob.storage_account";
     public static final String AZURE_BLOB_SHARED_KEY = "azure.blob.shared_key";
     public static final String AZURE_BLOB_CONTAINER = "azure.blob.container";
