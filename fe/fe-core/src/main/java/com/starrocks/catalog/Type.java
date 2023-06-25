@@ -754,7 +754,7 @@ public abstract class Type implements Cloneable {
             return true;
         }
 
-        return !isOnlyMetricType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
     }
 
     public boolean canGroupBy() {
