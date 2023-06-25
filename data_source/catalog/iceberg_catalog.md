@@ -116,7 +116,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 - 基于 Instance Profile 进行认证和鉴权
 
   ```SQL
-  "hive.metastore.type" = "glue",
+  "iceberg.catalog.type" = "glue",
   "aws.glue.use_instance_profile" = "true",
   "aws.glue.region" = "<aws_glue_region>"
   ```
@@ -124,7 +124,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 - 基于 Assumed Role 进行认证和鉴权
 
   ```SQL
-  "hive.metastore.type" = "glue",
+  "iceberg.catalog.type" = "glue",
   "aws.glue.use_instance_profile" = "true",
   "aws.glue.iam_role_arn" = "<iam_role_arn>",
   "aws.glue.region" = "<aws_glue_region>"
@@ -143,7 +143,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
 | 参数                          | 是否必须 | 说明                                                         |
 | ----------------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.type           | 是       | Iceberg 集群所使用的元数据服务的类型。设置为 `glue`。           |
+| iceberg.catalog.type          | 是       | Iceberg 集群所使用的元数据服务的类型。设置为 `glue`。           |
 | aws.glue.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
 | aws.glue.iam_role_arn         | 否       | 有权限访问 AWS Glue Data Catalog 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.region               | 是       | AWS Glue Data Catalog 所在的地域。示例：`us-west-1`。        |
@@ -266,7 +266,7 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
       "type" = "iceberg",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.type" = "glue",
+      "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.region" = "us-west-2"
   );
@@ -298,7 +298,7 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.type" = "glue",
+      "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
       "aws.glue.region" = "us-west-2"
@@ -333,7 +333,7 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_secret_key>",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.type" = "glue",
+      "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
