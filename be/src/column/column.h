@@ -347,7 +347,9 @@ public:
     virtual int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const = 0;
 
     // For some columns equals will be overwritten for more efficient
-    virtual bool equals(size_t left, const Column& rhs, size_t right) const {
+    // When safe equals, 0: false, 1: true
+    // When unsafe equals, -1: NULL, 0: false, 1: true
+    virtual int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const {
         return compare_at(left, right, rhs, -1) == 0;
     }
 

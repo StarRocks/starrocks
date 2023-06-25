@@ -803,7 +803,7 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
         Slice slice = bin_col->get_slice(i);
         if (slice.get_size() > limit) {
             return Status::InvalidArgument(fmt::format("string length({}) > limit({}), string: {}", slice.get_size(),
-                                                       limit, slice.get_data()));
+                                                       limit, slice.to_string()));
         }
     }
     return Status::OK();
