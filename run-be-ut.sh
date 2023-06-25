@@ -148,44 +148,21 @@ if [ "${USE_STAROS}" == "ON"  ]; then
     # assume starlet_thirdparty is installed to ${STARROCKS_THIRDPARTY}/installed/starlet/
     STARLET_INSTALL_DIR=${STARROCKS_THIRDPARTY}/installed/starlet
   fi
-  ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
-              -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
-              -DSTARROCKS_HOME=${STARROCKS_HOME} \
-              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-              -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-              -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
-              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-              -DUSE_STAROS=${USE_STAROS} -DWITH_GCOV=${WITH_GCOV} \
-              -DWITH_CACHELIB=${WITH_CACHELIB} \
-              -DWITH_STARCACHE=${USE_STAROS} \
-              -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
-              -DSTARCACHE_SKIP_INSTALL=ON \
-              -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
-              -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
-              -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
-              -DCURL_LIBRARY=${STARROCKS_THIRDPARTY}/installed/lib/libcurl.a \
-              -DCURL_INCLUDE_DIR=${STARROCKS_THIRDPARTY}/installed/include \
-              -DLIBXML2_INCLUDE_DIR=${STARLET_INSTALL_DIR}/third_party/include/libxml2 \
-              -DLIBXML2_LIBRARY=${STARLET_INSTALL_DIR}/third_party/lib/libxml2.a \
-              -Dazure-core-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/share/azure-core-cpp \
-              -Dazure-identity-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/share/azure-identity-cpp \
-              -Dazure-storage-common-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/share/azure-storage-common-cpp \
-              -Dazure-storage-blobs-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/share/azure-storage-blobs-cpp \
-              -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib/cmake ..
-else
-  ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
-              -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
-              -DSTARROCKS_HOME=${STARROCKS_HOME} \
-              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-              -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-              -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
-              -DWITH_GCOV=${WITH_GCOV} \
-              -DWITH_CACHELIB=${WITH_CACHELIB} \
-              -DWITH_STARCACHE=${USE_STAROS} \
-              -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
-              -DSTARCACHE_SKIP_INSTALL=ON \
-              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
+  export STARLET_INSTALL_DIR
 fi
+${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
+            -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
+            -DSTARROCKS_HOME=${STARROCKS_HOME} \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+            -DUSE_STAROS=${USE_STAROS} \
+            -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
+            -DWITH_GCOV=${WITH_GCOV} \
+            -DWITH_CACHELIB=${WITH_CACHELIB} \
+            -DWITH_STARCACHE=${USE_STAROS} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
+
 ${BUILD_SYSTEM} -j${PARALLEL}
 
 echo "*********************************"

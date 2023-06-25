@@ -32,6 +32,13 @@ else()
     message(FATAL_ERROR "STARROCKS_GCC_HOME environment variable is not set")
 endif()
 
+# disable pkgconfig searching libraries, all libraries are static imported
+set(CMAKE_DISABLE_FIND_PACKAGE_PkgConfig ON)
+# Workaround error of `Unknown CMake command "pkg_check_modules".'`
+# refer to: https://gitlab.kitware.com/cmake/cmake/-/issues/17043
+macro( pkg_check_modules )
+endmacro()
+
 project(starrocks CXX C)
 
 # set CMAKE_BUILD_TYPE
@@ -163,10 +170,10 @@ set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 
 # Set all libraries
 
-add_library(gflags STATIC IMPORTED)
+add_library(gflags STATIC IMPORTED GLOBAL)
 set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
 
-add_library(glog STATIC IMPORTED)
+add_library(glog STATIC IMPORTED GLOBAL)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
 
 add_library(re2 STATIC IMPORTED GLOBAL)
@@ -195,8 +202,10 @@ set_target_properties(gmock PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/l
 add_library(snappy STATIC IMPORTED)
 set_target_properties(snappy PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsnappy.a)
 
-add_library(curl STATIC IMPORTED)
-set_target_properties(curl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcurl.a)
+set(CURL_INCLUDE_DIR "${THIRDPARTY_DIR}/include" CACHE PATH "curl include path")
+set(CURL_LIBRARY "${THIRDPARTY_DIR}/lib/libcurl.a" CACHE FILEPATH "curl static library")
+add_library(curl STATIC IMPORTED GLOBAL)
+set_target_properties(curl PROPERTIES IMPORTED_LOCATION ${CURL_LIBRARY})
 
 add_library(lz4 STATIC IMPORTED)
 set_target_properties(lz4 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/liblz4.a)
@@ -210,7 +219,7 @@ set_target_properties(thriftnb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 add_library(mysql STATIC IMPORTED)
 set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/mariadb/libmariadbclient.a)
 
-add_library(hdfs STATIC IMPORTED)
+add_library(hdfs STATIC IMPORTED GLOBAL)
 set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
 
 # Allow FindOpenSSL() to find correct static libraries
@@ -235,7 +244,7 @@ set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 add_library(openssl STATIC IMPORTED)
 set_target_properties(openssl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libssl.a)
 
-add_library(leveldb STATIC IMPORTED)
+add_library(leveldb STATIC IMPORTED GLOBAL)
 set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
 
 add_library(jemalloc STATIC IMPORTED)
@@ -262,7 +271,7 @@ set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64
 add_library(parquet STATIC IMPORTED)
 set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libparquet.a)
 
-add_library(brpc STATIC IMPORTED)
+add_library(brpc STATIC IMPORTED GLOBAL)
 set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrpc.a)
 
 add_library(rocksdb STATIC IMPORTED)
@@ -385,53 +394,88 @@ if (${WITH_CACHELIB} STREQUAL "ON")
 endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
+    if (DEFINED ENV{STARLET_INSTALL_DIR})
+        set(STARLET_INSTALL_DIR "$ENV{STARLET_INSTALL_DIR}")
+    else()
+        set(STARLET_INSTALL_DIR "${THIRDPARTY_DIR}/starlet")
+    endif()
+    if (NOT EXISTS ${STARLET_INSTALL_DIR})
+        message(FATAL_ERROR "Starlet thirdparty directory ${STARLET_INSTALL_DIR} not exist!")
+    else()
+        message(STATUS "Searching starlet related libraries from ${STARLET_INSTALL_DIR} ...")
+    endif()
+
     # explicitly import ZLIB::ZLIB which is required by starlet thirdparty
     add_library(ZLIB::ZLIB STATIC IMPORTED)
     set_target_properties(ZLIB::ZLIB PROPERTIES IMPORTED_LOCATION ${LIBZ})
+
+    # Tell cmake that PROTOBUF library is already found
+    set(PROTOBUF_FOUND TRUE)
     # starrocks project has its imported libprotobuf.a and libre2.a
     # add following ALIAS so grpc can find the correct dependent libraries
     add_library(protobuf::libprotobuf ALIAS protobuf)
     add_library(re2::re2 ALIAS re2)
+    add_library(glog::glog ALIAS glog)
+    add_library(gflags::gflags_static ALIAS gflags)
+    add_library(hdfs::hdfs ALIAS hdfs)
+    add_library(brpc::brpc ALIAS brpc)
+    add_library(leveldb::leveldb ALIAS leveldb)
+    add_library(CURL::libcurl ALIAS curl)
 
+    set(absl_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
+    find_package(absl CONFIG REQUIRED)
+
+    # required by azure-*
+    set(LIBXML2_INCLUDE_DIR "${STARLET_INSTALL_DIR}/third_party/include/libxml2" CACHE PATH "libxml2 include path")
+    set(LIBXML2_LIBRARY "${STARLET_INSTALL_DIR}/third_party/lib/libxml2.a" CACHE FILEPATH "libxml2 static library")
+    add_library(libxml2 STATIC IMPORTED GLOBAL)
+    set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${LIBXML2_LIBRARY})
+
+    set(gRPC_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc" CACHE PATH "grpc search path")
     find_package(gRPC CONFIG REQUIRED)
     message(STATUS "Using gRPC ${gRPC_VERSION}")
     get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
     include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
-    find_package(starlet CONFIG REQUIRED)
-    message(STATUS "Using starlet ${starlet_VERSION}")
-    message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
-    message(STATUS "starlet lib dir: ${STARLET_LIBS}")
-    include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
-    add_library(starlet STATIC IMPORTED)
-    set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
-
+    set(prometheus-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp" CACHE PATH "prometheus cpp client search path")
     find_package (prometheus-cpp CONFIG REQUIRED)
     get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
     message(STATUS "Using prometheus-cpp")
     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
-    find_package(azure-identity-cpp CONFIG REQUIRED)
-    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+    set(azure-core-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-core-cpp" CACHE PATH "azure core cpp search path")
     find_package(azure-core-cpp CONFIG REQUIRED)
+    set(azure-identity-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-identity-cpp" CACHE PATH "azure identity cpp search path")
+    find_package(azure-identity-cpp CONFIG REQUIRED)
+    set(azure-storage-common-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-common-cpp" CACHE PATH "azure storage common search path")
     find_package(azure-storage-common-cpp CONFIG REQUIRED)
+    set(azure-storage-blobs-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-blobs-cpp" CACHE PATH "azure storage blobs search path")
+    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
     set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-core Azure::azure-storage-common)
 
-    add_library(starcachelib STATIC IMPORTED GLOBAL)
-    set_target_properties(starcachelib PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarcache.a)
+    set(starcache_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake/starcache" CACHE PATH "starcachelib search path")
+    find_package(starcache CONFIG REQUIRED)
+    set_target_properties(starcache::starcache PROPERTIES IMPORTED_GLOBAL TRUE)
+    add_library(starcachelib ALIAS starcache::starcache)
 
-    add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
-    set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
+    set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
+    find_package(starlet CONFIG REQUIRED)
+    message(STATUS "Using starlet ${starlet_VERSION}")
+    message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
+    message(STATUS "starlet lib dir: ${STARLET_LIBS}")
+    include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
+
+    set_target_properties(starlet::starlet_fslib_all PROPERTIES IMPORTED_GLOBAL TRUE)
+    add_library(starlet_fslib_all ALIAS starlet::starlet_fslib_all)
+    set_target_properties(starlet::starlet PROPERTIES IMPORTED_GLOBAL TRUE)
+    add_library(starlet ALIAS starlet::starlet)
 
     set(STARROCKS_DEPENDENCIES
        ${STARROCKS_DEPENDENCIES}
        starlet
-       gRPC::grpc++_reflection
-       gRPC::grpc++
        starlet_fslib_all
        starcachelib
-       prometheus-cpp::core
        ${AZURE_SDK_LIB}
        )
 endif()
