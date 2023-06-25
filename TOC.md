@@ -51,7 +51,7 @@
   + [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
   + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
   + [从 Apache Kafka® 持续导入](/loading/RoutineLoad.md)
-  + 使用 Apache Spark™ 导入
+  + 通过 Apache Spark™ 导入
     + [使用 Spark connector（推荐）](/loading/Spark-connector-starrocks.md)
     + [使用 Spark Load](/loading/SparkLoad.md)
   + [使用 INSERT 语句导入](/loading/InsertInto.md)
