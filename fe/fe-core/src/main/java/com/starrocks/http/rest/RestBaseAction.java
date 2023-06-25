@@ -63,8 +63,6 @@ public class RestBaseAction extends BaseAction {
     protected static final String LABEL_KEY = "label";
     private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
 
-    private HttpConnectContext ctx;
-
     public RestBaseAction(ActionController controller) {
         super(controller);
     }
@@ -93,7 +91,7 @@ public class RestBaseAction extends BaseAction {
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
         // ctx's lifetime is same as the channel
-        ctx = request.getConnectContext();
+        HttpConnectContext ctx = request.getConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setNettyChannel(request.getContext());
         ctx.setQualifiedUser(authInfo.fullUserName);

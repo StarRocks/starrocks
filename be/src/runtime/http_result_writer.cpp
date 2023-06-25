@@ -131,7 +131,7 @@ StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
                 current_rows = 0;
             }
 
-            VLOG_ROW << "written row:" << row_str;
+            // VLOG_ROW << "written row:" << row_str;
             result_rows[current_rows].swap(reinterpret_cast<std::string&>(row_str));
             row_str.clear();
 

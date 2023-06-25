@@ -48,25 +48,24 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
-
-    private ActionController controller = null;
+    // keep connectContext when channel is open
+    private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
+            AttributeKey.valueOf("httpContextKey");
     protected FullHttpRequest fullRequest = null;
     protected HttpRequest request = null;
+    private ActionController controller = null;
     private BaseAction action = null;
-
-    // keep connectContext when channel is open
-    private HttpConnectContext connectContext = null;
 
     public HttpServerHandler(ActionController controller) {
         super();
         this.controller = controller;
-        connectContext = new HttpConnectContext();
     }
 
     @Override
@@ -88,6 +87,9 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "Bad Request. <br/> " + e.getMessage());
                 return;
             }
+
+            // get HttpConnectContext from channel, HttpConnectContext's lifetime is same as channel
+            HttpConnectContext connectContext = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
             BaseRequest req = new BaseRequest(ctx, request, connectContext);
             action = getAction(req);
             if (action != null) {
@@ -102,10 +104,18 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     }
 
     @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        // create HttpConnectContext when channel is establised, and store it in channel attr
+        ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
+        super.channelActive(ctx);
+    }
+
+    @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         if (action != null) {
             action.handleChannelInactive(ctx);
         }
+        super.channelInactive(ctx);
     }
 
     private void validateRequest(ChannelHandlerContext ctx, HttpRequest request) {

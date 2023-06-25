@@ -65,7 +65,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpConnectProcessor;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
@@ -81,6 +80,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
+import io.netty.util.AttributeKey;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -93,14 +93,13 @@ import static io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERR
 
 public class ExecuteSqlAction extends RestBaseAction {
 
-    private static final Logger LOG = LogManager.getLogger(ExecuteSqlAction.class);
-    private HttpConnectContext context;
+    private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
+            AttributeKey.valueOf("httpContextKey");
 
-    private HttpConnectProcessor connectProcessor = null;
+    private static final Logger LOG = LogManager.getLogger(ExecuteSqlAction.class);
 
     public ExecuteSqlAction(ActionController controller) {
         super(controller);
-        context = (HttpConnectContext) HttpConnectContext.get();
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
@@ -116,7 +115,8 @@ public class ExecuteSqlAction extends RestBaseAction {
 
         response.setContentType("application/x-ndjson; charset=utf-8");
 
-        context = (HttpConnectContext) ConnectContext.get();
+        HttpConnectContext context = request.getConnectContext();
+
         String catalogName = request.getSingleParameter(CATALOG_KEY);
         String databaseName = request.getSingleParameter(DB_KEY);
 
@@ -126,20 +126,21 @@ public class ExecuteSqlAction extends RestBaseAction {
         }
 
         try {
-            changeCatalogAndDB(catalogName, databaseName);
-            SqlRequest requestBody = validatePostBody(request.getContent());
-            checkSessionVariable(requestBody.sessionVariables);
+            changeCatalogAndDB(catalogName, databaseName, context);
+            SqlRequest requestBody = validatePostBody(request.getContent(), context);
+            checkSessionVariable(requestBody.sessionVariables, context);
             // parse the sql here, for the convenience of verification of http request
             parsedStmt = parse(requestBody.query, context.getSessionVariable());
             context.setStatement(parsedStmt);
 
             // only register connectContext once for one channel
             if (!context.isInitialized()) {
-                registerContext(requestBody.query);
+                registerContext(requestBody.query, context);
                 context.setInitialized(true);
             }
 
             // process this request
+            HttpConnectProcessor connectProcessor = new HttpConnectProcessor(context);
             try {
                 connectProcessor.processOnce();
             } catch (Exception e) {
@@ -148,7 +149,7 @@ public class ExecuteSqlAction extends RestBaseAction {
             }
 
             // finalize just send 200 for kill, and throw StarRocksHttpException if context's error is set
-            finalize(request, response, parsedStmt);
+            finalize(request, response, parsedStmt, context);
 
         } catch (StarRocksHttpException e) {
             // send {"exception","error message"}
@@ -160,7 +161,8 @@ public class ExecuteSqlAction extends RestBaseAction {
         }
     }
 
-    private void changeCatalogAndDB(String catalogName, String databaseName) throws StarRocksHttpException {
+    private void changeCatalogAndDB(String catalogName, String databaseName, HttpConnectContext context)
+            throws StarRocksHttpException {
         if (!catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
             throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "only support default_catalog right now");
         }
@@ -176,7 +178,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         }
     }
 
-    private SqlRequest validatePostBody(String postContent) throws StarRocksHttpException {
+    private SqlRequest validatePostBody(String postContent, HttpConnectContext context) throws StarRocksHttpException {
         SqlRequest requestBody;
         StatementBase parsedStmt;
         try {
@@ -230,7 +232,7 @@ public class ExecuteSqlAction extends RestBaseAction {
     }
 
     // refer to AcceptListener.handleEvent
-    private void registerContext(String sql) throws StarRocksHttpException {
+    private void registerContext(String sql, HttpConnectContext context) throws StarRocksHttpException {
         // now register this request in connectScheduler
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         connectScheduler.submit(context);
@@ -242,25 +244,24 @@ public class ExecuteSqlAction extends RestBaseAction {
             throw new StarRocksHttpException(HttpResponseStatus.SERVICE_UNAVAILABLE, "Reach limit of connections");
         }
         context.setStartTime();
-        connectProcessor = new HttpConnectProcessor(context);
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);
     }
 
     // when connect is closed, this function will be called
     protected void handleChannelInactive(ChannelHandlerContext ctx) {
         LOG.info("Netty channel is closed");
-        ConnectContext context = ConnectContext.get();
-        context.setKilled();
+        HttpConnectContext context = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
         context.getConnectScheduler().unregisterConnection(context);
     }
 
-    private void checkSessionVariable(Map<String, String> customVariable) {
+    private void checkSessionVariable(Map<String, String> customVariable, HttpConnectContext context) {
         if (customVariable != null) {
             try {
                 for (String key : customVariable.keySet()) {
                     VariableMgr.setSystemVariable(context.getSessionVariable(),
                             new SystemVariable(key, new StringLiteral(customVariable.get(key))), true);
                 }
+                context.setThreadLocalInfo();
             } catch (DdlException e) {
                 throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, context.getState().getErrorMessage());
             }
@@ -268,9 +269,9 @@ public class ExecuteSqlAction extends RestBaseAction {
     }
 
     // Currently finalize just send kill's result. But any other statement which only send state information can use finalize to send result
-    private void finalize(BaseRequest request, BaseResponse response, StatementBase parsedStmt)
+    private void finalize(BaseRequest request, BaseResponse response, StatementBase parsedStmt,
+                          HttpConnectContext context)
             throws StarRocksHttpException, DdlException {
-        HttpConnectContext context = (HttpConnectContext) ConnectContext.get();
 
         // need forwarding to leader
         if (context.isForwardToLeader()) {
