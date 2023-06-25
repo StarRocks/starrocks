@@ -10,16 +10,16 @@ You can also map the StarRocks table to a Spark DataFrame or a Spark RDD, and th
 
 ## Usage notes
 
-- Currently, you can only read data from StarRocks. You cannot write data from a sink to StarRocks.
 - You can filter data on StarRocks before you read the data, thereby reducing the amount of data transferred.
 - If the overhead of reading data is substantial, you can employ appropriate table design and filter conditions to prevent Spark from reading an excessive amount of data at a time. As such, you can reduce I/O pressure on your disk and network connection, thereby ensuring routine queries can be run properly.
 
 ## Version requirements
 
-| Spark connector | Spark | StarRocks       | Java | Scala |
-| --------------- | ----- | --------------- | ---- | ----- |
-| v1.0.0          | v2.x  | v1.18 and later | v8   | v2.11 |
-| v1.0.0          | v3.x  | v1.18 and later | v8   | v2.12 |
+| Spark connector | Spark         | StarRocks       | Java | Scala |
+|---------------- | ------------- | --------------- | ---- | ----- |
+| 1.1.0           | 3.2, 3.3, 3.4 | 2.4 and later   | 8    | 2.12  |
+| 1.0.0           | 3.x           | 1.18 and later  | 8    | 2.12  |
+| 1.0.0           | 2.x           | 1.18 and later  | 8    | 2.11  |
 
 ## Prerequisites
 
