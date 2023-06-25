@@ -89,7 +89,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String QUERY_TIMEOUT = "query_timeout";
 
-    /* 
+    /*
      * When FE does not set the pagecache parameter, we expect a query to follow the pagecache policy of BE.
      * If pagecache is set by FE, a query whether to use pagecache follows the policy specified by FE.
      */
@@ -445,7 +445,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("enable_vectorized_insert")
             .add("vectorized_insert_enable")
             .add("prefer_join_method")
-            .add("rewrite_count_distinct_to_bitmap_hll").build();
+            .add("rewrite_count_distinct_to_bitmap_hll")
+            .build();
 
     // Limitations
     // mem limit can't smaller than bufferpool's default page size

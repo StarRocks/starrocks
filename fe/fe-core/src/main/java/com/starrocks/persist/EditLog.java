@@ -1068,6 +1068,11 @@ public class EditLog {
                     globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(log);
                     break;
                 }
+                case OperationType.OP_PIPE: {
+                    PipeOpEntry opEntry = (PipeOpEntry) journal.getData();
+                    globalStateMgr.getPipeManager().getRepo().replay(opEntry);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -2026,6 +2031,10 @@ public class EditLog {
 
     public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
+    }
+
+    public void logPipeOp(PipeOpEntry opEntry) {
+        logEdit(OperationType.OP_PIPE, opEntry);
     }
 
     private void logJsonObject(short op, Object obj) {

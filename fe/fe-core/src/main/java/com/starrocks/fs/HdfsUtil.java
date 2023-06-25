@@ -20,6 +20,7 @@ package com.starrocks.fs;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.hdfs.HdfsService;
@@ -70,15 +71,17 @@ public class HdfsUtil {
      */
     public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses, boolean skipDir, 
             boolean fileNameOnly) throws UserException {
+        if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
+            fileStatuses.add(new TBrokerFileStatus("file1", false, 1024, false));
+            return;
+        }
         TBrokerListPathRequest request = new TBrokerListPathRequest(
                 TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
         hdfsService.listPath(request, fileStatuses, skipDir, fileNameOnly);
     }
 
     public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
-        TBrokerListPathRequest request = new TBrokerListPathRequest(
-                TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
-        hdfsService.listPath(request, fileStatuses, true, false);
+        parseFile(path, brokerDesc, fileStatuses, true, false);
     }
 
     public static List<String> parseColumnsFromPath(String filePath, List<String> columnsFromPath)

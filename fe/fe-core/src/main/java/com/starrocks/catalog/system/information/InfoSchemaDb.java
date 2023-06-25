@@ -70,6 +70,7 @@ public class InfoSchemaDb extends Database {
         super.createTable(BeLogsSystemTable.create());
         super.createTable(BeBvarsSystemTable.create());
         super.createTable(BeCloudNativeCompactionsSystemTable.create());
+        super.createTable(PipeFileSystemTable.create());
     }
 
     @Override

@@ -5,9 +5,7 @@
 // to you under the Apache License, Version 2.0 (the
 // "License"); you may not use this file except in compliance
 // with the License.  You may obtain a copy of the License at
-//
 //   http://www.apache.org/licenses/LICENSE-2.0
-//
 // Unless required by applicable law or agreed to in writing,
 // software distributed under the License is distributed on an
 // "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -15,20 +13,33 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.common;
+package com.starrocks.sql.ast.pipe;
 
-public class DdlException extends UserException {
-    public DdlException(String msg) {
-        super(msg);
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.parser.NodePosition;
+
+public class AlterPipeStmt extends DdlStmt {
+
+    private final PipeName pipeName;
+    private final AlterPipeClause alterPipeClause;
+
+    public AlterPipeStmt(NodePosition pos, PipeName pipeName, AlterPipeClause alterPipeClause) {
+        super(pos);
+        this.pipeName = pipeName;
+        this.alterPipeClause = alterPipeClause;
     }
 
-    public DdlException(String msg, Throwable e) {
-        super(msg, e);
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAlterPipeStatement(this, context);
     }
 
-    public static void requireNotNull(String name, Object obj) throws DdlException {
-        if (obj == null) {
-            throw new DdlException(name + " not exists");
-        }
+    public PipeName getPipeName() {
+        return pipeName;
+    }
+
+    public AlterPipeClause getAlterPipeClause() {
+        return alterPipeClause;
     }
 }

@@ -281,6 +281,13 @@ statement
     | descStorageVolumeStatement
     | setDefaultStorageVolumeStatement
 
+    // Pipe Statement
+    | createPipeStatement
+    | dropPipeStatement
+    | alterPipeStatement
+    | showPipeStatement
+    | descPipeStatement
+
     //Unsupported Statement
     | unsupportedStatement
     ;
@@ -1695,6 +1702,35 @@ showSmallFilesStatement
     : SHOW FILE ((FROM | IN) catalog=qualifiedName)?
     ;
 
+// -------------------------------------------- Pipe Statement ---------------------------------------------------------
+
+createPipeStatement
+    : CREATE PIPE (IF NOT EXISTS)? qualifiedName
+        properties?
+        AS insertStatement
+    ;
+
+dropPipeStatement
+    : DROP PIPE (IF EXISTS)? qualifiedName
+    ;
+
+alterPipeClause
+    : PAUSE | RESUME
+    ;
+
+alterPipeStatement
+    : ALTER PIPE qualifiedName alterPipeClause
+    ;
+
+descPipeStatement
+    : (DESC | DESCRIBE) PIPE qualifiedName
+    ;
+
+showPipeStatement
+    : SHOW PIPES ((LIKE pattern=string) | (WHERE expression) | (FROM qualifiedName))?
+    ;
+
+
 // ------------------------------------------- Set Statement -----------------------------------------------------------
 
 setStatement
@@ -2506,7 +2542,7 @@ nonReserved
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
-    | PERCENT_RANK | PRECEDING | PROC | PROCESSLIST | PRIVILEGES | PROPERTIES | PROPERTY
+    | PERCENT_RANK | PRECEDING | PROC | PROCESSLIST | PRIVILEGES | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUEUE | QUOTA | QUALIFY
     | REMOVE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES

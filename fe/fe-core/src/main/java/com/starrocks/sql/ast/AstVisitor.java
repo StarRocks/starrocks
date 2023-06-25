@@ -45,6 +45,13 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
+import com.starrocks.sql.ast.pipe.AlterPipeClause;
+import com.starrocks.sql.ast.pipe.AlterPipeStmt;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DescPipeStmt;
+import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -774,6 +781,35 @@ public abstract class AstVisitor<R, C> {
 
     public R visitAlterStorageVolumeCommentClause(AlterStorageVolumeCommentClause clause, C context) {
         return visitNode(clause, context);
+    }
+
+    // -------------------------------------------- Pipe Statement -----------------------------------------------------
+    public R visitPipeName(PipeName statement, C context) {
+        return visit(statement, context);
+    }
+
+    public R visitCreatePipeStatement(CreatePipeStmt statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitDropPipeStatement(DropPipeStmt statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitAlterPipeStatement(AlterPipeStmt statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitShowPipeStatement(ShowPipeStmt statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitAlterPipeClause(AlterPipeClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitDescPipeStatement(DescPipeStmt statement, C context) {
+        return visitNode(statement, context);
     }
 
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
