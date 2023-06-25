@@ -432,7 +432,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
             }
         }
         restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
-                db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
+                db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(),
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 

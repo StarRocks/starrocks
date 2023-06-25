@@ -26,8 +26,8 @@ import com.starrocks.sql.parser.NodePosition;
 public class ShowRestoreStmt extends ShowStmt {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("JobId").add("Label").add("Timestamp").add("DbName").add("State")
-            .add("AllowLoad").add("ReplicationNum")
-            .add("RestoreObjs").add("CreateTime").add("MetaPreparedTime").add("SnapshotFinishedTime")
+            .add("AllowLoad").add("RestoreObjs")
+            .add("CreateTime").add("MetaPreparedTime").add("SnapshotFinishedTime")
             .add("DownloadFinishedTime").add("FinishedTime").add("UnfinishedTasks").add("Progress")
             .add("TaskErrMsg").add("Status").add("Timeout")
             .build();

@@ -263,7 +263,7 @@ public class RestoreJobPrimaryKeyTest {
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
+                jobInfo, false, 100000,
                 globalStateMgr, repo.getId(), backupMeta);
     }
 

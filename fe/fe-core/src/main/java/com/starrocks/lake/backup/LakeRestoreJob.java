@@ -82,9 +82,9 @@ public class LakeRestoreJob extends RestoreJob {
     }
 
     public LakeRestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
-                          boolean allowLoad, int restoreReplicationNum, long timeoutMs,
-                          GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta) {
-        super(label, backupTs, dbId, dbName, jobInfo, allowLoad, restoreReplicationNum, timeoutMs,
+                          boolean allowLoad, long timeoutMs, GlobalStateMgr globalStateMgr,
+                          long repoId, BackupMeta backupMeta) {
+        super(label, backupTs, dbId, dbName, jobInfo, allowLoad, timeoutMs,
                 globalStateMgr, repoId, backupMeta);
         this.type = JobType.LAKE_RESTORE;
     }
@@ -296,7 +296,7 @@ public class LakeRestoreJob extends RestoreJob {
             Range<PartitionKey> remoteRange = remotePartitionInfo.getRange(remotePartId);
             DataProperty remoteDataProperty = remotePartitionInfo.getDataProperty(remotePartId);
             localPartitionInfo.addPartition(restorePart.getId(), false, remoteRange,
-                    remoteDataProperty, (short) restoreReplicationNum,
+                    remoteDataProperty, remoteTbl.getDefaultReplicationNum(),
                     remotePartitionInfo.getIsInMemory(remotePartId),
                     remotePartitionInfo.getStorageCacheInfo(remotePartId));
             localTbl.addPartition(restorePart);
@@ -314,7 +314,7 @@ public class LakeRestoreJob extends RestoreJob {
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
             remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getStorageCacheInfo());
-            remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
+            remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, remoteOlapTbl.getDefaultReplicationNum());
         } catch (DdlException e) {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }
