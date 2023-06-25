@@ -33,11 +33,7 @@ import mockit.Expectations;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.TableMetadata;
-import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.hadoop.HadoopFileIO;
-import org.apache.iceberg.io.FileIO;
-import org.apache.iceberg.io.LocationProvider;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -795,38 +791,7 @@ public class InsertPlanTest extends PlanTestBase {
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
         MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
 
-        Table nativeTable = new BaseTable(new TableOperations() {
-            @Override
-            public TableMetadata current() {
-                return null;
-            }
-
-            @Override
-            public TableMetadata refresh() {
-                return null;
-            }
-
-            @Override
-            public void commit(TableMetadata base, TableMetadata metadata) {
-
-            }
-
-            @Override
-            public FileIO io() {
-                return new HadoopFileIO();
-            }
-
-            @Override
-            public String metadataFileLocation(String fileName) {
-                return null;
-            }
-
-            @Override
-            public LocationProvider locationProvider() {
-                return null;
-            }
-        }, null);
-
+        Table nativeTable = new BaseTable(null, null);
 
         Column k1 = new Column("k1", Type.INT);
         Column k2 = new Column("k2", Type.INT);
@@ -866,6 +831,10 @@ public class InsertPlanTest extends PlanTestBase {
 
                 nativeTable.properties();
                 result = new HashMap<String, String>();
+                minTimes = 0;
+
+                nativeTable.io();
+                result = new HadoopFileIO();
                 minTimes = 0;
             }
         };

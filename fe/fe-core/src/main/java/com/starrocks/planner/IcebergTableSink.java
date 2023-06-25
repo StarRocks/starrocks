@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.Connector;
+import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -78,9 +79,12 @@ public class IcebergTableSink extends DataSink {
                 String.format("connector of catalog %s should not be null", catalogName));
 
         // Try to set for tabular
-        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
-        if (tabularTempCloudConfiguration.getCloudType() == CloudType.AWS) {
+        if (icebergTable.getNativeTable().io().properties().containsKey(IcebergRESTCatalog.KEY_ENABLE_TABULAR_SUPPORT)) {
+            CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
+                    buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
+            // Tabular must using aws
+            Preconditions.checkArgument(tabularTempCloudConfiguration.getCloudType() == CloudType.AWS,
+                    "For tabular, we must using AWS S3's parameters");
             this.cloudConfiguration = tabularTempCloudConfiguration;
         } else {
             this.cloudConfiguration = connector.getCloudConfiguration();
