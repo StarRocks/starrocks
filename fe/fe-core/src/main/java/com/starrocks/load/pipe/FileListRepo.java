@@ -50,7 +50,7 @@ public class FileListRepo {
             PipeFile pfile = new PipeFile(file.getPath(), file.getSize(), PipeFileState.UNLOADED);
             fileList.put(file.getPath(), pfile);
         }
-        LOG.info("add broker-files into repo: " + files);
+        LOG.debug("add broker-files into repo: " + files);
     }
 
     public void addFiles(List<PipeFile> files) {
@@ -69,7 +69,7 @@ public class FileListRepo {
                 fileList.put(file.path, file);
             }
         }
-        LOG.info("update file state to {}: {}", state, files);
+        LOG.debug("update file state to {}: {}", state, files);
     }
 
     public void gcFiles() {
