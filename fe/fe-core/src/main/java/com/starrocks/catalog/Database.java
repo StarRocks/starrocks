@@ -55,7 +55,6 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
-import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -465,15 +464,14 @@ public class Database extends MetaObject implements Writable {
         if (table == null) {
             return false;
         }
-        boolean result = true;
         String tableName = table.getName();
         if (nameToTable.containsKey(tableName)) {
-            result = false;
+            return false;
         } else {
             idToTable.put(table.getId(), table);
             nameToTable.put(table.getName(), table);
+            return true;
         }
-        return result;
     }
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
@@ -560,29 +558,6 @@ public class Database extends MetaObject implements Writable {
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isCloudNativeTable()) {
                 GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
             }
-        }
-    }
-
-    public boolean createMaterializedWithLock(MaterializedView materializedView, boolean isReplay) {
-        writeLock();
-        try {
-            String mvName = materializedView.getName();
-            if (nameToTable.containsKey(mvName)) {
-                return false;
-            } else {
-                idToTable.put(materializedView.getId(), materializedView);
-                nameToTable.put(materializedView.getName(), materializedView);
-                // There are many checks in onCreate. If these checks fail, the log should not be written,
-                // so it should be placed in front of the log
-                materializedView.onCreate();
-                if (!isReplay) {
-                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, materializedView, "");
-                    GlobalStateMgr.getCurrentState().getEditLog().logCreateMaterializedView(info);
-                }
-            }
-            return true;
-        } finally {
-            writeUnlock();
         }
     }
 

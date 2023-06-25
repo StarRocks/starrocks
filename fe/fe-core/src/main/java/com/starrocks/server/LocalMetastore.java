@@ -788,60 +788,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         Table table = tableFactory.createTable(this, db, stmt);
-        db.writeLock();
-        try {
-            registerTable(db, table, stmt.isSetIfNotExists());
-            table.onCreate();
+        String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                .getStorageVolumeIdOfTable(table.getId());
 
-            String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                    .getStorageVolumeIdOfTable(table.getId());
-            CreateTableInfo info = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
-        } finally {
-            db.writeUnlock();
-        }
+        registerTableAndSaveLog(db, table, storageVolumeId, stmt.isSetIfNotExists());
         return true;
-    }
-
-    private String buildStorageVolum(Database db, OlapTable olapTable,
-                                     Map<String, String> properties) throws DdlException {
-        RunMode runMode = RunMode.getCurrentRunMode();
-        String volume = "";
-        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
-            volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
-        }
-        if (runMode == RunMode.SHARED_DATA) {
-            if (volume.equals(StorageVolumeMgr.LOCAL)) {
-                throw new DdlException("Cannot create table " +
-                        "without persistent volume in current run mode \"" + runMode + "\"");
-            }
-
-            StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-            StorageVolume sv = null;
-            if (volume.isEmpty()) {
-                String dbStorageVolumeId = svm.getStorageVolumeIdOfDb(db.getId());
-                if (dbStorageVolumeId != null) {
-                    sv = svm.getStorageVolume(dbStorageVolumeId);
-                } else {
-                    sv = svm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-                }
-            } else if (volume.equals(StorageVolumeMgr.DEFAULT)) {
-                sv = svm.getDefaultStorageVolume();
-            } else {
-                sv = svm.getStorageVolumeByName(volume);
-            }
-            if (sv == null) {
-                throw new DdlException("Unknown storage volume \"" + volume + "\"");
-            }
-            String storageVolumeId = sv.getId();
-            setLakeStorageInfo(olapTable, storageVolumeId, properties);
-            svm.bindTableToStorageVolume(sv.getId(), olapTable.getId());
-            olapTable.setStorageVolume(sv.getName());
-            return storageVolumeId;
-        } else {
-            olapTable.setStorageVolume(StorageVolumeMgr.LOCAL);
-            return "";
-        }
     }
 
     @Override
@@ -2001,30 +1952,41 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setStorageInfo(pathInfo, storageCacheInfo);
     }
 
-    void registerTable(Database db, Table table, boolean isSetIfNotExists) throws DdlException {
+    void registerTableAndSaveLog(Database db, Table table, String storageVolumeId, boolean isSetIfNotExists) throws DdlException {
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
+
         try {
             if (getDb(db.getFullName()) == null) {
                 throw new DdlException("Database has been dropped when creating table");
             }
-            if (!db.registerTableUnlock(table)) {
-                if (db.isSystemDatabase()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), "create denied");
-                }
 
-                if (!isSetIfNotExists) {
-                    if (table instanceof OlapTable) {
-                        OlapTable olapTable = (OlapTable) table;
-                        olapTable.onErase(false);
+            if (db.isSystemDatabase()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), "create denied");
+            }
+
+            db.writeLock();
+            try {
+                if (!db.registerTableUnlock(table)) {
+                    if (!isSetIfNotExists) {
+                        if (table instanceof OlapTable) {
+                            OlapTable olapTable = (OlapTable) table;
+                            olapTable.onErase(false);
+                        }
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                                "table already exists");
+                    } else {
+                        LOG.info("Create table[{}] which already exists", table.getName());
                     }
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                            "table already exists");
-                } else {
-                    LOG.info("Create table[{}] which already exists", table.getName());
                 }
+                table.onCreate();
+
+                CreateTableInfo info = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
+            } finally {
+                db.writeUnlock();
             }
 
         } finally {
@@ -2045,7 +2007,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (!isCheckpointThread()) {
             // add to inverted index
-            if (table.isOlapOrCloudNativeTable()) {
+            if (table.isOlapOrCloudNativeTable() || table.isMaterializedView()) {
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 OlapTable olapTable = (OlapTable) table;
                 long dbId = db.getId();
@@ -2063,7 +2025,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            if (table.isOlapTable()) {
+                            if (tablet instanceof LocalTablet) {
                                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                 }
@@ -2080,39 +2042,6 @@ public class LocalMetastore implements ConnectorMetadata {
             String storageVolumeId = info.getStorageVolumeId();
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                     .bindTableToStorageVolume(storageVolumeId, table.getId());
-        }
-    }
-
-    public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
-        Database db = this.fullNameToDb.get(dbName);
-        db.createMaterializedWithLock(materializedView, true);
-
-        if (!isCheckpointThread()) {
-            // add to inverted index
-            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-            long dbId = db.getId();
-            long mvId = materializedView.getId();
-            for (Partition partition : materializedView.getAllPartitions()) {
-                long partitionId = partition.getId();
-                TStorageMedium medium = materializedView.getPartitionInfo().getDataProperty(
-                        partitionId).getStorageMedium();
-                for (MaterializedIndex mIndex : partition.getMaterializedIndices(
-                        MaterializedIndex.IndexExtState.ALL)) {
-                    long indexId = mIndex.getId();
-                    int schemaHash = materializedView.getSchemaHashByIndexId(indexId);
-                    TabletMeta tabletMeta = new TabletMeta(dbId, mvId, partitionId, indexId, schemaHash, medium);
-                    for (Tablet tablet : mIndex.getTablets()) {
-                        long tabletId = tablet.getId();
-                        invertedIndex.addTablet(tabletId, tabletMeta);
-                        if (tablet instanceof LocalTablet) {
-                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                                invertedIndex.addReplica(tabletId, replica);
-                            }
-                        }
-                    }
-                }
-            } // end for partitions
-            DynamicPartitionUtil.registerOrRemovePartitionTTLTable(dbId, materializedView);
         }
     }
 
@@ -2846,7 +2775,6 @@ public class LocalMetastore implements ConnectorMetadata {
         boolean isNonPartitioned = partitionInfo.getType() == PartitionType.UNPARTITIONED;
         DataProperty dataProperty = analyzeMVDataProperties(db, materializedView, properties, isNonPartitioned);
 
-        boolean createMvSuccess;
         Set<Long> tabletIdSet = new HashSet<>();
         // process single partition info
         if (isNonPartitioned) {
@@ -2867,31 +2795,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
 
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-        try {
-            if (getDb(db.getId()) == null) {
-                throw new DdlException("Database has been dropped when creating materialized view");
-            }
-            createMvSuccess = db.createMaterializedWithLock(materializedView, false);
-            if (!createMvSuccess) {
-                for (Long tabletId : tabletIdSet) {
-                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-                }
-                if (!stmt.isIfNotExists()) {
-                    ErrorReport
-                            .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
-                                    "Materialized view already exists");
-                } else {
-                    LOG.info("Create materialized view[{}] which already exists", materializedView);
-                    return;
-                }
-            }
-        } finally {
-            unlock();
-        }
+        registerTableAndSaveLog(db, materializedView, "", stmt.isIfNotExists());
         LOG.info("Successfully create materialized view [{}:{}]", mvName, materializedView.getMvId());
 
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
@@ -3830,6 +3734,7 @@ public class LocalMetastore implements ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
+
         // check if table exists in db
         db.readLock();
         try {
@@ -3859,9 +3764,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("failed to init view stmt", e);
         }
 
-        registerTable(db, view, stmt.isSetIfNotExists());
-        CreateTableInfo info = new CreateTableInfo(db.getFullName(), view, "");
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
+        registerTableAndSaveLog(db, view, "", stmt.isSetIfNotExists());
 
         LOG.info("successfully create view[" + tableName + "-" + view.getId() + "]");
     }

@@ -83,7 +83,6 @@ public class InfoSchemaDbTest {
         Database db = new InfoSchemaDb();
 
         Assert.assertFalse(db.registerTableUnlock(null));
-        Assert.assertFalse(db.createMaterializedWithLock(null, false));
         db.dropTable("authors");
         db.dropTableWithLock("authors");
         db.write(null);

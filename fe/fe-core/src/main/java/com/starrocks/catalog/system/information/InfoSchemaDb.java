@@ -15,7 +15,6 @@
 package com.starrocks.catalog.system.information;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 
@@ -80,11 +79,6 @@ public class InfoSchemaDb extends Database {
     @Override
     public void dropTable(String name) {
         // Do nothing.
-    }
-
-    @Override
-    public boolean createMaterializedWithLock(MaterializedView materializedView, boolean isReplay) {
-        return false;
     }
 
     @Override
