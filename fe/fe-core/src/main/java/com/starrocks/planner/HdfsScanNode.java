@@ -59,6 +59,7 @@ public class HdfsScanNode extends ScanNode {
     private HiveTable hiveTable = null;
     private CloudConfiguration cloudConfiguration = null;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private DescriptorTable descTbl;
 
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -82,8 +83,9 @@ public class HdfsScanNode extends ScanNode {
         return helper.toString();
     }
 
-    public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
-        scanRangeLocations.setupScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
+    public void setupScanRangeLocations(DescriptorTable descTbl) {
+        this.descTbl = descTbl;
+        scanRangeLocations.setup(descTbl, hiveTable, scanNodePredicates);
     }
 
     private void setupCloudCredential() {
@@ -100,7 +102,7 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeLocations.getScanRangeLocations(maxScanRangeLength);
+        return scanRangeLocations.getScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
     }
 
     @Override

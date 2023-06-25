@@ -54,6 +54,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -1324,6 +1325,11 @@ public class Coordinator {
             if (Strings.isNullOrEmpty(copyStatus.getErrorMsg())) {
                 copyStatus.rewriteErrorMsg();
             }
+
+            if (copyStatus.isRemoteFileNotFound()) {
+                throw new RemoteFileNotFoundException(copyStatus.getErrorMsg());
+            }
+
             if (copyStatus.isRpcError()) {
                 throw new RpcException("unknown", copyStatus.getErrorMsg());
             } else {
