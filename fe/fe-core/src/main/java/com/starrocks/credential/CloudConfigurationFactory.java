@@ -65,14 +65,14 @@ public abstract class CloudConfigurationFactory {
 
     public static CloudConfiguration buildCloudConfigurationForTabular(Map<String, String> properties) {
         Map<String, String> copiedProperties = new HashMap<>();
-        String tmpAk = properties.getOrDefault(AwsProperties.S3FILEIO_ACCESS_KEY_ID, null);
-        String tmpSk = properties.getOrDefault(AwsProperties.S3FILEIO_SECRET_ACCESS_KEY, null);
-        String tmpSessionToken = properties.getOrDefault(AwsProperties.S3FILEIO_SESSION_TOKEN, null);
+        String sessionAk = properties.getOrDefault(AwsProperties.S3FILEIO_ACCESS_KEY_ID, null);
+        String sessionSk = properties.getOrDefault(AwsProperties.S3FILEIO_SECRET_ACCESS_KEY, null);
+        String sessionToken = properties.getOrDefault(AwsProperties.S3FILEIO_SESSION_TOKEN, null);
         String region = properties.getOrDefault(AwsProperties.CLIENT_REGION, null);
-        if (tmpAk != null && tmpSk != null && tmpSessionToken != null && region != null) {
-            copiedProperties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, tmpAk);
-            copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, tmpSk);
-            copiedProperties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, tmpSessionToken);
+        if (sessionAk != null && sessionSk != null && sessionToken != null && region != null) {
+            copiedProperties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, sessionAk);
+            copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, sessionSk);
+            copiedProperties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
             CloudConfigurationFactory factory = new AWSCloudConfigurationFactory(copiedProperties);
             CloudConfiguration cloudConfiguration = factory.buildForStorage();
