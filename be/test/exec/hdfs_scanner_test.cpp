@@ -1195,6 +1195,56 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     scanner->close(_runtime_state);
 }
 
+TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/boolean_slot_ref.orc";
+
+    SlotDesc c0{"sex", TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN)};
+
+    SlotDesc slot_descs[] = {c0, {""}};
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(input_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(slot_descs);
+    auto* param = _create_param(input_orc_file, range, tuple_desc);
+
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node;
+        lit_node.__set_node_type(TExprNodeType::SLOT_REF);
+        lit_node.__set_num_children(0);
+        lit_node.__set_type(create_primitive_type_desc(TPrimitiveType::BOOLEAN));
+        TSlotRef t_slot_ref = TSlotRef();
+        t_slot_ref.slot_id = 0;
+        t_slot_ref.tuple_id = 0;
+        lit_node.__set_slot_ref(t_slot_ref);
+        nodes.emplace_back(lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+    }
+
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &chunk);
+    EXPECT_TRUE(status.ok());
+
+    EXPECT_EQ(1, chunk->num_rows());
+
+    EXPECT_EQ("[1]", chunk->debug_row(0));
+
+    scanner->close(_runtime_state);
+}
+
 // =============================================================================
 
 /*
