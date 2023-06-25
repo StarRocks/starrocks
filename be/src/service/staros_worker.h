@@ -83,6 +83,10 @@ private:
                                                                                  const Configuration& conf);
     absl::StatusOr<std::shared_ptr<FileSystem>> new_shared_filesystem(std::string_view scheme,
                                                                       const Configuration& conf);
+    absl::Status build_conf_from_shard_info(const ShardInfo& info, Configuration& conf);
+    CacheKey get_cache_key(std::string_view scheme, const Configuration& conf);
+    absl::Status invalidate_fs(const ShardInfo& shard);
+    absl::StatusOr<std::string> build_scheme_from_shard_info(const ShardInfo& info);
 
     mutable std::shared_mutex _mtx;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
