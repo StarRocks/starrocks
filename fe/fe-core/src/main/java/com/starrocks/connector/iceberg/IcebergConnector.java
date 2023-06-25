@@ -85,7 +85,8 @@ public class IcebergConnector implements Connector {
             nativeCatalogTypeStr = properties.get(ICEBERG_CATALOG_LEGACY);
         }
         if (Strings.isNullOrEmpty(nativeCatalogTypeStr)) {
-            throw new StarRocksConnectorException("Can't find iceberg native catalog type");
+            throw new StarRocksConnectorException("Can't find iceberg native catalog type. You must specify the" +
+                    " 'iceberg.catalog.type' property when creating an iceberg catalog in the catalog properties");
         }
         return IcebergCatalogType.fromString(nativeCatalogTypeStr);
     }
