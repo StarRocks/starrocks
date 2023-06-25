@@ -1,26 +1,26 @@
-# 使用 Flink 连接器读取数据
+# 使用 Flink Connector 读取数据
 
-StarRocks 提供自研的 Apache Flink® 连接器 (StarRocks Connector for Apache Flink®)，支持通过 Flink 批量读取某个 StarRocks 集群中的数据。
+StarRocks 提供自研的 Apache Flink® Connector (StarRocks Connector for Apache Flink®)，支持通过 Flink 批量读取某个 StarRocks 集群中的数据。
 
-Flink 连接器支持两种数据读取方式：Flink SQL 和 Flink DataStream。推荐使用 Flink SQL。
+Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream。推荐使用 Flink SQL。
 
 > **说明**
 >
-> Flink 连接器还支持将 Flink 读取到的数据写入另外一个 StarRocks 集群或其他存储系统上。参见[从 Apache Flink 持续导入](../loading/Flink-connector-starrocks.md)。
+> Flink Connector 还支持将 Flink 读取到的数据写入另外一个 StarRocks 集群或其他存储系统上。参见[从 Apache Flink 持续导入](../loading/Flink-connector-starrocks.md)。
 
 ## 功能简介
 
-相较于 Flink 官方提供的 Flink JDBC 连接器 (JDBC Connector)，StarRocks 自研的 Flink 连接器具备从 StarRocks 集群中各 BE 节点并行读取数据的能力，大大提高了数据读取效率。以下是两种连接器的实现方案对比：
+相较于 Flink 官方提供的 Flink JDBC Connector (简称 JDBC Connector)，StarRocks 自研的 Flink Connector 具备从 StarRocks 集群中各 BE 节点并行读取数据的能力，大大提高了数据读取效率。以下是两种 Connector 的实现方案对比：
 
-- Flink 连接器
+- Flink Connector
 
   Flink 先从 FE 节点获取查询计划 (Query Plan)，然后将获取到的查询计划作为参数，下发至 BE 节点，最后获取 BE 节点返回的数据。
 
   ![Unload data - Flink Connector](../assets/unload_flink_connector_1.png)
 
-- Flink JDBC 连接器
+- Flink JDBC Connector
 
-  Flink JDBC 连接器仅能从 FE 单点上串行读取数据，数据读取效率较低。
+  Flink JDBC Connector 仅能从 FE 单点上串行读取数据，数据读取效率较低。
 
   ![Unload data - JDBC Connector](../assets/unload_flink_connector_2.png)
 
@@ -73,13 +73,13 @@ Flink 连接器支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 ## 准备工作
 
-通过如下步骤完成 Flink 连接器的部署：
+通过如下步骤完成 Flink Connector 的部署：
 
 1. 根据 Flink 的版本，选择和下载对应版本的 [flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks/releases) JAR 包。
 
    > **注意**
    >
-   > 推荐您下载 Flink 连接器版本在 1.2.x 及以上、并且配套的 Flink 版本与您的业务环境中安装的 Flink 版本前两位一致的 JAR 包。例如，如果您的业务环境中安装的 Flink 版本为 1.14.x，可以下载 `flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar`。
+   > 推荐您下载 Flink Connector 版本在 1.2.x 及以上、并且配套的 Flink 版本与您的业务环境中安装的 Flink 版本前两位一致的 JAR 包。例如，如果您的业务环境中安装的 Flink 版本为 1.14.x，可以下载 `flink-connector-starrocks-1.2.4_flink-1.14_x.yy.jar`。
 
 2. 如需调试代码，可选择对应分支代码自行编译。
 
@@ -102,7 +102,7 @@ Flink 连接器支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 | password                    | 是       | STRING   | 用于访问 StarRocks 集群的用户密码。                          |
 | database-name               | 是       | STRING   | 待读取数据的 StarRocks 数据库的名称。                        |
 | table-name                  | 是       | STRING   | 待读取数据的 StarRocks 表的名称。                            |
-| scan.connect.timeout-ms     | 否       | STRING   | Flink 连接器连接 StarRocks 集群的时间上限。单位：毫秒。默认值：`1000`。超过该时间上限，则数据读取任务会报错。 |
+| scan.connect.timeout-ms     | 否       | STRING   | Flink Connector 连接 StarRocks 集群的时间上限。单位：毫秒。默认值：`1000`。超过该时间上限，则数据读取任务会报错。 |
 | scan.params.keep-alive-min  | 否       | STRING   | 数据读取任务的保活时间，通过轮询机制定期检查。单位：分钟。默认值：`10`。建议取值大于等于 `5`。 |
 | scan.params.query-timeout-s | 否       | STRING   | 数据读取任务的超时时间，在任务执行过程中进行检查。单位：秒。默认值：`600`。如果超过该时间，仍未返回读取结果，则停止数据读取任务。 |
 | scan.params.mem-limit-byte  | 否       | STRING   | BE 节点中单个查询的内存上限。单位：字节。默认值：`1073741824`（即 1 GB）。 |
@@ -234,7 +234,7 @@ Flink 连接器支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 ### 使用 Flink SQL 读取数据
 
-1. 根据要待导入数据的 StarRocks 表，在 Flink 中创建一张表，例如 `flink_test`，并配置读取任务属性，包括设置 Flink 连接器和库表的信息：
+1. 根据要待导入数据的 StarRocks 表，在 Flink 中创建一张表，例如 `flink_test`，并配置读取任务属性，包括设置 Flink Connector 和库表的信息：
 
    ```SQL
    CREATE TABLE flink_test
@@ -264,7 +264,7 @@ Flink 连接器支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 使用 Flink SQL 读取数据时，需要注意以下事项：
 
 - 仅支持使用部分 SQL 语句读取 StarRocks 中的数据，如 `SELECT ... FROM <table_name> WHERE ...`。暂不支持除 `count` 以外的聚合函数。
-- 使用 SQL 语句时，支持自动进行谓词下推。如过滤条件 `char_1 <> 'A' and int_1 = -126`，会下推到 Flink 连接器中并转换成适用于 StarRocks 的语句后，再执行查询，不需要额外配置。
+- 使用 SQL 语句时，支持自动进行谓词下推。如过滤条件 `char_1 <> 'A' and int_1 = -126`，会下推到 Flink Connector 中并转换成适用于 StarRocks 的语句后，再执行查询，不需要额外配置。
 - 不支持 LIMIT 语句。
 - StarRocks 暂时不支持 Checkpoint 机制。因此，如果读取任务失败，则无法保证数据一致性。
 
@@ -293,9 +293,9 @@ Flink 连接器支持两种数据读取方式：Flink SQL 和 Flink DataStream�
    </dependency>
    ```
 
-   上述代码示例中，`x.x.x` 需要替换为 Flink 连接器的最新版本号。具体请参见[版本信息](https://search.maven.org/search?q=g:com.starrocks)。
+   上述代码示例中，`x.x.x` 需要替换为 Flink Connector 的最新版本号。具体请参见[版本信息](https://search.maven.org/search?q=g:com.starrocks)。
 
-2. 调用 Flink 连接器，读取 StarRocks 中的数据，如下所示：
+2. 调用 Flink Connector，读取 StarRocks 中的数据，如下所示：
 
    ```Java
    import com.starrocks.connector.flink.StarRocksSource;
