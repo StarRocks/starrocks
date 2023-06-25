@@ -564,7 +564,7 @@ public class StmtExecutor {
                     throw new AnalysisException("old planner does not support CTAS statement");
                 }
             } else if (parsedStmt instanceof DmlStmt) {
-                handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
+                handleDMLStmtWithProfile(execPlan, (DmlStmt) parsedStmt, beginTimeInNanoSecond);
             } else if (parsedStmt instanceof DdlStmt) {
                 handleDdlStmt();
             } else if (parsedStmt instanceof ShowStmt) {
@@ -652,10 +652,8 @@ public class StmtExecutor {
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
-            handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
-            if (context.getSessionVariable().isEnableProfile()) {
-                writeProfile(beginTimeInNanoSecond);
-            }
+            handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt(),
+                    beginTimeInNanoSecond);
             if (context.getState().getStateType() == MysqlStateType.ERR) {
                 ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
             }
@@ -663,8 +661,6 @@ public class StmtExecutor {
             LOG.warn("handle create table as select stmt fail", t);
             ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
             throw t;
-        } finally {
-            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
     }
 
@@ -1382,10 +1378,16 @@ public class StmtExecutor {
         manager.executeJob(context, this, job);
     }
 
-    public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-        long beginTimeInNanoSecond = TimeUtils.getStartTime();
+    /**
+     * `handleDMLStmtWithProfile` executes DML statement and write profile at the end.
+     * NOTE: `writeProfile` can only be called once, otherwise the profile detail will be lost.
+     */
+    public void handleDMLStmtWithProfile(ExecPlan execPlan,
+                                         DmlStmt stmt,
+                                         long beginTimeInNanoSecond) throws Exception {
         try {
-            handleDMLStmtImpl(execPlan, stmt);
+            handleDMLStmt(execPlan, stmt);
+            // TODO: Support write profile even dml aborted.
             if (context.getSessionVariable().isEnableProfile()) {
                 writeProfile(beginTimeInNanoSecond);
             }
@@ -1397,7 +1399,10 @@ public class StmtExecutor {
         }
     }
 
-    private void handleDMLStmtImpl(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+    /**
+     * `handleDMLStmt` only executes DML statement and no write profile at the end.
+     */
+    public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;

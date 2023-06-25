@@ -783,13 +783,6 @@ public class Config extends ConfigBase {
     public static long min_bytes_per_broker_scanner = 67108864L; // 64MB
 
     /**
-     * Maximal concurrency of broker scanners.
-     * Do not set this if you know what you are doing.
-     */
-    @ConfField(mutable = true)
-    public static int max_broker_concurrency = 100;
-
-    /**
      * Default insert load timeout
      */
     @ConfField(mutable = true)
@@ -2394,4 +2387,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int external_table_commit_timeout_ms = 10000; // 10s
+
+    @ConfField(mutable = false)
+    public static int pipe_listener_interval_millis = 1000;
+    @ConfField(mutable = false)
+    public static int pipe_scheduler_interval_millis = 1000;
 }
