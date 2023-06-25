@@ -49,7 +49,9 @@ public class MapTypeTest extends PlanTestBase {
         try {
             String plan = getFragmentPlan(sql);
         } catch (Exception e) {
-            assertContains(e.getMessage(), "Cannot cast 'map{1:map{1:2}}' from MAP<TINYINT,MAP<TINYINT,TINYINT>> to MAP<INT,VARCHAR(65533)>.");
+            assertContains(e.getMessage(), 
+                    "Cannot cast 'map{1:map{1:2}}' from " + 
+                    "MAP<TINYINT,MAP<TINYINT,TINYINT>> to MAP<INT,VARCHAR(65533)>.");
         }
     }
 }
