@@ -399,7 +399,7 @@ public class CreateTableTest {
                         + "('replication_num' = '1');\n"));
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Unknown properties: {asd=true, datacache.enable=true, storage_cache_ttl=86400}",
+                "Unknown properties: {datacache.enable=true, asd=true, storage_cache_ttl=86400}",
                 () -> createTable("CREATE TABLE test.demo (k0 tinyint NOT NULL, k1 date NOT NULL, k2 int NOT NULL," +
                         " k3 datetime not NULL, k4 bigint not NULL, k5 largeint not NULL) \n" +
                         "ENGINE = OLAP \n" +
