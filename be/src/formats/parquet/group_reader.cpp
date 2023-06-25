@@ -564,7 +564,9 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
 
         // eq predicate is faster than in predicate
         // TODO: improve not eq and not in
-        if (dict_codes.size() == 1) {
+        if (dict_codes.size() == 0) {
+            _predicates[slot_id] = nullptr;
+        } else if (dict_codes.size() == 1) {
             _predicates[slot_id] = obj_pool->add(
                     new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0])));
         } else {
@@ -581,13 +583,20 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
         if (dict_value_column->has_null()) {
             ColumnPredicate* old = _predicates[slot_id];
             // new = old or (is_null);
+            ColumnPredicate* result = nullptr;
             ColumnPredicate* is_null_pred =
                     obj_pool->add(new_column_null_predicate(get_type_info(kDictCodeFieldType), slot_id, true));
-            ColumnOrPredicate* or_pred =
-                    obj_pool->add(new ColumnOrPredicate(get_type_info(kDictCodeFieldType), slot_id));
-            or_pred->add_child(old);
-            or_pred->add_child(is_null_pred);
-            _predicates[slot_id] = or_pred;
+
+            if (old != nullptr) {
+                ColumnOrPredicate* or_pred =
+                        obj_pool->add(new ColumnOrPredicate(get_type_info(kDictCodeFieldType), slot_id));
+                or_pred->add_child(old);
+                or_pred->add_child(is_null_pred);
+                result = or_pred;
+            } else {
+                result = is_null_pred;
+            }
+            _predicates[slot_id] = result;
         }
     }
 

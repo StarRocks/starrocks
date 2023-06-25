@@ -64,3 +64,7 @@ select count(*) from tpch_customer_null where (c_mktsegment = 'BUILDING' OR c_mk
 
 -- BUILDING = 7, NULL = 6
 select count(*) from tpch_customer_null where coalesce(c_mktsegment, 'BUILDING') = 'BUILDING';
+
+select count(*) from tpch_customer_null where c_mktsegment is null;
+
+select count(*) from tpch_customer_null where c_mktsegment is not null;

@@ -10,9 +10,9 @@ shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_with_
 
 Succeed: Total num: 1, size: 4,374. OK num: 1(upload 1 files).
 
-average speed 174000(byte/s)
+average speed 2000(byte/s)
 
-0.025320(s) elapsed
+4.250127(s) elapsed
 -- !result
 CREATE EXTERNAL TABLE tpch_customer_null
 (
@@ -44,4 +44,12 @@ select count(*) from tpch_customer_null where (c_mktsegment = 'BUILDING' OR c_mk
 select count(*) from tpch_customer_null where coalesce(c_mktsegment, 'BUILDING') = 'BUILDING';
 -- result:
 13
+-- !result
+select count(*) from tpch_customer_null where c_mktsegment is null;
+-- result:
+6
+-- !result
+select count(*) from tpch_customer_null where c_mktsegment is not null;
+-- result:
+24
 -- !result
