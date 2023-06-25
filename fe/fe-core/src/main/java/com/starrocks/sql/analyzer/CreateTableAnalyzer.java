@@ -279,7 +279,7 @@ public class CreateTableAnalyzer {
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(statement.isOlapEngine());
+                columnDef.analyze(statement.isOlapEngine(), CatalogMgr.isInternalCatalog(catalogName), engineName);
             } catch (AnalysisException e) {
                 LOGGER.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
