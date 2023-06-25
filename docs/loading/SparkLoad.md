@@ -4,6 +4,10 @@ This load uses external Apache Spark™ resources to pre-process imported data, 
 
 Spark load is an **asynchronous** import method that requires users to create Spark-type import jobs via the MySQL protocol and view the import results using `SHOW LOAD`.
 
+> **NOTICE**
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+
 ## Terminology explanation
 
 * **Spark ETL**: Mainly responsible for ETL of data in the import process, including global dictionary construction (BITMAP type), partitioning, sorting, aggregation, etc.
