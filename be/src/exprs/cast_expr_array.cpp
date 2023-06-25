@@ -17,9 +17,11 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/json_column.h"
+#include "column/nullable_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
+#include "gutil/strings/escaping.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
@@ -290,6 +292,76 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
         res = ConstColumn::create(res, column->size());
     }
     return res;
+}
+
+StatusOr<ColumnPtr> CastArrayToString::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
+    if (column->only_null()) {
+        return ColumnHelper::create_const_null_column(column->size());
+    }
+
+    size_t size = input_chunk->num_rows();
+    ArrayColumn::Ptr array_column;
+    ColumnPtr array_elements;
+
+    if (column->is_nullable()) {
+        NullableColumn::Ptr nullable = ColumnHelper::as_column<NullableColumn>(column);
+        array_column = ColumnHelper::cast_to<TYPE_ARRAY>(nullable->data_column());
+        array_elements = array_column->elements_column();
+    } else {
+        array_column = ColumnHelper::cast_to<TYPE_ARRAY>(column);
+        array_elements = array_column->elements_column();
+    }
+
+    // Cast Array<ANY> to Array<String>
+    BinaryColumn::Ptr array_string;
+    NullColumn::Ptr string_nulls;
+    {
+        ChunkPtr chunk = std::make_shared<Chunk>();
+        SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
+        chunk->append_column(array_elements, slot_id);
+        ASSIGN_OR_RETURN(auto element_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
+        if (element_res->is_nullable()) {
+            string_nulls = ColumnHelper::as_column<NullableColumn>(element_res)->null_column();
+            array_string = ColumnHelper::cast_to<TYPE_VARCHAR>(
+                    ColumnHelper::as_column<NullableColumn>(element_res)->data_column());
+        } else {
+            array_string = ColumnHelper::cast_to<TYPE_VARCHAR>(element_res);
+            string_nulls = NullColumn::create();
+            string_nulls->append_value_multiple_times(&DATUM_NOT_NULL, array_string->size());
+        }
+    }
+    auto nullable_array_string = NullableColumn::create(array_string, string_nulls);
+
+    // Cast Array<String> to String
+    ColumnBuilder<TYPE_VARCHAR> res(size);
+    for (size_t i = 0; i < size; i++) {
+        if (column->is_null(i)) {
+            res.append_null();
+        } else {
+            auto pair = array_column->get_element_offset_size(i);
+            std::string row;
+            row += '[';
+            for (size_t j = pair.first; j < pair.first + pair.second; j++) {
+                if (j != pair.first) {
+                    row += ',';
+                }
+                if (nullable_array_string->is_null(j)) {
+                    row += "NULL";
+                } else {
+                    auto slice = array_string->get_slice(j);
+                    StringPiece piece(slice.data, slice.size);
+                    row += '"';
+                    strings::BackslashEscape(piece, "\"", &row);
+                    row += '"';
+                }
+            }
+            row += ']';
+
+            res.append(std::move(row));
+        }
+    }
+    return res.build(column->is_constant());
 }
 
 } // namespace starrocks

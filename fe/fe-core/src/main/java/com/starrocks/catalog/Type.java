@@ -1122,7 +1122,7 @@ public abstract class Type implements Cloneable {
                 }
             }
             return true;
-        } else if (from.isStringType() && to.isArrayType()) {
+        } else if ((from.isStringType() && to.isArrayType()) || (from.isArrayType() && to.isStringType())) {
             return true;
         } else if (from.isJsonType() && to.isArrayScalar()) {
             // now we only support cast json to one dimensional array

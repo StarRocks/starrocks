@@ -1,0 +1,5 @@
+-- name: test_array_cast
+select cast(array<string>['a', 'b'] as string);
+select cast(array<int>[1, 2] as string);
+select cast(array<double>[1.1, 2.2] as string);
+select cast(array<json>['{"a": 1}', '{"a": 2}'] as string);

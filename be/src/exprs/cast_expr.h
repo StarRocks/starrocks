@@ -88,6 +88,23 @@ private:
     TypeDescriptor _cast_to_type_desc;
 };
 
+// Cast Array to String
+class CastArrayToString final : public Expr {
+public:
+    CastArrayToString(const TExprNode& node, Expr* cast_element, TypeDescriptor type_desc)
+            : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(std::move(type_desc)) {}
+
+    ~CastArrayToString() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastArrayToString(*this)); }
+
+private:
+    Expr* _cast_elements_expr;
+    TypeDescriptor _cast_to_type_desc;
+    bool _throw_exception_if_err;
+};
+
 // cast one ARRAY to another ARRAY.
 // For example.
 //   cast ARRAY<tinyint> to ARRAY<int>

@@ -1613,6 +1613,29 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
         pool->add(child_input.release());
         return std::make_unique<CastArrayExpr>(node, std::move(child_cast));
     }
+
+    // Cast array<ANY> to string
+    if (from_type.is_array_type() && to_type.is_string_type()) {
+        TExprNode cast;
+        cast.type = to_type.to_thrift();
+        cast.child_type = to_thrift(from_type.children[0].type);
+        cast.slot_ref.slot_id = 0;
+        cast.slot_ref.tuple_id = 0;
+
+        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, true);
+        if (cast_element_expr == nullptr) {
+            return nullptr;
+        }
+        auto* child = new ColumnRef(cast);
+        cast_element_expr->add_child(child);
+        if (pool) {
+            pool->add(cast_element_expr);
+            pool->add(child);
+        }
+
+        return std::make_unique<CastArrayToString>(node, cast_element_expr, from_type);
+    }
+
     if (from_type.is_map_type() && to_type.is_map_type()) {
         ASSIGN_OR_RETURN(auto key_cast,
                          create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception));
