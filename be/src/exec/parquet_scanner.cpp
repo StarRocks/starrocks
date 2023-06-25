@@ -197,7 +197,7 @@ Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeD
         raw_type_desc->children.emplace_back(std::move(type));
         conv_func->children.emplace_back(std::move(cf));
         break;
-    } 
+    }
     case TYPE_MAP: {
         if (at != ArrowTypeId::MAP) {
             return Status::InternalError(
@@ -217,7 +217,7 @@ Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeD
             conv_func->children.emplace_back(std::move(cf));
         }
         break;
-    } 
+    }
     case TYPE_STRUCT: {
         if (at != ArrowTypeId::STRUCT) {
             return Status::InternalError(
@@ -240,7 +240,7 @@ Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeD
             conv_func->children.emplace_back(std::move(cf));
         }
         break;
-    } 
+    }
     default: {
         if (conv_func->func == nullptr) {
             need_cast = true;
