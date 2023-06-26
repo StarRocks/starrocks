@@ -58,6 +58,6 @@ public class PaimonFilter {
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, predicate, fieldNames);
+        return Objects.hash(databaseName, tableName, fieldNames);
     }
 }
