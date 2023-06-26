@@ -1,0 +1,39 @@
+-- name: test_union_rewrite_without_output_column
+CREATE TABLE `event1` (
+    `event_id` int(11) NOT NULL,
+    `event_type` varchar(26) NOT NULL,
+    `event_time` datetime NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`event_id`)
+PARTITION BY RANGE(`event_time`)
+(PARTITION p1 VALUES [("19900101"), ("20200101")),
+PARTITION p2 VALUES [("20200101"), ("20210101")),
+PARTITION p3 VALUES [("20210101"), ("20220101")),
+PARTITION p4 VALUES [("20220101"), ("20230101")),
+PARTITION p5 VALUES [("20230101"), ("20240101")),
+PARTITION p6 VALUES [("20240101"), ("20250101")),
+PARTITION p7 VALUES [("20250101"), ("20260101")))
+DISTRIBUTED BY HASH(`event_id`) BUCKETS 12
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into event1 values(129, "click", "2023-01-06 12:12:23"), (128, "click", "2023-01-06 18:12:23"), (127, "click2", "2023-01-05 12:12:23");
+
+CREATE MATERIALIZED VIEW `olap_mv1`
+COMMENT "MATERIALIZED_VIEW"
+PARTITION BY (`event_time`)
+DISTRIBUTED BY HASH(`event_id`) BUCKETS 1
+REFRESH MANUAL
+PROPERTIES (
+"replication_num" = "1"
+)
+AS SELECT `event_id`, `event_type`, `event_time`
+FROM `event1`
+WHERE `event_type` = 'click';
+
+refresh materialized view olap_mv1 with sync mode;
+
+explain logical select count(event_id) from event1;
+
+select count(event_id) from event1;

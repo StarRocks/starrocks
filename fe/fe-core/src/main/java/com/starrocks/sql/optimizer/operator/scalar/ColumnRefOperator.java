@@ -97,9 +97,8 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     @Override
-    public List<ColumnRefOperator> getColumnRefs(List<ColumnRefOperator> list) {
-        list.add(this);
-        return list;
+    public void getColumnRefs(List<ColumnRefOperator> columns) {
+        columns.add(this);
     }
 
 

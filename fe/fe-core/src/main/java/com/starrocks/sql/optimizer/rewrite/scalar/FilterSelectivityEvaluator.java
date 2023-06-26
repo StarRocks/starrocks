@@ -128,7 +128,7 @@ public class FilterSelectivityEvaluator {
         public ColumnFilter visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
             ScalarOperator left = predicate.getChild(0);
             ScalarOperator right = predicate.getChild(1);
-            List<ColumnRefOperator> usedCols = left.getColumnRefs(Lists.newArrayList());
+            List<ColumnRefOperator> usedCols = left.getColumnRefs();
 
             if (!isOnlyRefOneCol(usedCols)) {
                 return new ColumnFilter(NON_SELECTIVITY, predicate);
@@ -155,7 +155,7 @@ public class FilterSelectivityEvaluator {
                 return new ColumnFilter(NON_SELECTIVITY, predicate);
             } else {
                 Set<ScalarOperator> inSet = predicate.getChildren().stream().skip(1).collect(Collectors.toSet());
-                List<ColumnRefOperator> usedCols = predicate.getChild(0).getColumnRefs(Lists.newArrayList());
+                List<ColumnRefOperator> usedCols = predicate.getChild(0).getColumnRefs();
                 if (isOnlyRefOneCol(usedCols) && inSet.stream().allMatch(ScalarOperator::isConstantRef)) {
                     ColumnRefOperator column = usedCols.get(0);
                     ColumnStatistic columnStatistic = statistics.getColumnStatistic(column);
