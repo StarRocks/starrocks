@@ -186,7 +186,7 @@ message VacuumRequest {
     repeated int64 tablet_ids = 1;
     // Tablet metadata files with version numbers greater than or equals to min_retain_version
     // will NOT be vacuumed. For tablet metadata files with version numbers less than
-    // min_retaion_version, decide whether they should be deleted by comparing the create time
+    // min_retain_version, decide whether they should be deleted by comparing the create time
     // against the grace_timestamp.
     optional int64 min_retain_version = 2;
     // the timestamp after which created tablet metadata files will not be vacuumed.

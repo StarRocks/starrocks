@@ -14,10 +14,6 @@
 
 #include "storage/lake/vacuum.h"
 
-#include <rapidjson/error/en.h>
-#include <rapidjson/reader.h>
-#include <rapidjson/writer.h>
-
 #include <algorithm>
 #include <ctime>
 #include <string_view>
@@ -26,7 +22,6 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs.h"
-#include "fs/rapidjson_stream_adapter.h"
 #include "gutil/stl_util.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
