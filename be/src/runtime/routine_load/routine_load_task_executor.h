@@ -40,8 +40,8 @@
 
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/routine_load/data_consumer_pool.h"
-#include "util/threadpool.h"
 #include "util/starrocks_metrics.h"
+#include "util/threadpool.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -59,18 +59,16 @@ class RoutineLoadTaskExecutor {
 public:
     typedef std::function<void(StreamLoadContext*)> ExecFinishCallback;
 
-    RoutineLoadTaskExecutor(ExecEnv* exec_env)
-            : _exec_env(exec_env),
-              _data_consumer_pool(10) {
+    RoutineLoadTaskExecutor(ExecEnv* exec_env) : _exec_env(exec_env), _data_consumer_pool(10) {
         REGISTER_GAUGE_STARROCKS_METRIC(routine_load_task_count, [this]() {
             std::lock_guard<std::mutex> l(_lock);
             return _task_map.size();
         });
         auto st = ThreadPoolBuilder("routine_load")
-                    .set_min_threads(1)
-                    .set_max_threads(500)
-                    .set_max_queue_size(100000)
-                    .build(&_thread_pool);
+                          .set_min_threads(1)
+                          .set_max_threads(500)
+                          .set_max_queue_size(100000)
+                          .build(&_thread_pool);
         DCHECK(st.ok());
         _data_consumer_pool.start_bg_worker();
     }
