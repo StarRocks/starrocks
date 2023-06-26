@@ -289,10 +289,9 @@ public class AstToSQLBuilder {
 
             if (tableFunction.getAlias() != null) {
                 sqlBuilder.append(" ").append(tableFunction.getAlias().getTbl());
-
-                if (node.getColumnOutputNames() != null) {
+                if (tableFunction.getColumnOutputNames() != null) {
                     sqlBuilder.append("(");
-                    String names = node.getColumnOutputNames().stream().map(c -> "`" + c + "`")
+                    String names = tableFunction.getColumnOutputNames().stream().map(c -> "`" + c + "`")
                             .collect(Collectors.joining(","));
                     sqlBuilder.append(names);
                     sqlBuilder.append(")");
