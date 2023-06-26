@@ -3184,17 +3184,17 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(Datum((int32_t)(key % 100 + 2)));
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 100 + 2)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
     }
     // 2. delete [0, 1, 2 ... 50)
     {
-        Int64Column deletes;
+        vectorized::Int64Column deletes;
         for (int64_t i = 0; i < 50; i++) {
-            deletes.append_datum(Datum(i));
+            deletes.append_datum(vectorized::Datum(i));
         }
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, 0);
@@ -3210,9 +3210,9 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 2)));
-            cols[2]->append_datum(Datum((int32_t)(key % 100 + 3)));
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 2)));
+            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 100 + 3)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
     }
@@ -3223,26 +3223,26 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
         for (int i = 100; i < 200; i++) {
             keys.emplace_back(i);
         }
-        Int64Column deletes;
+        vectorized::Int64Column deletes;
         for (int64_t i = 50; i < 100; i++) {
-            deletes.append_datum(Datum(i));
+            deletes.append_datum(vectorized::Datum(i));
         }
 
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(Datum((int32_t)(key % 100 + 2)));
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 100 + 2)));
         }
         CHECK_OK(writer->flush_chunk_with_deletes(*chunk, deletes));
     }
     // 5. delete [150, 151, 152 ... 200)
     {
-        Int64Column deletes;
+        vectorized::Int64Column deletes;
         for (int64_t i = 150; i < 200; i++) {
-            deletes.append_datum(Datum(i));
+            deletes.append_datum(vectorized::Datum(i));
         }
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, 0);
@@ -3251,8 +3251,8 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
     RowsetSharedPtr rowset = *writer->build();
     ASSERT_TRUE(_tablet->rowset_commit(2, rowset).ok());
 
-    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    TabletReader reader(_tablet, Version(0, 2), schema);
+    auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    vectorized::TabletReader reader(_tablet, Version(0, 2), schema);
     auto iter = create_tablet_iterator(reader, schema);
     ASSERT_TRUE(iter != nullptr);
     std::vector<int64_t> keys;
@@ -3266,15 +3266,15 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
     for (int i = 0; i < 50; i++) {
-        cols[0]->append_datum(Datum(keys[i]));
-        cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 2)));
-        cols[2]->append_datum(Datum((int32_t)(keys[i] % 100 + 3)));
+        cols[0]->append_datum(vectorized::Datum(keys[i]));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 2)));
+        cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 100 + 3)));
     }
 
     for (int i = 50; i < 100; i++) {
-        cols[0]->append_datum(Datum(keys[i]));
-        cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(keys[i] % 100 + 2)));
+        cols[0]->append_datum(vectorized::Datum(keys[i]));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
+        cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 100 + 2)));
     }
 
     size_t count = 0;
