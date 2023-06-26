@@ -21,6 +21,7 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "simd/simd.h"
 #include "util/coding.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
@@ -204,27 +205,74 @@ public:
         return Status::OK();
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const std::vector<uint8_t>& nulls,
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                            Column* column) override {
+        const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
+        bool has_null = nulls.has_null();
+        bool all_null = false;
+
+        if (has_null) {
+            size_t count = SIMD::count_nonzero(null_data);
+            all_null = (count == null_data.size());
+        }
+
+        // dict codes size and column size HAVE TO BE EXACTLY SAME.
         std::vector<Slice> slices(dict_codes.size());
-        for (size_t i = 0; i < dict_codes.size(); i++) {
-            if (!nulls[i]) {
+        if (!has_null) {
+            for (size_t i = 0; i < dict_codes.size(); i++) {
                 slices[i] = _dict[dict_codes[i]];
             }
+        } else {
+            for (size_t i = 0; i < dict_codes.size(); i++) {
+                if (!null_data[i]) {
+                    slices[i] = _dict[dict_codes[i]];
+                }
+            }
         }
-        auto ret = column->append_strings_overflow(slices, _max_value_length);
+
+        // if there is no null, we already add tailing bytes to each dict value.
+        // so it's safe to call `append_strings_overflow`
+        // otherwise, slices[i] could be (data=nullptr, size =0), so it's not safe to call that
+        bool ret = false;
+        if (!has_null) {
+            ret = column->append_strings_overflow(slices, _max_value_length);
+        } else {
+            ret = column->append_strings(slices);
+        }
+
         if (UNLIKELY(!ret)) {
             return Status::InternalError("DictDecoder append strings to column failed");
         }
         return Status::OK();
     }
 
-    Status get_dict_codes(const std::vector<Slice>& dict_values, const std::vector<uint8_t>& nulls,
+    Status get_dict_codes(const std::vector<Slice>& dict_values, const NullableColumn& nulls,
                           std::vector<int32_t>* dict_codes) override {
-        for (size_t i = 0; i < dict_values.size(); i++) {
-            if (!nulls[i]) {
-                // dict value always exists in _dict_code_by_value
+        const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
+        bool has_null = nulls.has_null();
+        bool all_null = false;
+
+        // dict values size and dict codes size don't need to be matched.
+        // if nulls[i], then there is no need to get code of dict_values[i]
+
+        if (has_null) {
+            size_t count = SIMD::count_nonzero(null_data);
+            all_null = (count == null_data.size());
+        }
+        if (all_null) {
+            return Status::OK();
+        }
+
+        if (!has_null) {
+            dict_codes->reserve(dict_values.size());
+            for (size_t i = 0; i < dict_values.size(); i++) {
                 dict_codes->emplace_back(_dict_code_by_value[dict_values[i]]);
+            }
+        } else {
+            for (size_t i = 0; i < dict_values.size(); i++) {
+                if (!null_data[i]) {
+                    dict_codes->emplace_back(_dict_code_by_value[dict_values[i]]);
+                }
             }
         }
         return Status::OK();

@@ -560,7 +560,7 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
         auto* dict_value_binary_column = down_cast<BinaryColumn*>(dict_nullable_column->data_column().get());
         std::vector<int32_t> dict_codes;
         RETURN_IF_ERROR(column_readers[slot_id]->get_dict_codes(dict_value_binary_column->get_data(),
-                                                                dict_nullable_column->null_column_data(), &dict_codes));
+                                                                *dict_nullable_column, &dict_codes));
 
         // eq predicate is faster than in predicate
         // TODO: improve not eq and not in
@@ -651,8 +651,8 @@ Status GroupReader::DictFilterContext::decode_chunk(
             auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
             auto* codes_column =
                     ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
-            RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(
-                    codes_column->get_data(), codes_nullable_column->null_column_data(), dict_values.get()));
+            RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(codes_column->get_data(), *codes_nullable_column,
+                                                                     dict_values.get()));
             DCHECK_EQ(dict_codes->size(), dict_values->size());
 
             if (slots[chunk_index]->is_nullable()) {
