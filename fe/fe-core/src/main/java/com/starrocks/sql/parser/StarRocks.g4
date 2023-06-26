@@ -168,7 +168,6 @@ statement
     | cancelLoadStatement
     | alterLoadStatement
 
-
     // Show Statement
     | showAuthorStatement
     | showBackendsStatement
@@ -1272,7 +1271,7 @@ alterLoadStatement
 // ------------------------------------------- Compaction Statement ----------------------------------------------------------
 
 cancelCompactionStatement
-    : CANCEL COMPACTION (WHERE expression)?
+    : CANCEL COMPACTION WHERE expression
     ;
 
 // ------------------------------------------- Show Statement ----------------------------------------------------------

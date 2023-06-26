@@ -33,12 +33,6 @@ public class CancelCompactionStmtAnalyzer {
 
     static class CancelCompactionStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
-        private long txnId;
-
-        public CancelCompactionStmtAnalyzerVisitor() {
-            this.txnId = 0;
-        }
-
         public void analyze(CancelCompactionStmt statement, ConnectContext context) {
             visit(statement, context);
         }
@@ -52,6 +46,7 @@ public class CancelCompactionStmtAnalyzer {
         private void analyzeWhereClause(CancelCompactionStmt statement, ConnectContext context) {
             Expr whereClause = statement.getWhereClause();
             boolean valid = true;
+            long txnId = 0;
             do {
                 if (whereClause == null) {
                     valid = false;
