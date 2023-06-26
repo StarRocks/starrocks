@@ -114,7 +114,6 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("Buckets")
                     .add("DataSize")
                     .add("RowCount")
-                    .add("CacheTTL")
                     .add("AsyncWrite")
                     .add("AvgCS") // Average compaction score
                     .add("P50CS") // 50th percentile compaction score
@@ -407,7 +406,6 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
         partitionInfo.add(new ByteSizeValue(partition.getDataSize())); // DataSize
         partitionInfo.add(partition.getRowCount()); // RowCount
-        partitionInfo.add(cacheInfo.isEnableStorageCache() ? cacheInfo.getStorageCacheTtlS() : 0); // CacheTTL
         partitionInfo.add(cacheInfo.isEnableAsyncWriteBack()); // AsyncWrite
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getAvg() : 0.0)); // AvgCS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getP50() : 0.0)); // P50CS

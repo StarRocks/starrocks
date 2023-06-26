@@ -132,10 +132,6 @@ public class LakeMaterializedView extends MaterializedView {
                 properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
                         String.valueOf(storageInfo.isEnableStorageCache()));
 
-                // storage_cache_ttl
-                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
-                        String.valueOf(storageInfo.getStorageCacheTtlS()));
-
                 // enable_async_write_back
                 properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
                         String.valueOf(storageInfo.isEnableAsyncWriteBack()));
@@ -154,11 +150,6 @@ public class LakeMaterializedView extends MaterializedView {
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
                 .append(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).append("\" = \"");
         sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)).append("\"");
-
-        // storage_cache_ttl
-        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                .append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL).append("\" = \"");
-        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
 
         // allow_sync_write_back
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
