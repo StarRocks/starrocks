@@ -347,6 +347,7 @@ protected:
    */
 struct TimestampVectorBatch : public ColumnVectorBatch {
     TimestampVectorBatch(uint64_t capacity, MemoryPool& pool);
+    TimestampVectorBatch(uint64_t capacity, MemoryPool& pool, bool is_timestamp_instant_type);
     ~TimestampVectorBatch() override;
     std::string toString() const override;
     void resize(uint64_t capacity) override;
@@ -361,6 +362,8 @@ struct TimestampVectorBatch : public ColumnVectorBatch {
 
     // the nanoseconds of each value
     DataBuffer<int64_t> nanoseconds;
+
+    bool is_timestamp_instant_type = false;
 
     void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) override;
 };

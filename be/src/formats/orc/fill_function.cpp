@@ -817,7 +817,7 @@ static void fill_timestamp_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, s
             ns = data->nanoseconds[from];
         }
         OrcTimestampHelper::orc_ts_to_native_ts(&(values[i]), reader->tzinfo(), reader->tzoffset_in_seconds(),
-                                                data->data[from], ns);
+                                                data->data[from], ns, data->is_timestamp_instant_type);
     }
 }
 static void fill_timestamp_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
@@ -840,7 +840,7 @@ static void fill_timestamp_column_with_null(orc::ColumnVectorBatch* cvb, ColumnP
                 ns = data->nanoseconds[from];
             }
             OrcTimestampHelper::orc_ts_to_native_ts(&(values[i]), reader->tzinfo(), reader->tzoffset_in_seconds(),
-                                                    data->data[from], ns);
+                                                    data->data[from], ns, data->is_timestamp_instant_type);
         }
     }
 

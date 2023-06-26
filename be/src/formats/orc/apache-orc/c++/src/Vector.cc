@@ -586,6 +586,14 @@ TimestampVectorBatch::TimestampVectorBatch(uint64_t _capacity, MemoryPool& pool)
     // PASS
 }
 
+TimestampVectorBatch::TimestampVectorBatch(uint64_t _capacity, MemoryPool& pool, bool is_timestamp_instant_type)
+        : ColumnVectorBatch(_capacity, pool),
+          data(pool, _capacity),
+          nanoseconds(pool, _capacity),
+          is_timestamp_instant_type(is_timestamp_instant_type) {
+    // PASS
+}
+
 TimestampVectorBatch::~TimestampVectorBatch() {
     // PASS
 }

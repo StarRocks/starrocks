@@ -23,7 +23,6 @@
 
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
-#include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
@@ -55,7 +54,6 @@ OrcChunkReader::OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_
     if (_read_chunk_size == 0) {
         _read_chunk_size = 4096;
     }
-    _row_reader_options.useWriterTimezone();
 
     // some caller of `OrcChunkReader` may pass nullptr
     // This happens when there are extra fields in broker load specification
