@@ -83,6 +83,14 @@ public final class ColumnRefOperator extends ScalarOperator {
         return new ColumnRefSet(id);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public void getColumnRefs(List<ColumnRefOperator> columns) {
+        columns.add(this);
+    }
+
+>>>>>>> bd2f6ea71 ([Enhancement] optimize mv union rewrite (#25679))
 
     @Override
     public String toString() {
