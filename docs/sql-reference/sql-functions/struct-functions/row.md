@@ -2,38 +2,42 @@
 
 ## Description
 
-Create an unnamed STRUCT/ROW value from the given values.
+Create a named STRUCT or ROW value from the given values.
+
+The row() and struct() functions are equivalent. They support unnamed struct. You do not need to specify the field names. StarRocks automatically generates column names, like `col1`, `col2`...
 
 ## Syntax
 
-```
+```Haskell
 STRUCT row(ANY val, ...)
 ```
 
 ## Parameters
 
-This function is a variable argument function. Callers should give at least one argument.
+`val`: an expression of any supported type.
+
+This function is a variable argument function. You must pass at least one argument.
 
 ## Return value
 
-Return a STRUCT value which is consisted from the input values.
+Returns a STRUCT value which consists of the input values.
 
 ## Examples
 
 ```Plaintext
 select row(1,"Star","Rocks");
-+-------------------------+
-| row(1, 'Star', 'Rocks') |
-+-------------------------+
-| {1,"Star","Rocks"}      |
++------------------------------------------+
+| row(1, 'Star', 'Rocks')                  |
++------------------------------------------+
+| {"col1":1,"col2":"Star","col3":"Rocks"}  |
 +-------------------------+
 ```
 
 ```Plaintext
 select row("StarRocks", NULL);
-+------------------------+
-| row('StarRocks', NULL) |
-+------------------------+
-| {"StarRocks",null}     |
++-----------------------------------+
+| row('StarRocks', NULL)            |
++-----------------------------------+
+|  {"col1":"StarRocks","col2":null} |
 +------------------------+
 ```

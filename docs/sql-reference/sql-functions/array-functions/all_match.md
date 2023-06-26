@@ -2,9 +2,13 @@
 
 ## Description
 
-Returns whether all elements of an array match the given predicate. 
-Returns true if all the elements match the predicate (a special case is when the array is empty); false if one or more elements don’t match; NULL if the predicate function returns NULL for one or more elements and true for all other elements.
+Returns whether all elements of an array match the given predicate.
 
+Returns `true` (1) if all the elements match the predicate (a special case is when the array is empty).
+
+Returns `false` (0) if one or more elements do not match.
+
+Returns NULL if the predicate returns NULL for one or more elements and `true` for all other elements.
 
 ## Syntax
 
@@ -16,25 +20,24 @@ Returns whether all elements of `arr1` match the given predicate in the lambda f
 
 ## Parameters
 
-`arr1`: the array to match.
+- `arr1`: the array to match.
 
-`arrN`: optional arrays used in the lambda function.
+- `arrN`: optional arrays used in the lambda function.
 
-`lambda_function`: the lambda function used to match values.
+- `lambda_function`: the lambda function used to match values.
 
 ## Usage notes
 
-- The lambda function follows the usage notes in [array_map()](array_map.md), it returns array<bool>.
+- The lambda function follows the usage notes in [array_map()](array_map.md). It returns array<bool>.
 - If the input array is null or the lambda function results null, null is returned.
-- if `arr1` is empty, return true.
+- If `arr1` is empty, `true` is returned.
 - Map types can use it by rewriting `any/all_match((k,v)->k>v,map)` to `any/all_match(map_values(transform_values((k,v)->k>v, map)))`.
-
 
 ## Examples
 
-```Plain
--- check whether all elements in x that are less than the elements in y.
+Check whether all elements in `x` are less than the elements in `y`.
 
+```Plain
 select all_match((x,y) -> x < y, [1,2,-8], [4,5,6]);
 +---------------------------------------------------+
 | all_match((x, y) -> x < y, [1, 2, -8], [4, 5, 6]) |
@@ -63,11 +66,10 @@ select all_match((x,y) -> x < y, [], []);
 |                                  1 |
 +------------------------------------+
 
-mysql> select all_match((x,y) -> x < y, null, [4,5,6]);
+select all_match((x,y) -> x < y, null, [4,5,6]);
 +---------------------------------------------+
 | all_match((x, y) -> x < y, NULL, [4, 5, 6]) |
 +---------------------------------------------+
 |                                        NULL |
 +---------------------------------------------+
-
 ```
