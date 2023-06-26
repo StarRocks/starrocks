@@ -230,7 +230,7 @@ Status HdfsScanner::open_random_access_file() {
 
         // input_stream = CacheInputStream(input_stream)
         if (_scanner_params.use_block_cache) {
-            _cache_input_stream = std::make_shared<io::CacheInputStream>(input_stream, filename, file_size);
+            _cache_input_stream = std::make_shared<io::CacheInputStream>(_shared_buffered_input_stream, filename, file_size);
             _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_block_cache);
             _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
             input_stream = _cache_input_stream;
@@ -297,6 +297,8 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->block_cache_write_timer, stats.write_cache_ns);
         COUNTER_UPDATE(profile->block_cache_write_fail_counter, stats.write_cache_fail_count);
         COUNTER_UPDATE(profile->block_cache_write_fail_bytes, stats.write_cache_fail_bytes);
+        COUNTER_UPDATE(profile->block_cache_read_block_buffer_counter, stats.read_block_buffer_count);
+        COUNTER_UPDATE(profile->block_cache_read_block_buffer_bytes, stats.read_block_buffer_bytes);
     }
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());

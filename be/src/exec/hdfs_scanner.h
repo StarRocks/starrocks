@@ -89,6 +89,8 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* block_cache_write_timer = nullptr;
     RuntimeProfile::Counter* block_cache_write_fail_counter = nullptr;
     RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
+    RuntimeProfile::Counter* block_cache_read_block_buffer_counter = nullptr;
+    RuntimeProfile::Counter* block_cache_read_block_buffer_bytes = nullptr;
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;

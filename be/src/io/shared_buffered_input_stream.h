@@ -35,6 +35,17 @@ public:
         int64_t max_dist_size = 1 * MB;
         int64_t max_buffer_size = 8 * MB;
     };
+    struct SharedBuffer {
+        // request range
+        int64_t raw_offset;
+        int64_t raw_size;
+        // request range after alignment
+        int64_t offset;
+        int64_t size;
+        int64_t ref_count;
+        std::vector<uint8_t> buffer;
+        void align(int64_t align_size, int64_t file_size);
+    };
 
     SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
                               size_t file_size);
@@ -52,6 +63,9 @@ public:
         _offset += count;
         return _stream->skip(count);
     }
+
+    Status get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes);
+    StatusOr<SharedBuffer*> find_shared_buffer(size_t offset, size_t count);
 
     StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
         return _stream->get_numeric_statistics();
@@ -74,22 +88,7 @@ public:
     StatusOr<std::string_view> peek(int64_t count) override;
 
 private:
-    struct SharedBuffer {
-    public:
-        // request range
-        int64_t raw_offset;
-        int64_t raw_size;
-        // request range after alignment
-        int64_t offset;
-        int64_t size;
-        int64_t ref_count;
-        std::vector<uint8_t> buffer;
-        void align(int64_t align_size, int64_t file_size);
-    };
-
     void _update_estimated_mem_usage();
-    Status _get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes);
-    StatusOr<SharedBuffer*> _find_shared_buffer(size_t offset, size_t count);
     const std::shared_ptr<SeekableInputStream> _stream;
     const std::string _filename;
     std::map<int64_t, SharedBuffer> _map;
