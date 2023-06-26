@@ -49,8 +49,7 @@
 
 namespace starrocks {
 
-ExprContext::ExprContext(Expr* root)
-        : _root(root), _is_clone(false), _prepared(false), _opened(false), _closed(false) {}
+ExprContext::ExprContext(Expr* root) : _root(root) {}
 
 ExprContext::~ExprContext() {
     // nothing to do
@@ -150,7 +149,7 @@ Status ExprContext::get_udf_error() {
 std::string ExprContext::get_error_msg() const {
     for (auto fn_ctx : _fn_contexts) {
         if (fn_ctx->has_error()) {
-            return std::string(fn_ctx->error_msg());
+            return {fn_ctx->error_msg()};
         }
     }
     return "";

@@ -116,7 +116,7 @@ public:
         auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
-        InputColumnType src_column = *down_cast<const InputColumnType*>(src[0].get());
+        auto src_column = *down_cast<const InputColumnType*>(src[0].get());
         InputCppType* src_data = src_column.get_data().data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
@@ -178,7 +178,7 @@ public:
             memcpy(dest_ptr, src_ptr, cur_element_size);
             src_ptr += cur_element_size;
 
-            output.emplace_back(Slice(dest_ptr, cur_element_size));
+            output.emplace_back(dest_ptr, cur_element_size);
             dest_ptr += cur_element_size;
         }
 
@@ -229,7 +229,7 @@ public:
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
 
-        BinaryColumn src_column = *down_cast<const BinaryColumn*>(src[0].get());
+        auto src_column = *down_cast<const BinaryColumn*>(src[0].get());
         Slice* src_data = src_column.get_data().data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
@@ -260,7 +260,7 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
         pdqsort(new_vector.begin(), new_vector.end());
         const double& rate = this->data(state).rate;
 
-        ResultColumnType* column = down_cast<ResultColumnType*>(to);
+        auto* column = down_cast<ResultColumnType*>(to);
         DCHECK(!new_vector.empty());
         if (new_vector.size() == 1 || rate == 1) {
             column->append(new_vector.back());
@@ -305,7 +305,7 @@ class PercentileDiscAggregateFunction final : public PercentileContDiscAggregate
         pdqsort(new_vector.begin(), new_vector.end());
         const double& rate = this->data(state).rate;
 
-        ResultColumnType* column = down_cast<ResultColumnType*>(to);
+        auto* column = down_cast<ResultColumnType*>(to);
         DCHECK(!new_vector.empty());
         if (new_vector.size() == 1 || rate == 1) {
             column->append(new_vector.back());

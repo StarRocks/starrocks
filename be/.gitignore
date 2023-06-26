@@ -1,6 +1,7 @@
 /*
 !.gitignore
 !benchmark/
+!cmake_modules/
 !src/
 !test/
 !CMakeLists.txt

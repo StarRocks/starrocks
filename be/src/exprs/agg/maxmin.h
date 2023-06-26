@@ -184,7 +184,7 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        InputColumnType* column = down_cast<InputColumnType*>(dst);
+        auto* column = down_cast<InputColumnType*>(dst);
         for (size_t i = start; i < end; ++i) {
             AggDataTypeTraits<LT>::assign_value(column, i, this->data(state).result);
         }

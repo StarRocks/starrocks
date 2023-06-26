@@ -243,7 +243,7 @@ StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Col
     return dest_column;
 }
 
-void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPtr raw_filter, MapColumn* dest_column,
+void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPtr& raw_filter, MapColumn* dest_column,
                                      NullColumn* dest_null_map) {
     ArrayColumn* filter;
     NullColumn* filter_null_map = nullptr;

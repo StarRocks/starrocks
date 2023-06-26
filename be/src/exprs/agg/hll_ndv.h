@@ -42,7 +42,7 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         uint64_t value = 0;
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        const auto* column = down_cast<const ColumnType*>(columns[0]);
 
         if constexpr (lt_is_string<LT>) {
             Slice s = column->get_slice(row_num);
@@ -60,7 +60,7 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        const auto* column = down_cast<const ColumnType*>(columns[0]);
 
         if constexpr (lt_is_string<LT>) {
             uint64_t value = 0;
@@ -118,7 +118,7 @@ public:
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        const ColumnType* column = down_cast<const ColumnType*>(src[0].get());
+        const auto* column = down_cast<const ColumnType*>(src[0].get());
         auto* result = down_cast<BinaryColumn*>((*dst).get());
 
         Bytes& bytes = result->get_bytes();

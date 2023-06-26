@@ -40,7 +40,7 @@ protected:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
-    const FunctionDescriptor* _fn_desc;
+    const FunctionDescriptor* _fn_desc{nullptr};
 
     bool _is_returning_random_value = false;
 };

@@ -36,7 +36,7 @@ class LocationProvider;
 class Tablet;
 class MetaFileBuilder;
 class UpdateManager;
-class AutoIncrementPartialUpdateState;
+struct AutoIncrementPartialUpdateState;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:

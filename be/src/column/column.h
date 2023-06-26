@@ -31,7 +31,7 @@ namespace starrocks {
 class MemPool;
 class MysqlRowBuffer;
 class Slice;
-class TypeDescriptor;
+struct TypeDescriptor;
 
 // Forward declaration
 class Datum;
