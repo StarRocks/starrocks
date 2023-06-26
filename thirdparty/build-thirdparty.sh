@@ -909,6 +909,8 @@ build_broker_thirdparty_jars() {
     # cloudfs-hadoop-with-dependencies will include aws jars, but we already support aws by official sdk, so we don't need it anymore.
     # And it will conflict with Iceberg's S3FileIO, make access S3 files failed.
     rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/cloudfs-hadoop-with-dependencies-1.1.21.jar
+    # ensure read permission is granted for all users
+    chmod -R +r $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/
 }
 
 build_aws_cpp_sdk() {
