@@ -1,5 +1,7 @@
 -- name: test_array_cast
 
+select cast(array<string>[] as string);
+select cast(array<int>[] as string);
 select cast(array<string>['a', 'b'] as string);
 select cast(array<int>[1, 2] as string);
 select cast(array<double>[1.1, 2.2] as string);
@@ -9,6 +11,14 @@ select cast(array<int>[1, null] as string);
 select cast(array<int>[null, null] as string);
 select cast(array<array<int>>[null, null] as string);
 select cast(array<array<int>>[null, [null]] as string);
+
+-- not supported
+select cast(map<int, int>{1: 1} as string);
+select cast(row(1, 2) as string);
+select cast(array<map<int, int>>[map{1: 1}] as string);
+select cast(array<struct<c1 int, c2 int>>[row(1, 2)] as string);
+select cast(array<map<int, int>>[] as string);
+select cast(array<struct<c1 int, c2 int>>[] as string);
 
 CREATE TABLE array_test ( 
     pk bigint not null ,

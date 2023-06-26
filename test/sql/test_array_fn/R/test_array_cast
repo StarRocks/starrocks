@@ -1,4 +1,12 @@
 -- name: test_array_cast
+select cast(array<string>[] as string);
+-- result:
+[]
+-- !result
+select cast(array<int>[] as string);
+-- result:
+[]
+-- !result
 select cast(array<string>['a', 'b'] as string);
 -- result:
 [a,b]
@@ -34,6 +42,30 @@ select cast(array<array<int>>[null, null] as string);
 select cast(array<array<int>>[null, [null]] as string);
 -- result:
 [NULL,[NULL]]
+-- !result
+select cast(map<int, int>{1: 1} as string);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 41. Detail message: Invalid type cast from map<int(11),int(11)> to varchar(65533) in sql `map{1:1}`.')
+-- !result
+select cast(row(1, 2) as string);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 31. Detail message: Invalid type cast from struct<col1 tinyint(4), col2 tinyint(4)> to varchar(65533) in sql `row(1, 2)`.')
+-- !result
+select cast(array<map<int, int>>[map{1: 1}] as string);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 53. Detail message: Invalid type cast from array<map<int(11),int(11)>> to varchar(65533) in sql `[map{1:1}]`.')
+-- !result
+select cast(array<struct<c1 int, c2 int>>[row(1, 2)] as string);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 62. Detail message: Invalid type cast from array<struct<c1 int(11), c2 int(11)>> to varchar(65533) in sql `[row(1, 2)]`.')
+-- !result
+select cast(array<map<int, int>>[] as string);
+-- result:
+[]
+-- !result
+select cast(array<struct<c1 int, c2 int>>[] as string);
+-- result:
+[]
 -- !result
 CREATE TABLE array_test ( 
     pk bigint not null ,
@@ -72,17 +104,17 @@ None
 -- !result
 select cast(c2 as string) from array_test;
 -- result:
+[1,2,3,4,10]
+[1,2,3,4,10]
 None
-[1,2,3,4,10]
-[1,2,3,4,10]
 [1,2,3,4,10]
 -- !result
 select cast(c3 as string) from array_test;
 -- result:
-[10,20,30,4,100,10.1,2.1,30.2,40.3,-1,-10,100]
-None
 [1,2,3,4,10,1.1,2.1,3.2,4.3,-1,-10,100]
 [1,2,3,4,10,NULL,1.1,2.1,3.2,NULL,4.3,-1,-10,100]
+[10,20,30,4,100,10.1,2.1,30.2,40.3,-1,-10,100]
+None
 -- !result
 select cast(c4 as string) from array_test;
 -- result:
@@ -100,17 +132,17 @@ select cast(c5 as string) from array_test;
 -- !result
 select cast(c6 as string) from array_test;
 -- result:
-[4.0000000000000000000,2.1000000000000000000,3.2000000000000000000,10.0000000000000000000,1.1000000000000000000,-10.0000000000000000000,100.0000000000000000000,-1.0000000000000000000,1.0000000000000000000,2.0000000000000000000,3.0000000000000000000,4.3000000000000000000]
-[4.0000000000000000000,2.1000000000000000000,3.2000000000000000000,10.0000000000000000000,1.1000000000000000000,-10.0000000000000000000,100.0000000000000000000,-1.0000000000000000000,1.0000000000000000000,2.0000000000000000000,3.0000000000000000000,4.3000000000000000000]
 None
 [40.0000000000000000000,20.1000000000000000000,3.2000000000000000000,10.0000000000000000000,10.1000000000000000000,-10.0000000000000000000,100.0000000000000000000,-1.0000000000000000000,10.0000000000000000000,2.0000000000000000000,30.0000000000000000000,4.3000000000000000000]
+[4.0000000000000000000,2.1000000000000000000,3.2000000000000000000,10.0000000000000000000,1.1000000000000000000,-10.0000000000000000000,100.0000000000000000000,-1.0000000000000000000,1.0000000000000000000,2.0000000000000000000,3.0000000000000000000,4.3000000000000000000]
+[4.0000000000000000000,2.1000000000000000000,3.2000000000000000000,10.0000000000000000000,1.1000000000000000000,-10.0000000000000000000,100.0000000000000000000,-1.0000000000000000000,1.0000000000000000000,2.0000000000000000000,3.0000000000000000000,4.3000000000000000000]
 -- !result
 select cast(c7 as string) from array_test;
 -- result:
-[4.00000,2.10000,3.20000,10.00000,2.00000,3.00000,1.10000,-1.00000,-10.00000,100.00000,1.00000,4.30000]
-[4.00000,2.10000,3.20000,10.00000,2.00000,3.00000,1.10000,-1.00000,-10.00000,100.00000,1.00000,4.30000]
 None
 [4.00000,2.10000,3.20000,10.00000,20.00000,3.00000,1.10000,-10.00000,-100.00000,100.00000,10.00000,4.30000]
+[4.00000,2.10000,3.20000,10.00000,2.00000,3.00000,1.10000,-1.00000,-10.00000,100.00000,1.00000,4.30000]
+[4.00000,2.10000,3.20000,10.00000,2.00000,3.00000,1.10000,-1.00000,-10.00000,100.00000,1.00000,4.30000]
 -- !result
 select cast(c8 as string) from array_test;
 -- result:
@@ -121,10 +153,10 @@ None
 -- !result
 select cast(c9 as string) from array_test;
 -- result:
-[40.000000,20.100000,1000.000000,10.000000,40.300000,30.200000,100.000000,20.000000,3.000000,10.100000,-10.000000,-10.000000]
-None
 [4.000000,2.100000,100.000000,1.000000,4.300000,3.200000,10.000000,2.000000,3.000000,1.100000,-1.000000,-10.000000]
 [4.000000,2.100000,100.000000,NULL,1.000000,4.300000,3.200000,10.000000,2.000000,3.000000,1.100000,-1.000000,-10.000000]
+[40.000000,20.100000,1000.000000,10.000000,40.300000,30.200000,100.000000,20.000000,3.000000,10.100000,-10.000000,-10.000000]
+None
 -- !result
 select cast(c10 as string) from array_test;
 -- result:
@@ -142,10 +174,10 @@ None
 -- !result
 select cast(c12 as string) from array_test;
 -- result:
-[[[10],[20],[30]],[[60],[5],[4]],[[-100,-2],[-20,10],[100,23]]]
-None
 [[[1],[2],[3]],[[6],[5],[4]],[[-1,-2],[-2,10],[100,23]]]
 [[[1],[2],[3]],[[6],[5],[4]],[[-1,-2],NULL,[-2,10],[100,23]]]
+[[[10],[20],[30]],[[60],[5],[4]],[[-100,-2],[-20,10],[100,23]]]
+None
 -- !result
 select cast(c13 as string) from array_test;
 -- result:
