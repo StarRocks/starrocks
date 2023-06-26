@@ -59,6 +59,10 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.lake.DataCacheInfo;
+>>>>>>> 142753636 ([Feature] Rename table property enable_storage_cache to datacache.enable (#25768))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -147,7 +151,6 @@ public class PropertyAnalyzer {
     public static final String ABLE_LOW_CARD_DICT = "1";
     public static final String DISABLE_LOW_CARD_DICT = "0";
 
-    public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
@@ -164,6 +167,13 @@ public class PropertyAnalyzer {
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
+<<<<<<< HEAD
+=======
+    public static final String PROPERTIES_DATACACHE_ENABLE = "datacache.enable";
+    public static final String PROPERTIES_DATACACHE_PARTITION_DURATION = "datacache.partition_duration";
+
+    public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
+>>>>>>> 142753636 ([Feature] Rename table property enable_storage_cache to datacache.enable (#25768))
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
@@ -923,4 +933,46 @@ public class PropertyAnalyzer {
 
         return foreignKeyConstraints;
     }
+<<<<<<< HEAD
+=======
+
+    public static DataCacheInfo analyzeDataCacheInfo(Map<String, String> properties) throws AnalysisException {
+        boolean enableStorageCache =
+                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
+
+        long storageCacheTtlS = 0;
+        boolean isTtlSet = properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL);
+        if (isTtlSet) {
+            storageCacheTtlS = analyzeLongProp(properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+            if (storageCacheTtlS < -1) {
+                throw new AnalysisException("Storage cache ttl should not be less than -1");
+            }
+            if (!enableStorageCache && storageCacheTtlS != 0) {
+                throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
+            }
+            if (enableStorageCache && storageCacheTtlS == 0) {
+                throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
+            }
+        } else {
+            storageCacheTtlS = enableStorageCache ? Config.lake_default_storage_cache_ttl_seconds : 0L;
+        }
+
+        boolean enableAsyncWriteBack =
+                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
+        if (!enableStorageCache && enableAsyncWriteBack) {
+            throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
+        }
+
+        return new DataCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
+    }
+
+    public static PeriodDuration analyzeDataCachePartitionDuration(Map<String, String> properties) throws AnalysisException {
+        String text = properties.get(PROPERTIES_DATACACHE_PARTITION_DURATION);
+        if (text == null) {
+            return null;
+        }
+        properties.remove(PROPERTIES_DATACACHE_PARTITION_DURATION);
+        return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+    }
+>>>>>>> 142753636 ([Feature] Rename table property enable_storage_cache to datacache.enable (#25768))
 }

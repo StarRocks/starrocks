@@ -75,16 +75,17 @@ public class LakeMaterializedView extends MaterializedView {
     @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;
-        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
-        if (storageCacheInfo == null) {
+        DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partitionId);
+        if (dataCacheInfo == null) {
             cacheInfo = tableProperty.getStorageInfo().getCacheInfo();
         } else {
-            cacheInfo = storageCacheInfo.getCacheInfo();
+            cacheInfo = dataCacheInfo.getCacheInfo();
         }
         return cacheInfo;
     }
 
     @Override
+<<<<<<< HEAD
     public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
                 .setAsyncWriteBack(asyncWriteBack).build();
@@ -92,6 +93,13 @@ public class LakeMaterializedView extends MaterializedView {
             tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.setStorageInfo(new StorageInfo(pathInfo, cacheInfo));
+=======
+    public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.setStorageInfo(new StorageInfo(pathInfo, dataCacheInfo.getCacheInfo()));
+>>>>>>> 142753636 ([Feature] Rename table property enable_storage_cache to datacache.enable (#25768))
     }
 
     @Override
@@ -130,8 +138,8 @@ public class LakeMaterializedView extends MaterializedView {
         if (tableProperty != null) {
             StorageInfo storageInfo = tableProperty.getStorageInfo();
             if (storageInfo != null) {
-                // enable_storage_cache
-                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
+                // datacache.enable
+                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
                         String.valueOf(storageInfo.isEnableStorageCache()));
 
                 // storage_cache_ttl
@@ -152,10 +160,10 @@ public class LakeMaterializedView extends MaterializedView {
 
         Map<String, String> storageProperties = getProperties();
 
-        // enable_storage_cache
+        // datacache.enable
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                .append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE).append("\" = \"");
-        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
+                .append(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).append("\" = \"");
+        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)).append("\"");
 
         // storage_cache_ttl
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)

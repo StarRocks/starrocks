@@ -23,7 +23,12 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.lake.StorageCacheInfo;
+=======
+import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.sql.parser.NodePosition;
+>>>>>>> 142753636 ([Feature] Rename table property enable_storage_cache to datacache.enable (#25768))
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -86,7 +91,7 @@ public class PartitionDesc implements ParseNode {
         throw new NotImplementedException();
     }
 
-    public StorageCacheInfo getStorageCacheInfo() throws NotImplementedException {
+    public DataCacheInfo getDataCacheInfo() throws NotImplementedException {
         throw new NotImplementedException();
     }
 

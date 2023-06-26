@@ -179,7 +179,7 @@ public class CreateLakeTableTest {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key_cache (key1 int, key2 varchar(10))\n" +
                         "distributed by hash(key1) buckets 3\n" +
-                        "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '3600');"));
+                        "properties('datacache.enable' = 'true', 'storage_cache_ttl' = '3600');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "single_partition_duplicate_key_cache");
             // check table property
@@ -188,10 +188,10 @@ public class CreateLakeTableTest {
             Assert.assertEquals(3600, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partitionId = lakeTable.getPartition("single_partition_duplicate_key_cache").getId();
-            StorageCacheInfo partitionStorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partitionId);
-            Assert.assertTrue(partitionStorageCacheInfo.isEnableStorageCache());
-            Assert.assertEquals(3600, partitionStorageCacheInfo.getStorageCacheTtlS());
-            Assert.assertEquals(false, partitionStorageCacheInfo.isEnableAsyncWriteBack());
+            DataCacheInfo partitionDataCacheInfo = lakeTable.getPartitionInfo().getDataCacheInfo(partitionId);
+            Assert.assertTrue(partitionDataCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(3600, partitionDataCacheInfo.getStorageCacheTtlS());
+            Assert.assertEquals(false, partitionDataCacheInfo.isEnableAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -201,7 +201,7 @@ public class CreateLakeTableTest {
                         "(partition p1 values less than (\"2022-03-01\"),\n" +
                         " partition p2 values less than (\"2022-04-01\"))\n" +
                         "distributed by hash(key2) buckets 2\n" +
-                        "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '7200'," +
+                        "properties('datacache.enable' = 'true', 'storage_cache_ttl' = '7200'," +
                         "'enable_async_write_back' = 'true');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_aggregate_key_cache");
@@ -211,16 +211,16 @@ public class CreateLakeTableTest {
             Assert.assertEquals(7200, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partition1Id = lakeTable.getPartition("p1").getId();
-            StorageCacheInfo partition1StorageCacheInfo =
-                    lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
-            Assert.assertTrue(partition1StorageCacheInfo.isEnableStorageCache());
-            Assert.assertEquals(7200, partition1StorageCacheInfo.getStorageCacheTtlS());
+            DataCacheInfo partition1DataCacheInfo =
+                    lakeTable.getPartitionInfo().getDataCacheInfo(partition1Id);
+            Assert.assertTrue(partition1DataCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(7200, partition1DataCacheInfo.getStorageCacheTtlS());
             long partition2Id = lakeTable.getPartition("p2").getId();
-            StorageCacheInfo partition2StorageCacheInfo =
-                    lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
-            Assert.assertTrue(partition2StorageCacheInfo.isEnableStorageCache());
-            Assert.assertEquals(7200, partition2StorageCacheInfo.getStorageCacheTtlS());
-            Assert.assertEquals(true, partition2StorageCacheInfo.isEnableAsyncWriteBack());
+            DataCacheInfo partition2DataCacheInfo =
+                    lakeTable.getPartitionInfo().getDataCacheInfo(partition2Id);
+            Assert.assertTrue(partition2DataCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(7200, partition2DataCacheInfo.getStorageCacheTtlS());
+            Assert.assertEquals(true, partition2DataCacheInfo.isEnableAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -228,29 +228,36 @@ public class CreateLakeTableTest {
                         "unique key (key1, key2)\n" +
                         "partition by range(key1)\n" +
                         "(partition p1 values less than (\"10\"),\n" +
-                        " partition p2 values less than (\"20\") ('enable_storage_cache' = 'false'))\n" +
+                        " partition p2 values less than (\"20\") ('datacache.enable' = 'false'))\n" +
                         "distributed by hash(key2) buckets 1\n" +
                         "properties('replication_num' = '1');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_unique_key_cache");
             // check table property
             StorageInfo storageInfo = lakeTable.getTableProperty().getStorageInfo();
-            // enabled by default if property key `enable_storage_cache` is absent
+            // enabled by default if property key `datacache.enable` is absent
             Assert.assertTrue(storageInfo.isEnableStorageCache());
             Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partition1Id = lakeTable.getPartition("p1").getId();
-            StorageCacheInfo partition1StorageCacheInfo =
-                    lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
-            Assert.assertTrue(partition1StorageCacheInfo.isEnableStorageCache());
+            DataCacheInfo partition1DataCacheInfo =
+                    lakeTable.getPartitionInfo().getDataCacheInfo(partition1Id);
+            Assert.assertTrue(partition1DataCacheInfo.isEnableStorageCache());
             Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds,
-                    partition1StorageCacheInfo.getStorageCacheTtlS());
+                    partition1DataCacheInfo.getStorageCacheTtlS());
             long partition2Id = lakeTable.getPartition("p2").getId();
+<<<<<<< HEAD
             StorageCacheInfo partition2StorageCacheInfo =
                     lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
             Assert.assertFalse(partition2StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds,
                     partition2StorageCacheInfo.getStorageCacheTtlS());
+=======
+            DataCacheInfo partition2DataCacheInfo =
+                    lakeTable.getPartitionInfo().getDataCacheInfo(partition2Id);
+            Assert.assertFalse(partition2DataCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(0L, partition2DataCacheInfo.getStorageCacheTtlS());
+>>>>>>> 142753636 ([Feature] Rename table property enable_storage_cache to datacache.enable (#25768))
         }
     }
 
@@ -263,15 +270,21 @@ public class CreateLakeTableTest {
                 () -> createTable(
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
                                 "distributed by hash(key1) buckets 3\n" +
-                                " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '0'," +
+                                " properties('datacache.enable' = 'false', 'storage_cache_ttl' = '0'," +
                                 "'enable_async_write_back' = 'true');"));
 
         // disable auto partition
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Cloud native table does not support automatic partition",
                 () -> createTable(
+<<<<<<< HEAD
                         "create table lake_test.auto_partition (key1 date, key2 varchar(10), key3 int)\n" +
                                 "partition by date_trunc(\"day\", key1) distributed by hash(key2) buckets 3;"));
+=======
+                        "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
+                                "distributed by hash(key1) buckets 3\n" +
+                                " properties('datacache.enable' = 'false', 'storage_cache_ttl' = '2592000');"));
+>>>>>>> 142753636 ([Feature] Rename table property enable_storage_cache to datacache.enable (#25768))
     }
 
     @Test

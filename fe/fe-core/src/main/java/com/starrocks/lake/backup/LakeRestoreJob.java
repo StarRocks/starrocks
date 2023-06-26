@@ -298,7 +298,7 @@ public class LakeRestoreJob extends RestoreJob {
             localPartitionInfo.addPartition(restorePart.getId(), false, remoteRange,
                     remoteDataProperty, (short) restoreReplicationNum,
                     remotePartitionInfo.getIsInMemory(remotePartId),
-                    remotePartitionInfo.getStorageCacheInfo(remotePartId));
+                    remotePartitionInfo.getDataCacheInfo(remotePartId));
             localTbl.addPartition(restorePart);
             if (modify) {
                 // modify tablet inverted index
@@ -313,8 +313,12 @@ public class LakeRestoreJob extends RestoreJob {
             FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(remoteOlapTbl.getId());
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
+<<<<<<< HEAD
             remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.isEnableStorageCache(),
                     storageInfo.getStorageCacheTtlS(), storageInfo.isEnableAsyncWriteBack());
+=======
+            remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getDataCacheInfo());
+>>>>>>> 142753636 ([Feature] Rename table property enable_storage_cache to datacache.enable (#25768))
             remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
         } catch (DdlException e) {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());

@@ -44,7 +44,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -123,8 +123,8 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory, StorageCacheInfo storageCacheInfo) {
-        addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageCacheInfo);
+                             short replicationNum, boolean isInMemory, DataCacheInfo dataCacheInfo) {
+        addPartition(partitionId, dataProperty, replicationNum, isInMemory, dataCacheInfo);
         setRangeInternal(partitionId, isTemp, range);
     }
 
@@ -226,7 +226,7 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
         idToReplicationNum.put(partitionId, desc.getReplicationNum());
         idToInMemory.put(partitionId, desc.isInMemory());
-        idToStorageCacheInfo.put(partitionId, desc.getStorageCacheInfo());
+        idToStorageCacheInfo.put(partitionId, desc.getDataCacheInfo());
         return range;
     }
 
@@ -244,7 +244,7 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
         idToInMemory.put(partitionId, false);
-        idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
+        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true,
                 Config.lake_default_storage_cache_ttl_seconds, false));
     }
 
@@ -267,7 +267,7 @@ public class RangePartitionInfo extends PartitionInfo {
                 idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
                 idToReplicationNum.put(partitionId, desc.getReplicationNum());
                 idToInMemory.put(partitionId, desc.isInMemory());
-                idToStorageCacheInfo.put(partitionId, desc.getStorageCacheInfo());
+                idToStorageCacheInfo.put(partitionId, desc.getDataCacheInfo());
             }
         }
     }
@@ -292,7 +292,7 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, info.getDataProperty());
         idToReplicationNum.put(partitionId, info.getReplicationNum());
         idToInMemory.put(partitionId, info.isInMemory());
-        idToStorageCacheInfo.put(partitionId, info.getStorageCacheInfo());
+        idToStorageCacheInfo.put(partitionId, info.getDataCacheInfo());
     }
 
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {

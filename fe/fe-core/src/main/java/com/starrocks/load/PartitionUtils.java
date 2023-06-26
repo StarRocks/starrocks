@@ -74,7 +74,7 @@ public class PartitionUtils {
                         partitionInfo.getDataProperty(sourcePartitionId),
                         partitionInfo.getReplicationNum(sourcePartitionId),
                         partitionInfo.getIsInMemory(sourcePartitionId),
-                        partitionInfo.getStorageCacheInfo(sourcePartitionId));
+                        partitionInfo.getDataCacheInfo(sourcePartitionId));
                 Partition partition = newTempPartitions.get(i);
                 // range is null for UNPARTITIONED type
                 Range<PartitionKey> range = null;
@@ -84,6 +84,7 @@ public class PartitionUtils {
                             rangePartitionInfo.getRange(sourcePartitionId));
                     range = rangePartitionInfo.getRange(partition.getId());
                 }
+<<<<<<< HEAD
                 if (targetTable.isCloudNativeTableOrMaterializedView()) {
                     PartitionPersistInfoV2 info = null;
                     if (range != null) {
@@ -109,6 +110,21 @@ public class PartitionUtils {
                                     partitionInfo.getIsInMemory(partition.getId()),
                                     true);
                     partitionInfoList.add(info);
+=======
+                PartitionPersistInfoV2 info = null;
+                if (range != null) {
+                    info = new RangePartitionPersistInfo(db.getId(), targetTable.getId(),
+                            partition, partitionInfo.getDataProperty(partition.getId()),
+                            partitionInfo.getReplicationNum(partition.getId()),
+                            partitionInfo.getIsInMemory(partition.getId()), true,
+                            range, partitionInfo.getDataCacheInfo(partition.getId()));
+                } else {
+                    info = new SinglePartitionPersistInfo(db.getId(), targetTable.getId(),
+                            partition, partitionInfo.getDataProperty(partition.getId()),
+                            partitionInfo.getReplicationNum(partition.getId()),
+                            partitionInfo.getIsInMemory(partition.getId()), true,
+                            partitionInfo.getDataCacheInfo(partition.getId()));
+>>>>>>> 142753636 ([Feature] Rename table property enable_storage_cache to datacache.enable (#25768))
                 }
             }
 

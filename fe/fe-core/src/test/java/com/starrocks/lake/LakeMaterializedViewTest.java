@@ -170,7 +170,11 @@ public class LakeMaterializedViewTest {
         builder.setFsInfo(fsInfo);
         builder.setFullPath("s3://test-bucket/1/");
         FilePathInfo pathInfo = builder.build();
+<<<<<<< HEAD
         mv.setStorageInfo(pathInfo, true, 3600, true);
+=======
+        mv.setStorageInfo(pathInfo, new DataCacheInfo(true, 3600, true));
+>>>>>>> 142753636 ([Feature] Rename table property enable_storage_cache to datacache.enable (#25768))
 
         // Test serialize and deserialize
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
@@ -220,7 +224,7 @@ public class LakeMaterializedViewTest {
         StringBuilder sb = new StringBuilder();
         Deencapsulation.invoke(newMv2, "appendUniqueProperties", sb);
         String baseProperties = sb.toString();
-        Assert.assertTrue(baseProperties.contains("\"enable_storage_cache\" = \"true\""));
+        Assert.assertTrue(baseProperties.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(baseProperties.contains("\"storage_cache_ttl\" = \"3600\""));
         Assert.assertTrue(baseProperties.contains("\"enable_async_write_back\" = \"true\""));
 
@@ -233,7 +237,7 @@ public class LakeMaterializedViewTest {
         starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "PROPERTIES(\n" +
-                        "   'enable_storage_cache' = 'true',\n" +
+                        "   'datacache.enable' = 'true',\n" +
                         "   'storage_cache_ttl' = '3600',\n" +
                         "   'enable_async_write_back' = 'true'\n" +
                         ")\n" +
@@ -261,7 +265,7 @@ public class LakeMaterializedViewTest {
         String ddlStmt = lakeMv.getMaterializedViewDdlStmt(true);
         System.out.println(ddlStmt);
         Assert.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
-        Assert.assertTrue(ddlStmt.contains("\"enable_storage_cache\" = \"true\""));
+        Assert.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(ddlStmt.contains("\"storage_cache_ttl\" = \"3600\""));
         Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"true\""));
 
