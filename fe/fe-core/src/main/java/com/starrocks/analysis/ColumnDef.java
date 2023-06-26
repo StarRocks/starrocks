@@ -31,7 +31,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeNameFormat;
-import com.starrocks.sql.common.EngineType;
 
 import java.util.ArrayList;
 import java.util.Set;
@@ -199,8 +198,8 @@ public class ColumnDef {
         return typeDef.getType();
     }
 
-    public void analyze(boolean isOlap, String engineName) throws AnalysisException {
-        if (!isAllowNull && !EngineType.supportNotNullColumn(engineName)) {
+    public void analyze(boolean isOlap, boolean supportNotNull) throws AnalysisException {
+        if (!isAllowNull && !supportNotNull) {
             // prevent not null for external table
             throw new AnalysisException(String.format("All columns must be nullable for external table. " +
                     "Column %s is not nullable, You can rebuild the external table and " +
