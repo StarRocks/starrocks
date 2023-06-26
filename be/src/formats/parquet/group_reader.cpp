@@ -542,7 +542,7 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
         ColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
         dict_value_chunk->append_column(dict_value_column, slot_id);
         RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(dict_value_column.get()));
-        // append a null value to check if null is ok not not.
+        // append a null value to check if null is ok or not.
         dict_value_column->append_default();
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs_by_slot[slot_id], dict_value_chunk.get()));
         dict_value_chunk->check_or_die();
@@ -555,7 +555,6 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
 
         // ---------
         // get dict codes according to dict values.
-        dict_value_column = dict_value_chunk->get_column_by_slot_id(slot_id);
         auto* dict_nullable_column = down_cast<NullableColumn*>(dict_value_column.get());
         auto* dict_value_binary_column = down_cast<BinaryColumn*>(dict_nullable_column->data_column().get());
         std::vector<int32_t> dict_codes;
