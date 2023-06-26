@@ -328,7 +328,7 @@ public class PlanFragmentBuilder {
     }
 
     private static boolean useQueryCache(ExecPlan execPlan) {
-        if (execPlan.getConnectContext().getSessionVariable().isEnableQueryCache()) {
+        if (!execPlan.getConnectContext().getSessionVariable().isEnableQueryCache()) {
             return false;
         }
         return true;
