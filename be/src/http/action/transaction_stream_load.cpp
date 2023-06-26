@@ -300,6 +300,10 @@ Status TransactionStreamLoadAction::_on_header(HttpRequest* http_req, StreamLoad
         }
     }
 
+    if (!req->header(HTTP_WAREHOUSE).empty()) {
+        ctx->warehouse = req->header(HTTP_WAREHOUSE);
+    }
+
     return _exec_plan_fragment(http_req, ctx);
 }
 
@@ -312,6 +316,7 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     request.formatType = ctx->format;
     request.__set_loadId(ctx->id.to_thrift());
     request.fileType = TFileType::FILE_STREAM;
+    request.warehouse = ctx->warehouse;
 
     if (!http_req->header(HTTP_COLUMNS).empty()) {
         request.__set_columns(http_req->header(HTTP_COLUMNS));

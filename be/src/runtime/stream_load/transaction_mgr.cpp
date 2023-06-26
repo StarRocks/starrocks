@@ -304,6 +304,10 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
         return Status::InternalError("no valid Basic authorization");
     }
 
+    if (!req->header(HTTP_WAREHOUSE).empty()) {
+        ctx->warehouse = req->header(HTTP_WAREHOUSE);
+    }
+
     // 2. begin transaction
     ctx->begin_txn_ts = UnixSeconds();
     int64_t begin_nanos = MonotonicNanos();

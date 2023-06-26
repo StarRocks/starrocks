@@ -320,6 +320,10 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         ctx->timeout_second = timeout_second;
     }
 
+    if (!http_req->header(HTTP_WAREHOUSE).empty()) {
+        ctx->warehouse = http_req->header(HTTP_WAREHOUSE);
+    }
+
     // begin transaction
     int64_t begin_txn_start_time = MonotonicNanos();
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->begin_txn(ctx));
