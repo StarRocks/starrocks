@@ -222,7 +222,7 @@ public:
             for (size_t i = 0; i < dict_codes.size(); i++) {
                 slices[i] = _dict[dict_codes[i]];
             }
-        } else {
+        } else if (!all_null) {
             for (size_t i = 0; i < dict_codes.size(); i++) {
                 if (!null_data[i]) {
                     slices[i] = _dict[dict_codes[i]];
