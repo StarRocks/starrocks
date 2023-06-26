@@ -11,7 +11,7 @@ MAP<key_type,value_type>
 ```
 
 - `key_type`: the data type of the key. The key must be of a primitive type in StarRocks, such as numeric, string, or date types, excluding HLL, JSON, ARRAY, MAP, BITMAP, and STRUCT.
-- `value_type`: the data type of the value. The value can be of any supported types.
+- `value_type`: the data type of the value. The value can be of any supported type.
 
 Keys and values are natively nullable.
 
@@ -56,25 +56,25 @@ StarRocks can derive the data types of keys and values from all the input keys a
 
 ```SQL
 select map{1:1, 2:2, 3:3} as numbers;
-select map(1,1,2,2,3,3) as numbers; -- The result is {{1:1,2:2,3:3}.
+select map(1,1,2,2,3,3) as numbers; -- Returns {{1:1,2:2,3:3}.
 select map{1:"apple", 2:"orange", 3:"pear"} as fruit;
-select map(1, "apple", 2, "orange", 3, "pear") as fruit; -- The result is {1:"apple",2:"orange",3:"pear"}.
+select map(1, "apple", 2, "orange", 3, "pear") as fruit; -- Returns {1:"apple",2:"orange",3:"pear"}.
 select map{true:map{3.13:"abc"}, false:map{}} as nest;
-select map(true, map(3.13, "abc"), false, map{}) as nest; -- The result is {1:{3.13:"abc"},0:{}}.
+select map(true, map(3.13, "abc"), false, map{}) as nest; -- Returns {1:{3.13:"abc"},0:{}}.
 ```
 
 If the keys or values have different types, StarRocks automatically derives the appropriate type (supertype).
 
 ```SQL
-select map{1:2.2, 1.2:21} as floats_floats; -- The result is {1.0:2.2,1.2:21.0}.
-select map{12:"a", "100":1, NULL:NULL} as string_string; -- The result is {"12":"a","100":"1",null:null}.
+select map{1:2.2, 1.2:21} as floats_floats; -- Returns {1.0:2.2,1.2:21.0}.
+select map{12:"a", "100":1, NULL:NULL} as string_string; -- Returns {"12":"a","100":"1",null:null}.
 ```
 
 You can also define the data type using `{}` when you construct a map. The input keys or values must be able to cast into the specified types.
 
 ```SQL
-select map<FLOAT,INT>{1:2}; -- The result is {1:2}.
-select map<INT,INT>{"12": "100"}; -- The result is {12:100}.
+select map<FLOAT,INT>{1:2}; -- Returns {1:2}.
+select map<INT,INT>{"12": "100"}; -- Returns {12:100}.
 ```
 
 Keys and values are nullable.
@@ -87,7 +87,7 @@ Construct empty maps.
 
 ```SQL
 select map{} as empty_map;
-select map() as empty_map; --The result is {}.
+select map() as empty_map; -- Returns {}.
 ```
 
 ## Load MAP data into StarRocks
