@@ -104,6 +104,7 @@ A set of parameters about how StarRocks integrates with the metastore of your da
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
 ```SQL
+"iceberg.catalog.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
@@ -115,6 +116,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 | Parameter                           | Required | Description                                                  |
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
+| iceberg.catalog.type                | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. |
 | hive.metastore.uris                 | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ##### AWS Glue
@@ -141,6 +143,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 - To choose the IAM user-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
+  "iceberg.catalog.type" = "glue",
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -159,18 +162,6 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
-
-##### Custom metadata service
-
-If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class (the class name of the custom catalog cannot be the same as the name of any class that already exists in StarRocks) and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class `BaseMetastoreCatalog`. After the custom catalog is created, package the catalog and its related files, place them under the **fe/lib** path of each FE, and then restart each FE.
-
-After you complete the preceding operations, you can create an Iceberg catalog and configure its properties.
-
-| **Property**           | **Required** | **Description**                                              |
-| ---------------------- | ------------ | ------------------------------------------------------------ |
-| type                   | Yes          | The type of the data source. Set the value to `iceberg`.      |
-| iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `CUSTOM`. |
-| iceberg.catalog-impl   | Yes          | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the custom catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg catalog. |
 
 #### `StorageCredentialParams`
 
@@ -447,9 +438,10 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -460,11 +452,11 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
       "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -477,10 +469,11 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -491,13 +484,13 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
       "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -510,11 +503,12 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -525,15 +519,15 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   PROPERTIES
   (
       "type" = "iceberg",
-      "aws.s3.use_instance_profile" = "false",
-      "aws.s3.access_key" = "<iam_user_access_key>",
-      "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2",
       "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -545,7 +539,8 @@ Use MinIO as an example. Run a command like below:
 CREATE EXTERNAL CATALOG iceberg_catalog_hms
 PROPERTIES
 (
-    "type" = "iceberg", 
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
     "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
@@ -565,7 +560,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
@@ -578,7 +574,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.account_name" = "<blob_storage_account_name>",
       "azure.blob.container_name" = "<blob_container_name>",
@@ -594,7 +591,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
@@ -606,7 +604,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
@@ -622,7 +621,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -636,7 +636,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
@@ -649,7 +650,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -665,7 +667,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
@@ -677,7 +680,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "iceberg", 
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
@@ -693,7 +697,8 @@ PROPERTIES
     CREATE EXTERNAL CATALOG iceberg_catalog_hms
     PROPERTIES
     (
-        "type" = "iceberg", 
+        "type" = "iceberg",
+        "iceberg.catalog.type" = "hive",
         "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
@@ -706,12 +711,13 @@ PROPERTIES
     CREATE EXTERNAL CATALOG iceberg_catalog_hms
     PROPERTIES
     (
-        "type" = "iceberg", 
+        "type" = "iceberg",
+        "iceberg.catalog.type" = "hive",
         "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
-        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>",  
+        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
 
