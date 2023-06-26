@@ -178,9 +178,9 @@ E: (1064, 'Getting analyzing error from line 1, column 73 to line 1, column 84. 
 -- !result
 select map3 from map_test t where exists (select 1 from map_test s where t.map3 = s.map3);
 -- result:
-{"3":{3:"a33c"},null:null}
-{"1":{1:"abc"}}
 {"11":{1:"abc"},"":{2:null}}
+{"1":{1:"abc"}}
+{"3":{3:"a33c"},null:null}
 {null:{null:null}}
 -- !result
 select map5 from map_test t where exists (select 1 from map_test s where t.map5 < s.map3);
@@ -193,8 +193,8 @@ None
 -- !result
 select map1 from map_test t where not exists (select 1 from map_test s where t.map1 = s.map0);
 -- result:
-{null:""}
 None
+{null:""}
 -- !result
 select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map5);
 -- result:

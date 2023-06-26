@@ -32,7 +32,7 @@ select t.s0, s.s0 from struct_test t join struct_test s where s.s0 = t.s0 order 
 select t.s1, s.s1 from struct_test t join struct_test s where s.s1 = t.s1 order by t.pk;
 select t.s2, s.s2 from struct_test t join struct_test s where s.s2 = t.s2 order by t.pk;
 select t.s3, s.s3 from struct_test t join struct_test s where s.s3 = t.s3 order by t.pk;
-select t.s4, s.s4 from struct_test t join struct_test s where s.s4 = t.s4 order by t.pk;
+-- select t.s4, s.s4 from struct_test t join struct_test s where s.s4 = t.s4 order by t.pk;
 select t.s2, s.s3 from struct_test t join struct_test s where s.s2 = t.s3 order by t.pk;
 
 

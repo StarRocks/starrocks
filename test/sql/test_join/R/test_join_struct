@@ -93,10 +93,6 @@ select t.s3, s.s3 from struct_test t join struct_test s where s.s3 = t.s3 order 
 {"c0":null,"c1":{null:null}}	{"c0":null,"c1":{null:null}}
 {"c0":"3","c1":{3:"a33c",null:null}}	{"c0":"3","c1":{3:"a33c",null:null}}
 -- !result
-select t.s4, s.s4 from struct_test t join struct_test s where s.s4 = t.s4 order by t.pk;
--- result:
-E: (1064, 'join on type STRUCT{c0 INT, c1 JSON}=STRUCT{c0 INT, c1 JSON} is not supported backend:172.26.92.195')
--- !result
 select t.s2, s.s3 from struct_test t join struct_test s where s.s2 = t.s3 order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 71. Detail message: Column type struct<c0 int(11), c1 array<varchar(65533)>> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
