@@ -96,6 +96,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 如果选择 HMS 作为 Iceberg 集群的元数据服务，请按如下配置 `MetastoreParams`：
 
 ```SQL
+"iceberg.catalog.type" = "hive",
 "iceberg.catalog.hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
@@ -107,7 +108,8 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
 | 参数                                 | 是否必须 | 说明                                                         |
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
-| iceberg.catalog.hive.metastore.uris                 | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br>如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
+| iceberg.catalog.type                | 是       | Iceberg 集群所使用的元数据服务的类型。设置为 `hive`。           |
+| iceberg.catalog.hive.metastore.uris | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br>如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
 
 ##### AWS Glue
 
@@ -133,6 +135,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 - 基于 IAM User 进行认证和鉴权
 
   ```SQL
+  "iceberg.catalog.type" = "glue",
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -151,18 +154,6 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
-
-##### 自定义元数据服务
-
-如使用自定义元数据服务，则您需要在 StarRocks 中开发一个 Custom Catalog 类（Custom Catalog 类名不能与 StarRocks 中已存在的类名重复），并实现相关接口，以保证 StarRocks 能够访问自定义元数据服务。Custom Catalog 类需要继承抽象类 `BaseMetastoreCatalog`。开发完成后，您需要将 Custom Catalog 及其相关文件打包并放到所有 FE 节点的 **fe/lib** 路径下，然后重启所有 FE 节点，以便 FE 识别这个类。
-
-以上操作完成后即可创建 Iceberg Catalog 并配置其相关属性，具体如下：
-
-| **属性**               | **必选** | **说明**                                                     |
-| ---------------------- | -------- | ------------------------------------------------------------ |
-| type                   | 是       | 数据源类型，取值为 `iceberg`。                                |
-| iceberg.catalog.type   | 是       | Iceberg 中 Catalog 的类型。取值为 `CUSTOM`。使用自定义元数据服务则需要在 Iceberg 中配置 Custom Catalog。 |
-| iceberg.catalog-impl   | 是       | Custom Catalog 的全限定类名。FE 会根据该类名查找开发的 Custom Catalog。如果您在 Custom Catalog 中自定义了配置项，且希望在查询外部数据时这些配置项能生效，您可以在创建 Iceberg Catalog 时将这些配置项以键值对的形式添加到 SQL 语句的 `PROPERTIES` 中。 |
 
 #### StorageCredentialParams
 
@@ -251,9 +242,10 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
   PROPERTIES
   (
       "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
-      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -264,11 +256,11 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
   PROPERTIES
   (
       "type" = "iceberg",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
       "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -281,10 +273,11 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
   PROPERTIES
   (
       "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
-      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -295,13 +288,13 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
   PROPERTIES
   (
       "type" = "iceberg",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
       "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -314,11 +307,12 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
   PROPERTIES
   (
       "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
-      "aws.s3.region" = "us-west-2",
-      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -329,15 +323,15 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
   PROPERTIES
   (
       "type" = "iceberg",
-      "aws.s3.use_instance_profile" = "false",
-      "aws.s3.access_key" = "<iam_user_access_key>",
-      "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2",
       "iceberg.catalog.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -349,7 +343,8 @@ Iceberg Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
 CREATE EXTERNAL CATALOG iceberg_catalog_hms
 PROPERTIES
 (
-    "type" = "iceberg", 
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
     "iceberg.catalog.hive.metastore.uris" = "thrift://34.132.15.127:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
