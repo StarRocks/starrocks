@@ -30,6 +30,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.List;
 import java.util.Map;
 
+// Add columnsToEnforce into LogicalScanOperator's colRefToColumnMetaMap.
+// enforce() will return a new OptExpression based on old OptExpression insteading of
+// modifying it locally.
 public class ColumnEnforcer {
     private OptExpression optExpression;
     private List<ColumnRefOperator> columnsToEnforce;
