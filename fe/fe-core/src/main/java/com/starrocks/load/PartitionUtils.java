@@ -75,7 +75,7 @@ public class PartitionUtils {
                         partitionInfo.getDataProperty(sourcePartitionId),
                         partitionInfo.getReplicationNum(sourcePartitionId),
                         partitionInfo.getIsInMemory(sourcePartitionId),
-                        partitionInfo.getStorageCacheInfo(sourcePartitionId));
+                        partitionInfo.getDataCacheInfo(sourcePartitionId));
                 Partition partition = newTempPartitions.get(i);
 
                 PartitionPersistInfoV2 info;
@@ -121,6 +121,7 @@ public class PartitionUtils {
                             values, multiValues);
                 } else {
                     throw new DdlException("Unsupported partition persist info.");
+                            partitionInfo.getDataCacheInfo(partition.getId()));
                 }
                 partitionInfoV2List.add(info);
             }

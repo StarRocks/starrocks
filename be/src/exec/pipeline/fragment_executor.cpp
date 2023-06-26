@@ -172,12 +172,6 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 }
 
 Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
-    bool enable_resource_group =
-            request.common().__isset.enable_resource_group && request.common().enable_resource_group;
-    if (!enable_resource_group) {
-        return Status::OK();
-    }
-
     WorkGroupPtr wg = nullptr;
     if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
         wg = WorkGroupManager::instance()->get_default_workgroup();
@@ -699,7 +693,6 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = exec_env->wg_driver_executor();
     _fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
-        DCHECK(!fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);
         executor->submit(driver.get());
         return Status::OK();
     });

@@ -1,3 +1,4 @@
+#!/bin/bash
 # Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-log4j.rootLogger=ERROR, stdout
-log4j.appender.stdout=org.apache.log4j.ConsoleAppender
-log4j.appender.stdout.target=System.err
-log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
-log4j.appender.stdout.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p [%t] %F(%M:%L): %m%n
+#####################################################
+# Download url, filename and unpaced filename
+# of all thirdparties
+# 
+# vars-${arch}.sh defines the thirdparties that are
+# architecure-related.
+#####################################################
+
+# jindosdk for Aliyun OSS
+JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux-ubuntu22-x86_64.tar.gz"
+JINDOSDK_NAME="jindosdk-4.6.8-linux-ubuntu22-x86_64.tar.gz"
+JINDOSDK_SOURCE="jindosdk-4.6.8-linux-ubuntu22-x86_64"
+JINDOSDK_MD5SUM="52236053391091591c2d09684791e810"

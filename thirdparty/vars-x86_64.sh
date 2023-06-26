@@ -44,3 +44,9 @@ ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releas
 ASYNC_PROFILER_NAME="async-profiler-2.9-linux-x64.tar.gz"
 ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-x64"
 ASYNC_PROFILER_MD5SUM="29127cee36b7acf069d31603b4558361"
+
+# jindosdk for Aliyun OSS
+JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux.tar.gz"
+JINDOSDK_NAME="jindosdk-4.6.8-linux.tar.gz"
+JINDOSDK_SOURCE="jindosdk-4.6.8-linux"
+JINDOSDK_MD5SUM="5436e4fe39c4dfdc942e41821f1dd8a9"
