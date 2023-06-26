@@ -89,13 +89,13 @@ public class PartitionUtils {
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
-                            range, partitionInfo.getStorageCacheInfo(partition.getId()));
+                            range, partitionInfo.getDataCacheInfo(partition.getId()));
                 } else if (partitionInfo instanceof SinglePartitionInfo) {
                     info = new SinglePartitionPersistInfo(db.getId(), targetTable.getId(),
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
-                            partitionInfo.getStorageCacheInfo(partition.getId()));
+                            partitionInfo.getDataCacheInfo(partition.getId()));
                 } else if (partitionInfo instanceof ListPartitionInfo) {
                     ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
 
@@ -121,7 +121,6 @@ public class PartitionUtils {
                             values, multiValues);
                 } else {
                     throw new DdlException("Unsupported partition persist info.");
-                            partitionInfo.getDataCacheInfo(partition.getId()));
                 }
                 partitionInfoV2List.add(info);
             }
