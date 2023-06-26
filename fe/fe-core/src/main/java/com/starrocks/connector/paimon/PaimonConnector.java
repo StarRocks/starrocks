@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.paimon;
 
+import com.google.common.base.Strings;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -26,7 +27,6 @@ import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.options.Options;
-import org.apache.parquet.Strings;
 
 import java.util.Map;
 

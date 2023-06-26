@@ -14,6 +14,7 @@
 
 package com.starrocks.paimon.reader;
 
+import com.google.common.base.Strings;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
@@ -34,7 +35,6 @@ import org.apache.paimon.table.source.Split;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
-import org.apache.parquet.Strings;
 
 import java.io.IOException;
 import java.util.Arrays;
