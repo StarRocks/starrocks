@@ -6,6 +6,8 @@ Creates a named STRUCT or ROW value from the given values.
 
 The row() and struct() functions are equivalent. They support unnamed struct. You do not need to specify the field names. StarRocks automatically generates column names, like `col1`, `col2`...
 
+This function is supported from v3.1 onwards.
+
 ## Syntax
 
 ```Haskell

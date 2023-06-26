@@ -6,6 +6,8 @@ STRUCT is widely used to express complex data types. It represents a collection 
 
 Fields can be of primitive data types (such as numeric, string, or date) or complex data types (such as ARRAY or MAP). A field within a STRUCT can also be another STRUCT, ARRAY, or MAP, which allows you to create nested data structures, for example, `STRUCT<a INT, b STRUCT<c INT, d INT>, c MAP<INT, INT>, d ARRAY<INT>>`.
 
+The STRUCT data type is supported from v3.1 onwards.
+
 ## Syntax
 
 ```Haskell

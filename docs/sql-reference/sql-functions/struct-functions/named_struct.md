@@ -4,6 +4,8 @@
 
 Creates a struct with the specified field names and values.
 
+This function is supported from v3.1 onwards.
+
 ## Syntax
 
 ```Haskell

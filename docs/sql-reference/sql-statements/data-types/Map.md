@@ -4,6 +4,8 @@
 
 MAP is a complex data type that stores a set of key-value pairs, for example, `{a:1, b:2, c:3}`. Keys in a map must be unique. A nested map can contain up to 14 levels of nesting.
 
+The MAP data type is supported from v3.1 onwards.
+
 ## Syntax
 
 ```Haskell

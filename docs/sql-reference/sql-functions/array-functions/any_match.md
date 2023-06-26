@@ -10,6 +10,8 @@ Returns `false` (0) if none of the elements matches (a special case is when the 
 
 Returns NULL if the predicate returns NULL for one or more elements and `false` for all other elements.
 
+This function is supported from v3.1 onwards.
+
 ## Syntax
 
 ```Haskell
