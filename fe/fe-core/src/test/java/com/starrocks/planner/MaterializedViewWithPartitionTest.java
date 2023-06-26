@@ -301,16 +301,12 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " on t1.c1=t2.c1 and t1.c3=t2.c3 ")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 1: c1 IS NOT NULL, 3: c3 IS NOT NULL\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part\n" +
-                        "     tabletRatio=10/10")
-                .contains("TABLE: test_base_part2\n" +
+                        "     PREDICATES: 15: c1 IS NOT NULL, 16: c3 IS NOT NULL\n" +
+                        "     partitions=1/5")
+                .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 IS NOT NULL, 7: c3 IS NOT NULL\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part2\n" +
-                        "     tabletRatio=10/10");
+                        "     PREDICATES: 15: c1 IS NOT NULL, 16: c3 IS NOT NULL\n" +
+                        "     partitions=1/5");
 
         starRocksAssert.dropMaterializedView("partial_mv_6");
     }
@@ -398,16 +394,13 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " on t1.c1=t2.c1 and t1.c3=t2.c3 ")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 1: c1 IS NOT NULL, 3: c3 IS NOT NULL\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part\n" +
-                        "     tabletRatio=10/10")
+                        "     PREDICATES: 15: c1 IS NOT NULL, 16: c3 IS NOT NULL\n" +
+                        "     partitions=1/5\n" +
+                        "     rollup: test_base_part")
                 .contains("TABLE: test_base_part2\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 IS NOT NULL, 7: c3 IS NOT NULL\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part2\n" +
-                        "     tabletRatio=10/10");
+                        "     PREDICATES: 19: c1 IS NOT NULL, 21: c3 IS NOT NULL\n" +
+                        "     partitions=1/5");
 
         starRocksAssert.dropMaterializedView("partial_mv_6");
     }
