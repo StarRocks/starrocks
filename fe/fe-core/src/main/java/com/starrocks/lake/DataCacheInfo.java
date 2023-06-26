@@ -22,7 +22,7 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 
 import java.io.IOException;
 
-public class StorageCacheInfo implements GsonPreProcessable, GsonPostProcessable {
+public class DataCacheInfo implements GsonPreProcessable, GsonPostProcessable {
     // cache ttl:
     // -1 indicates "cache forever"
     // 0 indicates "disable cache"
@@ -30,11 +30,11 @@ public class StorageCacheInfo implements GsonPreProcessable, GsonPostProcessable
     private byte[] cacheInfoBytes;
     private FileCacheInfo cacheInfo;
 
-    public StorageCacheInfo(FileCacheInfo cacheInfo) {
+    public DataCacheInfo(FileCacheInfo cacheInfo) {
         this.cacheInfo = cacheInfo;
     }
 
-    public StorageCacheInfo(boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
+    public DataCacheInfo(boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
         this.cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
                 .setAsyncWriteBack(asyncWriteBack).build();
     }

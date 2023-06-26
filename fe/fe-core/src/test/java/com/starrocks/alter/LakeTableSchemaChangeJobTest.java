@@ -40,11 +40,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -162,9 +162,9 @@ public class LakeTableSchemaChangeJobTest {
         builder.setFullPath("s3://test-bucket/object-1");
         FilePathInfo pathInfo = builder.build();
 
-        table.setStorageInfo(pathInfo, new StorageCacheInfo(false, 0, false));
-        StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
-        partitionInfo.setStorageCacheInfo(partitionId, storageCacheInfo);
+        table.setStorageInfo(pathInfo, new DataCacheInfo(false, 0, false));
+        DataCacheInfo dataCacheInfo = new DataCacheInfo(false, 0, false);
+        partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
 
         db.createTable(table);
 

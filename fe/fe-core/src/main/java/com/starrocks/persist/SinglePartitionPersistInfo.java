@@ -16,14 +16,14 @@ package com.starrocks.persist;
 
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 
 // UNPARTITIONED type
 public class SinglePartitionPersistInfo extends PartitionPersistInfoV2 {
 
     public SinglePartitionPersistInfo(Long dbId, Long tableId, Partition partition,
                                       DataProperty dataProperty, short replicationNum, boolean isInMemory,
-                                      boolean isTempPartition, StorageCacheInfo storageCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition, storageCacheInfo);
+                                      boolean isTempPartition, DataCacheInfo dataCacheInfo) {
+        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition, dataCacheInfo);
     }
 }

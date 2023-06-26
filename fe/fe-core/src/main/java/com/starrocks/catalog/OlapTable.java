@@ -74,7 +74,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -948,7 +948,7 @@ public class OlapTable extends Table {
                             rangePartitionInfo.getDataProperty(partition.getId()),
                             rangePartitionInfo.getReplicationNum(partition.getId()),
                             rangePartitionInfo.getIsInMemory(partition.getId()),
-                            rangePartitionInfo.getStorageCacheInfo(partition.getId()));
+                            rangePartitionInfo.getDataCacheInfo(partition.getId()));
                 } else if (!reserveTablets) {
                     GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 }
@@ -1661,14 +1661,14 @@ public class OlapTable extends Table {
         DataProperty dataProperty = partitionInfo.getDataProperty(oldPartition.getId());
         short replicationNum = partitionInfo.getReplicationNum(oldPartition.getId());
         boolean isInMemory = partitionInfo.getIsInMemory(oldPartition.getId());
-        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(oldPartition.getId());
+        DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(oldPartition.getId());
 
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                    replicationNum, isInMemory, storageCacheInfo);
+                    replicationNum, isInMemory, dataCacheInfo);
         } else if (partitionInfo.getType() == PartitionType.LIST) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             List<String> values = listPartitionInfo.getIdToValues().get(oldPartition.getId());
@@ -1676,14 +1676,14 @@ public class OlapTable extends Table {
             listPartitionInfo.dropPartition(oldPartition.getId());
             try {
                 listPartitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory,
-                        storageCacheInfo, values, multiValues);
+                        dataCacheInfo, values, multiValues);
             } catch (AnalysisException ex) {
                 LOG.warn("failed to add list partition", ex);
                 throw new SemanticException(ex.getMessage());
             }
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
-            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageCacheInfo);
+            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, dataCacheInfo);
         }
 
         return oldPartition;
@@ -2433,7 +2433,7 @@ public class OlapTable extends Table {
         throw new SemanticException("getPartitionFileCacheInfo is not supported");
     }
 
-    public void setStorageInfo(FilePathInfo pathInfo, StorageCacheInfo storageCacheInfo) {
+    public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
         throw new SemanticException("setStorageInfo is not supported");
     }
     // ------ for lake table and lake materialized view end ------
