@@ -59,7 +59,7 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -142,7 +142,6 @@ public class PropertyAnalyzer {
     public static final String ABLE_LOW_CARD_DICT = "1";
     public static final String DISABLE_LOW_CARD_DICT = "0";
 
-    public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
@@ -160,6 +159,7 @@ public class PropertyAnalyzer {
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
+    public static final String PROPERTIES_DATACACHE_ENABLE = "datacache.enable";
     public static final String PROPERTIES_DATACACHE_PARTITION_DURATION = "datacache.partition_duration";
 
     public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
@@ -938,10 +938,9 @@ public class PropertyAnalyzer {
         return foreignKeyConstraints;
     }
 
-    // analyze enable storage cache and cache ttl, and whether allow async write back
-    public static StorageCacheInfo analyzeStorageCacheInfo(Map<String, String> properties) throws AnalysisException {
+    public static DataCacheInfo analyzeDataCacheInfo(Map<String, String> properties) throws AnalysisException {
         boolean enableStorageCache =
-                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
+                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
 
         long storageCacheTtlS = 0;
         boolean isTtlSet = properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL);
@@ -966,7 +965,7 @@ public class PropertyAnalyzer {
             throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
         }
 
-        return new StorageCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
+        return new DataCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
     }
 
     public static PeriodDuration analyzeDataCachePartitionDuration(Map<String, String> properties) throws AnalysisException {

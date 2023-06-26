@@ -71,7 +71,7 @@ public class PartitionUtils {
                         partitionInfo.getDataProperty(sourcePartitionId),
                         partitionInfo.getReplicationNum(sourcePartitionId),
                         partitionInfo.getIsInMemory(sourcePartitionId),
-                        partitionInfo.getStorageCacheInfo(sourcePartitionId));
+                        partitionInfo.getDataCacheInfo(sourcePartitionId));
                 Partition partition = newTempPartitions.get(i);
                 // range is null for UNPARTITIONED type
                 Range<PartitionKey> range = null;
@@ -87,13 +87,13 @@ public class PartitionUtils {
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
-                            range, partitionInfo.getStorageCacheInfo(partition.getId()));
+                            range, partitionInfo.getDataCacheInfo(partition.getId()));
                 } else {
                     info = new SinglePartitionPersistInfo(db.getId(), targetTable.getId(),
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
-                            partitionInfo.getStorageCacheInfo(partition.getId()));
+                            partitionInfo.getDataCacheInfo(partition.getId()));
                 }
                 partitionInfoV2List.add(info);
             }
