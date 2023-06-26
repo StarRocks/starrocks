@@ -877,7 +877,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
         SlotId slot_id = ref->slot_id();
         std::string name = _slot_id_to_desc[slot_id]->col_name();
         builder->equals(name, orc::PredicateDataType::BOOLEAN, true);
-        return Status::OK();
+        return;
     }
 
     if (node_type == TExprNodeType::type::COMPOUND_PRED) {
