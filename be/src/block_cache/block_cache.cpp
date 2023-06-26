@@ -83,32 +83,47 @@ Status BlockCache::init(const CacheOptions& options) {
     return _kv_cache->init(options);
 }
 
-Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* buffer,
-                               size_t ttl_seconds, bool overwrite) {
+Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer, size_t ttl_seconds,
+                               bool overwrite) {
     if (offset % _block_size != 0) {
         LOG(WARNING) << "write block key: " << cache_key << " with invalid args, offset: " << offset;
         return Status::InvalidArgument(strings::Substitute("offset must be aligned by block size $0", _block_size));
     }
-    if (!buffer) {
+    if (buffer.empty()) {
+        return Status::OK();
+    }
+    size_t index = offset / _block_size;
+    std::string block_key = fmt::format("{}/{}", cache_key, index);
+    return _kv_cache->write_cache(block_key, buffer, ttl_seconds, overwrite);
+}
+
+static void empty_deleter(void*) {}
+
+Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* data,
+                               size_t ttl_seconds, bool overwrite) {
+    if (!data) {
         return Status::InvalidArgument("invalid data buffer");
     }
+
+    IOBuffer buffer;
+    buffer.append_user_data((void*)data, size, empty_deleter);
+    return write_cache(cache_key, offset, buffer, ttl_seconds, overwrite);
+}
+
+Status BlockCache::read_cache(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer) {
     if (size == 0) {
         return Status::OK();
     }
-
     size_t index = offset / _block_size;
     std::string block_key = fmt::format("{}/{}", cache_key, index);
-    return _kv_cache->write_cache(block_key, buffer, size, ttl_seconds, overwrite);
+    return _kv_cache->read_cache(block_key, offset - index * _block_size, size, buffer);
 }
 
-StatusOr<size_t> BlockCache::read_cache(const CacheKey& cache_key, off_t offset, size_t size, char* buffer) {
-    // when buffer == nullptr, it can check if cached.
-    if (size == 0) {
-        return 0;
-    }
-    size_t index = offset / _block_size;
-    std::string block_key = fmt::format("{}/{}", cache_key, index);
-    return _kv_cache->read_cache(block_key, buffer, offset - index * _block_size, size);
+StatusOr<size_t> BlockCache::read_cache(const CacheKey& cache_key, off_t offset, size_t size, char* data) {
+    IOBuffer buffer;
+    RETURN_IF_ERROR(read_cache(cache_key, offset, size, &buffer));
+    buffer.copy_to(data);
+    return buffer.size();
 }
 
 Status BlockCache::remove_cache(const CacheKey& cache_key, off_t offset, size_t size) {

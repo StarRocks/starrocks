@@ -17,7 +17,8 @@
 #include <memory>
 #include <string>
 
-#include "io/seekable_input_stream.h"
+#include "block_cache/io_buffer.h"
+#include "io/shared_buffered_input_stream.h"
 
 namespace starrocks::io {
 
@@ -32,9 +33,12 @@ public:
         int64_t write_cache_bytes = 0;
         int64_t write_cache_fail_count = 0;
         int64_t write_cache_fail_bytes = 0;
+        int64_t read_block_buffer_bytes = 0;
+        int64_t read_block_buffer_count = 0;
     };
 
-    explicit CacheInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename, size_t size);
+    explicit CacheInputStream(std::shared_ptr<SharedBufferedInputStream> stream, const std::string& filename,
+                              size_t size);
 
     ~CacheInputStream() override = default;
 
@@ -58,20 +62,29 @@ public:
 
     Status skip(int64_t count) override {
         _offset += count;
-        return _stream->skip(count);
+        return _sb_stream->skip(count);
     }
 
 private:
+    struct BlockBuffer {
+        int64_t offset;
+        IOBuffer buffer;
+    };
+
+    Status _read_block(int64_t offset, int64_t size, char* out, bool single_read);
     void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count);
+    void _deduplicate_shared_buffer(SharedBufferedInputStream::SharedBuffer* sb);
 
     std::string _cache_key;
     std::string _filename;
-    std::shared_ptr<SeekableInputStream> _stream;
+    std::shared_ptr<SharedBufferedInputStream> _sb_stream;
     int64_t _offset;
     std::string _buffer;
     Stats _stats;
     int64_t _size;
     bool _enable_populate_cache = false;
+    int64_t _block_size = 0;
+    std::unordered_map<int64_t, BlockBuffer> _block_map;
 };
 
 } // namespace starrocks::io
