@@ -98,6 +98,7 @@ StarRocks 访问 Hudi 集群元数据服务的相关参数配置。
 如果选择 HMS 作为 Hudi 集群的元数据服务，请按如下配置 `MetastoreParams`：
 
 ```SQL
+"hive.metastore.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
@@ -109,6 +110,7 @@ StarRocks 访问 Hudi 集群元数据服务的相关参数配置。
 
 | 参数                | 是否必须 | 说明                                                         |
 | ------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.type | 是       | Hudi 集群所使用的元数据服务的类型。设置为 `hive`。           |
 | hive.metastore.uris | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br>如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
 
 ##### AWS Glue
@@ -135,6 +137,7 @@ StarRocks 访问 Hudi 集群元数据服务的相关参数配置。
 - 基于 IAM User 进行认证和鉴权
 
   ```SQL
+  "hive.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -464,9 +467,10 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   PROPERTIES
   (
       "type" = "hudi",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -477,11 +481,11 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   PROPERTIES
   (
       "type" = "hudi",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -494,10 +498,11 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   PROPERTIES
   (
       "type" = "hudi",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -508,13 +513,13 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   PROPERTIES
   (
       "type" = "hudi",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -527,11 +532,12 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   PROPERTIES
   (
       "type" = "hudi",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -542,15 +548,15 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   PROPERTIES
   (
       "type" = "hudi",
-      "aws.s3.use_instance_profile" = "false",
-      "aws.s3.access_key" = "<iam_user_access_key>",
-      "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -562,7 +568,8 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 CREATE EXTERNAL CATALOG hudi_catalog_hms
 PROPERTIES
 (
-    "type" = "hudi", 
+    "type" = "hudi",
+    "hive.metastore.type" = "hive",
     "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
@@ -582,7 +589,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi", 
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
@@ -595,7 +603,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi", 
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.account_name" = "<blob_storage_account_name>",
       "azure.blob.container_name" = "<blob_container_name>",
@@ -611,7 +620,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi", 
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
@@ -623,7 +633,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi", 
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
@@ -639,7 +650,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi", 
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -653,7 +665,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi", 
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
@@ -666,7 +679,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi", 
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -682,7 +696,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi", 
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
@@ -694,7 +709,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi", 
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
@@ -710,7 +726,8 @@ PROPERTIES
     CREATE EXTERNAL CATALOG hudi_catalog_hms
     PROPERTIES
     (
-        "type" = "hudi", 
+        "type" = "hudi",
+        "hive.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
@@ -723,7 +740,8 @@ PROPERTIES
     CREATE EXTERNAL CATALOG hudi_catalog_hms
     PROPERTIES
     (
-        "type" = "hudi", 
+        "type" = "hudi",
+        "hive.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
