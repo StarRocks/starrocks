@@ -34,6 +34,7 @@ import org.apache.paimon.table.source.Split;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
+import org.apache.parquet.Strings;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -84,7 +85,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         Options options = new Options();
         options.setString(METASTORE.key(), catalogType);
         options.setString(WAREHOUSE.key(), warehousePath);
-        if (!metastoreUri.isEmpty()) {
+        if (!Strings.isNullOrEmpty(metastoreUri)) {
             options.setString(URI.key(), metastoreUri);
         }
         Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options));

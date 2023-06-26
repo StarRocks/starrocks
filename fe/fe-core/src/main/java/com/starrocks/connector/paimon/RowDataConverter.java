@@ -19,25 +19,26 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.stream.IntStream;
+import java.util.Map;
 
 public class RowDataConverter {
-    private final InternalRow.FieldGetter[] fieldGetters;
+    private final Map<String, InternalRow.FieldGetter> fieldGetters;
 
     public RowDataConverter(RowType rowType) {
-        this.fieldGetters =
-                IntStream.range(0, rowType.getFieldCount())
-                        .mapToObj(
-                                i ->
-                                        InternalRowUtils.createNullCheckingFieldGetter(
-                                                rowType.getTypeAt(i), i))
-                        .toArray(InternalRow.FieldGetter[]::new);
+        int fieldCount = rowType.getFieldCount();
+        this.fieldGetters = new HashMap<>(fieldCount);
+        for (int i = 0; i < fieldCount; i++) {
+            this.fieldGetters.put(rowType.getFields().get(i).name(),
+                    InternalRowUtils.createNullCheckingFieldGetter(rowType.getTypeAt(i), i));
+        }
     }
 
-    public List<String> convert(InternalRow rowData) {
-        List<String> result = new ArrayList<>(fieldGetters.length);
-        for (InternalRow.FieldGetter fieldGetter : fieldGetters) {
+    public List<String> convert(InternalRow rowData, List<String> requiredNames) {
+        List<String> result = new ArrayList<>(requiredNames.size());
+        for (String name : requiredNames) {
+            InternalRow.FieldGetter fieldGetter = this.fieldGetters.get(name);
             Object o = fieldGetter.getFieldOrNull(rowData);
             String value = o == null ? "null" : o.toString();
             result.add(value);

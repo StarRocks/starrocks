@@ -113,7 +113,8 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         for (Split split : splits) {
             DataSplit dataSplit = (DataSplit) split;
-            List<String> partitionValues = dataSplit.partition() == null ? null : converter.convert(dataSplit.partition());
+            List<String> partitionValues = dataSplit.partition() == null ? null :
+                    converter.convert(dataSplit.partition(), partitionColumnNames);
             String partitionName = FileUtils.makePartName(partitionColumnNames, partitionValues);
             partitionNames.add(partitionName);
         }

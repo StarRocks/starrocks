@@ -26,6 +26,7 @@ import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.options.Options;
+import org.apache.parquet.Strings;
 
 import java.util.Map;
 
@@ -55,19 +56,19 @@ public class PaimonConnector implements Connector  {
         this.warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
 
         this.paimonOptions = new Options();
-        if (catalogType == null || catalogType.isEmpty()) {
+        if (Strings.isNullOrEmpty(catalogType)) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_TYPE);
         }
         paimonOptions.setString(METASTORE.key(), catalogType);
         if (catalogType.equals("hive")) {
-            if (metastoreUris != null && !metastoreUris.isEmpty()) {
+            if (!Strings.isNullOrEmpty(metastoreUris)) {
                 paimonOptions.setString(URI.key(), metastoreUris);
             } else {
                 throw new StarRocksConnectorException("The property %s must be set if paimon catalog is hive.",
                         HIVE_METASTORE_URIS);
             }
         }
-        if (warehousePath == null || warehousePath.isEmpty()) {
+        if (Strings.isNullOrEmpty(warehousePath)) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);

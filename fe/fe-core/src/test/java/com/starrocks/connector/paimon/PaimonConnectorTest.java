@@ -14,14 +14,28 @@
 
 package com.starrocks.connector.paimon;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.connector.ConnectorContext;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import mockit.Expectations;
+import mockit.Mocked;
+import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.Identifier;
+import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.IntType;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class PaimonConnectorTest {
@@ -57,5 +71,42 @@ public class PaimonConnectorTest {
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
 
         new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+    }
+
+    @Test
+    public void testCreatePaimonTable(@Mocked Catalog paimonNativeCatalog,
+                                      @Mocked AbstractFileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
+        properties.put("paimon.catalog.type", "filesystem");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        List<DataField> fields = new ArrayList<>();
+        fields.add(new DataField(1, "col2", new IntType()));
+        new Expectations(connector) {
+            {
+                connector.getPaimonNativeCatalog();
+                result = paimonNativeCatalog;
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = paimonNativeTable;
+                paimonNativeTable.rowType().getFields();
+                result = fields;
+                paimonNativeTable.location().toString();
+                result = "hdfs://127.0.0.1:10000/paimon";
+                paimonNativeTable.partitionKeys();
+                result = new ArrayList<>(Collections.singleton("col1"));
+            }
+        };
+
+        ConnectorMetadata metadata = connector.getMetadata();
+        Assert.assertTrue(metadata instanceof PaimonMetadata);
+        PaimonMetadata paimonMetadata = (PaimonMetadata) metadata;
+        com.starrocks.catalog.Table table = paimonMetadata.getTable("db1", "tbl1");
+        PaimonTable paimonTable = (PaimonTable) table;
+        Assert.assertEquals("db1", paimonTable.getDbName());
+        Assert.assertEquals("tbl1", paimonTable.getTableName());
+        Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
+        Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
+        Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
+        Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
     }
 }
