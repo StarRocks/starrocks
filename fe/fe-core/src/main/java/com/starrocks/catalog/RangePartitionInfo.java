@@ -40,7 +40,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.lake.DataCacheInfo;
@@ -244,8 +243,7 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
         idToInMemory.put(partitionId, false);
-        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true,
-                Config.lake_default_storage_cache_ttl_seconds, false));
+        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true, false));
     }
 
     public void handleNewRangePartitionDescs(Map<Partition, PartitionDesc> partitionMap,

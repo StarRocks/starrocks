@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.lake.DataCacheInfo;
@@ -432,7 +431,6 @@ public class ListPartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
         idToInMemory.put(partitionId, false);
-        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true,
-                Config.lake_default_storage_cache_ttl_seconds, false));
+        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true, false));
     }
 }
