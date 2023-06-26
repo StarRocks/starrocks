@@ -2107,12 +2107,6 @@ public class Config extends ConfigBase {
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
 
-    /**
-     * default storage cache ttl of lake table
-     */
-    @ConfField(mutable = true)
-    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
-
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
