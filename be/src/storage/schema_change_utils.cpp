@@ -237,8 +237,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                 }
                 auto new_col = new_col_status.value();
                 // TODO: no need to unpack const column later.
-                new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
-                new_chunk->update_column_by_index(new_col, i);
+                new_chunk->columns()[i] = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
             } else {
                 LogicalType ref_type = base_tablet_meta->tablet_schema().column(ref_column).type();
                 LogicalType new_type = new_tablet_meta->tablet_schema().column(i).type();
@@ -382,8 +381,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     return false;
                 }
                 auto new_col = new_col_status.value();
-                new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
-                new_chunk->update_column_by_index(new_col, i);
+                new_chunk->columns()[i] = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
             } else {
                 DCHECK(_slot_id_to_index_map.find(ref_column) != _slot_id_to_index_map.end());
                 int base_index = _slot_id_to_index_map[ref_column];
