@@ -56,8 +56,9 @@ import java.util.concurrent.Future;
 
 public class TableFunctionTable extends Table {
 
-    private static final String PROPERTY_PATH = "path";
-    private static final String PROPERTY_FORMAT = "format";
+    public static final String FAKE_PATH = "fake://";
+    public static final String PROPERTY_PATH = "path";
+    public static final String PROPERTY_FORMAT = "format";
 
     private String path;
     private String format;
@@ -70,11 +71,18 @@ public class TableFunctionTable extends Table {
         super.setId(-1);
         super.setName("table_function_table");
         this.properties = properties;
-        parseProperties();
 
+        parseProperties();
         parseFiles();
 
-        super.setNewFullSchema(getFileSchema());
+        if (path.startsWith(FAKE_PATH)) {
+            List<Column> columns = new ArrayList<>();
+            columns.add(new Column("col_int", Type.INT));
+            columns.add(new Column("col_string", Type.VARCHAR));
+            setNewFullSchema(columns);
+        } else {
+            setNewFullSchema(getFileSchema());
+        }
     }
 
     public List<TBrokerFileStatus> fileList() {
@@ -134,6 +142,10 @@ public class TableFunctionTable extends Table {
 
     private void parseFiles() throws DdlException {
         try {
+            // fake:// is a faked path, for testing purpose
+            if (path.startsWith("fake://")) {
+                return;
+            }
             HdfsUtil.parseFile(path, new BrokerDesc(properties), fileStatuses);
         } catch (UserException e) {
             throw new DdlException("failed to parse files: " + e.getMessage());
@@ -188,6 +200,9 @@ public class TableFunctionTable extends Table {
     }
 
     private List<Column> getFileSchema() throws DdlException {
+        if (fileStatuses.isEmpty()) {
+            return Lists.newArrayList();
+        }
         TNetworkAddress address;
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
         if (backendIds.isEmpty()) {

@@ -82,7 +82,7 @@ public class TaskRunManager {
         status.setMergeRedundant(option.isMergeRedundant());
         GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
         arrangeTaskRun(taskRun, option.isMergeRedundant());
-        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
+        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());
     }
 
     public boolean killTaskRun(Long taskId) {

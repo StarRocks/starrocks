@@ -172,6 +172,9 @@ import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.LoadTimeoutChecker;
+import com.starrocks.load.pipe.PipeListener;
+import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.load.pipe.PipeScheduler;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
@@ -318,6 +321,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -528,6 +532,10 @@ public class GlobalStateMgr {
     private ConfigRefreshDaemon configRefreshDaemon;
 
     private StorageVolumeMgr storageVolumeMgr;
+
+    private PipeManager pipeManager;
+    private PipeListener pipeListener;
+    private PipeScheduler pipeScheduler;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -741,6 +749,9 @@ public class GlobalStateMgr {
         this.shardDeleter = new ShardDeleter();
 
         this.binlogManager = new BinlogManager();
+        this.pipeManager = new PipeManager();
+        this.pipeListener = new PipeListener(this.pipeManager);
+        this.pipeScheduler = new PipeScheduler(this.pipeManager);
 
         if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
@@ -975,6 +986,18 @@ public class GlobalStateMgr {
 
     public StorageVolumeMgr getStorageVolumeMgr() {
         return storageVolumeMgr;
+    }
+
+    public PipeManager getPipeManager() {
+        return pipeManager;
+    }
+
+    public PipeScheduler getPipeScheduler() {
+        return pipeScheduler;
+    }
+
+    public PipeListener getPipeListener() {
+        return pipeListener;
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
@@ -1339,6 +1362,8 @@ public class GlobalStateMgr {
         taskManager.start();
         taskCleaner.start();
         mvMVJobExecutor.start();
+        pipeListener.start();
+        pipeScheduler.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
@@ -1578,6 +1603,8 @@ public class GlobalStateMgr {
                 checksum = warehouseMgr.loadWarehouses(dis, checksum);
                 remoteChecksum = dis.readLong();
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = pipeManager.getRepo().loadImage(dis, checksum);
                 remoteChecksum = dis.readLong();
                 // ** NOTICE **: always add new code at the end
 
@@ -1942,6 +1969,8 @@ public class GlobalStateMgr {
                 checksum = warehouseMgr.saveWarehouses(dos, checksum);
                 dos.writeLong(checksum);
                 checksum = localMetastore.saveAutoIncrementId(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = pipeManager.getRepo().saveImage(dos, checksum);
                 dos.writeLong(checksum);
                 // ** NOTICE **: always add new code at the end
 
@@ -2964,6 +2993,14 @@ public class GlobalStateMgr {
 
     public Database getDb(String name) {
         return localMetastore.getDb(name);
+    }
+
+    public Optional<Database> mayGetDb(String name) {
+        return Optional.ofNullable(localMetastore.getDb(name));
+    }
+
+    public Optional<Database> mayGetDb(long dbId) {
+        return Optional.ofNullable(localMetastore.getDb(dbId));
     }
 
     public Database getDb(long dbId) {

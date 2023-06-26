@@ -38,7 +38,8 @@ public class Constants {
     public enum TaskSource {
         CTAS,
         MV,
-        INSERT
+        INSERT,
+        PIPE,
     }
 
     // PENDING -> RUNNING -> FAILED

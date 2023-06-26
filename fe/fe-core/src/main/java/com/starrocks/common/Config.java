@@ -2387,4 +2387,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int external_table_commit_timeout_ms = 10000; // 10s
+
+    @ConfField(mutable = false)
+    public static int pipe_listener_interval_millis = 1000;
+    @ConfField(mutable = false)
+    public static int pipe_scheduler_interval_millis = 1000;
 }
