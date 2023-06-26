@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -45,6 +46,7 @@ public class MvRewriteContext {
 
     private final List<ScalarOperator> onPredicates;
     private final Rule rule;
+    private List<ColumnRefOperator> enforcedColumns;
 
     public MvRewriteContext(MaterializationContext materializationContext,
                             List<Table> queryTables,
@@ -112,4 +114,23 @@ public class MvRewriteContext {
     public Rule getRule() {
         return rule;
     }
+<<<<<<< HEAD
+=======
+
+    public void addJoinDeriveContext(JoinDeriveContext joinDeriveContext) {
+        joinDeriveContexts.add(joinDeriveContext);
+    }
+
+    public List<JoinDeriveContext> getJoinDeriveContexts() {
+        return joinDeriveContexts;
+    }
+
+    public List<ColumnRefOperator> getEnforcedColumns() {
+        return enforcedColumns;
+    }
+
+    public void setEnforcedColumns(List<ColumnRefOperator> enforcedColumns) {
+        this.enforcedColumns = enforcedColumns;
+    }
+>>>>>>> bd2f6ea71 ([Enhancement] optimize mv union rewrite (#25679))
 }
