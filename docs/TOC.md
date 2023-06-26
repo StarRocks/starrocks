@@ -312,7 +312,6 @@
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [MAP](./sql-reference/sql-statements/data-types/Map.md)
         + [STRUCT](./sql-reference/sql-statements/data-types/STRUCT.md)
-
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + Function Reference

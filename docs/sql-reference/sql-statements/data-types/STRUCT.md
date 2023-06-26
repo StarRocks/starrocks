@@ -2,7 +2,7 @@
 
 ## Description
 
-STRUCT is widely used to express complex data types. It represents a collection of named fields with different data types. Each field has a name and a type, for example `<a INT, b INT>`. Field names in a struct must be unique.
+STRUCT is widely used to express complex data types. It represents a collection of named fields with different data types. Each field has a name and a type, for example, `<a INT, b INT>`. Field names in a struct must be unique.
 
 A field within a STRUCT can also be another STRUCT, ARRAY, or MAP, which allows you to create nested data structures.
 
@@ -18,7 +18,7 @@ STRUCT<name, type>
 ```
 
 - `name`: the field name, same as the column name defined in the CREATE TABLE statement.
-- `type`: the field type. It can be of any supported types.
+- `type`: the field type. It can be of any supported type.
 
 ## Define a STRUCT column in StarRocks
 
@@ -62,11 +62,11 @@ STRUCT can be constructed in SQL using the following functions: [row, struct](..
 StarRocks automatically determines the type of the struct.
 
 ```SQL
-select row(1, 2, 3, 4) as numbers; -- The result is {"col1":1,"col2":2,"col3":3,"col4":4}.
-select row(1, 2, null, 4) as numbers; -- The result is `{"col1":1,"col2":2,"col3":null,"col4":4}`.
-select row(null) as nulls; -- The result is {"col1":null}.
-select struct(1, 2, 3, 4) as numbers; -- The result is {"col1":1,"col2":2,"col3":3,"col4":4}.
-select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- The result is {"a":1,"b":2,"c":3,"d":4}.
+select row(1, 2, 3, 4) as numbers; -- Return {"col1":1,"col2":2,"col3":3,"col4":4}.
+select row(1, 2, null, 4) as numbers; -- Return {"col1":1,"col2":2,"col3":null,"col4":4}.
+select row(null) as nulls; -- Return {"col1":null}.
+select struct(1, 2, 3, 4) as numbers; -- Return {"col1":1,"col2":2,"col3":3,"col4":4}.
+select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- Return {"a":1,"b":2,"c":3,"d":4}.
 ```
 
 ## Load STRUCT data
@@ -107,7 +107,6 @@ To query a subfield of a struct, you can use the dot (`.`) operator to query a v
 
 ```Plain Text
 mysql> select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4).a;
-
 +------------------------------------------------+
 | named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4).a |
 +------------------------------------------------+

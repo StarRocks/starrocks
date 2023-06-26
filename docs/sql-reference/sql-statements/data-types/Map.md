@@ -56,25 +56,25 @@ StarRocks can derive the data types of keys and values from all the input keys a
 
 ```SQL
 select map{1:1, 2:2, 3:3} as numbers;
-select map(1,1,2,2,3,3) as numbers; -- Returns {{1:1,2:2,3:3}.
+select map(1,1,2,2,3,3) as numbers; -- Return {{1:1,2:2,3:3}.
 select map{1:"apple", 2:"orange", 3:"pear"} as fruit;
-select map(1, "apple", 2, "orange", 3, "pear") as fruit; -- Returns {1:"apple",2:"orange",3:"pear"}.
+select map(1, "apple", 2, "orange", 3, "pear") as fruit; -- Return {1:"apple",2:"orange",3:"pear"}.
 select map{true:map{3.13:"abc"}, false:map{}} as nest;
-select map(true, map(3.13, "abc"), false, map{}) as nest; -- Returns {1:{3.13:"abc"},0:{}}.
+select map(true, map(3.13, "abc"), false, map{}) as nest; -- Return {1:{3.13:"abc"},0:{}}.
 ```
 
 If the keys or values have different types, StarRocks automatically derives the appropriate type (supertype).
 
 ```SQL
-select map{1:2.2, 1.2:21} as floats_floats; -- Returns {1.0:2.2,1.2:21.0}.
-select map{12:"a", "100":1, NULL:NULL} as string_string; -- Returns {"12":"a","100":"1",null:null}.
+select map{1:2.2, 1.2:21} as floats_floats; -- Return {1.0:2.2,1.2:21.0}.
+select map{12:"a", "100":1, NULL:NULL} as string_string; -- Return {"12":"a","100":"1",null:null}.
 ```
 
 You can also define the data type using `{}` when you construct a map. The input keys or values must be able to cast into the specified types.
 
 ```SQL
-select map<FLOAT,INT>{1:2}; -- Returns {1:2}.
-select map<INT,INT>{"12": "100"}; -- Returns {12:100}.
+select map<FLOAT,INT>{1:2}; -- Return {1:2}.
+select map<INT,INT>{"12": "100"}; -- Return {12:100}.
 ```
 
 Keys and values are nullable.
@@ -87,7 +87,7 @@ Construct empty maps.
 
 ```SQL
 select map{} as empty_map;
-select map() as empty_map; -- Returns {}.
+select map() as empty_map; -- Return {}.
 ```
 
 ## Load MAP data into StarRocks
