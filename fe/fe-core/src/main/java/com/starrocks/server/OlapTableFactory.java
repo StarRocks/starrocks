@@ -37,19 +37,16 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.UniqueConstraint;
-import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.StorageInfo;
-import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -375,26 +372,21 @@ public class OlapTableFactory implements AbstractTableFactory {
             partitionInfo.setIsInMemory(partitionId, isInMemory);
             partitionInfo.setTabletType(partitionId, tabletType);
             StorageInfo storageInfo = table.getTableProperty().getStorageInfo();
-            StorageCacheInfo storageCacheInfo = storageInfo == null ? null : storageInfo.getStorageCacheInfo();
-            partitionInfo.setStorageCacheInfo(partitionId, storageCacheInfo);
+            DataCacheInfo dataCacheInfo = storageInfo == null ? null : storageInfo.getDataCacheInfo();
+            partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
         }
 
         // check colocation properties
-        String colocateGroup = null;
-        try {
-            colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
-                    colocateGroup, false /* expectLakeTable */);
-            if (table instanceof ExternalOlapTable == false && addedToColocateGroup) {
-                // Colocate table should keep the same bucket number across the partitions
-                DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
-                if (defaultDistributionInfo.getBucketNum() == 0) {
-                    int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-                    defaultDistributionInfo.setBucketNum(bucketNum);
-                }
+        String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+        boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
+                colocateGroup, false /* expectLakeTable */);
+        if (!(table instanceof ExternalOlapTable) && addedToColocateGroup) {
+            // Colocate table should keep the same bucket number across the partitions
+            DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
+            if (defaultDistributionInfo.getBucketNum() == 0) {
+                int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                defaultDistributionInfo.setBucketNum(bucketNum);
             }
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
         }
 
         // get base index storage type. default is COLUMN
@@ -492,7 +484,6 @@ public class OlapTableFactory implements AbstractTableFactory {
         // if failed in any step, use this set to do clear things
         Set<Long> tabletIdSet = new HashSet<Long>();
 
-
         // do not create partition for external table
         if (table.isOlapOrCloudNativeTable()) {
             if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
@@ -565,35 +556,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* expectLakeTable */);
 
         // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
-
-        // we have added these index to memory, only need to persist here
-        if (colocateTableIndex.isColocateTable(tableId)) {
-            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
-            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
-            ColocatePersistInfo info =
-                    ColocatePersistInfo.createForAddTable(groupId, tableId, backendsPerBucketSeq);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
-        }
         LOG.info("Successfully create table[{};{}]", tableName, tableId);
-        // register or remove table from DynamicPartition after table created
-        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), table);
-        DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), table);
-        stateMgr.getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
-                tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
-
-
-        if (Config.dynamic_partition_enable && table.getTableProperty().getDynamicPartitionProperty().getEnable()) {
-            new Thread(() -> {
-                try {
-                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
-                            .executeDynamicPartitionForTable(db.getId(), tableId);
-                } catch (Exception ex) {
-                    LOG.warn("Some problems were encountered in the process of triggering " +
-                            "the execution of dynamic partitioning", ex);
-                }
-            }, "BackgroundDynamicPartitionThread").start();
-        }
-
         return table;
     }
 

@@ -66,7 +66,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
@@ -392,7 +392,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), partition.getId());
         PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
         Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
-        StorageCacheInfo cacheInfo = tblPartitionInfo.getStorageCacheInfo(partition.getId());
+        DataCacheInfo cacheInfo = tblPartitionInfo.getDataCacheInfo(partition.getId());
         List<Comparable> partitionInfo = new ArrayList<Comparable>();
 
         partitionInfo.add(partition.getId()); // PartitionId

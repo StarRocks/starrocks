@@ -86,6 +86,7 @@ Usage: $0 <options>
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
+     --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      -j                 build Backend parallel
 
   Eg.
@@ -109,6 +110,7 @@ OPTS=$(getopt \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'with-bench' \
+  -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'use-staros' \
   -o 'j:' \
@@ -128,6 +130,7 @@ CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
+WITH_CLANG_TIDY=OFF
 USE_STAROS=OFF
 MSG=""
 MSG_FE="Frontend"
@@ -212,6 +215,7 @@ else
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
+            --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -240,6 +244,7 @@ echo "Get params:
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
+    WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
     USE_STAROS          -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
@@ -328,6 +333,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DUSE_JEMALLOC=$USE_JEMALLOC                          \
                   -DWITH_BENCH=${WITH_BENCH}                            \
+                  -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_CACHELIB=${WITH_CACHELIB}                      \
                   -DUSE_STAROS=${USE_STAROS}                            \

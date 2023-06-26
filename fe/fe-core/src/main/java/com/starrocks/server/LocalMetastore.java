@@ -115,9 +115,9 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.persist.AddPartitionsInfoV2;
@@ -340,8 +340,7 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onCreate);
-            db.getHiveTables().forEach(Table::onCreate);
+            db.getTables().forEach(Table::onReload);
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -796,7 +795,7 @@ public class LocalMetastore implements ConnectorMetadata {
         String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                 .getStorageVolumeIdOfTable(table.getId());
 
-        registerTableAndSaveLog(db, table, storageVolumeId, stmt.isSetIfNotExists());
+        onCreate(db, table, storageVolumeId, stmt.isSetIfNotExists());
         return true;
     }
 
@@ -1067,7 +1066,7 @@ public class LocalMetastore implements ConnectorMetadata {
             copiedTable.getPartitionInfo().setTabletType(partitionId, partitionDesc.getTabletType());
             copiedTable.getPartitionInfo().setReplicationNum(partitionId, partitionDesc.getReplicationNum());
             copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
-            copiedTable.getPartitionInfo().setStorageCacheInfo(partitionId, partitionDesc.getStorageCacheInfo());
+            copiedTable.getPartitionInfo().setDataCacheInfo(partitionId, partitionDesc.getDataCacheInfo());
 
             Partition partition =
                     createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
@@ -1153,7 +1152,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     partitionInfo.getReplicationNum(partition.getId()),
                     partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
                     ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
-                    ((SingleRangePartitionDesc) partitionDescs.get(0)).getStorageCacheInfo());
+                    ((SingleRangePartitionDesc) partitionDescs.get(0)).getDataCacheInfo());
             partitionInfoV2List.add(info);
             AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
             GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
@@ -1169,7 +1168,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
                             ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
-                            ((SingleRangePartitionDesc) partitionDescs.get(i)).getStorageCacheInfo());
+                            ((SingleRangePartitionDesc) partitionDescs.get(i)).getDataCacheInfo());
 
                     partitionInfoV2List.add(info);
                 }
@@ -1381,7 +1380,7 @@ public class LocalMetastore implements ConnectorMetadata {
             } else if (partitionType == PartitionType.UNPARTITIONED) {
                 // insert overwrite job will create temp partition and replace the single partition.
                 partitionInfo.addPartition(partition.getId(), info.getDataProperty(), info.getReplicationNum(),
-                        info.isInMemory(), info.getStorageCacheInfo());
+                        info.isInMemory(), info.getDataCacheInfo());
             } else {
                 throw new DdlException("Unsupported partition type: " + partitionType.name());
             }
@@ -1943,9 +1942,9 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     void setLakeStorageInfo(OlapTable table, String storageVolumeId, Map<String, String> properties) throws DdlException {
-        StorageCacheInfo storageCacheInfo = null;
+        DataCacheInfo dataCacheInfo = null;
         try {
-            storageCacheInfo = PropertyAnalyzer.analyzeStorageCacheInfo(properties);
+            dataCacheInfo = PropertyAnalyzer.analyzeDataCacheInfo(properties);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
@@ -1954,10 +1953,10 @@ public class LocalMetastore implements ConnectorMetadata {
         FilePathInfo pathInfo = !storageVolumeId.isEmpty() ?
                 stateMgr.getStarOSAgent().allocateFilePath(storageVolumeId, table.getId()) :
                 stateMgr.getStarOSAgent().allocateFilePath(table.getId());
-        table.setStorageInfo(pathInfo, storageCacheInfo);
+        table.setStorageInfo(pathInfo, dataCacheInfo);
     }
 
-    void registerTableAndSaveLog(Database db, Table table, String storageVolumeId, boolean isSetIfNotExists) throws DdlException {
+    void onCreate(Database db, Table table, String storageVolumeId, boolean isSetIfNotExists) throws DdlException {
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -1986,10 +1985,11 @@ public class LocalMetastore implements ConnectorMetadata {
                         LOG.info("Create table[{}] which already exists", table.getName());
                     }
                 }
-                table.onCreate();
 
-                CreateTableInfo info = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
+
+                CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
+                table.onCreate(db);
             } finally {
                 db.writeUnlock();
             }
@@ -2002,10 +2002,10 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayCreateTable(CreateTableInfo info) {
         Table table = info.getTable();
         Database db = this.fullNameToDb.get(info.getDbName());
-        db.writeUnlock();
+        db.writeLock();
         try {
             db.registerTableUnlock(table);
-            table.onCreate();
+            table.onReload();
         } finally {
             db.writeUnlock();
         }
@@ -2790,8 +2790,8 @@ public class LocalMetastore implements ConnectorMetadata {
             partitionInfo.setIsInMemory(partitionId, false);
             partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
             StorageInfo storageInfo = materializedView.getTableProperty().getStorageInfo();
-            partitionInfo.setStorageCacheInfo(partitionId,
-                    storageInfo == null ? null : storageInfo.getStorageCacheInfo());
+            partitionInfo.setDataCacheInfo(partitionId,
+                    storageInfo == null ? null : storageInfo.getDataCacheInfo());
             Long version = Partition.PARTITION_INIT_VERSION;
             Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
             buildPartitions(db, materializedView, Collections.singletonList(partition));
@@ -2800,7 +2800,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
 
-        registerTableAndSaveLog(db, materializedView, "", stmt.isIfNotExists());
+        onCreate(db, materializedView, "", stmt.isIfNotExists());
         LOG.info("Successfully create materialized view [{}:{}]", mvName, materializedView.getMvId());
 
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
@@ -3769,7 +3769,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("failed to init view stmt", e);
         }
 
-        registerTableAndSaveLog(db, view, "", stmt.isSetIfNotExists());
+        onCreate(db, view, "", stmt.isSetIfNotExists());
 
         LOG.info("successfully create view[" + tableName + "-" + view.getId() + "]");
     }
@@ -3980,8 +3980,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
                 if (copiedTbl.isCloudNativeTable()) {
-                    partitionInfo.setStorageCacheInfo(newPartitionId,
-                            partitionInfo.getStorageCacheInfo(oldPartitionId));
+                    partitionInfo.setDataCacheInfo(newPartitionId,
+                            partitionInfo.getDataCacheInfo(oldPartitionId));
                 }
 
                 copiedTbl.setDefaultDistributionInfo(entry.getValue().getDistributionInfo());
@@ -4439,7 +4439,7 @@ public class LocalMetastore implements ConnectorMetadata {
             partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(sourcePartitionId));
             partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(sourcePartitionId));
             if (copiedTbl.isCloudNativeTableOrMaterializedView()) {
-                partitionInfo.setStorageCacheInfo(newPartitionId, partitionInfo.getStorageCacheInfo(sourcePartitionId));
+                partitionInfo.setDataCacheInfo(newPartitionId, partitionInfo.getDataCacheInfo(sourcePartitionId));
             }
 
             Partition newPartition =
@@ -4625,7 +4625,7 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onCreate);
+            db.getTables().forEach(Table::onReload);
         }
 
         // put built-in database into local metastore
