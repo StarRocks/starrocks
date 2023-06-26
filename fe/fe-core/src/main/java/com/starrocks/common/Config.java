@@ -1337,9 +1337,7 @@ public class Config extends ConfigBase {
 
     /**
      * the max concurrent routine load task num per BE.
-     * This is to limit the num of routine load tasks sending to a BE, and it should also less
-     * than BE config 'routine_load_thread_pool_size'(default 10),
-     * which is the routine load task thread pool size on BE.
+     * This is to limit the num of routine load tasks sending to a BE.
      */
     @ConfField(mutable = true)
     public static int max_routine_load_task_num_per_be = 16;

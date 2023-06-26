@@ -40,7 +40,7 @@
 
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/routine_load/data_consumer_pool.h"
-#include "util/priority_thread_pool.hpp"
+#include "util/threadpool.h"
 #include "util/starrocks_metrics.h"
 #include "util/uid_util.h"
 
@@ -61,20 +61,27 @@ public:
 
     RoutineLoadTaskExecutor(ExecEnv* exec_env)
             : _exec_env(exec_env),
-              _thread_pool("routine_load", config::routine_load_thread_pool_size,
-                           config::routine_load_thread_pool_size),
               _data_consumer_pool(10) {
         REGISTER_GAUGE_STARROCKS_METRIC(routine_load_task_count, [this]() {
             std::lock_guard<std::mutex> l(_lock);
             return _task_map.size();
         });
-
+        auto st = ThreadPoolBuilder("routine_load")
+                    .set_min_threads(1)
+                    .set_max_threads(500)
+                    .set_max_queue_size(100000)
+                    .build(&_thread_pool);
+        DCHECK(st.ok());
         _data_consumer_pool.start_bg_worker();
     }
 
     ~RoutineLoadTaskExecutor() noexcept {
-        _thread_pool.shutdown();
-        _thread_pool.join();
+        // _thread_pool.shutdown();
+        // _thread_pool.join();
+
+        if (_thread_pool) {
+            _thread_pool->shutdown();
+        }
 
         for (auto& it : _task_map) {
             auto ctx = it.second;
@@ -109,7 +116,7 @@ private:
 
 private:
     ExecEnv* _exec_env;
-    PriorityThreadPool _thread_pool;
+    std::unique_ptr<ThreadPool> _thread_pool;
     DataConsumerPool _data_consumer_pool;
 
     std::mutex _lock;

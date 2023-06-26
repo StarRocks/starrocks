@@ -109,7 +109,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | label_keep_max_second                   | s    | 259200                                          | The maximum duration the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state can be retained in the StarRocks system. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. Unit: seconds. A value too large consumes a lot of memory. |
 | max_routine_load_job_num                | -    | 100                                             | The maximum number of Routine Load jobs in a StarRocks cluster. |
 | max_routine_load_task_concurrent_num    | -    | 5                                               | The maximum number of concurrent tasks for each Routine Load job. |
-| max_routine_load_task_num_per_be        | -    | 5                                               | The maximum number of concurrent Routine Load tasks that can run for each BE. The value must be less than or equal to the BE configuration item `routine_load_thread_pool_size`. |
 | max_routine_load_batch_size             | Byte | 4294967296                                      | The maximum amount of data that can be loaded by a Routine Load task, in bytes. |
 | routine_load_task_consume_second        | s    | 15                                              | The maximum duration each Routine Load task can consume data, in seconds. |
 | routine_load_task_timeout_second        | s    | 60                                              | The timeout duration for each Routine Load task, in seconds. |
@@ -446,7 +445,6 @@ BE static parameters are as follows.
 | load_process_max_memory_limit_bytes | 107374182400 | Byte | The maximum size limit of memory resources can be taken up by all load process on a BE node. |
 | load_process_max_memory_limit_percent | 30 | % | The maximum percentage limit of memory resources can be taken up by all load process on a BE node. |
 | sync_tablet_meta | FALSE | N/A | The boolean value to control if to enable the synchronization of the tablet metadata. The value true indicates to enable the synchronization. The value false indicates to disable the synchronization. |
-| routine_load_thread_pool_size | 10 | N/A | The thread pool size of Routine Load. |
 | brpc_max_body_size | 2147483648 | Byte | The maximum body size of a BRPC. |
 | tablet_map_shard_size | 32 | N/A | The tablet map shard size. The value must be the power of two. |
 | enable_bitmap_union_disk_format_with_set | FALSE | N/A | The boolean value to control if to enable the new storage format of the BITMAP type, which can improve the performance of bitmap_union. The value true indicates to enable the new storage format. The value false indicates to disable the new storage format. |
