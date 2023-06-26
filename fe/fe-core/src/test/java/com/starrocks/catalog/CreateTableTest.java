@@ -399,7 +399,7 @@ public class CreateTableTest {
                         + "('replication_num' = '1');\n"));
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Unknown properties: {datacache.enable=true, asd=true, storage_cache_ttl=86400}",
+                "Unknown properties: {datacache.enable=true, asd=true}",
                 () -> createTable("CREATE TABLE test.demo (k0 tinyint NOT NULL, k1 date NOT NULL, k2 int NOT NULL," +
                         " k3 datetime not NULL, k4 bigint not NULL, k5 largeint not NULL) \n" +
                         "ENGINE = OLAP \n" +
@@ -407,7 +407,7 @@ public class CreateTableTest {
                         "PARTITION BY RANGE (k1) (START (\"1970-01-01\") END (\"2022-09-30\") " +
                         "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
                         "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
-                        "\"datacache.enable\" = \"true\",\"storage_cache_ttl\" = \"86400\",\"asd\" = \"true\");"));
+                        "\"datacache.enable\" = \"true\",\"asd\" = \"true\");"));
     }
 
     @Test
