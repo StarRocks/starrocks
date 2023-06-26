@@ -60,10 +60,3 @@ Calculate the value corresponding to percentile 0.5.
   +-------------------------------------+
   1 row in set (0.03 sec)
   ```
-
-
-insert into aggregate_tbl values
-(5, '2020-02-23', 'city_code', 555, percentile_hash(1)),
-(5, '2020-02-23', 'city_code', 555, percentile_hash(2)),
-(5, '2020-02-23', 'city_code', 555, percentile_hash(3)),
-(5, '2020-02-23', 'city_code', 555, percentile_hash(4));
