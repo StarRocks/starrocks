@@ -15,6 +15,7 @@
 package com.starrocks.lake.vacuum;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -38,7 +39,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -53,7 +54,7 @@ public class AutovacuumDaemon extends Daemon {
     private static final long MINUTES_PER_HOUR = 60;
     private static final long MILLISECONDS_PER_HOUR = MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 
-    private final ConcurrentHashMap<Long, Boolean> vacuumingPartitions = new ConcurrentHashMap<>();
+    private final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
     private final Executor executor = Executors.newFixedThreadPool(Config.lake_autovacuum_parallel_partitions);
 
     public AutovacuumDaemon() {
@@ -101,11 +102,9 @@ public class AutovacuumDaemon extends Daemon {
         }
 
         for (Partition partition : partitions) {
-            if (vacuumingPartitions.containsKey(partition.getId())) {
-                continue;
+            if (vacuumingPartitions.add(partition.getId())) {
+                executor.execute(() -> vacuumPartition(db, table, partition));
             }
-            vacuumingPartitions.put(partition.getId(), true);
-            executor.execute(() -> vacuumPartition(db, table, partition));
         }
     }
 
