@@ -1328,11 +1328,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_metric_calculator = true;
 
-    /**
-     * the max routine load job num, including NEED_SCHEDULED, RUNNING, PAUSE
-     */
-    @ConfField(mutable = true)
-    public static int max_routine_load_job_num = 100;
 
     /**
      * the max concurrent routine load task num of a single routine load job
@@ -1347,7 +1342,7 @@ public class Config extends ConfigBase {
      * which is the routine load task thread pool size on BE.
      */
     @ConfField(mutable = true)
-    public static int max_routine_load_task_num_per_be = 5;
+    public static int max_routine_load_task_num_per_be = 16;
 
     /**
      * max load size for each routine load task
