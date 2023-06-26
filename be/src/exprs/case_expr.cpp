@@ -155,11 +155,11 @@ private:
                 res = ColumnHelper::cast_to_nullable_column(res);
             }
 
-            for (int i = 0; i < then_columns.size(); ++i) {
-                then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);
+            for (auto& then_column : then_columns) {
+                then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
             }
-            for (int i = 0; i < when_columns.size(); ++i) {
-                when_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, when_columns[i]);
+            for (auto& when_column : when_columns) {
+                when_column = ColumnHelper::unpack_and_duplicate_const_column(size, when_column);
             }
             case_column = ColumnHelper::unpack_and_duplicate_const_column(size, case_column);
 
@@ -191,10 +191,10 @@ private:
 
             std::vector<ColumnViewer<ResultType>> then_viewers;
             then_viewers.reserve(loop_end);
-            for (auto col : when_columns) {
+            for (auto& col : when_columns) {
                 when_viewers.emplace_back(col);
             }
-            for (auto col : then_columns) {
+            for (auto& col : then_columns) {
                 then_viewers.emplace_back(col);
             }
             when_columns.emplace_back(case_column);
@@ -328,8 +328,8 @@ private:
             if (res_nullable) {
                 res = ColumnHelper::cast_to_nullable_column(res);
             }
-            for (int i = 0; i < then_columns.size(); ++i) {
-                then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);
+            for (auto& then_column : then_columns) {
+                then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
             }
             // when_columns[i] is true or not
             auto when_num = when_columns.size();
@@ -362,7 +362,7 @@ private:
         } else {
             std::vector<ColumnViewer<ResultType>> then_viewers;
             then_viewers.reserve(loop_end);
-            for (auto col : then_columns) {
+            for (auto& col : then_columns) {
                 then_viewers.emplace_back(col);
             }
             ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);

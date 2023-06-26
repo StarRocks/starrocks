@@ -289,15 +289,15 @@ private:
         NullColumnPtr null_result = NullColumn::create();
         null_result->resize(chunk_size);
 
-        for (int i = 0; i < columns.size(); ++i) {
-            if (columns[i]->is_nullable()) {
+        for (const auto& column : columns) {
+            if (column->is_nullable()) {
                 is_nullable = true;
-                has_null = (columns[i]->has_null() || has_null);
-                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[i].get());
+                has_null = (column->has_null() || has_null);
+                const auto* src_nullable_column = down_cast<const NullableColumn*>(column.get());
                 src_columns.emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
                 null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
             } else {
-                src_columns.emplace_back(down_cast<ArrayColumn*>(columns[i].get()));
+                src_columns.emplace_back(down_cast<ArrayColumn*>(column.get()));
             }
         }
 
@@ -808,14 +808,14 @@ private:
             bool append = false;
             Slice sep_slice = sep_column->get(i).get_slice();
             Slice null_slice = null_replace_column->get(i).get_slice();
-            for (size_t j = 0; j < datum_array.size(); j++) {
+            for (const auto& datum : datum_array) {
                 if (append) {
                     res.append_partial(sep_slice);
                 }
-                if (datum_array[j].is_null()) {
+                if (datum.is_null()) {
                     res.append_partial(null_slice);
                 } else {
-                    Slice value_slice = datum_array[j].get_slice();
+                    Slice value_slice = datum.get_slice();
                     res.append_partial(value_slice);
                 }
                 append = true;
@@ -844,14 +844,14 @@ private:
             const auto& datum_array = datum.get_array();
             bool append = false;
             Slice sep_slice = sep_column->get(i).get_slice();
-            for (size_t j = 0; j < datum_array.size(); j++) {
-                if (datum_array[j].is_null()) {
+            for (const auto& datum : datum_array) {
+                if (datum.is_null()) {
                     continue;
                 }
                 if (append) {
                     res.append_partial(sep_slice);
                 }
-                Slice value_slice = datum_array[j].get_slice();
+                Slice value_slice = datum.get_slice();
                 res.append_partial(value_slice);
                 append = true;
             }
@@ -986,8 +986,8 @@ private:
         return dest_column;
     }
 
-    static void _filter_array_items(const ArrayColumn* src_column, const ColumnPtr raw_filter, ArrayColumn* dest_column,
-                                    NullColumn* dest_null_map) {
+    static void _filter_array_items(const ArrayColumn* src_column, const ColumnPtr& raw_filter,
+                                    ArrayColumn* dest_column, NullColumn* dest_null_map) {
         ArrayColumn* filter;
         NullColumn* filter_null_map = nullptr;
         auto& dest_offsets = dest_column->offsets_column()->get_data();
@@ -1079,7 +1079,7 @@ public:
 
 private:
     static void _sort_array_column(Column* dest_array_column, const Column& src_array_column,
-                                   const ColumnPtr key_array_ptr, const NullColumn* src_null_map) {
+                                   const ColumnPtr& key_array_ptr, const NullColumn* src_null_map) {
         NullColumnPtr key_null_map = nullptr;
         ColumnPtr key_data = key_array_ptr;
         if (key_array_ptr->is_nullable()) { // Nullable(array(Nullable(element), offsets), null_map)
