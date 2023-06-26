@@ -69,9 +69,7 @@ FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& ar
     return context;
 }
 
-FunctionContext::FunctionContext()
-        : _state(nullptr), _num_warnings(0), _thread_local_fn_state(nullptr), _fragment_local_fn_state(nullptr) {}
-
+FunctionContext::FunctionContext() = default;
 FunctionContext::~FunctionContext() = default;
 
 FunctionContext* FunctionContext::clone(MemPool* pool) {

@@ -20,8 +20,7 @@
 #include "formats/parquet/level_builder.h"
 #include "gutil/casts.h"
 
-namespace starrocks {
-namespace parquet {
+namespace starrocks::parquet {
 
 ColumnChunkWriter::ColumnChunkWriter(::parquet::ColumnWriter* column_writer) : _column_writer(column_writer) {}
 
@@ -77,5 +76,4 @@ int64_t ColumnChunkWriter::estimated_buffered_value_bytes() {
     }
 }
 
-} // namespace parquet
-} // namespace starrocks
+} // namespace starrocks::parquet

@@ -62,7 +62,7 @@ public:
                 size_t row_num) const override {
         DCHECK(columns[0]->is_numeric() || columns[0]->is_decimal());
 
-        const InputColumnType* column = down_cast<const InputColumnType*>(columns[0]);
+        const auto* column = down_cast<const InputColumnType*>(columns[0]);
 
         int64_t temp = 1 + this->data(state).count;
 
@@ -102,8 +102,8 @@ public:
         DCHECK(column->is_binary());
         Slice slice = column->get(row_num).get_slice();
 
-        TResult mean = unaligned_load<TResult>(slice.data);
-        TResult m2 = unaligned_load<TResult>(slice.data + sizeof(TResult));
+        auto mean = unaligned_load<TResult>(slice.data);
+        auto m2 = unaligned_load<TResult>(slice.data + sizeof(TResult));
         int64_t count = *reinterpret_cast<int64_t*>(slice.data + sizeof(TResult) * 2);
 
         TResult delta = this->data(state).mean - mean;
@@ -165,7 +165,7 @@ public:
         bytes.resize(one_element_size * chunk_size);
         dst_column->get_offset().resize(chunk_size + 1);
 
-        const InputColumnType* src_column = down_cast<const InputColumnType*>(src[0].get());
+        const auto* src_column = down_cast<const InputColumnType*>(src[0].get());
 
         TResult mean = {};
         TResult m2;
@@ -297,7 +297,7 @@ public:
             }
         }
 
-        ResultColumnType* column = down_cast<ResultColumnType*>(dst);
+        auto* column = down_cast<ResultColumnType*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = result;
         }
@@ -431,7 +431,7 @@ public:
             }
         }
 
-        ResultColumnType* column = down_cast<ResultColumnType*>(dst);
+        auto* column = down_cast<ResultColumnType*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = result;
         }

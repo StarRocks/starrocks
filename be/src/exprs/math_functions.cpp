@@ -222,7 +222,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(binImpl, v) {
     do {
         result[--index] = '0' + (n & 1);
     } while (n >>= 1);
-    return std::string(result + index, max_bits - index);
+    return {result + index, max_bits - index};
 }
 
 StatusOr<ColumnPtr> MathFunctions::bin(FunctionContext* context, const Columns& columns) {
@@ -403,7 +403,7 @@ std::string MathFunctions::decimal_to_base(int64_t src_num, int8_t dest_base) {
     // Max number of digits of any base (base 2 gives max digits), plus sign.
     const size_t max_digits = sizeof(uint64_t) * 8 + 1;
     char buf[max_digits];
-    int32_t result_len = 0;
+    size_t result_len = 0;
     int32_t buf_index = max_digits - 1;
     uint64_t temp_num;
     if (dest_base < 0) {
@@ -426,7 +426,7 @@ std::string MathFunctions::decimal_to_base(int64_t src_num, int8_t dest_base) {
         buf[buf_index] = '-';
         ++result_len;
     }
-    return std::string(buf + max_digits - result_len, result_len);
+    return {buf + max_digits - result_len, result_len};
 }
 
 template <DecimalRoundRule rule, bool keep_scale>
@@ -716,7 +716,7 @@ Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::Fu
         } else {
             seed = GetCurrentTimeNanos();
         }
-        context->set_function_state(scope, reinterpret_cast<void*>(seed));
+        context->set_function_state(scope, reinterpret_cast<void*>(seed)); // NOLINT
     }
     return Status::OK();
 }
@@ -731,7 +731,7 @@ StatusOr<ColumnPtr> MathFunctions::rand(FunctionContext* context, const Columns&
 
     ColumnBuilder<TYPE_DOUBLE> result(num_rows);
     int64_t res = generate_randoms(&result, num_rows, reinterpret_cast<int64_t>(state));
-    state = reinterpret_cast<void*>(res);
+    state = reinterpret_cast<void*>(res); // NOLINT
     context->set_function_state(FunctionContext::THREAD_LOCAL, state);
 
     return result.build(false);

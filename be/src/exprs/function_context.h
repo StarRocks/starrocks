@@ -172,18 +172,18 @@ private:
 
     // We use the query's runtime state to report errors and warnings. NULL for test
     // contexts.
-    RuntimeState* _state;
+    RuntimeState* _state{nullptr};
 
     // Empty if there's no error
     mutable std::mutex _error_msg_mutex;
     std::string _error_msg;
 
     // The number of warnings reported.
-    int64_t _num_warnings;
+    int64_t _num_warnings{0};
 
     /// The function state accessed via FunctionContext::Get/SetFunctionState()
-    void* _thread_local_fn_state;
-    void* _fragment_local_fn_state;
+    void* _thread_local_fn_state{nullptr};
+    void* _fragment_local_fn_state{nullptr};
 
     // Type descriptor for the return type of the function.
     FunctionContext::TypeDesc _return_type;

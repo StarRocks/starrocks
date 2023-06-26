@@ -59,8 +59,7 @@ class VectorizedInConstPredicate final : public Predicate {
 public:
     using ValueType = typename RunTimeTypeTraits<Type>::CppType;
 
-    VectorizedInConstPredicate(const TExprNode& node)
-            : Predicate(node), _is_not_in(node.in_predicate.is_not_in), _is_prepare(false), _null_in_set(false) {}
+    VectorizedInConstPredicate(const TExprNode& node) : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
 
     VectorizedInConstPredicate(const VectorizedInConstPredicate& other)
             : Predicate(other),
@@ -383,9 +382,9 @@ private:
         }
     }
 
-    const bool _is_not_in;
-    bool _is_prepare;
-    bool _null_in_set;
+    const bool _is_not_in{false};
+    bool _is_prepare{false};
+    bool _null_in_set{false};
     bool _is_join_runtime_filter = false;
     bool _eq_null = false;
     int _array_size = 0;
@@ -399,15 +398,7 @@ private:
 class VectorizedInConstPredicateBuilder {
 public:
     VectorizedInConstPredicateBuilder(RuntimeState* state, ObjectPool* pool, Expr* expr)
-            : _state(state),
-              _pool(pool),
-              _expr(expr),
-              _eq_null(false),
-              _null_in_set(false),
-              _is_not_in(false),
-              _is_join_runtime_filter(false),
-              _array_size(0),
-              _in_pred_ctx(nullptr) {}
+            : _state(state), _pool(pool), _expr(expr) {}
 
     Status create();
     Status add_values(const ColumnPtr& column, size_t column_offset);
@@ -423,12 +414,12 @@ private:
     RuntimeState* _state;
     ObjectPool* _pool;
     Expr* _expr;
-    bool _eq_null;
-    bool _null_in_set;
-    bool _is_not_in;
-    bool _is_join_runtime_filter;
-    int _array_size;
-    ExprContext* _in_pred_ctx;
+    bool _eq_null{false};
+    bool _null_in_set{false};
+    bool _is_not_in{false};
+    bool _is_join_runtime_filter{false};
+    int _array_size{0};
+    ExprContext* _in_pred_ctx{nullptr};
     Status _st;
 };
 

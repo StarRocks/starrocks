@@ -2032,7 +2032,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
         return {};
     }
 
-    int result_len = str.size / 2;
+    size_t result_len = str.size / 2;
     std::vector<char> result;
     result.resize(result_len);
     int res_index = 0;
@@ -2068,7 +2068,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
         ++res_index;
         s_index += 2;
     }
-    return std::string(result.data(), result_len);
+    return {result.data(), result_len};
 }
 
 StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starrocks::Columns& columns) {
@@ -3144,7 +3144,7 @@ Status StringFunctions::parse_url_prepare(FunctionContext* context, FunctionCont
     state->const_pattern = true;
     auto column = context->get_constant_column(1);
     auto part = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
-    state->url_part.reset(new UrlParser::UrlPart);
+    state->url_part = std::make_unique<UrlParser::UrlPart>();
     *(state->url_part) = UrlParser::get_url_part(StringValue::from_slice(part));
 
     if (*(state->url_part) == UrlParser::INVALID) {
