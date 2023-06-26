@@ -154,107 +154,15 @@ E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 73. 
 -- !result
 select t.map0, s.map0 from map_test t join map_test s on s.map0 < t.map0 order by t.pk;
 -- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map1, s.map1 from map_test t join map_test s on s.map1 < t.map1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map5, s.map5 from map_test t join map_test s on s.map5 < t.map5 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map0, s.map0 from map_test t join map_test s where s.map0 < t.map0 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map3, s.map4 from map_test t join map_test s where s.map3 < t.map4 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<varchar(65533),map<int(11),varchar(30)>> does not support binary predicate operation with type map<int(11),json>.')
--- !result
-select t.map3, s.map5 from map_test t join map_test s where s.map3 < t.map5 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<varchar(65533),map<int(11),varchar(30)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
--- !result
-select t.map4, s.map5 from map_test t join map_test s where s.map4 < t.map5 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<int(11),json> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 57 to line 1, column 68. Detail message: Column type map<int(11),varchar(65533)> does not support binary predicate operation with type map<int(11),varchar(65533)>.')
 -- !result
 select t.map0, s.map0 from map_test t join map_test s on s.map0 <= t.map0 order by t.pk;
 -- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map1, s.map1 from map_test t join map_test s on s.map1 <= t.map1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map3, s.map3 from map_test t join map_test s where s.map3 <= t.map3 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map4, s.map4 from map_test t join map_test s where s.map4 <= t.map4 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map5, s.map5 from map_test t join map_test s where s.map5 <= t.map5 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map0, s.map1 from map_test t join map_test s where s.map0 <= t.map1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map0, s.map2 from map_test t join map_test s where s.map0 <= t.map2 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 72. Detail message: Column type map<int(11),varchar(65533)> does not support binary predicate operation with type map<int(11),array<varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 57 to line 1, column 69. Detail message: Column type map<int(11),varchar(65533)> does not support binary predicate operation with type map<int(11),varchar(65533)>.')
 -- !result
 select t.map3, s.map4 from map_test t join map_test s where s.map3 <= t.map4 order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 72. Detail message: Column type map<varchar(65533),map<int(11),varchar(30)>> does not support binary predicate operation with type map<int(11),json>.')
--- !result
-select t.map3, s.map5 from map_test t join map_test s where s.map3 <= t.map5 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 72. Detail message: Column type map<varchar(65533),map<int(11),varchar(30)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
--- !result
-select t.map4, s.map5 from map_test t join map_test s where s.map4 <= t.map5 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 72. Detail message: Column type map<int(11),json> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
--- !result
-select t.map0, s.map0 from map_test t join map_test s on s.map0 > t.map0 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map1, s.map1 from map_test t join map_test s on s.map1 > t.map1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map2, s.map2 from map_test t join map_test s on s.map2 > t.map2 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map4, s.map4 from map_test t join map_test s where s.map4 > t.map4 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map5, s.map5 from map_test t join map_test s where s.map5 > t.map5 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map0, s.map1 from map_test t join map_test s where s.map0 > t.map1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.map0, s.map2 from map_test t join map_test s where s.map0 > t.map2 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 71. Detail message: Column type map<int(11),varchar(65533)> does not support binary predicate operation with type map<int(11),array<varchar(65533)>>.')
--- !result
-select t.map3, s.map5 from map_test t join map_test s where s.map3 >= t.map5 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 72. Detail message: Column type map<varchar(65533),map<int(11),varchar(30)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
--- !result
-select t.map4, s.map5 from map_test t join map_test s where s.map4 >= t.map5 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 72. Detail message: Column type map<int(11),json> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
 -- !result
 select map0 from map_test t where exists (select 1 from map_test s where t.map0 = s.map3);
 -- result:
@@ -270,22 +178,14 @@ E: (1064, 'Getting analyzing error from line 1, column 73 to line 1, column 84. 
 -- !result
 select map3 from map_test t where exists (select 1 from map_test s where t.map3 = s.map3);
 -- result:
-{"11":{1:"abc"},"":{2:null}}
-{"1":{1:"abc"}}
-{null:{null:null}}
 {"3":{3:"a33c"},null:null}
+{"1":{1:"abc"}}
+{"11":{1:"abc"},"":{2:null}}
+{null:{null:null}}
 -- !result
 select map5 from map_test t where exists (select 1 from map_test s where t.map5 < s.map3);
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 73 to line 1, column 84. Detail message: Column type map<int(11),struct<c int(11), b varchar(65533)>> does not support binary predicate operation with type map<varchar(65533),map<int(11),varchar(30)>>.')
--- !result
-select map0 from map_test t where exists (select 1 from map_test s where t.map0 < s.map4);
--- result:
-E: (1064, 'Getting analyzing error. Detail message: Not support exists correlation subquery with Non-EQ predicate.')
--- !result
-select map1 from map_test t where exists (select 1 from map_test s where t.map1 < s.map4);
--- result:
-E: (1064, 'Getting analyzing error. Detail message: Not support exists correlation subquery with Non-EQ predicate.')
 -- !result
 select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map0);
 -- result:
@@ -302,7 +202,7 @@ E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. 
 -- !result
 select map5 from map_test t where not exists (select 1 from map_test s where t.map5 < s.map5);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Not support exists correlation subquery with Non-EQ predicate.')
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type map<int(11),struct<c int(11), b varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
 -- !result
 select map3 from map_test t where map3 in (select map3 from map_test s);
 -- result:
@@ -313,22 +213,6 @@ select map4 from map_test t where map4 in (select map3 from map_test s);
 E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
 -- !result
 select map5 from map_test t where map5 in (select map3 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map0 from map_test t where map0 in (select map4 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map1 from map_test t where map1 in (select map4 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map5 from map_test t where map5 in (select map4 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map0 from map_test t where map0 in (select map5 from map_test s);
 -- result:
 E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
 -- !result
@@ -361,18 +245,6 @@ select map4 from map_test t where map4 not in (select map2 from map_test s);
 E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
 -- !result
 select map4 from map_test t where map4 not in (select map3 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map5 from map_test t where map5 not in (select map3 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map0 from map_test t where map0 not in (select map4 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map1 from map_test t where map1 not in (select map4 from map_test s);
 -- result:
 E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
 -- !result
@@ -436,10 +308,6 @@ select map5 not in (select map5 from map_test s) from map_test;
 -- result:
 E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
 -- !result
-select t.map3, s.map3 from map_test t left join map_test s on s.map3 > t.map3 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
 select t.map4, s.map4 from map_test t left join map_test s on s.map4 = t.map4 order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Type (nested) percentile/hll/bitmap/json not support join.')
@@ -470,10 +338,6 @@ select t.map5, s.map5 from map_test t left join map_test s on s.map5 = t.map5 or
 {null:null,3:{"c":3,"b":"a"}}	{null:null,3:{"c":3,"b":"a"}}
 None	None
 -- !result
-select t.map3, s.map3 from map_test t right join map_test s on s.map3 > t.map3 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
 select t.map4, s.map4 from map_test t right join map_test s on s.map4 = t.map4 order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Type (nested) percentile/hll/bitmap/json not support join.')
@@ -503,10 +367,6 @@ None	None
 {null:{"c":null,"b":null}}	{null:{"c":null,"b":null}}
 {null:{"c":null,"b":null}}	{null:{"c":null,"b":null}}
 {null:null,3:{"c":3,"b":"a"}}	{null:null,3:{"c":3,"b":"a"}}
--- !result
-select t.map3, s.map3 from map_test t full join map_test s on s.map3 > t.map3 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
 -- !result
 select t.map4, s.map4 from map_test t full join map_test s on s.map4 = t.map4 order by t.pk;
 -- result:

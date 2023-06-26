@@ -165,79 +165,15 @@ E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 73. 
 -- !result
 select t.s0, s.s0 from struct_test t join struct_test s on s.s0 < t.s0 order by t.pk;
 -- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s1, s.s1 from struct_test t join struct_test s on s.s1 < t.s1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s1, s.s2 from struct_test t join struct_test s where s.s1 < t.s2 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 71. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
--- !result
-select t.s1, s.s3 from struct_test t join struct_test s where s.s1 < t.s3 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 71. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
--- !result
-select t.s0, s.s0 from struct_test t join struct_test s where s.s0 <= t.s0 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s1, s.s1 from struct_test t join struct_test s where s.s1 <= t.s1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s2, s.s2 from struct_test t join struct_test s on s.s2 > t.s2 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s3, s.s3 from struct_test t join struct_test s on s.s3 > t.s3 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s4, s.s4 from struct_test t join struct_test s on s.s4 > t.s4 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: Type (nested) percentile/hll/bitmap/json not support join.')
--- !result
-select t.s5, s.s5 from struct_test t join struct_test s on s.s5 > t.s5 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s0, s.s0 from struct_test t join struct_test s where s.s0 > t.s0 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
+E: (1064, 'Getting analyzing error from line 1, column 59 to line 1, column 68. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 int(11), c1 varchar(65533)>.')
 -- !result
 select t.s4, s.s4 from struct_test t join struct_test s where s.s4 > t.s4 order by t.pk;
 -- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
+E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 71. Detail message: Column type struct<c0 int(11), c1 json> does not support binary predicate operation with type struct<c0 int(11), c1 json>.')
 -- !result
 select t.s0, s.s0 from struct_test t join struct_test s on s.s0 >= t.s0 order by t.pk;
 -- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s1, s.s1 from struct_test t join struct_test s on s.s1 >= t.s1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s2, s.s2 from struct_test t join struct_test s on s.s2 >= t.s2 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s3, s.s3 from struct_test t join struct_test s on s.s3 >= t.s3 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
-select t.s2, s.s5 from struct_test t join struct_test s where s.s2 >= t.s5 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 72. Detail message: Column type struct<c0 int(11), c1 array<varchar(65533)>> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
--- !result
-select t.s3, s.s4 from struct_test t join struct_test s where s.s3 >= t.s4 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 72. Detail message: Column type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>> does not support binary predicate operation with type struct<c0 int(11), c1 json>.')
--- !result
-select t.s3, s.s5 from struct_test t join struct_test s where s.s3 >= t.s5 order by t.pk;
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 72. Detail message: Column type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 59 to line 1, column 69. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 int(11), c1 varchar(65533)>.')
 -- !result
 select t.s4, s.s5 from struct_test t join struct_test s where s.s4 >= t.s5 order by t.pk;
 -- result:
@@ -254,29 +190,6 @@ E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. 
 select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 = s.s5);
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 array<varchar(65533)>> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
--- !result
-select s3 from struct_test t where exists (select 1 from struct_test s where t.s3 = s.s5);
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
--- !result
-select s4 from struct_test t where exists (select 1 from struct_test s where t.s4 = s.s5);
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 json> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
--- !result
-select s5 from struct_test t where exists (select 1 from struct_test s where t.s5 = s.s5);
--- result:
-{"c0":0,"c1":{"c":1,"b":"a"}}
-{"c0":null,"c1":{"c":null,"b":null}}
-{"c0":null,"c1":{"c":null,"b":null}}
-{"c0":null,"c1":{"c":3,"b":"a"}}
--- !result
-select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 <=> s.s2);
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
--- !result
-select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 <=> s.s2);
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
 -- !result
 select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 <=> s.s2);
 -- result:
@@ -296,35 +209,15 @@ E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. 
 -- !result
 select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 < s.s1);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Not support exists correlation subquery with Non-EQ predicate.')
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 decimal64(16, 3), c1 varchar(30)>.')
 -- !result
 select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 < s.s1);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Not support exists correlation subquery with Non-EQ predicate.')
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 decimal64(16, 3), c1 varchar(30)>.')
 -- !result
 select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 < s.s1);
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 array<varchar(65533)>> does not support binary predicate operation with type struct<c0 decimal64(16, 3), c1 varchar(30)>.')
--- !result
-select s3 from struct_test t where exists (select 1 from struct_test s where t.s3 < s.s1);
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>> does not support binary predicate operation with type struct<c0 decimal64(16, 3), c1 varchar(30)>.')
--- !result
-select s4 from struct_test t where exists (select 1 from struct_test s where t.s4 < s.s1);
--- result:
-E: (1064, 'Getting analyzing error. Detail message: Not support exists correlation subquery with Non-EQ predicate.')
--- !result
-select s5 from struct_test t where exists (select 1 from struct_test s where t.s5 < s.s1);
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>> does not support binary predicate operation with type struct<c0 decimal64(16, 3), c1 varchar(30)>.')
--- !result
-select s0 from struct_test t where not exists (select 1 from struct_test s where t.s0 <=> s.s5);
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 81 to line 1, column 92. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
--- !result
-select s1 from struct_test t where not exists (select 1 from struct_test s where t.s1 <=> s.s5);
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 81 to line 1, column 92. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
 -- !result
 select s2 from struct_test t where not exists (select 1 from struct_test s where t.s2 <=> s.s5);
 -- result:
@@ -446,10 +339,6 @@ select t.s0, s.s0 from struct_test t left join struct_test s on s.s0 = t.s0 orde
 {"c0":3,"c1":""}	{"c0":3,"c1":""}
 None	None
 -- !result
-select t.s1, s.s1 from struct_test t left join struct_test s on s.s1 < t.s1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
--- !result
 select t.s1, s.s2 from struct_test t left join struct_test s on s.s1 = t.s2 order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
@@ -477,10 +366,6 @@ None	None
 {"c0":1,"c1":null}	{"c0":1,"c1":null}
 {"c0":null,"c1":null}	{"c0":null,"c1":null}
 {"c0":3,"c1":""}	{"c0":3,"c1":""}
--- !result
-select t.s1, s.s1 from struct_test t right join struct_test s on s.s1 < t.s1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
 -- !result
 select t.s1, s.s2 from struct_test t right join struct_test s on s.s1 = t.s2 order by t.pk;
 -- result:
@@ -514,10 +399,6 @@ None	None
 {"c0":null,"c1":null}	{"c0":null,"c1":null}
 {"c0":3,"c1":""}	{"c0":3,"c1":""}
 None	None
--- !result
-select t.s1, s.s1 from struct_test t full join struct_test s on s.s1 < t.s1 order by t.pk;
--- result:
-E: (1064, 'Vectorized engine does not support the operator, node_type: 2 backend:172.26.92.195')
 -- !result
 select t.s1, s.s2 from struct_test t full join struct_test s on s.s1 = t.s2 order by t.pk;
 -- result:

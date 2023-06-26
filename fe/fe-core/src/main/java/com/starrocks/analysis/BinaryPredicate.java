@@ -194,7 +194,7 @@ public class BinaryPredicate extends Predicate implements Writable {
             return Type.JSON;
         }
         if (type1.isComplexType() || type2.isComplexType()) {
-            return TypeManager.getCommonSuperType(type1, type2);
+            return Type.INVALID;
         }
         if (t1 == PrimitiveType.VARCHAR && t2 == PrimitiveType.VARCHAR) {
             return Type.VARCHAR;

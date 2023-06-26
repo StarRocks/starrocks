@@ -75,22 +75,6 @@ select s.d_5, t.d_3 from array_test s join array_test t on s.d_5 = t.d_3 order b
 select s.d_6, t.d_3 from array_test s join array_test t on s.d_6 = t.d_3 order by 1, 2;
 
 select s.d_5, t.d_4 from array_test s join array_test t on s.d_5 >= t.d_4 order by 1, 2;
-select s.d_6, t.d_4 from array_test s join array_test t on s.d_6 >= t.d_4 order by 1, 2;
-
-select s.d_5, t.d_5 from array_test s join array_test t on s.d_5 >= t.d_5 order by 1, 2;
-select s.d_6, t.d_5 from array_test s join array_test t on s.d_6 >= t.d_5 order by 1, 2;
-
-select s.d_6, t.d_6 from array_test s join array_test t on s.d_6 >= t.d_6 order by 1, 2;
-
-select s.i_1, t.d_1 from array_test s join array_test t on s.i_1 <= t.d_1 order by 1, 2;
-select s.i_1, t.d_2 from array_test s join array_test t on s.i_1 <= t.d_2 order by 1, 2;
-select s.i_1, t.d_3 from array_test s join array_test t on s.i_1 <= t.d_3 order by 1, 2;
-select s.d_6, t.d_4 from array_test s join array_test t on s.d_6 <= t.d_4 order by 1, 2;
-
-select s.d_5, t.d_5 from array_test s join array_test t on s.d_5 <= t.d_5 order by 1, 2;
-select s.d_6, t.d_5 from array_test s join array_test t on s.d_6 <= t.d_5 order by 1, 2;
-
-select s.d_6, t.d_6 from array_test s join array_test t on s.d_6 <= t.d_6 order by 1, 2;
 
 select s.i_1, t.d_1 from array_test s join array_test t on s.i_1 != t.d_1 order by 1, 2;
 select s.i_1, t.d_2 from array_test s join array_test t on s.i_1 != t.d_2 order by 1, 2;
@@ -110,7 +94,6 @@ select i_0 from array_test s where exists (select 1 from array_test t where t.i_
 select i_0 from array_test s where exists (select 1 from array_test t where t.i_0 <=> s.d_6) order by 1;
 select i_0 from array_test s where exists (select 1 from array_test t where t.i_0 <=> s.ai_1) order by 1;
 
-select i_0 from array_test s where exists (select 1 from array_test t where t.i_0 < s.i_0) order by 1;
 select i_0 from array_test s where exists (select 1 from array_test t where t.i_0 < s.i_1) order by 1;
 
 select s_1 from array_test s where not exists (select 1 from array_test t where t.s_1 = s.s_1) order by 1;
@@ -125,7 +108,6 @@ select i_0 from array_test s where not exists (select 1 from array_test t where 
 select i_0 from array_test s where not exists (select 1 from array_test t where t.i_0 <=> s.i_1) order by 1;
 select i_0 from array_test s where not exists (select 1 from array_test t where t.i_0 <=> s.d_1) order by 1;
 
-select i_0 from array_test s where not exists (select 1 from array_test t where t.i_0 < s.d_6) order by 1;
 select i_0 from array_test s where not exists (select 1 from array_test t where t.i_0 < s.ai_1) order by 1;
 
 
@@ -195,8 +177,6 @@ select s.ai_1, t.ai_1 from array_test s left join array_test t on s.ai_1 = t.ai_
 select s.as_1, t.as_1 from array_test s left join array_test t on s.as_1 = t.as_1 order by 1, 2;
 
 select s.aad_1, t.aas_1 from array_test s left join array_test t on s.aad_1 < t.aas_1 order by 1, 2;
-select s.aad_1, t.aad_1 from array_test s left join array_test t on s.aad_1 < t.aad_1 order by 1, 2;
-select s.aas_1, t.aas_1 from array_test s left join array_test t on s.aas_1 < t.aas_1 order by 1, 2;
 select s.aas_1, t.aas_1 from array_test s left join array_test t on s.aas_1 <=> t.aas_1 order by 1, 2;
 select s.aad_1, t.aas_1 from array_test s left join array_test t on s.aad_1 != t.aas_1 order by 1, 2;
 select s.aad_1, t.aad_1 from array_test s left join array_test t on s.aad_1 != t.aad_1 order by 1, 2;
@@ -224,10 +204,7 @@ select s.ai_1, t.as_1 from array_test s right join array_test t on s.ai_1 = t.as
 select s.ai_1, t.ai_1 from array_test s right join array_test t on s.ai_1 = t.ai_1 order by 1, 2;
 select s.as_1, t.as_1 from array_test s right join array_test t on s.as_1 <= t.as_1 order by 1, 2;
 select s.ai_1, t.as_1 from array_test s right join array_test t on s.ai_1 <=> t.as_1 order by 1, 2;
-select s.ai_1, t.ai_1 from array_test s right join array_test t on s.ai_1 <=> t.ai_1 order by 1, 2;
-select s.as_1, t.as_1 from array_test s right join array_test t on s.as_1 <=> t.as_1 order by 1, 2;
 select s.ai_1, t.as_1 from array_test s right join array_test t on s.ai_1 != t.as_1 order by 1, 2;
-select s.ai_1, t.ai_1 from array_test s right join array_test t on s.ai_1 != t.ai_1 order by 1, 2;
 select s.as_1, t.as_1 from array_test s right join array_test t on s.as_1 != t.as_1 order by 1, 2;
 
 select s.aad_1, t.aas_1 from array_test s right join array_test t on s.aad_1 = t.aas_1 order by 1, 2;
@@ -238,14 +215,10 @@ select s.aad_1, t.aad_1 from array_test s right join array_test t on s.aad_1 <=>
 select s.aas_1, t.aas_1 from array_test s right join array_test t on s.aas_1 != t.aas_1 order by 1, 2;
 
 select s.s_1, t.i_1 from array_test s full join array_test t on s.s_1 = t.i_1 order by 1, 2;
-select s.s_1, t.i_1 from array_test s full join array_test t on s.s_1 <=> t.i_1 order by 1, 2;
-select s.s_1, t.i_1 from array_test s full join array_test t on s.s_1 > t.i_1 order by 1, 2;
-select s.aad_1, t.aad_1 from array_test s full join array_test t on s.aad_1 <= t.aad_1 order by 1, 2;
+select s.s_1, t.i_1 from array_test s full join array_test t on s.s_1 => t.i_1 order by 1, 2;
 select s.aas_1, t.aas_1 from array_test s full join array_test t on s.aas_1 <= t.aas_1 order by 1, 2;
 select s.aad_1, t.aas_1 from array_test s full join array_test t on s.aad_1 <=> t.aas_1 order by 1, 2;
-select s.aad_1, t.aad_1 from array_test s full join array_test t on s.aad_1 <=> t.aad_1 order by 1, 2;
 select s.aas_1, t.aas_1 from array_test s full join array_test t on s.aas_1 <=> t.aas_1 order by 1, 2;
-select s.aad_1, t.aas_1 from array_test s full join array_test t on s.aad_1 != t.aas_1 order by 1, 2;
 select s.aad_1, t.aad_1 from array_test s full join array_test t on s.aad_1 != t.aad_1 order by 1, 2;
 select s.aas_1, t.aas_1 from array_test s full join array_test t on s.aas_1 != t.aas_1 order by 1, 2;
 

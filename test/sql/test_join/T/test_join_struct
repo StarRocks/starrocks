@@ -46,39 +46,14 @@ select t.s3, s.s3 from struct_test t join struct_test s where s.s3 <=> t.s3 orde
 
 select t.s4, s.s5 from struct_test t join struct_test s where s.s4 <=> t.s5 order by t.pk;
 select t.s0, s.s0 from struct_test t join struct_test s on s.s0 < t.s0 order by t.pk;
-select t.s1, s.s1 from struct_test t join struct_test s on s.s1 < t.s1 order by t.pk;
-select t.s1, s.s2 from struct_test t join struct_test s where s.s1 < t.s2 order by t.pk;
-select t.s1, s.s3 from struct_test t join struct_test s where s.s1 < t.s3 order by t.pk;
-select t.s0, s.s0 from struct_test t join struct_test s where s.s0 <= t.s0 order by t.pk;
-select t.s1, s.s1 from struct_test t join struct_test s where s.s1 <= t.s1 order by t.pk;
-
-select t.s2, s.s2 from struct_test t join struct_test s on s.s2 > t.s2 order by t.pk;
-select t.s3, s.s3 from struct_test t join struct_test s on s.s3 > t.s3 order by t.pk;
-select t.s4, s.s4 from struct_test t join struct_test s on s.s4 > t.s4 order by t.pk;
-select t.s5, s.s5 from struct_test t join struct_test s on s.s5 > t.s5 order by t.pk;
-select t.s0, s.s0 from struct_test t join struct_test s where s.s0 > t.s0 order by t.pk;
 select t.s4, s.s4 from struct_test t join struct_test s where s.s4 > t.s4 order by t.pk;
-
-
 select t.s0, s.s0 from struct_test t join struct_test s on s.s0 >= t.s0 order by t.pk;
-select t.s1, s.s1 from struct_test t join struct_test s on s.s1 >= t.s1 order by t.pk;
-select t.s2, s.s2 from struct_test t join struct_test s on s.s2 >= t.s2 order by t.pk;
-select t.s3, s.s3 from struct_test t join struct_test s on s.s3 >= t.s3 order by t.pk;
-select t.s2, s.s5 from struct_test t join struct_test s where s.s2 >= t.s5 order by t.pk;
-select t.s3, s.s4 from struct_test t join struct_test s where s.s3 >= t.s4 order by t.pk;
-select t.s3, s.s5 from struct_test t join struct_test s where s.s3 >= t.s5 order by t.pk;
 select t.s4, s.s5 from struct_test t join struct_test s where s.s4 >= t.s5 order by t.pk;
 
 
 select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 = s.s5);
 select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 = s.s5);
 select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 = s.s5);
-select s3 from struct_test t where exists (select 1 from struct_test s where t.s3 = s.s5);
-select s4 from struct_test t where exists (select 1 from struct_test s where t.s4 = s.s5);
-select s5 from struct_test t where exists (select 1 from struct_test s where t.s5 = s.s5);
-
-select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 <=> s.s2);
-select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 <=> s.s2);
 select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 <=> s.s2);
 select s3 from struct_test t where exists (select 1 from struct_test s where t.s3 <=> s.s2);
 select s4 from struct_test t where exists (select 1 from struct_test s where t.s4 <=> s.s2);
@@ -88,12 +63,6 @@ select s5 from struct_test t where exists (select 1 from struct_test s where t.s
 select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 < s.s1);
 select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 < s.s1);
 select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 < s.s1);
-select s3 from struct_test t where exists (select 1 from struct_test s where t.s3 < s.s1);
-select s4 from struct_test t where exists (select 1 from struct_test s where t.s4 < s.s1);
-select s5 from struct_test t where exists (select 1 from struct_test s where t.s5 < s.s1);
-
-select s0 from struct_test t where not exists (select 1 from struct_test s where t.s0 <=> s.s5);
-select s1 from struct_test t where not exists (select 1 from struct_test s where t.s1 <=> s.s5);
 select s2 from struct_test t where not exists (select 1 from struct_test s where t.s2 <=> s.s5);
 select s3 from struct_test t where not exists (select 1 from struct_test s where t.s3 <=> s.s5);
 select s4 from struct_test t where not exists (select 1 from struct_test s where t.s4 <=> s.s5);
@@ -127,7 +96,6 @@ select s0 not in (select s5 from struct_test s) from struct_test;
 
 select t.s4, s.s5 from struct_test t left join struct_test s where s.s4 <=> t.s5 order by t.pk;
 select t.s0, s.s0 from struct_test t left join struct_test s on s.s0 = t.s0 order by t.pk;
-select t.s1, s.s1 from struct_test t left join struct_test s on s.s1 < t.s1 order by t.pk;
 select t.s1, s.s2 from struct_test t left join struct_test s on s.s1 = t.s2 order by t.pk;
 select t.s1, s.s3 from struct_test t left join struct_test s on s.s1 < t.s3 order by t.pk;
 select t.s0, s.s0 from struct_test t left join struct_test s where s.s0 = t.s0 order by t.pk;
@@ -135,7 +103,6 @@ select t.s1, s.s1 from struct_test t left join struct_test s where s.s1 <= t.s1 
 
 select t.s4, s.s5 from struct_test t right join struct_test s where s.s4 <=> t.s5 order by t.pk;
 select t.s0, s.s0 from struct_test t right join struct_test s on s.s0 = t.s0 order by t.pk;
-select t.s1, s.s1 from struct_test t right join struct_test s on s.s1 < t.s1 order by t.pk;
 select t.s1, s.s2 from struct_test t right join struct_test s on s.s1 = t.s2 order by t.pk;
 select t.s1, s.s3 from struct_test t right join struct_test s on s.s1 < t.s3 order by t.pk;
 select t.s0, s.s0 from struct_test t right join struct_test s on s.s0 = t.s0 order by t.pk;
@@ -143,7 +110,6 @@ select t.s1, s.s1 from struct_test t right join struct_test s where s.s1 <= t.s1
 
 select t.s4, s.s5 from struct_test t full join struct_test s on s.s4 <=> t.s5 order by t.pk;
 select t.s0, s.s0 from struct_test t full join struct_test s on s.s0 = t.s0 order by t.pk;
-select t.s1, s.s1 from struct_test t full join struct_test s on s.s1 < t.s1 order by t.pk;
 select t.s1, s.s2 from struct_test t full join struct_test s on s.s1 = t.s2 order by t.pk;
 select t.s1, s.s3 from struct_test t full join struct_test s on s.s1 < t.s3 order by t.pk;
 select t.s0, s.s0 from struct_test t full join struct_test s where s.s0 = t.s0 order by t.pk;
