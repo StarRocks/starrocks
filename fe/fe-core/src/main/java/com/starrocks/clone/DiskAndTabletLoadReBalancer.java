@@ -297,8 +297,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
     @Override
     public Long getToDeleteReplicaId(Long tabletId) {
-        Long beId = cachedReplicaId.remove(tabletId);
-        return beId == null ? -1L : beId;
+        Long replicaId = cachedReplicaId.remove(tabletId);
+        return replicaId == null ? -1L : replicaId;
     }
 
     private void setCachedReplicaId(Long tabletId, Long replicaId) {

@@ -83,6 +83,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
@@ -307,6 +308,50 @@ public class TabletScheduler extends FrontendDaemon {
                 ).forEach(t -> result.merge(t.getColocateGroupId(), 1L, Long::sum))
         );
         return result;
+    }
+
+    private synchronized TabletSchedCtx getTabletSchedCtx(long tabletId) {
+        TabletSchedCtx tabletSchedCtx = runningTablets.get(tabletId);
+        if (tabletSchedCtx == null) {
+            Optional<TabletSchedCtx> optional =
+                    pendingTablets.stream().filter(ctx -> ctx.getTabletId() == tabletId).findFirst();
+            if (optional.isPresent()) {
+                tabletSchedCtx = optional.get();
+            }
+        }
+        return tabletSchedCtx;
+    }
+
+    /**
+     * For tablet with single replica set, after re-balancing, the src replica will be set to decommissioned state
+     * to clean redundant replica, but because there may exist loading txns which have run concurrently with
+     * re-balancing process, and the newly cloned replica would have failed versions if the loading txn doesn't
+     * see these new replicas.
+     * <p>
+     * So the tablet may in a state where all of its replicas are in an abnormal state, the original replica
+     * has complete versions but is in decommissioned state and the newly cloned replica has failed version.
+     * In this situation, the tablet is not queryable, we should reset the original replica's state to normal ASAP.
+     * <p>
+     * Besides, here we reset the state only when the newly cloned replica has failed version to avoid
+     * extra scheduling cost.
+     *
+     * @param replicas list of replicas belong to a tablet
+     */
+    public static void resetDecommStatForSingleReplicaTabletUnlocked(long tabletId, List<Replica> replicas) {
+        TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
+        TabletSchedCtx tabletSchedCtx = tabletScheduler.getTabletSchedCtx(tabletId);
+        if (tabletSchedCtx != null) {
+            Replica decommissionedReplica = tabletSchedCtx.getDecommissionedReplica();
+            for (Replica replica : replicas) {
+                if (replica.getState() == Replica.ReplicaState.DECOMMISSION && replica.getLastFailedVersion() < 0
+                        && decommissionedReplica != null && replica.getId() == decommissionedReplica.getId()) {
+                    tabletScheduler.finalizeTabletCtx(tabletSchedCtx, TabletSchedCtx.State.CANCELLED,
+                            "src replica of rebalance need to reset state, replicas: " +
+                                    tabletSchedCtx.getTablet().getReplicaInfos());
+                    break;
+                }
+            }
+        }
     }
 
     /**
