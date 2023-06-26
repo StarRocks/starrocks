@@ -174,6 +174,9 @@ public class Trino2SRFunctionCallTransformer {
         // strpos -> locate
         registerFunctionTransformer("strpos", 2, new FunctionCallExpr("locate",
                 ImmutableList.of(new PlaceholderExpr(2, Expr.class), new PlaceholderExpr(1, Expr.class))));
+
+        // length -> char_length
+        registerFunctionTransformer("length", 1, "char_length", ImmutableList.of(Expr.class));
     }
 
     private static void registerRegexpFunctionTransformer() {
