@@ -157,6 +157,21 @@ public abstract class ScalarOperator implements Cloneable {
      */
     public abstract ColumnRefSet getUsedColumns();
 
+<<<<<<< HEAD
+=======
+    public List<ColumnRefOperator> getColumnRefs() {
+        List<ColumnRefOperator> columns = Lists.newArrayList();
+        getColumnRefs(columns);
+        return columns;
+    }
+
+    public void getColumnRefs(List<ColumnRefOperator> columns) {
+        for (ScalarOperator child : getChildren()) {
+            child.getColumnRefs(columns);
+        }
+    }
+
+>>>>>>> bd2f6ea71 ([Enhancement] optimize mv union rewrite (#25679))
     public String debugString() {
         return toString();
     }
