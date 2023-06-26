@@ -115,7 +115,7 @@ public class LakeTableTest {
         builder.setFsInfo(fsInfo);
         builder.setFullPath("s3://test-bucket/1/");
         FilePathInfo pathInfo = builder.build();
-        table.setStorageInfo(pathInfo, new DataCacheInfo(false, 0, false));
+        table.setStorageInfo(pathInfo, new DataCacheInfo(false, false));
 
         table.setStorageVolume("storage_volume");
 
