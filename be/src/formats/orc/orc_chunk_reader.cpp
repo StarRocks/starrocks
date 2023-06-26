@@ -873,7 +873,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
     // We build SearchArgument about col=true directly.
     if (node_type == TExprNodeType::type::SLOT_REF) {
         auto* ref = down_cast<const ColumnRef*>(conjunct);
-        DCHECK(conjunct->type().type == LogicalType::TYPE_BOOLEAN);
+        DCHECK(conjunct->type().type == PrimitiveType::TYPE_BOOLEAN);
         SlotId slot_id = ref->slot_id();
         std::string name = _slot_id_to_desc[slot_id]->col_name();
         builder->equals(name, orc::PredicateDataType::BOOLEAN, true);
