@@ -1850,8 +1850,7 @@ public class MvRewriteOptimizationTest {
         String query6 =
                 "SELECT `emps`.`deptno`, `emps`.`name`, sum(salary) as salary FROM `emps` group by deptno, name;";
         String plan6 = getFragmentPlan(query6);
-        PlanTestBase.assertNotContains(plan6, "mv_agg_1");
-        PlanTestBase.assertContains(plan6, "emps");
+        PlanTestBase.assertContains(plan6, "mv_agg_1", "emps", "UNION");
         dropMv("test", "mv_agg_1");
     }
 
