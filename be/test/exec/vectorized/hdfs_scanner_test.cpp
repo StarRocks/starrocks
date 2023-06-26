@@ -1209,7 +1209,7 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
 
-    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     EXPECT_TRUE(status.ok());
 
