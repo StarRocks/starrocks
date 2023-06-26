@@ -235,8 +235,7 @@ TEST_F(LakePrimaryKeyPublishTest, test_write_read_success) {
 
     writer->close();
 
-    ASSIGN_OR_ABORT(auto score, _tablet_manager->publish_version(_tablet_metadata->id(), 1, 2, logs, 1));
-    EXPECT_TRUE(score > 0.0);
+    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), 1, 2, logs, 1).status());
     EXPECT_TRUE(_update_manager->TEST_check_update_state_cache_noexist(_tablet_metadata->id(), txn_id));
 
     // read at version 2
@@ -346,10 +345,6 @@ TEST_F(LakePrimaryKeyPublishTest, test_write_fail_retry) {
 }
 
 TEST_F(LakePrimaryKeyPublishTest, test_publish_multi_times) {
-    auto saved_max_versions = config::lake_gc_metadata_max_versions;
-    // Prevent the old tablet metadata files been removed
-    config::lake_gc_metadata_max_versions = 10;
-
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
     auto txns = std::vector<int64_t>();
     auto version = 1;
@@ -378,8 +373,6 @@ TEST_F(LakePrimaryKeyPublishTest, test_publish_multi_times) {
     // advince publish should fail, because version + 1 don't exist
     ASSERT_ERROR(_tablet_manager->publish_version(tablet_id, version + 1, version + 2, &txns.back(), 1).status());
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
-
-    config::lake_gc_metadata_max_versions = saved_max_versions;
 }
 
 TEST_F(LakePrimaryKeyPublishTest, test_publish_concurrent) {

@@ -42,6 +42,8 @@ import com.starrocks.proto.UnlockTabletMetadataRequest;
 import com.starrocks.proto.UnlockTabletMetadataResponse;
 import com.starrocks.proto.UploadSnapshotsRequest;
 import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.VacuumRequest;
+import com.starrocks.proto.VacuumResponse;
 
 import java.util.concurrent.Future;
 
@@ -84,5 +86,8 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "abort_compaction", onceTalkTimeout = 5000)
     Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum", onceTalkTimeout = /*10 minutes=*/600000)
+    Future<VacuumResponse> vacuum(VacuumRequest request);
 }
 
