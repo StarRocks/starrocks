@@ -228,6 +228,7 @@ Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeD
         auto arrow_field_size = arrow_type->num_fields();
 
         raw_type_desc->type = TYPE_STRUCT;
+        raw_type_desc->field_names = type_desc->field_names;
         conv_func->field_names = type_desc->field_names;
         for (auto i = 0; i < field_size; i++) {
             TypeDescriptor type;
@@ -236,7 +237,6 @@ Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeD
             RETURN_IF_ERROR(
                     build_dest(sub_at.get(), &type_desc->children[i], true, &type, cf.get(), need_cast, strict_mode));
             raw_type_desc->children.emplace_back(std::move(type));
-            raw_type_desc->field_names.emplace_back(arrow_type->field(i)->name());
             conv_func->children.emplace_back(std::move(cf));
         }
         break;
