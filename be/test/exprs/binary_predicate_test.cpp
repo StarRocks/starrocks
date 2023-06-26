@@ -556,7 +556,6 @@ public:
     ColumnPtr _column;
 };
 
-
 class VectorizedBinaryPredicateArrayTest : public ::testing::Test {
 public:
     void SetUp() override {
@@ -595,6 +594,7 @@ public:
         e->_column = std::move(value);
         return e;
     }
+
 public:
     TExprNode expr_node;
     ObjectPool _objpool;
