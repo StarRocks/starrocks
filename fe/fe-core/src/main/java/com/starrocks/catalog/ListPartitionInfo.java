@@ -23,7 +23,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
@@ -413,9 +413,9 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, DataProperty dataProperty, short replicationNum, boolean isInMemory,
-                             StorageCacheInfo storageCacheInfo, List<String> values,
+                             DataCacheInfo dataCacheInfo, List<String> values,
                              List<List<String>> multiValues) throws AnalysisException {
-        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageCacheInfo);
+        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory, dataCacheInfo);
         if (multiValues != null && multiValues.size() > 0) {
             this.idToMultiValues.put(partitionId, multiValues);
             this.setMultiLiteralExprValues(partitionId, multiValues);
@@ -432,7 +432,7 @@ public class ListPartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
         idToInMemory.put(partitionId, false);
-        idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
+        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true,
                 Config.lake_default_storage_cache_ttl_seconds, false));
     }
 }
