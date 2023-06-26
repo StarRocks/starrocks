@@ -114,7 +114,6 @@
     + [监控报警](/administration/Monitor_and_Alert.md)
     + [通过 Audit Loader 管理 StarRocks 中的审计日志](/administration/audit_loader.md)
     + [启用 FQDN 访问](/administration/enable_fqdn.md)
-    + [升级 DorisDB 到 StarRocks](/administration/update_from_dorisdb.md)
     + [升级 Apache Doris 到 StarRocks](/administration/update_from_doris.md)
     + [时区](/administration/timezone.md)
     + [Information Schema](/administration/information_schema.md)
