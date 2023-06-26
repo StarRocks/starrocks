@@ -261,19 +261,8 @@ std::string TypeDescriptor::debug_string() const {
 }
 
 bool TypeDescriptor::support_join() const {
-    if (type == TYPE_ARRAY) {
-        return children[0].support_join();
-    }
-    if (type == TYPE_MAP) {
-        return children[0].support_join() && children[1].support_join();
-    }
-    if (type == TYPE_STRUCT) {
-        for (auto& c : children) {
-            if (!c.support_join()) {
-                return false;
-            }
-        }
-        return true;
+    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+        return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
     }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
@@ -287,19 +276,8 @@ bool TypeDescriptor::support_orderby() const {
 }
 
 bool TypeDescriptor::support_groupby() const {
-    if (type == TYPE_ARRAY) {
-        return children[0].support_groupby();
-    }
-    if (type == TYPE_MAP) {
-        return children[0].support_groupby() && children[1].support_groupby();
-    }
-    if (type == TYPE_STRUCT) {
-        for (auto& c : children) {
-            if (!c.support_groupby()) {
-                return false;
-            }
-        }
-        return true;
+    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+        return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
     }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
