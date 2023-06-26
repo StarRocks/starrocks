@@ -1076,7 +1076,7 @@ public class AlterTest {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
-                "   \"datacache.enable\" = \"true\", \"storage_cache_ttl\" = \"3600\"\n" +
+                "   \"datacache.enable\" = \"true\"\n" +
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
@@ -2129,7 +2129,7 @@ public class AlterTest {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
-                "   \"datacache.enable\" = \"true\", \"storage_cache_ttl\" = \"3600\"\n" +
+                "   \"datacache.enable\" = \"true\"\n" +
                 ")";
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);

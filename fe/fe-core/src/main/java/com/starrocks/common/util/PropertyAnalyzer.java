@@ -142,7 +142,6 @@ public class PropertyAnalyzer {
     public static final String ABLE_LOW_CARD_DICT = "1";
     public static final String DISABLE_LOW_CARD_DICT = "0";
 
-    public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
@@ -939,33 +938,15 @@ public class PropertyAnalyzer {
     }
 
     public static DataCacheInfo analyzeDataCacheInfo(Map<String, String> properties) throws AnalysisException {
-        boolean enableStorageCache =
-                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
-
-        long storageCacheTtlS = 0;
-        boolean isTtlSet = properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL);
-        if (isTtlSet) {
-            storageCacheTtlS = analyzeLongProp(properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
-            if (storageCacheTtlS < -1) {
-                throw new AnalysisException("Storage cache ttl should not be less than -1");
-            }
-            if (!enableStorageCache && storageCacheTtlS != 0) {
-                throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
-            }
-            if (enableStorageCache && storageCacheTtlS == 0) {
-                throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
-            }
-        } else {
-            storageCacheTtlS = enableStorageCache ? Config.lake_default_storage_cache_ttl_seconds : 0L;
-        }
+        boolean enableDataCache = analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
 
         boolean enableAsyncWriteBack =
                 analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
-        if (!enableStorageCache && enableAsyncWriteBack) {
+        if (!enableDataCache && enableAsyncWriteBack) {
             throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
         }
 
-        return new DataCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
+        return new DataCacheInfo(enableDataCache, enableAsyncWriteBack);
     }
 
     public static PeriodDuration analyzeDataCachePartitionDuration(Map<String, String> properties) throws AnalysisException {
