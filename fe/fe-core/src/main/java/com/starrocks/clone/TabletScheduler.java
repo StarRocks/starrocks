@@ -900,10 +900,11 @@ public class TabletScheduler extends MasterDaemon {
         stat.counterReplicaRedundantErr.incrementAndGet();
 
         Database db = globalStateMgr.getDbIncludeRecycleBin(tabletCtx.getDbId());
-        if (db == null || !db.writeLockAndCheckExist()) {
+        if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
         try {
+            db.writeLock();
             checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
@@ -1110,10 +1111,11 @@ public class TabletScheduler extends MasterDaemon {
         Preconditions.checkNotNull(backendSet);
         stat.counterReplicaColocateRedundant.incrementAndGet();
         Database db = globalStateMgr.getDbIncludeRecycleBin(tabletCtx.getDbId());
-        if (db == null || !db.writeLockAndCheckExist()) {
+        if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
         try {
+            db.writeLock();
             checkMetaExist(tabletCtx);
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {
