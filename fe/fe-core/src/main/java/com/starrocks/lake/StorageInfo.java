@@ -39,7 +39,7 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
         this.cacheInfo = cacheInfo;
     }
 
-    public boolean isEnableStorageCache() {
+    public boolean isEnableDataCache() {
         return getCacheInfo().getEnableCache();
     }
 

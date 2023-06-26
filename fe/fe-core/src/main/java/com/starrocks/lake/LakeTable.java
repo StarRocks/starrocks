@@ -154,7 +154,7 @@ public class LakeTable extends OlapTable {
             if (storageInfo != null) {
                 // datacache.enable
                 properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
-                        String.valueOf(storageInfo.isEnableStorageCache()));
+                        String.valueOf(storageInfo.isEnableDataCache()));
 
                 // enable_async_write_back
                 properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,

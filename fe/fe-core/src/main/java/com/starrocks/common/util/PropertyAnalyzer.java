@@ -938,16 +938,15 @@ public class PropertyAnalyzer {
     }
 
     public static DataCacheInfo analyzeDataCacheInfo(Map<String, String> properties) throws AnalysisException {
-        boolean enableStorageCache =
-                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
+        boolean enableDataCache = analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
 
         boolean enableAsyncWriteBack =
                 analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
-        if (!enableStorageCache && enableAsyncWriteBack) {
+        if (!enableDataCache && enableAsyncWriteBack) {
             throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
         }
 
-        return new DataCacheInfo(enableStorageCache, enableAsyncWriteBack);
+        return new DataCacheInfo(enableDataCache, enableAsyncWriteBack);
     }
 
     public static PeriodDuration analyzeDataCachePartitionDuration(Map<String, String> properties) throws AnalysisException {

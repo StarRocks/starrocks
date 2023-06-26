@@ -41,11 +41,11 @@ public class DataCacheInfo implements GsonPreProcessable, GsonPostProcessable {
         return cacheInfo;
     }
 
-    public boolean isEnableStorageCache() {
+    public boolean isEnabled() {
         return cacheInfo.getEnableCache();
     }
 
-    public boolean isEnableAsyncWriteBack() {
+    public boolean isAsyncWriteBack() {
         return cacheInfo.getAsyncWriteBack();
     }
 
