@@ -644,9 +644,10 @@
       + [percentile_hash](./sql-reference/sql-functions/percentile-functions/percentile_hash.md)
       + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + Scalar Functions
-      + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
+      + [hll_cardinality](./sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Struct Functions
-      + [row](/sql-reference/sql-functions/struct-functions/row.md)
+      + [named_struct](./sql-reference/sql-functions/struct-functions/named_struct.md)
+      + [row](./sql-reference/sql-functions/struct-functions/row.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)

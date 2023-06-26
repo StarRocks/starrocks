@@ -4,12 +4,7 @@
 
 STRUCT is widely used to express complex data types. It represents a collection of named fields with different data types. Each field has a name and a type, for example, `<a INT, b INT>`. Field names in a struct must be unique.
 
-A field within a STRUCT can also be another STRUCT, ARRAY, or MAP, which allows you to create nested data structures.
-
-Both MAP and STRUCT are semi-structured data types but there are some differences:
-
-- MAP can only hold collections of key-value pairs. It is commonly used for fast lookups and storage of data.
-- STRUCT is a composite type that stores named fields with different types. It uses less memory than a map storing the same key-value pairs. The fields in a STRUCT can have different types, allowing users to create custom data structures.
+Fields can be of primitive data types (such as numeric, string, or date) or complex data types (such as ARRAY or MAP). A field within a STRUCT can also be another STRUCT, ARRAY, or MAP, which allows you to create nested data structures, for example, `STRUCT<a INT, b STRUCT<c INT, d INT>, c MAP<INT, INT>, d ARRAY<INT>>`.
 
 ## Syntax
 
@@ -21,6 +16,8 @@ STRUCT<name, type>
 - `type`: the field type. It can be of any supported type.
 
 ## Define a STRUCT column in StarRocks
+
+You can define a STRUCT column when you create a table and load STRUCT data into this column.
 
 ```SQL
 -- Define a one-dimensional struct.
@@ -59,7 +56,7 @@ STRUCT can be constructed in SQL using the following functions: [row, struct](..
 - `row` and `struct` support unnamed struct. You do not need to specify the field names. StarRocks automatically generates column names, like `col1`, `col2`...
 - `named_struct` supports named struct. The expressions of names and values must be in pairs.
 
-StarRocks automatically determines the type of the struct.
+StarRocks automatically determines the type of the struct based on the input values.
 
 ```SQL
 select row(1, 2, 3, 4) as numbers; -- Return {"col1":1,"col2":2,"col3":3,"col4":4}.

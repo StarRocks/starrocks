@@ -10,12 +10,14 @@ MAP is a complex data type that stores a set of key-value pairs, for example, `{
 MAP<key_type,value_type>
 ```
 
-- `key_type`: the data type of the key. The key must be of a primitive type in StarRocks, such as numeric, string, or date types, excluding HLL, JSON, ARRAY, MAP, BITMAP, and STRUCT.
+- `key_type`: the data type of the key. The key must be of a primitive type in StarRocks, such as numeric, string, or date. It cannot be of the HLL, JSON, ARRAY, MAP, BITMAP, or STRUCT type.
 - `value_type`: the data type of the value. The value can be of any supported type.
 
-Keys and values are natively nullable.
+Keys and values are **natively nullable**.
 
 ## Define a MAP column in StarRocks
+
+You can define a MAP column when you create a table and load MAP data into this column.
 
 ```SQL
 -- Define a one-dimensional map.
@@ -37,26 +39,28 @@ CREATE TABLE t2(
   c0 INT,
   c1 MAP<INT,DATETIME> NOT NULL
 )
-DUPLICATE KEY(c0)
+DUPLICATE KEY(c0);
 ```
 
 Columns with the MAP type have the following restrictions:
 
 - Cannot be used as key columns (may be supported later).
-- Cannot be used as partition key columns (following PARTITION BY).
-- Cannot be used as bucketing columns (following DISTRIBUTED BY).
+- Cannot be used as partition key columns (the columns following PARTITION BY).
+- Cannot be used as bucketing columns (the columns following DISTRIBUTED BY).
 
 ## Construct maps in SQL
 
-Map can be constructed in SQL using `map{key_expr:value_expr, ...}`, with each map element separated by a comma (`,`), and keys and values separated by a colon (`:`), for example, `map{a:1, b:2, c:3}`.
+Map can be constructed in SQL using the following two syntaxes:
 
-Alternatively, you can construct maps using `MAP(key_expr, value_expr ...)`, where the expressions of keys and values must be in pairs, for example, `map(a,1,b,2,c,3)`.
+- `map{key_expr:value_expr, ...}`: Map elements are separated by a comma (`,`), and keys and values are separated by a colon (`:`), for example, `map{a:1, b:2, c:3}`.
+
+- `map(key_expr, value_expr ...)`: The expressions of keys and values must be in pairs, for example, `map(a,1,b,2,c,3)`.
 
 StarRocks can derive the data types of keys and values from all the input keys and values.
 
 ```SQL
 select map{1:1, 2:2, 3:3} as numbers;
-select map(1,1,2,2,3,3) as numbers; -- Return {{1:1,2:2,3:3}.
+select map(1,1,2,2,3,3) as numbers; -- Return {1:1,2:2,3:3}.
 select map{1:"apple", 2:"orange", 3:"pear"} as fruit;
 select map(1, "apple", 2, "orange", 3, "pear") as fruit; -- Return {1:"apple",2:"orange",3:"pear"}.
 select map{true:map{3.13:"abc"}, false:map{}} as nest;
@@ -154,7 +158,6 @@ The following example queries the value corresponding to key 2, which does not e
 
 ```Plain Text
 mysql> select map{1:2,3:NULL}[2];
-
 +-----------------------+
 | map(1, 2, 3, NULL)[2] |
 +-----------------------+

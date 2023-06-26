@@ -41,3 +41,8 @@ select row("StarRocks", NULL);
 |  {"col1":"StarRocks","col2":null} |
 +------------------------+
 ```
+
+## References
+
+- [STRUCT data type](../../sql-statements/data-types/STRUCT.md)
+- [named_struct](named_struct.md)
