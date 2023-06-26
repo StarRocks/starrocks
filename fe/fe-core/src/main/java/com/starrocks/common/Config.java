@@ -2220,7 +2220,7 @@ public class Config extends ConfigBase {
     public static int lake_autovacuum_parallel_partitions = 8;
 
     @ConfField(mutable = true)
-    public static long lake_autovacuum_partition_naptime_seconds = 30;
+    public static long lake_autovacuum_partition_naptime_seconds = 180;
 
     @ConfField(mutable = true)
     public static long lake_autovacuum_grace_period_minutes = 5;
