@@ -1173,7 +1173,7 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
 TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/boolean_slot_ref.orc";
 
-    SlotDesc c0{"sex", TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN)};
+    SlotDesc c0{"sex", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BOOLEAN)};
 
     SlotDesc slot_descs[] = {c0, {""}};
 
