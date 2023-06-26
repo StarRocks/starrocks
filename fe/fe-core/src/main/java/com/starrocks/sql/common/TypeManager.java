@@ -120,6 +120,10 @@ public class TypeManager {
 
     public static Expr addCastExpr(Expr expr, Type targetType) {
         try {
+            if (targetType.matchesType(expr.getType()) || targetType.isNull()) {
+                return expr;
+            }
+
             if (!Type.canCastTo(expr.getType(), targetType)) {
                 throw new SemanticException(
                         "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
