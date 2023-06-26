@@ -157,8 +157,6 @@ if [[ $(ulimit -n) -lt 60000 ]]; then
     ulimit -n 65535
 fi
 
-export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:30000,dirty_decay_ms:30000,lg_tcache_max:23,metadata_thp:auto,background_thread:true"
-
 if [ ${RUN_BE} -eq 1 ]; then
     echo "start time: "$(date) >> $LOG_DIR/be.out
     if [ ${RUN_DAEMON} -eq 1 ]; then
