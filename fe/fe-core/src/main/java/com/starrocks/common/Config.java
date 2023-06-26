@@ -2214,6 +2214,25 @@ public class Config extends ConfigBase {
     public static int experimental_lake_publish_version_threads = 16;
 
     @ConfField(mutable = true)
+    public static int lake_autovacuum_max_previous_versions = 0;
+
+    @ConfField
+    public static int lake_autovacuum_parallel_partitions = 8;
+
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_partition_naptime_seconds = 180;
+
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_grace_period_minutes = 5;
+
+    /**
+     * time threshold in hours, if a partition has not been updated for longer than this
+     * threshold, auto vacuum operations will no longer be triggered for that partition.
+     */
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_stale_partition_threshold = 12;
+
+    @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
 
     /**

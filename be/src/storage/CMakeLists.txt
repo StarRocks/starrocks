@@ -168,7 +168,7 @@ add_library(Storage STATIC
     lake/compaction_scheduler.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
-    lake/gc.cpp
+    lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
     lake/rowset.cpp
