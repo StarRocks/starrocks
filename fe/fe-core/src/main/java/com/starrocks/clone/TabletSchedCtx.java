@@ -539,6 +539,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return candidates;
     }
 
+    public Replica getDecommissionedReplica() {
+        return decommissionedReplica;
+    }
+
     // database lock should be held.
     public void chooseSrcReplica(Map<Long, PathSlot> backendsWorkingSlots) throws SchedException {
         /*
