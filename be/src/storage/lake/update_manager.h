@@ -134,7 +134,7 @@ private:
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
     Status _handle_index_op(Tablet* tablet, const TabletMetadata& metadata, const int64_t base_version,
-                            const MetaFileBuilder* builder, std::function<void(LakePrimaryIndex&)> op);
+                            const MetaFileBuilder* builder, const std::function<void(LakePrimaryIndex&)>& op);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

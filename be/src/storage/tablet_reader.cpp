@@ -44,8 +44,11 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
         : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version) {}
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
-                           const std::vector<RowsetSharedPtr>& captured_rowsets)
-        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version), _rowsets(captured_rowsets) {}
+                           std::vector<RowsetSharedPtr> captured_rowsets)
+        : ChunkIterator(std::move(schema)),
+          _tablet(std::move(tablet)),
+          _version(version),
+          _rowsets(std::move(captured_rowsets)) {}
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)

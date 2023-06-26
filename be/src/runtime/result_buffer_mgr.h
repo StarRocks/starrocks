@@ -48,7 +48,7 @@ namespace starrocks {
 
 class TFetchDataResult;
 class BufferControlBlock;
-class GetResultBatchCtx;
+struct GetResultBatchCtx;
 class PUniqueId;
 
 // manage all result buffer control block in one backend
