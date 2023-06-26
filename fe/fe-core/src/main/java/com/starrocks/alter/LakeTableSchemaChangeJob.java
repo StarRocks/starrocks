@@ -376,6 +376,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         getOrCreateSchemaChangeBatchTask().addTask(alterTask);
                     }
                 }
+
+                partition.setMinRetainVersion(visibleVersion);
+
             } // end for partitions
         }
 
@@ -418,6 +421,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = table.getPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
+                partition.setMinRetainVersion(0);
                 long commitVersion = partition.getNextVersion();
                 commitVersionMap.put(partitionId, commitVersion);
                 LOG.debug("commit version of partition {} is {}. jobId={}", partitionId, commitVersion, jobId);
@@ -702,6 +706,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             Preconditions.checkNotNull(partition, partitionId);
+            partition.setMinRetainVersion(0);
             for (MaterializedIndex shadowIdx : partitionIndexMap.row(partitionId).values()) {
                 partition.deleteRollupIndex(shadowIdx.getId());
             }

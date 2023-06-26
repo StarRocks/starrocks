@@ -26,9 +26,11 @@
 #include "gutil/macros.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
+#include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/vacuum.h"
 #include "testutil/sync_point.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
@@ -80,8 +82,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
 
             auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size);
             if (res.ok()) {
+                auto metadata = std::move(res).value();
+                auto score = compaction_score(*metadata);
                 std::lock_guard l(response_mtx);
-                response->mutable_compaction_scores()->insert({tablet_id, *res});
+                response->mutable_compaction_scores()->insert({tablet_id, score});
             } else {
                 LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
                              << " txn_id=" << txns[0];
@@ -571,6 +575,60 @@ void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* contro
     auto st = scheduler->abort(request->txn_id());
     TEST_SYNC_POINT("LakeServiceImpl::abort_compaction:aborted");
     st.to_protobuf(response->mutable_status());
+}
+
+void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
+                             const ::starrocks::lake::VacuumRequest* request,
+                             ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    // The BE process already has enough threads. I don't want to create more threads, so I directly use
+    // the thread pool for creating local tablet's replica.
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::CREATE);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("vacuum thread pool is null");
+        return;
+    }
+    auto latch = BThreadCountDownLatch(1);
+    auto st = thread_pool->submit_func([&]() {
+        lake::vacuum(_env->lake_tablet_manager(), *request, response);
+        latch.count_down();
+    });
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to submit vacuum task: " << st;
+        st.to_protobuf(response->mutable_status());
+        latch.count_down();
+    }
+
+    latch.wait();
+}
+
+void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
+                                  const ::starrocks::lake::VacuumFullRequest* request,
+                                  ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    // The BE process already has enough threads. I don't want to create more threads, so I directly use
+    // the thread pool for dropping local tablet's replica.
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DROP);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("full vacuum thread pool is null");
+        return;
+    }
+    auto latch = BThreadCountDownLatch(1);
+    auto st = thread_pool->submit_func([&]() {
+        lake::vacuum_full(_env->lake_tablet_manager(), *request, response);
+        latch.count_down();
+    });
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to submit vacuum task: " << st;
+        st.to_protobuf(response->mutable_status());
+        latch.count_down();
+    }
+
+    latch.wait();
 }
 
 } // namespace starrocks

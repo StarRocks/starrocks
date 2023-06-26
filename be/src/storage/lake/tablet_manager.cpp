@@ -31,7 +31,6 @@
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/delta_writer.h"
-#include "storage/lake/gc.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -55,27 +54,18 @@
 
 namespace starrocks::lake {
 
-static void* gc_checker(void* arg);
-static StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
-                                int txns_size);
+static StatusOr<TabletMetadataPtr> publish(Tablet* tablet, int64_t base_version, int64_t new_version,
+                                           const int64_t* txns, int txns_size);
 
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
           _metacache(new_lru_cache(cache_capacity)),
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
-          _update_mgr(update_mgr),
-          _gc_checker_tid(INVALID_BTHREAD) {
+          _update_mgr(update_mgr) {
     _update_mgr->set_tablet_mgr(this);
 }
 
-TabletManager::~TabletManager() {
-    if (_gc_checker_tid != INVALID_BTHREAD) {
-        [[maybe_unused]] void* ret = nullptr;
-        // We don't care about the return value of bthread_stop or bthread_join.
-        (void)bthread_stop(_gc_checker_tid);
-        (void)bthread_join(_gc_checker_tid, &ret);
-    }
-}
+TabletManager::~TabletManager() = default;
 
 std::string TabletManager::tablet_root_location(int64_t tablet_id) const {
     return _location_provider->root_location(tablet_id);
@@ -574,23 +564,18 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     return schema;
 }
 
-StatusOr<double> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                const int64_t* txns, int txns_size) {
+StatusOr<TabletMetadataPtr> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
+                                                           const int64_t* txns, int txns_size) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
     return publish(&tablet, base_version, new_version, txns, txns_size);
 }
 
-StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
-                         int txns_size) {
+StatusOr<TabletMetadataPtr> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
+                                    int txns_size) {
     // Read base version metadata
     auto res = tablet->get_metadata(base_version);
     if (res.status().is_not_found()) {
-        auto target_metadata_or = tablet->get_metadata(new_version);
-        if (target_metadata_or.ok()) {
-            // base version metadata does not exist but the new version metadata has been generated, maybe
-            // this is a duplicated publish version request.
-            return compaction_score(**target_metadata_or);
-        }
+        return tablet->get_metadata(new_version);
     }
 
     if (!res.ok()) {
@@ -617,13 +602,7 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
     auto init_st = log_applier->init();
     if (!init_st.ok()) {
         if (init_st.is_already_exist()) {
-            auto target_metadata_or = tablet->get_metadata(new_version);
-            if (target_metadata_or.ok()) {
-                // try to publish already finished txn
-                return compaction_score(**target_metadata_or);
-            } else {
-                return target_metadata_or.status();
-            }
+            return tablet->get_metadata(new_version);
         } else {
             return init_st;
         }
@@ -636,12 +615,7 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
         auto txn_log_st = tablet->get_txn_log(txn_id);
 
         if (txn_log_st.status().is_not_found()) {
-            auto target_metadata_or = tablet->get_metadata(new_version);
-            if (target_metadata_or.ok()) {
-                // txn log does not exist but the new version metadata has been generated, maybe
-                // this is a duplicated publish version request.
-                return compaction_score(**target_metadata_or);
-            }
+            return tablet->get_metadata(new_version);
         }
 
         if (!txn_log_st.ok()) {
@@ -669,12 +643,7 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
             auto txn_vlog = tablet->get_txn_vlog(v);
             if (txn_vlog.status().is_not_found()) {
-                auto target_metadata_or = tablet->get_metadata(new_version);
-                if (target_metadata_or.ok()) {
-                    // txn version log does not exist but the new version metadata has been generated, maybe
-                    // this is a duplicated publish version request.
-                    return compaction_score(**target_metadata_or);
-                }
+                return tablet->get_metadata(new_version);
             }
 
             if (!txn_vlog.ok()) {
@@ -707,23 +676,7 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
         }
     }
 
-    if (config::lake_enable_aggressive_gc && DeltaWriter::io_threads() != nullptr) {
-        auto tablet_mgr = tablet->tablet_mgr();
-        auto tablet_id = new_metadata->id();
-        auto old_version = new_version - config::lake_gc_metadata_max_versions;
-        auto priority = config::lake_aggressive_gc_high_priority ? ThreadPool::HIGH_PRIORITY : ThreadPool::LOW_PRIORITY;
-        auto may_has_garbage_file = old_version <= new_metadata->prev_garbage_version();
-        (void)DeltaWriter::io_threads()->submit_func(
-                [=]() {
-                    if (may_has_garbage_file) {
-                        (void)delete_garbage_files(tablet_mgr, tablet_id, old_version);
-                    }
-                    (void)tablet_mgr->delete_tablet_metadata(tablet_id, old_version);
-                },
-                priority);
-    }
-
-    return compaction_score(*new_metadata);
+    return new_metadata;
 }
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
@@ -876,11 +829,6 @@ std::set<int64_t> TabletManager::owned_tablets() {
     return _location_provider->owned_tablets();
 }
 
-void TabletManager::start_gc() {
-    int r = bthread_start_background(&_gc_checker_tid, nullptr, gc_checker, this);
-    PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";
-}
-
 void TabletManager::update_metacache_limit(size_t new_capacity) {
     size_t old_capacity = _metacache->get_capacity();
     int64_t delta = (int64_t)new_capacity - (int64_t)old_capacity;
@@ -888,94 +836,6 @@ void TabletManager::update_metacache_limit(size_t new_capacity) {
         (void)_metacache->adjust_capacity(delta);
         VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << _metacache->get_capacity();
     }
-}
-
-static void metadata_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots, int64_t min_active_txn_id) {
-    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
-    auto num_running = std::atomic<int>(roots.size());
-    for (const auto& root : roots) {
-        auto st = thread_pool->submit_func([&, root]() {
-            auto t1 = std::chrono::steady_clock::now();
-            auto r = metadata_gc(root, tablet_mgr, min_active_txn_id);
-            auto t2 = std::chrono::steady_clock::now();
-            auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
-            if (r.ok()) {
-                LOG(INFO) << "Finished garbage collection of metadata for directory " << root << ". cost:" << cost
-                          << "ms";
-            } else {
-                LOG(WARNING) << "Fail to do garbage collection of metadata for directory " << root << ". cost:" << cost
-                             << "ms error:" << r;
-            }
-            num_running.fetch_sub(1);
-        });
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit task to threadpool: " << st;
-            num_running.fetch_sub(1);
-        }
-    }
-    while (num_running.load() > 0) {
-        LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
-        bthread_usleep(/*1s=*/1000 * 1000);
-    }
-}
-
-static void data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots, int64_t min_active_txn_id) {
-    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
-    auto num_running = std::atomic<int>(roots.size());
-    for (const auto& root : roots) {
-        auto st = thread_pool->submit_func([&, root]() {
-            auto t1 = std::chrono::steady_clock::now();
-            auto r = datafile_gc(root, tablet_mgr, min_active_txn_id);
-            auto t2 = std::chrono::steady_clock::now();
-            auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
-            if (r.ok()) {
-                LOG(INFO) << "Finished garbage collection of data for directory " << root << ". cost:" << cost << "ms";
-            } else {
-                LOG(WARNING) << "Fail to do garbage collection of data for directory " << root << ". cost:" << cost
-                             << "ms error:" << r;
-            }
-            num_running.fetch_sub(1);
-        });
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit task to threadpool: " << st;
-            num_running.fetch_sub(1);
-        }
-    }
-    while (num_running.load() > 0) {
-        LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
-        bthread_usleep(/*1s=*/1000 * 1000);
-    }
-}
-
-void* gc_checker(void* arg) {
-    auto tablet_mgr = static_cast<TabletManager*>(arg);
-    auto lp = tablet_mgr->location_provider();
-    // NOTE: Share the same thread pool with local tablet's clone task.
-    int64_t curr = butil::gettimeofday_s();
-    int64_t gc_time[2] = {curr + config::lake_gc_metadata_check_interval,
-                          curr + config::lake_gc_segment_check_interval};
-    while (!bthread_stopped(bthread_self())) {
-        int64_t now = butil::gettimeofday_s();
-        int64_t min_gc_time = std::min(gc_time[0], gc_time[1]);
-        if (min_gc_time > now) {
-            // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
-            // configured value, which is ok now.
-            (void)bthread_usleep((min_gc_time - now) * 1000ULL * 1000ULL);
-        }
-
-        std::set<std::string> roots;
-        (void)lp->list_root_locations(&roots);
-
-        auto master_info = get_master_info();
-        if (min_gc_time == gc_time[0]) {
-            metadata_gc(tablet_mgr, roots, master_info.min_active_txn_id);
-            gc_time[0] = butil::gettimeofday_s() + config::lake_gc_metadata_check_interval;
-        } else {
-            data_gc(tablet_mgr, roots, master_info.min_active_txn_id);
-            gc_time[1] = butil::gettimeofday_s() + config::lake_gc_segment_check_interval;
-        }
-    }
-    return nullptr;
 }
 
 } // namespace starrocks::lake

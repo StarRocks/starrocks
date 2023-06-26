@@ -31,7 +31,6 @@
 #include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
-#include "storage/lake/gc.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
@@ -276,22 +275,6 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 1);
     EXPECT_EQ(3, new_tablet_metadata2->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata2->has_prev_garbage_version());
-
-    // make sure delvecs have been gc
-    config::lake_gc_metadata_max_versions = 1;
-    ASSERT_OK(metadata_gc(kTestGroupPath, _tablet_manager.get(), txn_id + 1));
-    ASSERT_OK(datafile_gc(kTestGroupPath, _tablet_manager.get(), txn_id + 1));
-
-    std::vector<std::string> files;
-    ASSERT_OK(fs::get_children(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName), &files));
-
-    std::vector<std::string> delvec_files;
-    for (auto file : files) {
-        if (file.size() >= strlen(".delvec") && file.substr(file.size() - strlen(".delvec")) == ".delvec") {
-            delvec_files.emplace_back(file);
-        }
-    }
-    EXPECT_EQ(delvec_files.size(), 0);
 }
 
 // test write 3 diff chunk

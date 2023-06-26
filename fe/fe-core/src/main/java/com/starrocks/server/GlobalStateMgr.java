@@ -159,6 +159,7 @@ import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.load.DeleteMgr;
@@ -530,6 +531,8 @@ public class GlobalStateMgr {
 
     private StorageVolumeMgr storageVolumeMgr;
 
+    private AutovacuumDaemon autovacuumDaemon;
+
     private PipeManager pipeManager;
     private PipeListener pipeListener;
     private PipeScheduler pipeScheduler;
@@ -752,6 +755,7 @@ public class GlobalStateMgr {
 
         if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
+            this.autovacuumDaemon = new AutovacuumDaemon();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
@@ -1363,6 +1367,7 @@ public class GlobalStateMgr {
 
         if (RunMode.allowCreateLakeTable()) {
             shardDeleter.start();
+            autovacuumDaemon.start();
         }
 
         if (Config.enable_safe_mode) {

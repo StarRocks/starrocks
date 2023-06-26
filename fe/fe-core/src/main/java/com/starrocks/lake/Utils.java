@@ -66,6 +66,14 @@ public class Utils {
         return backendIds.get(0);
     }
 
+    public static ComputeNode chooseNode(LakeTablet tablet) {
+        Long nodeId = chooseBackend(tablet);
+        if (nodeId == null) {
+            return null;
+        }
+        return GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+    }
+
     // Preconditions: Has required the database's reader lock.
     // Returns a map from backend ID to a list of tablet IDs.
     public static Map<Long, List<Long>> groupTabletID(OlapTable table) throws NoAliveBackendException {

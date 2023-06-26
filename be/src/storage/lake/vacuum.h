@@ -14,18 +14,14 @@
 
 #pragma once
 
-#include <string_view>
-
-#include "common/status.h"
+#include "gen_cpp/lake_service.pb.h"
 
 namespace starrocks::lake {
 
 class TabletManager;
 
-Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_log_id);
+void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response);
 
-Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_log_id);
-
-Status delete_garbage_files(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version);
+void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response);
 
 } // namespace starrocks::lake

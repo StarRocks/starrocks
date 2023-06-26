@@ -65,9 +65,9 @@ public:
 
     Status delete_tablet(int64_t tablet_id);
 
-    // Returns the compaction score of the newly created tablet metadata
-    StatusOr<double> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, const int64_t* txns,
-                                     int txns_size);
+    // Returns the the newly created tablet metadata
+    StatusOr<TabletMetadataPtr> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
+                                                const int64_t* txns, int txns_size);
 
     void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
 
@@ -145,8 +145,6 @@ public:
 
     const LocationProvider* location_provider() const { return _location_provider; }
 
-    void start_gc();
-
     // Return a set of tablet that owned by this TabletManager.
     std::set<int64_t> owned_tablets();
 
@@ -190,8 +188,6 @@ private:
     std::unique_ptr<Cache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr;
-
-    bthread_t _gc_checker_tid;
 };
 
 } // namespace starrocks::lake
