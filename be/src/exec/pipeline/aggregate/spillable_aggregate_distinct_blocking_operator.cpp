@@ -137,6 +137,7 @@ Status SpillableAggregateDistinctBlockingSinkOperatorFactory::prepare(RuntimeSta
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "agg-distinct-blocking-spill";
     _spill_options->plan_node_id = _plan_node_id;
+    _spill_options->encode_level = state->spill_encode_level();
 
     return Status::OK();
 }
