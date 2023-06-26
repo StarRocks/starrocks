@@ -481,9 +481,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void syncPartitions() {
         snapshotBaseTables = collectBaseTables(materializedView);
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-        Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
-        mvContext.setPartitionBaseTable(partitionTableAndColumn.first);
-        mvContext.setPartitionColumn(partitionTableAndColumn.second);
+        if (!(partitionInfo instanceof SinglePartitionInfo)) {
+            Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
+            mvContext.setPartitionBaseTable(partitionTableAndColumn.first);
+            mvContext.setPartitionColumn(partitionTableAndColumn.second);
+        }
         int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
         mvContext.setPartitionTTLNumber(partitionTTLNumber);
 
