@@ -127,12 +127,17 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid tablet id format: " + tabletIdStr);
         }
 
-        Tablet tablet = index.getTablet(tabletId);
-        if (tablet == null) {
-            throw new AnalysisException("Can't find tablet id: " + tabletIdStr);
+        db.readLock();
+        try {
+            Tablet tablet = index.getTablet(tabletId);
+            if (tablet == null) {
+                throw new AnalysisException("Can't find tablet id: " + tabletIdStr);
+            }
+            Preconditions.checkState(tablet instanceof LakeTablet);
+            return new LakeTabletProcNode((LakeTablet) tablet);
+        } finally {
+            db.readUnlock();
         }
-        Preconditions.checkState(tablet instanceof LakeTablet);
-        return new LakeTabletProcNode((LakeTablet) tablet);
     }
 
     // Handle showing single tablet info
