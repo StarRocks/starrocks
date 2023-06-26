@@ -182,6 +182,8 @@ public class ConnectContext {
     // set true when user dump query through HTTP
     protected boolean isQueryDump = false;
 
+    protected boolean isStatisticsConnection = false;
+
     protected DumpInfo dumpInfo;
 
     // The related db ids for current sql
@@ -593,6 +595,14 @@ public class ConnectContext {
 
     public void setCurrentWarehouse(String currentWarehouse) {
         this.currentWarehouse = currentWarehouse;
+    }
+
+    public boolean isStatisticsConnection() {
+        return isStatisticsConnection;
+    }
+
+    public void setStatisticsConnection(boolean statisticsConnection) {
+        isStatisticsConnection = statisticsConnection;
     }
 
     // kill operation with no protect.

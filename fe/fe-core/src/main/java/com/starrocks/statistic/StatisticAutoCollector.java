@@ -82,6 +82,7 @@ public class StatisticAutoCollector extends LeaderDaemon {
                 GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setStatisticsConnection(true);
                 statsConnectCtx.setThreadLocalInfo();
                 STATISTIC_EXECUTOR.collectStatistics(statsConnectCtx, statsJob, analyzeStatus, true);
             }
@@ -94,6 +95,7 @@ public class StatisticAutoCollector extends LeaderDaemon {
             LOG.info("auto collect statistic on analyze job[{}] start", jobIds);
             for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setStatisticsConnection(true);
                 statsConnectCtx.setThreadLocalInfo();
                 analyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
             }
