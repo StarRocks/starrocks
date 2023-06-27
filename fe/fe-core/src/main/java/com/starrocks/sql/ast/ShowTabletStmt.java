@@ -27,7 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.proc.LakeTabletsProcNode;
+import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
@@ -209,7 +209,7 @@ public class ShowTabletStmt extends ShowStmt {
             }
 
             if (table.isCloudNativeTableOrMaterializedView()) {
-                return LakeTabletsProcNode.TITLE_NAMES;
+                return LakeTabletsProcDir.TITLE_NAMES;
             } else {
                 return LocalTabletsProcDir.TITLE_NAMES;
             }
