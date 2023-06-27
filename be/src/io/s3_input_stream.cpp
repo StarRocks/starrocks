@@ -28,8 +28,9 @@
 namespace starrocks::io {
 
 inline Status make_error_status(const Aws::S3::S3Error& error) {
-    return Status::IOError(fmt::format("code={}(SdkErrorType:{}), message={}", error.GetResponseCode(),
-                                       error.GetErrorType(), error.GetMessage()));
+    return Status::IOError(fmt::format("code={}(SdkErrorType:{}), message={}",
+                                       static_cast<int>(error.GetResponseCode()),
+                                       static_cast<int>(error.GetErrorType()), error.GetMessage()));
 }
 
 StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
