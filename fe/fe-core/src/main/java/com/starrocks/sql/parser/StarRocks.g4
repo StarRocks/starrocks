@@ -1845,7 +1845,7 @@ roleList
     ;
 
 setWarehouseStatement
-    : SET WAREHOUSE identifierOrString
+    : SET SESSION? WAREHOUSE EQ? identifierOrString
     ;
 
 executeScriptStatement
