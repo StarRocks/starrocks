@@ -143,7 +143,8 @@ private:
             break;
         }
         default:
-            return Status::InternalError(fmt::format("unsupported json number: {}", num.get_number_type()));
+            return Status::InternalError(
+                    fmt::format("unsupported json number: {}", static_cast<int>(num.get_number_type())));
         }
         return Status::OK();
     }
