@@ -227,7 +227,7 @@ public:
     void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
     Status prepare(RuntimeState* runtime_state);
     virtual StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
-    void finalize(RuntimeState* runtime_state, DriverState state);
+    void finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count, int64_t execution_time);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
 
@@ -298,7 +298,8 @@ public:
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
     void mark_precondition_ready(RuntimeState* runtime_state);
-    void start_timers();
+    void start_schedule(int64_t start_count, int64_t start_time);
+    int64_t get_active_time() const { return _active_timer->value(); }
     void submit_operators();
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
@@ -512,6 +513,9 @@ protected:
     RuntimeProfile::Counter* _schedule_timer = nullptr;
 
     // Schedule counters
+    // Record global schedule count during this driver lifecycle
+    RuntimeProfile::Counter* _global_schedule_counter = nullptr;
+    RuntimeProfile::Counter* _global_schedule_timer = nullptr;
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_time_limit_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_preempt_counter = nullptr;
