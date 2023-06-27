@@ -64,11 +64,7 @@ public:
             std::lock_guard<std::mutex> l(_lock);
             return _task_map.size();
         });
-        auto st = ThreadPoolBuilder("routine_load")
-                          .set_min_threads(1)
-                          .set_max_threads(500)
-                          .set_max_queue_size(100000)
-                          .build(&_thread_pool);
+        auto st = ThreadPoolBuilder("routine_load").build(&_thread_pool);
         DCHECK(st.ok());
         _data_consumer_pool.start_bg_worker();
     }
