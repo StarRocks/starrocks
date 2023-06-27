@@ -20,6 +20,10 @@ Fixed the following issues:
 - LDAP authentication succeeds even when no password is used. [#24862](https://github.com/StarRocks/starrocks/pull/24862)
 - CANCEL LOAD fails if the table involved in the load job does not exist. [#24922](https://github.com/StarRocks/starrocks/pull/24922)
 
+### Upgrade Notes
+
+If your system has a database named `starrocks`, change it to another name using ALTER DATABASE RENAME before the upgrade. This is because `starrocks` is the name of a default system database that stores privilege information.
+
 ## 3.0.1
 
 Release date: June 1, 2023
@@ -44,6 +48,10 @@ Fixed the following issues:
 - BEs may crash during a Routine Load job. [#20677](https://github.com/StarRocks/starrocks/issues/20677)
 - Null pointer exception (NPE) occurs if you specify unsupported properties when creating a partitioned table. [#21374](https://github.com/StarRocks/starrocks/issues/21374)
 - Information returned by SHOW TABLE STATUS is incomplete. [#24279](https://github.com/StarRocks/starrocks/issues/24279)
+
+### Upgrade Notes
+
+If your system has a database named `starrocks`, change it to another name using ALTER DATABASE RENAME before the upgrade. This is because `starrocks` is the name of a default system database that stores privilege information.
 
 ## 3.0.0
 
