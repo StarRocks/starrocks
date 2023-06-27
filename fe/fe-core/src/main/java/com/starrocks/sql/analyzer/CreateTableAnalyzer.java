@@ -26,6 +26,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionType;
@@ -135,9 +136,16 @@ public class CreateTableAnalyzer {
             throw new SemanticException(e.getMessage());
         }
 
-        String dbName = tableNameObject.getDb();
-        if (GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName) == null) {
-            throw new SemanticException("Unknown database '%s'", dbName);
+        Database db = MetaUtils.getDatabase(catalogName, tableNameObject.getDb());
+
+        // check if table exists in db
+        db.readLock();
+        try {
+            if (db.getTable(tableName) != null && !statement.isSetIfNotExists()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+            }
+        } finally {
+            db.readUnlock();
         }
 
         final String engineName = analyzeEngineName(statement.getEngineName(), catalogName).toLowerCase();
@@ -154,9 +162,9 @@ public class CreateTableAnalyzer {
                 }
                 throw new SemanticException("only primary key support sort key", keysPos);
             } else {
-                List<String> columnNames = 
-                            statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
-                
+                List<String> columnNames =
+                        statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
+
                 for (String column : statement.getSortKeys()) {
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
@@ -346,6 +354,7 @@ public class CreateTableAnalyzer {
                     distributionDesc = new RandomDistributionDesc();
                 }
             }
+
             if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
                 throw new SemanticException("Random distribution must be used in DUP_KEYS", distributionDesc.getPos());
             }
@@ -429,8 +438,8 @@ public class CreateTableAnalyzer {
 
                     ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                             new RelationFields(columns.stream().map(col -> new Field(
-                                    col.getName(), col.getType(), tableNameObject, null))
-                                        .collect(Collectors.toList()))), context);
+                                            col.getName(), col.getType(), tableNameObject, null))
+                                    .collect(Collectors.toList()))), context);
 
                     // check if contain aggregation
                     List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -458,8 +467,8 @@ public class CreateTableAnalyzer {
 
                     if (!column.getType().matchesType(expr.getType())) {
                         throw new SemanticException("Illege expression type for Materialized Column " +
-                                                    "Column Type: " + column.getType().toString() +
-                                                    ", Expression Type: " + expr.getType().toString());
+                                "Column Type: " + column.getType().toString() +
+                                ", Expression Type: " + expr.getType().toString());
                     }
 
                     found = true;

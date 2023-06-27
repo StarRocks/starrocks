@@ -28,20 +28,9 @@ public class StarRocksDb extends Database {
 
     public StarRocksDb() {
         super(SystemId.STARROCKS_DB_ID, DATABASE_NAME);
-        super.createTable(RoleEdges.create());
-        super.createTable(GrantsTo.createGrantsToRoles());
-        super.createTable(GrantsTo.createGrantsToUsers());
-    }
-
-    @Override
-    public boolean createTableWithLock(Table table, boolean isReplay) {
-        return false;
-    }
-
-    @Override
-    public boolean createTable(Table table) {
-        // Do nothing.
-        return false;
+        super.registerTableUnlock(RoleEdges.create());
+        super.registerTableUnlock(GrantsTo.createGrantsToRoles());
+        super.registerTableUnlock(GrantsTo.createGrantsToUsers());
     }
 
     @Override
