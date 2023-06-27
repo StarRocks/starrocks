@@ -29,10 +29,11 @@ jobs:
           echo "${{ github.event.pull_request.title }}"
           echo "${{ github.head_ref }}"
       - uses: xSAVIKx/artifact-exists-action@v0
+        id: check-exists
         with:
           name: 'coverage-artifact'
       - run: |
-          echo "exists - ${{ env.ARTIFACT_EXISTS }}"
+          echo "${{ steps.check-exists.outputs.exists }}"
           exit 1
 
 
