@@ -281,12 +281,11 @@ private:
         HANDLE_ELEMENT_TYPE(DateColumn);
         HANDLE_ELEMENT_TYPE(TimestampColumn);
         HANDLE_ELEMENT_TYPE(ArrayColumn);
+        HANDLE_ELEMENT_TYPE(JsonColumn);
         HANDLE_ELEMENT_TYPE(MapColumn);
         HANDLE_ELEMENT_TYPE(StructColumn);
 
-        LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
-        DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
-        return ColumnHelper::create_const_null_column(array_elements.size());
+        return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
 
     // array is non-nullable.
@@ -605,13 +604,11 @@ private:
         HANDLE_ELEMENT_TYPE(DateColumn);
         HANDLE_ELEMENT_TYPE(TimestampColumn);
         HANDLE_ELEMENT_TYPE(ArrayColumn);
+        HANDLE_ELEMENT_TYPE(JsonColumn);
         HANDLE_ELEMENT_TYPE(MapColumn);
         HANDLE_ELEMENT_TYPE(StructColumn);
 
-        // TODO(zhuming): demangle class name
-        LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
-        DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
-        return ColumnHelper::create_const_null_column(array_elements.size());
+        return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
 
     // array is non-nullable.
@@ -843,12 +840,11 @@ private:
         HANDLE_HAS_TYPE(DateColumn);
         HANDLE_HAS_TYPE(TimestampColumn);
         HANDLE_HAS_TYPE(ArrayColumn);
+        HANDLE_HAS_TYPE(JsonColumn);
         HANDLE_HAS_TYPE(MapColumn);
         HANDLE_HAS_TYPE(StructColumn);
 
-        LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
-        DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
-        return ColumnHelper::create_const_null_column(array_elements.size());
+        return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
 
     // array is non-nullable.
