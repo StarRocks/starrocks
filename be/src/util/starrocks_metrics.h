@@ -69,6 +69,9 @@ private:
 
 class StarRocksMetrics {
 public:
+    // query execution
+    METRIC_DEFINE_INT_GAUGE(pipe_scan_executor_queuing, MetricUnit::NOUNIT);
+
     // counters
     METRIC_DEFINE_INT_COUNTER(fragment_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(fragment_request_duration_us, MetricUnit::MICROSECONDS);
