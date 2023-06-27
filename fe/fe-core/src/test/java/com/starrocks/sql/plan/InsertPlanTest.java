@@ -33,6 +33,7 @@ import mockit.Expectations;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -830,6 +831,10 @@ public class InsertPlanTest extends PlanTestBase {
 
                 nativeTable.properties();
                 result = new HashMap<String, String>();
+                minTimes = 0;
+
+                nativeTable.io();
+                result = new HadoopFileIO();
                 minTimes = 0;
             }
         };

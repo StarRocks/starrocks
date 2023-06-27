@@ -89,6 +89,7 @@ import java.util.function.Function;
 
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_LEGACY;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.KEY_ENABLE_TABULAR_SUPPORT;
 
 /**
  * Implementation of FileIO that adds metadata content caching features.
@@ -132,7 +133,13 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
             switch (type.toLowerCase(Locale.ROOT)) {
                 case "hive":
                 case "rest":
-                    wrappedIO = new HadoopFileIO(conf);
+                    // Not all rest catalog is tabular, we need to make a distinction here.
+                    if (properties.getOrDefault(KEY_ENABLE_TABULAR_SUPPORT, "false").equalsIgnoreCase("true")) {
+                        // If we are using tabular, we must use S3FileIO
+                        wrappedIO = new S3FileIO();
+                    } else {
+                        wrappedIO = new HadoopFileIO(conf);
+                    }
                     break;
                 case "glue":
                     wrappedIO = new S3FileIO();
@@ -176,6 +183,11 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
         wrappedIO.deleteFile(path);
         // remove from cache.
         fileContentCache.invalidate(path);
+    }
+
+    @Override
+    public Map<String, String> properties() {
+        return wrappedIO.properties();
     }
 
     private static class CacheEntry {
