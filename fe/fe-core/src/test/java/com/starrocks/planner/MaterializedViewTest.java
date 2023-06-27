@@ -3329,17 +3329,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testRightOuterJoin() {
         {
-            String q = "select empid, deptno from emps\n"
+            String q = "select empid, depts.deptno from emps\n"
                     + "right outer join depts using (deptno)";
-            String m = "select empid, deptno from emps\n"
+            String m = "select empid, depts.deptno from emps\n"
                     + "right outer join depts using (deptno)";
             testRewriteOK(m, q);
         }
 
         {
-            String q = "select empid, deptno from emps\n"
+            String q = "select empid, depts.deptno from emps\n"
                     + "right outer join depts using (deptno) where empid = 1";
-            String m = "select empid, deptno from emps\n"
+            String m = "select empid, depts.deptno from emps\n"
                     + "right outer join depts using (deptno)";
             testRewriteOK(m, q);
         }
