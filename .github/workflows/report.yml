@@ -58,11 +58,10 @@ jobs:
       - name: Incremental Coverage Report
         if: steps.download-fe-ut-result.conclusion == 'success'
         run: |
-          source ~/.profile
           cd ${{ github.workspace }}
           mkdir fe-result && cd fe-result
           branch=${{ github.event.workflow_run.base_ref }}
-          ossutil64 cp oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ . --recursive
+          ossutil64 --config-file ~/.ossutilconfig cp oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ . --recursive
           
           cd ${{ github.workspace }}
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
