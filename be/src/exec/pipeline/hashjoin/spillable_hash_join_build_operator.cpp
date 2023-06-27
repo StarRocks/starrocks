@@ -80,7 +80,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         DCHECK(_is_first_time_spill);
         _is_first_time_spill = false;
         auto& ht = _join_builder->hash_join_builder()->hash_table();
-        RETURN_IF_ERROR(init_spiller_partitions(ht));
+        RETURN_IF_ERROR(init_spiller_partitions(state, ht));
 
         _hash_table_slice_iterator = _convert_hash_map_to_chunk();
         RETURN_IF_ERROR(_join_builder->append_spill_task(state, _hash_table_slice_iterator));
@@ -153,7 +153,7 @@ Status SpillableHashJoinBuildOperator::append_hash_columns(const ChunkPtr& chunk
     return Status::OK();
 }
 
-Status SpillableHashJoinBuildOperator::init_spiller_partitions(JoinHashTable& ht) {
+Status SpillableHashJoinBuildOperator::init_spiller_partitions(RuntimeState* state, JoinHashTable& ht) {
     if (ht.get_row_count() > 0) {
         // We estimate the size of the hash table to be twice the size of the already input hash table
         auto num_partitions = ht.mem_usage() * 2 / _join_builder->spiller()->options().spill_mem_table_bytes_size;
@@ -181,7 +181,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
     auto& ht = _join_builder->hash_join_builder()->hash_table();
     // Estimate the appropriate number of partitions
     if (_is_first_time_spill) {
-        RETURN_IF_ERROR(init_spiller_partitions(ht));
+        RETURN_IF_ERROR(init_spiller_partitions(state, ht));
     }
 
     ASSIGN_OR_RETURN(auto spill_chunk, ht.convert_to_spill_schema(chunk));

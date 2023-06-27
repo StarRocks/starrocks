@@ -61,7 +61,7 @@ private:
 
     Status append_hash_columns(const ChunkPtr& chunk);
 
-    Status init_spiller_partitions(JoinHashTable& ht);
+    Status init_spiller_partitions(RuntimeState* state, JoinHashTable& ht);
 
     ChunkSharedSlice _hash_table_build_chunk_slice;
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;
