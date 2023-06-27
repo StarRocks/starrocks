@@ -354,7 +354,22 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     }
     {
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
-        RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
+
+        // if reading start of file, skipping UTF-8 BOM
+        bool has_bom = false;
+        if (scan_range->offset == 0) {
+            CSVReader::Record first_line;
+            reader->next_record(&first_line);
+            if (first_line.size >= 3 && (unsigned char)first_line.data[0] == 0xEF &&
+                (unsigned char)first_line.data[1] == 0xBB && (unsigned char)first_line.data[2] == 0xBF) {
+                has_bom = true;
+            }
+        }
+        if (has_bom) {
+            RETURN_IF_ERROR(reader->reset(scan_range->offset + 3, scan_range->length - 3));
+        } else {
+            RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
+        }
         if (scan_range->offset != 0) {
             // Always skip first record of scan range with non-zero offset.
             // Notice that the first record will read by previous scan range.
