@@ -34,7 +34,7 @@ class MemTracker;
 class SegmentPB;
 class PTabletInfo;
 class FileSystem;
-class DeltaWriterOptions;
+struct DeltaWriterOptions;
 
 using DeltaWriterOptions = starrocks::DeltaWriterOptions;
 

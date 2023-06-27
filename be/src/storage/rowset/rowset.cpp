@@ -283,7 +283,7 @@ Status Rowset::remove_delta_column_group() {
     return _remove_delta_column_group_files(fs);
 }
 
-Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) {
+Status Rowset::_remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs) {
     if (num_segments() > 0) {
         std::filesystem::path schema_hash_path(_rowset_path);
         std::filesystem::path data_dir_path = schema_hash_path.parent_path().parent_path().parent_path().parent_path();

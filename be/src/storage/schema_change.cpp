@@ -560,7 +560,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     // materialized column index in new schema
     std::unordered_set<int> materialized_column_idxs;
     if (request.materialized_column_req.mc_exprs.size() != 0) {
-        for (auto it : request.materialized_column_req.mc_exprs) {
+        for (const auto& it : request.materialized_column_req.mc_exprs) {
             materialized_column_idxs.insert(it.first);
         }
     }
@@ -589,7 +589,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         sc_params.chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
                                                     request.materialized_column_req.query_globals);
 
-        for (auto it : request.materialized_column_req.mc_exprs) {
+        for (const auto& it : request.materialized_column_req.mc_exprs) {
             ExprContext* ctx = nullptr;
             RETURN_IF_ERROR(Expr::create_expr_tree(sc_params.chunk_changer->get_object_pool(), it.second, &ctx,
                                                    sc_params.chunk_changer->get_runtime_state()));

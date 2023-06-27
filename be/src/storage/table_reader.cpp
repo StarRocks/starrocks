@@ -29,9 +29,9 @@
 
 namespace starrocks {
 
-TableReader::TableReader() {}
+TableReader::TableReader() = default;
 
-TableReader::~TableReader() {}
+TableReader::~TableReader() = default;
 
 Status TableReader::init(const LocalTableReaderParams& local_params) {
     if (_local_params || _params) {
@@ -244,8 +244,8 @@ Status TableReader::_tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int
     PTabletReaderMultiGetRequest request;
     request.set_tablet_id(tablet_id);
     request.set_version(version);
-    for (size_t i = 0; i < value_columns.size(); ++i) {
-        request.add_values_columns(value_columns[i]);
+    for (const auto& value_column : value_columns) {
+        request.add_values_columns(value_column);
     }
     StatusOr<ChunkPB> keys_pb;
     TRY_CATCH_BAD_ALLOC(keys_pb = serde::ProtobufChunkSerde::serialize(keys, nullptr));

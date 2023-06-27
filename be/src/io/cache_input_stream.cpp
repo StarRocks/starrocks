@@ -26,7 +26,7 @@
 
 namespace starrocks::io {
 
-CacheInputStream::CacheInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
+CacheInputStream::CacheInputStream(const std::shared_ptr<SeekableInputStream>& stream, const std::string& filename,
                                    size_t size)
         : SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
           _filename(filename),

@@ -38,7 +38,7 @@ ChunkChanger::~ChunkChanger() {
     }
 }
 
-void ChunkChanger::init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals) {
+void ChunkChanger::init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals) {
     _state = _obj_pool.add(
             new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, ExecEnv::GetInstance()));
 }
@@ -531,7 +531,7 @@ void SchemaChangeUtils::init_materialized_params(const TAlterTabletReqV2& reques
         return;
     }
 
-    for (auto item : request.materialized_view_params) {
+    for (const auto& item : request.materialized_view_params) {
         AlterMaterializedViewParam mv_param;
         mv_param.column_name = item.column_name;
         /*

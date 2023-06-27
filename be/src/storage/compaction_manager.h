@@ -53,9 +53,9 @@ public:
 
     bool pick_candidate(CompactionCandidate* candidate);
 
-    void update_tablet_async(TabletSharedPtr tablet);
+    void update_tablet_async(const TabletSharedPtr& tablet);
 
-    void update_tablet(TabletSharedPtr tablet);
+    void update_tablet(const TabletSharedPtr& tablet);
 
     bool register_task(CompactionTask* compaction_task);
 

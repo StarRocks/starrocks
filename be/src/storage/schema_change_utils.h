@@ -56,7 +56,7 @@ public:
 
     Status fill_materialized_columns(ChunkPtr& new_chunk);
 
-    void init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals);
+    void init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals);
 
     const std::vector<ColumnId>& get_selected_column_indexes() const { return _selected_column_indexes; }
     std::vector<ColumnId>* get_mutable_selected_column_indexes() { return &_selected_column_indexes; }

@@ -302,7 +302,7 @@ void CompactionManager::_dispatch_worker() {
     }
 }
 
-void CompactionManager::update_tablet_async(TabletSharedPtr tablet) {
+void CompactionManager::update_tablet_async(const TabletSharedPtr& tablet) {
     std::lock_guard lock(_dispatch_mutex);
     auto iter = _dispatch_map.find(tablet->tablet_id());
     if (iter != _dispatch_map.end()) {
@@ -316,7 +316,7 @@ void CompactionManager::update_tablet_async(TabletSharedPtr tablet) {
     }
 }
 
-void CompactionManager::update_tablet(TabletSharedPtr tablet) {
+void CompactionManager::update_tablet(const TabletSharedPtr& tablet) {
     if (tablet == nullptr) {
         return;
     }

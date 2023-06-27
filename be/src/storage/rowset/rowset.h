@@ -370,7 +370,7 @@ protected:
 private:
     int64_t _mem_usage() const { return sizeof(Rowset) + _rowset_path.length(); }
 
-    Status _remove_delta_column_group_files(std::shared_ptr<FileSystem> fs);
+    Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs);
 
     Status _link_delta_column_group_files(const std::string& dir, int64_t version);
 

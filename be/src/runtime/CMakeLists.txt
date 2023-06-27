@@ -17,6 +17,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp

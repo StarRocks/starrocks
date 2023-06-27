@@ -1090,7 +1090,7 @@ Status Tablet::set_partition_id(int64_t partition_id) {
 }
 
 TabletInfo Tablet::get_tablet_info() const {
-    return TabletInfo(tablet_id(), schema_hash(), tablet_uid());
+    return {tablet_id(), schema_hash(), tablet_uid()};
 }
 
 void Tablet::pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets) {
@@ -1614,7 +1614,7 @@ std::string Tablet::debug_string() const {
         return _updates->debug_string();
     }
     // TODO: add more debug info
-    return string();
+    return {};
 }
 
 } // namespace starrocks

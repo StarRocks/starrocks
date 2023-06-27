@@ -36,10 +36,7 @@ public:
               _metadata(std::move(metadata)),
               _base_version(_metadata->version()),
               _new_version(new_version),
-              _max_txn_id(0),
-              _builder(_tablet, _metadata),
-              _inited(false),
-              _check_meta_version_succ(false) {
+              _builder(_tablet, _metadata) {
         _metadata->set_version(_new_version);
     }
 
@@ -135,12 +132,12 @@ private:
 
     Tablet _tablet;
     std::shared_ptr<TabletMetadataPB> _metadata;
-    int64_t _base_version;
-    int64_t _new_version;
-    int64_t _max_txn_id; // Used as the file name prefix of the delvec file
+    int64_t _base_version{0};
+    int64_t _new_version{0};
+    int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
-    bool _inited;
-    bool _check_meta_version_succ;
+    bool _inited{false};
+    bool _check_meta_version_succ{false};
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {

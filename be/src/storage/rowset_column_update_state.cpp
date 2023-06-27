@@ -331,7 +331,7 @@ static StatusOr<ChunkPtr> read_from_source_segment(Rowset* rowset, const Schema&
 
 // this function build delta writer for delta column group's file.(end with `.col`)
 StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta_column_group_writer(
-        Rowset* rowset, std::shared_ptr<TabletSchema> tschema, uint32_t rssid, int64_t ver) {
+        Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema, uint32_t rssid, int64_t ver) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     ASSIGN_OR_RETURN(auto rowsetid_segid, _find_rowset_seg_id(rssid));
     const std::string path = Rowset::delta_column_group_path(rowset->rowset_path(), rowsetid_segid.unique_rowset_id,
@@ -346,7 +346,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     return std::move(segment_writer);
 }
 
-static Status read_chunk_from_update_file(ChunkIteratorPtr iter, ChunkPtr result_chunk) {
+static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const ChunkPtr& result_chunk) {
     auto chunk = result_chunk->clone_empty(1024);
     while (true) {
         chunk->reset();
@@ -455,8 +455,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
     std::map<uint32_t, RowidsToUpdateRowids> rss_rowid_to_update_rowid;
     for (int upt_id = 0; upt_id < _partial_update_states.size(); upt_id++) {
         for (const auto& each : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
-            uint32_t rssid = (uint32_t)(each.first >> 32);
-            uint32_t rowid = (uint32_t)(each.first & ROWID_MASK);
+            auto rssid = (uint32_t)(each.first >> 32);
+            auto rowid = (uint32_t)(each.first & ROWID_MASK);
             rss_rowid_to_update_rowid[rssid][rowid] = std::make_pair(upt_id, each.second);
             // prepare delta column writers by the way
             if (delta_column_group_writer.count(rssid) == 0) {
