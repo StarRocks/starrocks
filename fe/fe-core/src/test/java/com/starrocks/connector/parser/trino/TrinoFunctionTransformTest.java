@@ -205,6 +205,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select strpos('bccaab', 'aa');";
         assertPlanContains(sql, "locate('aa', 'bccaab')");
+
+        sql = "select length('aaa');";
+        assertPlanContains(sql, "char_length('aaa')");
     }
 
     @Test
