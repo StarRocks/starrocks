@@ -23,7 +23,6 @@
 
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
-#include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
@@ -55,7 +54,6 @@ OrcChunkReader::OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_
     if (_read_chunk_size == 0) {
         _read_chunk_size = 4096;
     }
-    _row_reader_options.useWriterTimezone();
 
     // some caller of `OrcChunkReader` may pass nullptr
     // This happens when there are extra fields in broker load specification
@@ -427,6 +425,7 @@ Status OrcChunkReader::_init_src_types(const std::unique_ptr<OrcMapping>& mappin
                 _reader->getType().getSubtypeByColumnId(mapping->get_column_id_or_child_mapping(i).orc_column_id);
         RETURN_IF_ERROR(_create_type_descriptor_by_orc(
                 slot_desc->type(), orc_type, mapping->get_column_id_or_child_mapping(i).orc_mapping, &_src_types[i]));
+        _orc_types.insert({slot_desc->col_name(), orc_type->getKind()});
         _try_implicit_cast(&_src_types[i], slot_desc->type());
     }
     return Status::OK();
@@ -563,7 +562,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
         _fill_functions[src_index](cvb, col, 0, _batch->numElements, slot_desc->type(),
-                                   _root_selected_mapping->get_column_id_or_child_mapping(src_index).orc_mapping, this);
+                                   _root_selected_mapping->get_column_id_or_child_mapping(src_index).orc_mapping, this, slot_desc->col_name());
     }
 
     if (_broker_load_mode) {

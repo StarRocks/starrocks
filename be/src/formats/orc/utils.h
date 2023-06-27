@@ -85,9 +85,10 @@ public:
         tv->from_timestamp(tp.year(), tp.month(), tp.day(), tp.hour(), tp.minute(), tp.second(), 0);
     }
     static void orc_ts_to_native_ts(TimestampValue* tv, const cctz::time_zone& tz, int64_t tzoffset, int64_t seconds,
-                                    int64_t nanoseconds) {
+                                    int64_t nanoseconds, bool is_instant = false) {
         if (seconds >= 0) {
-            orc_ts_to_native_ts_after_unix_epoch(tv, seconds + tzoffset, nanoseconds);
+            seconds = is_instant ? seconds + tzoffset : seconds;
+            orc_ts_to_native_ts_after_unix_epoch(tv, seconds, nanoseconds);
         } else {
             orc_ts_to_native_ts_before_unix_epoch(tv, tz, seconds, nanoseconds);
         }

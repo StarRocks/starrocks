@@ -328,8 +328,10 @@ std::unique_ptr<ColumnVectorBatch> TypeImpl::createRowBatch(uint64_t capacity, M
                        : std::unique_ptr<ColumnVectorBatch>(new StringVectorBatch(capacity, memoryPool));
 
     case TIMESTAMP:
+        return std::unique_ptr<ColumnVectorBatch>(new TimestampVectorBatch(capacity, memoryPool, false));
+
     case TIMESTAMP_INSTANT:
-        return std::unique_ptr<ColumnVectorBatch>(new TimestampVectorBatch(capacity, memoryPool));
+        return std::unique_ptr<ColumnVectorBatch>(new TimestampVectorBatch(capacity, memoryPool, true));
 
     case STRUCT: {
         auto* result = new StructVectorBatch(capacity, memoryPool);

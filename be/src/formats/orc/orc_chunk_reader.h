@@ -137,6 +137,8 @@ public:
 
     bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);
 
+    bool is_timestamp_instant_type(const std::string& col_name) { return _orc_types[col_name] == orc::TIMESTAMP_INSTANT; }
+
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
     Status _fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
@@ -166,6 +168,7 @@ private:
     bool _use_orc_column_names = false;
     std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;
+    std::unordered_map<std::string, orc::TypeKind> _orc_types;
     // slot id to position in orc.
     std::unordered_map<SlotId, int> _slot_id_to_position;
     std::vector<Expr*> _cast_exprs;
