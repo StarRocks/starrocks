@@ -303,7 +303,7 @@ public class VariableMgr {
 
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
                     findSimilarVarNames(setVar.getVariable()));
         }
 
