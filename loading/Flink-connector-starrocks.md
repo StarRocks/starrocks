@@ -223,6 +223,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 [Stream Loa
 | totalFlushRows | counter | successfully flushed rows. |
 | totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed. |
 | totalFlushFailedTimes | counter | number of times that the flushing been failed. |
+| totalFilteredRows | counter | number of rows filtered. totalFlushRows includes those rows. |
 
 flink-connector-starrocks 导入底层调用的 Stream Load实现，可以在 flink 日志中查看导入状态
 
