@@ -1355,7 +1355,48 @@ public class StmtExecutor {
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift());
             coord.setQueryType(TQueryType.LOAD);
+<<<<<<< HEAD
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+=======
+
+            List<ScanNode> scanNodes = execPlan.getScanNodes();
+
+            boolean containOlapScanNode = false;
+            for (ScanNode scanNode : scanNodes) {
+                if (scanNode instanceof OlapScanNode) {
+                    estimateScanRows += ((OlapScanNode) scanNode).getActualRows();
+                    containOlapScanNode = true;
+                }
+            }
+
+            TLoadJobType type = null;
+            if (containOlapScanNode) {
+                coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
+                type = TLoadJobType.INSERT_QUERY;
+            } else {
+                estimateScanRows = execPlan.getFragments().get(0).getPlanRoot().getCardinality();
+                coord.setLoadJobType(TLoadJobType.INSERT_VALUES);
+                type = TLoadJobType.INSERT_VALUES;
+            }
+
+            if (!targetTable.isIcebergTable()) {
+                jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
+                        label,
+                        database.getFullName(),
+                        targetTable.getId(),
+                        EtlJobType.INSERT,
+                        createTime,
+                        estimateScanRows,
+                        type,
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+            }
+
+            coord.setJobId(jobId);
+            trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
+
+            QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord);
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
+>>>>>>> a1ba1635e ([BugFix] provide query statistic for insert statement (#25923))
             coord.exec();
 
             coord.join(context.getSessionVariable().getQueryTimeoutS());
