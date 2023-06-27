@@ -77,18 +77,27 @@ public class ExternalOlapTable extends OlapTable {
 
     public class ExternalTableInfo {
         // remote doris cluster fe addr
+        @SerializedName("ht")
         private String host;
+        @SerializedName("pt")
         private int port;
         // access credential
+        @SerializedName("us")
         private String user;
+        @SerializedName("pw")
         private String password;
 
         // source table info
+        @SerializedName("db")
         private String dbName;
+        @SerializedName("tb")
         private String tableName;
 
+        @SerializedName("dbi")
         private long dbId;
+        @SerializedName("tbi")
         private long tableId;
+        @SerializedName("tbt")
         private TableType tableType;
 
         public ExternalTableInfo() {
