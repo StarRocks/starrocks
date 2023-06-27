@@ -28,6 +28,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.monitor.unit.ByteSizeValue;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -36,7 +37,7 @@ import java.util.List;
  * show tablets' detail info within an index
  * for LakeTablet
  */
-public class LakeTabletsProcNode implements ProcNodeInterface {
+public class LakeTabletsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("TabletId").add("BackendId").add("DataSize").add("RowCount")
             .build();
@@ -46,7 +47,7 @@ public class LakeTabletsProcNode implements ProcNodeInterface {
     private final OlapTable table;
     private final MaterializedIndex index;
 
-    public LakeTabletsProcNode(Database db, OlapTable table, MaterializedIndex index) {
+    public LakeTabletsProcDir(Database db, OlapTable table, MaterializedIndex index) {
         this.db = db;
         this.table = table;
         this.index = index;
@@ -107,4 +108,57 @@ public class LakeTabletsProcNode implements ProcNodeInterface {
         }
         return result;
     }
+
+    @Override
+    public boolean register(String name, ProcNodeInterface node) {
+        return false;
+    }
+
+    @Override
+    public ProcNodeInterface lookup(String tabletIdStr) throws AnalysisException {
+        Preconditions.checkNotNull(db);
+        Preconditions.checkNotNull(index);
+        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
+
+        long tabletId = -1L;
+        try {
+            tabletId = Long.parseLong(tabletIdStr);
+        } catch (NumberFormatException e) {
+            throw new AnalysisException("Invalid tablet id format: " + tabletIdStr);
+        }
+
+        db.readLock();
+        try {
+            Tablet tablet = index.getTablet(tabletId);
+            if (tablet == null) {
+                throw new AnalysisException("Can't find tablet id: " + tabletIdStr);
+            }
+            Preconditions.checkState(tablet instanceof LakeTablet);
+            return new LakeTabletProcNode((LakeTablet) tablet);
+        } finally {
+            db.readUnlock();
+        }
+    }
+
+    // Handle showing single tablet info
+    public static class LakeTabletProcNode implements ProcNodeInterface {
+        private final LakeTablet tablet;
+        public LakeTabletProcNode(LakeTablet tablet) {
+            this.tablet = tablet;
+        }
+
+        @Override
+        public ProcResult fetchResult() throws AnalysisException {
+            BaseProcResult result = new BaseProcResult();
+            result.setNames(TITLE_NAMES);
+            List<String> row = Arrays.asList(
+                    String.valueOf(tablet.getId()),
+                    new Gson().toJson(tablet.getBackendIds()),
+                    new ByteSizeValue(tablet.getDataSize(true)).toString(),
+                    String.valueOf(tablet.getRowCount(0L))
+            );
+            result.addRow(row);
+            return result;
+        }
+    };
 }
