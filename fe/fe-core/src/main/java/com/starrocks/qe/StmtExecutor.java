@@ -1416,7 +1416,8 @@ public class StmtExecutor {
                     ConnectContext.get().getSessionVariable().getQueryTimeoutS());
             coord.setJobId(jobId);
 
-            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+            QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord);
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
             coord.exec();
 
             coord.join(context.getSessionVariable().getQueryTimeoutS());
