@@ -230,6 +230,9 @@ class ScalarTypeInfoResolver {
     DECLARE_SINGLETON(ScalarTypeInfoResolver);
 
 public:
+    ScalarTypeInfoResolver(const ScalarTypeInfoResolver&) = delete;
+    const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
+
     const TypeInfoPtr get_type_info(const LogicalType t) {
         if (this->_mapping.find(t) == this->_mapping.end()) {
             return std::make_shared<ScalarTypeInfo>(*this->_mapping[TYPE_NONE].get());
@@ -252,9 +255,6 @@ private:
 
     // item_type_info -> list_type_info
     std::unordered_map<LogicalType, std::unique_ptr<ScalarTypeInfo>, std::hash<size_t>> _mapping;
-
-    ScalarTypeInfoResolver(const ScalarTypeInfoResolver&) = delete;
-    const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
 };
 
 template <typename TypeInfoImpl>
@@ -361,7 +361,7 @@ struct ScalarTypeInfoImpl<TYPE_BOOLEAN> : public ScalarTypeInfoImplBase<TYPE_BOO
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const bool*>(src));
-        return std::string(buf);
+        return {buf};
     }
 
     static void set_to_max(void* buf) { (*(bool*)buf) = true; }
@@ -382,7 +382,7 @@ struct ScalarTypeInfoImpl<TYPE_TINYINT> : public ScalarTypeInfoImplBase<TYPE_TIN
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const int8_t*>(src));
-        return std::string(buf);
+        return {buf};
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
@@ -399,7 +399,7 @@ struct ScalarTypeInfoImpl<TYPE_SMALLINT> : public ScalarTypeInfoImplBase<TYPE_SM
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int16_t>(src));
-        return std::string(buf);
+        return {buf};
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
@@ -415,7 +415,7 @@ struct ScalarTypeInfoImpl<TYPE_INT> : public ScalarTypeInfoImplBase<TYPE_INT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int32_t>(src));
-        return std::string(buf);
+        return {buf};
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
@@ -431,7 +431,7 @@ struct ScalarTypeInfoImpl<TYPE_BIGINT> : public ScalarTypeInfoImplBase<TYPE_BIGI
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%" PRId64, unaligned_load<int64_t>(src));
-        return std::string(buf);
+        return {buf};
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
@@ -517,7 +517,7 @@ struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LA
             }
         }
 
-        return std::string(buf);
+        return {buf};
     }
 
     // GCC7.3 will generate movaps instruction, which will lead to SEGV when buf is
@@ -563,7 +563,7 @@ struct ScalarTypeInfoImpl<TYPE_FLOAT> : public ScalarTypeInfoImplBase<TYPE_FLOAT
         char buf[1024] = {'\0'};
         int length = FloatToBuffer(unaligned_load<CppType>(src), MAX_FLOAT_STR_LENGTH, buf);
         DCHECK(length >= 0) << "gcvt float failed, float value=" << unaligned_load<CppType>(src);
-        return std::string(buf);
+        return {buf};
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
@@ -588,7 +588,7 @@ struct ScalarTypeInfoImpl<TYPE_DOUBLE> : public ScalarTypeInfoImplBase<TYPE_DOUB
         char buf[1024] = {'\0'};
         int length = DoubleToBuffer(unaligned_load<CppType>(src), MAX_DOUBLE_STR_LENGTH, buf);
         DCHECK(length >= 0) << "gcvt float failed, float value=" << unaligned_load<CppType>(src);
-        return std::string(buf);
+        return {buf};
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
@@ -835,7 +835,7 @@ struct ScalarTypeInfoImpl<TYPE_DATETIME_V1> : public ScalarTypeInfoImplBase<TYPE
 
         char buf[20] = {'\0'};
         strftime(buf, 20, "%Y-%m-%d %H:%M:%S", &time_tm);
-        return std::string(buf);
+        return {buf};
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,

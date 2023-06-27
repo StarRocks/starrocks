@@ -32,7 +32,7 @@ BinlogManager::BinlogManager(int64_t tablet_id, std::string path, int64_t max_fi
           _max_file_size(max_file_size),
           _max_page_size(max_page_size),
           _compression_type(compression_type),
-          _rowset_fetcher(rowset_fetcher),
+          _rowset_fetcher(std::move(rowset_fetcher)),
           _unused_binlog_file_ids(UINT64_MAX) {}
 
 BinlogManager::~BinlogManager() {
@@ -60,7 +60,7 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
     std::vector<int64_t> useless_file_ids;
     std::vector<BinlogFileMetaPBPtr> recovered_file_metas;
     recovered_file_metas.reserve(binlog_file_ids.size());
-    std::list<int64_t>::reverse_iterator file_id_it = binlog_file_ids.rbegin();
+    auto file_id_it = binlog_file_ids.rbegin();
     int64_t next_version_index = sorted_valid_versions.size() - 1;
     while (next_version_index >= 0) {
         int64_t version = sorted_valid_versions[next_version_index];
@@ -255,14 +255,14 @@ StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version)
     return params;
 }
 
-void BinlogManager::precommit_ingestion(int64_t version, BinlogBuildResultPtr result) {
+void BinlogManager::precommit_ingestion(int64_t version, const BinlogBuildResultPtr& result) {
     VLOG(3) << "Pre-commit ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(version, _ingestion_version);
     DCHECK(_build_result == nullptr);
-    _build_result = result;
+    _build_result = std::move(result);
 }
 
-void BinlogManager::abort_ingestion(int64_t version, BinlogBuildResultPtr result) {
+void BinlogManager::abort_ingestion(int64_t version, const BinlogBuildResultPtr& result) {
     VLOG(3) << "Abort ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(version, _ingestion_version);
     DCHECK(_build_result == nullptr);
@@ -499,8 +499,8 @@ void BinlogManager::delete_all_binlog() {
             _unused_binlog_file_ids.blocking_put(binlog_file->file_meta()->id());
             _wait_reader_binlog_files.pop_front();
         }
-        for (auto it = _alive_binlog_files.begin(); it != _alive_binlog_files.end(); it++) {
-            _unused_binlog_file_ids.blocking_put(it->second->file_meta()->id());
+        for (const auto& iter : _alive_binlog_files) {
+            _unused_binlog_file_ids.blocking_put((iter.second)->file_meta()->id());
         }
         _alive_binlog_files.clear();
         _alive_rowset_count_map.clear();
@@ -518,7 +518,7 @@ bool BinlogManager::is_rowset_used(int64_t rowset_id) {
     return _alive_rowset_count_map.count(rowset_id) >= 1 || _wait_reader_rowset_count_map.count(rowset_id) >= 1;
 }
 
-StatusOr<int64_t> BinlogManager::register_reader(std::shared_ptr<BinlogReader> reader) {
+StatusOr<int64_t> BinlogManager::register_reader(const std::shared_ptr<BinlogReader>& reader) {
     RETURN_IF_ERROR(_check_init_failure());
     std::unique_lock lock(_meta_lock);
     int64_t reader_id = _next_reader_id++;
@@ -565,8 +565,8 @@ BinlogRange BinlogManager::current_binlog_range() {
 
     BinlogFilePtr& start = _alive_binlog_files.begin()->second;
     BinlogFilePtr& end = _alive_binlog_files.rbegin()->second;
-    return BinlogRange(start->file_meta()->start_version(), start->file_meta()->start_seq_id(),
-                       end->file_meta()->end_version(), end->file_meta()->end_seq_id());
+    return {start->file_meta()->start_version(), start->file_meta()->start_seq_id(), end->file_meta()->end_version(),
+            end->file_meta()->end_seq_id()};
 }
 
 void BinlogManager::close_active_writer() {

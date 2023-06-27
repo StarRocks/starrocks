@@ -69,7 +69,7 @@
 
 namespace starrocks {
 
-class TxnInfo;
+struct TxnInfo;
 
 struct TabletTxnInfo {
     PUniqueId load_id;

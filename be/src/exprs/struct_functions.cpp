@@ -28,7 +28,7 @@ StatusOr<ColumnPtr> StructFunctions::new_struct(FunctionContext* context, const 
     DCHECK_EQ(fields.size(), columns.size());
 
     for (int i = 0; i < columns.size(); i++) {
-        auto column = columns[i];
+        auto& column = columns[i];
         if (column->only_null()) {
             fields[i]->append_nulls(column->size());
         } else if (column->is_constant()) {

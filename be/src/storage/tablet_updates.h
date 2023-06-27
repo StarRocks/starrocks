@@ -39,7 +39,7 @@ class MemTracker;
 class RowsetReadOptions;
 class SnapshotMeta;
 class Tablet;
-class TabletBasicInfo;
+struct TabletBasicInfo;
 class TTabletInfo;
 
 class ChunkIterator;
@@ -216,13 +216,13 @@ public:
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
-    Status link_from(Tablet* base_tablet, int64_t request_version, std::string err_msg_header = "");
+    Status link_from(Tablet* base_tablet, int64_t request_version, const std::string& err_msg_header = "");
 
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                        ChunkChanger* chunk_changer, std::string err_msg_header = "");
+                        ChunkChanger* chunk_changer, const std::string& err_msg_header = "");
 
     Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                        ChunkChanger* chunk_changer, std::string err_msg_header = "");
+                        ChunkChanger* chunk_changer, const std::string& err_msg_header = "");
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
@@ -351,9 +351,9 @@ private:
     void _apply_rowset_commit(const EditVersionInfo& version_info);
 
     // used for normal update or row-mode partial update
-    void _apply_normal_rowset_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset);
+    void _apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
     // used for column-mode partial update
-    void _apply_column_partial_update_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset);
+    void _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
 
     void _apply_compaction_commit(const EditVersionInfo& version_info);
 

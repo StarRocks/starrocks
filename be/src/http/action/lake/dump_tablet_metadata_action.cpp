@@ -81,7 +81,7 @@ void DumpTabletMetadataAction::handle(HttpRequest* req) {
             auto path = join_path(location, name);
             auto metadata_or = tablet_mgr->get_tablet_metadata(path, false);
             if (!metadata_or.ok() && !metadata_or.status().is_not_found()) {
-                response.write("{\"error\": \"").write(metadata_or.status().to_string()).write("\"}");
+                response.write(R"({"error": ")").write(metadata_or.status().to_string()).write("\"}");
             } else if (metadata_or.ok()) {
                 auto metadata = std::move(metadata_or).value();
                 json2pb::Pb2JsonOptions options;
@@ -89,7 +89,7 @@ void DumpTabletMetadataAction::handle(HttpRequest* req) {
                 std::string json;
                 std::string error;
                 if (!json2pb::ProtoMessageToJson(*metadata, &json, options, &error)) {
-                    response.write("{\"error\": \"").write(error).write("\"}");
+                    response.write(R"({"error": ")").write(error).write("\"}");
                 } else {
                     response.write(json);
                 }
@@ -99,7 +99,7 @@ void DumpTabletMetadataAction::handle(HttpRequest* req) {
     });
 
     if (!st.ok()) {
-        response.write("{\"error\": \"").write(st.to_string()).write("\"}");
+        response.write(R"({"error": ")").write(st.to_string()).write("\"}");
     }
 
     response.write("\n]\n");

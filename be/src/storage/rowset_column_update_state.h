@@ -121,9 +121,8 @@ private:
     Status _check_and_resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t segment_id,
                                        EditVersion latest_applied_version, const PrimaryIndex& index);
 
-    StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(Rowset* rowset,
-                                                                                std::shared_ptr<TabletSchema> tschema,
-                                                                                uint32_t rssid, int64_t ver);
+    StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(
+            Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema, uint32_t rssid, int64_t ver);
 
     // to build `_partial_update_states`
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock);

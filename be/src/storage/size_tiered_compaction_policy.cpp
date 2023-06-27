@@ -185,7 +185,7 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
     int64_t total_size = 0;
     int64_t prev_end_version = -1;
     bool skip_dup_large_base_rowset = true;
-    for (auto rowset : candidate_rowsets) {
+    for (const auto& rowset : candidate_rowsets) {
         // when duplicate key's base rowset larger than 0.8 * max_segment_file_size, we don't need compact it
         // if set force_base_compaction, we will compact it to make sure delete version can be compacted
         if (keys_type == KeysType::DUP_KEYS && skip_dup_large_base_rowset && !force_base_compaction &&

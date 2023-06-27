@@ -105,17 +105,17 @@ bool parse_basic_auth(const HttpRequest& req, AuthInfo* auth) {
 std::string get_content_type(const std::string& file_name) {
     std::string file_ext = path_util::file_extension(file_name);
     if (file_ext == std::string(".html") || file_ext == std::string(".htm")) {
-        return std::string("text/html; charset=utf-8");
+        return {"text/html; charset=utf-8"};
     } else if (file_ext == std::string(".js")) {
-        return std::string("application/javascript; charset=utf-8");
+        return {"application/javascript; charset=utf-8"};
     } else if (file_ext == std::string(".css")) {
-        return std::string("text/css; charset=utf-8");
+        return {"text/css; charset=utf-8"};
     } else if (file_ext == std::string(".txt")) {
-        return std::string("text/plain; charset=utf-8");
+        return {"text/plain; charset=utf-8"};
     } else if (file_ext == std::string(".png")) {
-        return std::string("image/png");
+        return {"image/png"};
     } else if (file_ext == std::string(".ico")) {
-        return std::string("image/x-icon");
+        return {"image/x-icon"};
     } else {
         return "text/plain; charset=utf-8";
     }

@@ -135,7 +135,7 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
 
     for (auto& rowset : _rowsets) {
         RETURN_IF_ERROR(rowset->load());
-        for (auto seg : rowset->segments()) {
+        for (const auto& seg : rowset->segments()) {
             segments->emplace_back(seg);
         }
     }

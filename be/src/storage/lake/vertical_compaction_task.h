@@ -24,7 +24,7 @@ class Chunk;
 class ChunkIterator;
 class TabletSchema;
 class RowSourceMaskBuffer;
-class RowSourceMask;
+struct RowSourceMask;
 } // namespace starrocks
 
 namespace starrocks::lake {

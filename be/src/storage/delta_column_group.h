@@ -87,7 +87,8 @@ public:
 
 class DeltaColumnGroupListHelper {
 public:
-    static void garbage_collection(DeltaColumnGroupList& dcg_list, TabletSegmentId tsid, int64_t min_readable_version,
+    static void garbage_collection(DeltaColumnGroupList& dcg_list, const TabletSegmentId& tsid,
+                                   int64_t min_readable_version,
                                    std::vector<std::pair<TabletSegmentId, int64_t>>& garbage_dcgs);
 };
 

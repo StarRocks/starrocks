@@ -29,7 +29,7 @@ CompactionState::CompactionState(Rowset* rowset) {
     }
 }
 
-CompactionState::~CompactionState() {}
+CompactionState::~CompactionState() = default;
 
 Status CompactionState::load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id) {
     if (segment_id >= pk_cols.size() && pk_cols.size() != 0) {

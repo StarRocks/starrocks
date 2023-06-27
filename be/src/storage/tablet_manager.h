@@ -60,7 +60,7 @@ namespace starrocks {
 
 class Tablet;
 class DataDir;
-class TabletBasicInfo;
+struct TabletBasicInfo;
 
 // RowsetsAcqRel is a RAII wrapper for invocation of Rowset::acquire_readers and Rowset::release_readers
 class RowsetsAcqRel;

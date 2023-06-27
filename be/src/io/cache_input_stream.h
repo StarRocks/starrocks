@@ -34,7 +34,8 @@ public:
         int64_t write_cache_fail_bytes = 0;
     };
 
-    explicit CacheInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename, size_t size);
+    explicit CacheInputStream(const std::shared_ptr<SeekableInputStream>& stream, const std::string& filename,
+                              size_t size);
 
     ~CacheInputStream() override = default;
 

@@ -25,8 +25,7 @@
 #include "util/defer_op.h"
 #include "util/raw_container.h"
 
-namespace starrocks {
-namespace lake {
+namespace starrocks::lake {
 
 static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
     DelvecCacheKeyPB cache_key_pb;
@@ -40,7 +39,7 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
 MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
         : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {}
 
-void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
+void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment_id) {
     if (delvec->cardinality() > 0) {
         const uint64_t offset = _buf.size();
         std::string delvec_str;
@@ -77,7 +76,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
                                       Finder{it->id()});
         if (search_it != op_compaction.input_rowsets().end()) {
             // find it
-            delete_delvec_sid_range.push_back(std::make_pair(it->id(), it->id() + it->segments_size() - 1));
+            delete_delvec_sid_range.emplace_back(it->id(), it->id() + it->segments_size() - 1);
             _tablet_meta->mutable_compaction_inputs()->Add(std::move(*it));
             it = _tablet_meta->mutable_rowsets()->erase(it);
             del_range_ss << "[" << delete_delvec_sid_range.back().first << "," << delete_delvec_sid_range.back().second
@@ -359,5 +358,4 @@ void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite
     }
 }
 
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::lake

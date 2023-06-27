@@ -36,8 +36,7 @@ public:
         int64_t max_buffer_size = 8 * MB;
     };
 
-    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
-                              size_t file_size);
+    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, std::string filename, size_t file_size);
     ~SharedBufferedInputStream() override = default;
 
     Status seek(int64_t position) override {

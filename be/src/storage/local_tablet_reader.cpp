@@ -27,7 +27,7 @@
 
 namespace starrocks {
 
-LocalTabletReader::LocalTabletReader() {}
+LocalTabletReader::LocalTabletReader() = default;
 
 Status LocalTabletReader::init(TabletSharedPtr& tablet, int64_t version) {
     if (tablet->updates() == nullptr) {

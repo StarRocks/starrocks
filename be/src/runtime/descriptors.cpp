@@ -59,12 +59,12 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
     return os;
 }
 
-SlotDescriptor::SlotDescriptor(SlotId id, const std::string& name, const TypeDescriptor& type)
+SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
         : _id(id),
-          _type(type),
+          _type(std::move(type)),
           _parent(0),
           _null_indicator_offset(0, 0),
-          _col_name(name),
+          _col_name(std::move(name)),
           _slot_idx(0),
           _slot_size(_type.get_slot_size()),
           _is_materialized(false) {}

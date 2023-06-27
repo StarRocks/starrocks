@@ -110,7 +110,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         swap(finish_tablet_infos, finish_task_request->finish_tablet_infos);
         finish_task_request->__isset.finish_tablet_infos = true;
         LOG(INFO) << alter_msg_head << "alter success. signature: " << signature;
-        error_msgs.push_back("alter success");
+        error_msgs.emplace_back("alter success");
         task_status.__set_status_code(TStatusCode::OK);
     } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
         LOG(WARNING) << alter_msg_head << "alter table request task type invalid. "
@@ -119,8 +119,8 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
     } else {
         LOG(WARNING) << alter_msg_head << "alter failed. signature: " << signature;
-        error_msgs.push_back("alter failed");
-        error_msgs.push_back("status: " + print_agent_status(status));
+        error_msgs.emplace_back("alter failed");
+        error_msgs.emplace_back("status: " + print_agent_status(status));
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 

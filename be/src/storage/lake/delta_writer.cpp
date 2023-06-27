@@ -454,8 +454,7 @@ Status DeltaWriterImpl::_fill_auto_increment_id(const Chunk& chunk) {
 
     std::vector<uint8_t> filter;
     uint32_t gen_num = 0;
-    for (uint32_t i = 0; i < rss_rowid_map.size(); i++) {
-        uint64_t v = rss_rowid_map[i];
+    for (unsigned long v : rss_rowid_map) {
         uint32_t rssid = v >> 32;
         if (rssid == (uint32_t)-1) {
             filter.emplace_back(1);

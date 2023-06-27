@@ -822,7 +822,8 @@ Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_ver
     return Status::OK();
 }
 
-void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset) {
+void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& version_info,
+                                                        const RowsetSharedPtr& rowset) {
     auto span = Tracer::Instance().start_trace_tablet("apply_column_partial_update_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
 
@@ -838,7 +839,7 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
             strings::Substitute("$0_$1", tablet_id, rowset->rowset_id().to_string()));
     state_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     // when failure happen, remove state cache and record error msg
-    auto failure_handler = [&](const std::string& str, Status st) {
+    auto failure_handler = [&](const std::string& str, const Status& st) {
         manager->update_column_state_cache().remove(state_entry);
         std::string msg = strings::Substitute("$0: $1 $2", str, st.to_string(), debug_string());
         LOG(ERROR) << msg;
@@ -950,7 +951,7 @@ bool TabletUpdates::check_delta_column_generate_from_version(EditVersion begin_v
     return false;
 }
 
-void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset) {
+void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset) {
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
 
@@ -1581,7 +1582,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     auto span = Tracer::Instance().start_trace_tablet("commit_compaction", _tablet.tablet_id());
     auto scoped_span = trace::Scope(span);
     _compaction_state = std::make_unique<CompactionState>();
-    const auto status = _compaction_state->load(rowset.get());
+    auto status = _compaction_state->load(rowset.get());
     if (!status.ok()) {
         _compaction_state.reset();
         std::string msg = strings::Substitute("_commit_compaction error: load compaction state failed: $0 $1",
@@ -2804,7 +2805,7 @@ struct RowsetLoadInfo {
     vector<DeltaColumnGroupList> dcgs;
 };
 
-Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, std::string err_msg_header) {
+Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, const std::string& err_msg_header) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << err_msg_header << "tablet state is not TABLET_NOTREADY, link_from is not allowed"
@@ -2967,7 +2968,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, st
 }
 
 Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                                   ChunkChanger* chunk_changer, std::string err_msg_header) {
+                                   ChunkChanger* chunk_changer, const std::string& err_msg_header) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << err_msg_header << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
@@ -3209,7 +3210,7 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
 }
 
 Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                                   ChunkChanger* chunk_changer, std::string err_msg_header) {
+                                   ChunkChanger* chunk_changer, const std::string& err_msg_header) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << err_msg_header << "tablet state is not TABLET_NOTREADY, reorder_from is not allowed"
@@ -3950,7 +3951,7 @@ static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext&
 }
 
 static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDeltaColumnContext& ctx,
-                                                                         std::shared_ptr<FileSystem> fs,
+                                                                         const std::shared_ptr<FileSystem>& fs,
                                                                          ColumnIteratorOptions& iter_opts,
                                                                          uint32_t ucid) {
     // build column iter from delta column group
@@ -3971,8 +3972,8 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                         bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns, void* state) {
     std::vector<uint32_t> unique_column_ids;
-    for (auto i = 0; i < column_ids.size(); ++i) {
-        const TabletColumn& tablet_column = _tablet.tablet_schema().column(column_ids[i]);
+    for (unsigned int column_id : column_ids) {
+        const TabletColumn& tablet_column = _tablet.tablet_schema().column(column_id);
         unique_column_ids.push_back(tablet_column.unique_id());
     }
 
@@ -4054,7 +4055,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         }
     }
     if (state != nullptr && with_default) {
-        AutoIncrementPartialUpdateState* auto_increment_state = (AutoIncrementPartialUpdateState*)state;
+        auto* auto_increment_state = (AutoIncrementPartialUpdateState*)state;
         Rowset* rowset = auto_increment_state->rowset;
         uint32_t id = auto_increment_state->id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;

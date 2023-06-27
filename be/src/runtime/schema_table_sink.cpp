@@ -78,8 +78,8 @@ static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be
     }
     ExecuteCommandRequestPB request;
     request.set_command("set_config");
-    request.set_params(strings::Substitute("{\"name\":\"$0\",\"value\":\"$1\"}", name, value));
-    RefCountClosure<ExecuteCommandResultPB>* closure = new RefCountClosure<ExecuteCommandResultPB>();
+    request.set_params(strings::Substitute(R"({"name":"$0","value":"$1"})", name, value));
+    auto* closure = new RefCountClosure<ExecuteCommandResultPB>();
     closure->cntl.set_timeout_ms(10000);
     closure->ref();
     DeferOp op([&]() {

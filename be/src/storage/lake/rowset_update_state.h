@@ -21,9 +21,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 
-namespace starrocks {
-
-namespace lake {
+namespace starrocks::lake {
 
 class MetaFileBuilder;
 
@@ -130,6 +128,4 @@ inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {
     return os;
 }
 
-} // namespace lake
-
-} // namespace starrocks
+} // namespace starrocks::lake
