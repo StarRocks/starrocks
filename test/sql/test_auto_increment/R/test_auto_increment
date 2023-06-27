@@ -94,11 +94,11 @@ SELECT * FROM t;
 -- !result
 INSERT INTO t (id, name, job1, job2) VALUES (1,NULL,NULL,2);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: AUTO_INCREMENT column: name must not be NULL.')
+E: (1064, 'Getting analyzing error. Detail message:  `NULL` value is not supported for an AUTO_INCREMENT column: name You can use `default` for an AUTO INCREMENT column.')
 -- !result
 INSERT INTO t VALUES (1,NULL,NULL,2);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: AUTO_INCREMENT column: name must not be NULL.')
+E: (1064, 'Getting analyzing error. Detail message:  `NULL` value is not supported for an AUTO_INCREMENT column: name You can use `default` for an AUTO INCREMENT column.')
 -- !result
 UPDATE t SET name = NULL where id = 1;
 -- result:
@@ -109,6 +109,70 @@ SELECT * FROM t;
 1	1	None	2
 -- !result
 DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+CREATE TABLE t2 ( id BIGINT NOT NULL, idx BIGINT NULL )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t2 VALUES (1, NULL), (2, NULL);
+-- result:
+-- !result
+INSERT INTO t1 SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 SELECT 1, NULL;
+-- result:
+-- !result
+SELECT * FROM t1;
+-- result:
+-- !result
+INSERT INTO t2 VALUES (10, 1), (20, 2);
+-- result:
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id) SELECT id FROM t2;
+-- result:
+-- !result
+SELECT * FROM t1;
+-- result:
+1	5
+2	6
+10	7
+20	8
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+DROP TABLE t2;
+-- result:
+-- !result
+SET enable_insert_strict = true;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "true");
 -- result:
 -- !result
 DROP DATABASE test_table_with_null;
