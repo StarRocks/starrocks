@@ -2922,10 +2922,6 @@ public class GlobalStateMgr {
         localMetastore.replayCreateTable(info);
     }
 
-    public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
-        localMetastore.replayCreateMaterializedView(dbName, materializedView);
-    }
-
     // Drop table
     public void dropTable(DropTableStmt stmt) throws DdlException {
         localMetastore.dropTable(stmt);

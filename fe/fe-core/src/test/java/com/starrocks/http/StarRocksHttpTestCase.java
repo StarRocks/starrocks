@@ -211,11 +211,11 @@ public abstract class StarRocksHttpTestCase {
             //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
             Database db = new Database(testDbId, "testDb");
             OlapTable table = newTable(TABLE_NAME);
-            db.createTable(table);
+            db.registerTableUnlock(table);
             OlapTable table1 = newTable(TABLE_NAME + 1);
-            db.createTable(table1);
+            db.registerTableUnlock(table1);
             EsTable esTable = newEsTable("es_table");
-            db.createTable(esTable);
+            db.registerTableUnlock(esTable);
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.getAuth();
@@ -278,11 +278,11 @@ public abstract class StarRocksHttpTestCase {
             //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
             Database db = new Database(testDbId, "testDb");
             OlapTable table = newTable(TABLE_NAME);
-            db.createTable(table);
+            db.registerTableUnlock(table);
             OlapTable table1 = newTable(TABLE_NAME + 1);
-            db.createTable(table1);
+            db.registerTableUnlock(table1);
             EsTable esTable = newEsTable("es_table");
-            db.createTable(esTable);
+            db.registerTableUnlock(esTable);
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.getAuth();

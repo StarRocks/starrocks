@@ -48,7 +48,6 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
@@ -221,8 +220,15 @@ public class EditLog {
                 case OperationType.OP_CREATE_TABLE:
                 case OperationType.OP_CREATE_TABLE_V2: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
-                    LOG.info("Begin to unprotect create table. db = "
-                            + info.getDbName() + " table = " + info.getTable().getId());
+
+                    if (info.getTable().isMaterializedView()) {
+                        LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
+                                + " create materialized view = " + info.getTable().getId()
+                                + " tableName = " + info.getTable().getName());
+                    } else {
+                        LOG.info("Begin to unprotect create table. db = "
+                                + info.getDbName() + " table = " + info.getTable().getId());
+                    }
                     globalStateMgr.replayCreateTable(info);
                     break;
                 }
@@ -239,13 +245,12 @@ public class EditLog {
                     globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }
-                case OperationType.OP_CREATE_MATERIALIZED_VIEW:
-                case OperationType.OP_CREATE_MATERIALIZED_VIEW_V2: {
+                case OperationType.OP_CREATE_MATERIALIZED_VIEW: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
                     LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
                             + " create materialized view = " + info.getTable().getId()
                             + " tableName = " + info.getTable().getName());
-                    globalStateMgr.replayCreateMaterializedView(info.getDbName(), ((MaterializedView) info.getTable()));
+                    globalStateMgr.replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION_V2: {
@@ -1227,14 +1232,6 @@ public class EditLog {
             logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
         } else {
             logEdit(OperationType.OP_CREATE_TABLE, info);
-        }
-    }
-
-    public void logCreateMaterializedView(CreateTableInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_MATERIALIZED_VIEW_V2, info);
-        } else {
-            logEdit(OperationType.OP_CREATE_MATERIALIZED_VIEW, info);
         }
     }
 
