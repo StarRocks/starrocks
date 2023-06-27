@@ -1032,4 +1032,16 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "         1 | row(2, 3)\n" +
                 "         2 | row(3, 4)");
     }
+
+    @Test
+    public void testSelectReal() throws Exception {
+        String sql = "select real '10.3'";
+        assertPlanContains(sql, "<slot 2> : 10.3");
+
+        sql = "select cast('1.1' as real)";
+        assertPlanContains(sql, "<slot 2> : 1.1");
+
+        sql = "select cast(v1 / v2 as real) from t0";
+        assertPlanContains(sql, "CAST(CAST(1: v1 AS DOUBLE) / CAST(2: v2 AS DOUBLE) AS FLOAT)");
+    }
 }

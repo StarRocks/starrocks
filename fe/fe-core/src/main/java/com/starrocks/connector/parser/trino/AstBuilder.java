@@ -828,6 +828,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         } else if (node.getType().equalsIgnoreCase("json")) {
             return new com.starrocks.analysis.StringLiteral(node.getValue());
+        } else if (node.getType().equalsIgnoreCase("real")) {
+            try {
+                return new FloatLiteral(node.getValue());
+            } catch (AnalysisException e) {
+                throw new RuntimeException(e);
+            }
         }
         throw new ParsingException("Parse Error : unknown type " + node.getType());
     }
@@ -1130,6 +1136,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             return ScalarType.createUnifiedDecimalType(38, 0);
         } else if (typeName.contains("decimal")) {
             throw new SemanticException("Unknown type: %s", typeName);
+        } else if (typeName.equals("real")) {
+            return ScalarType.createType(PrimitiveType.FLOAT);
         } else {
             // this contains datetime/date/numeric type
             return ScalarType.createType(typeName);
