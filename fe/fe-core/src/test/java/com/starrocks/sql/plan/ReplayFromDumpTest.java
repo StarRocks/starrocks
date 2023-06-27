@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -70,6 +72,13 @@ public class ReplayFromDumpTest {
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
         FeConstants.showLocalShuffleColumnsInExplain = false;
+
+        new MockUp<EditLog>() {
+            @Mock
+            protected void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
     }
 
     @Before
