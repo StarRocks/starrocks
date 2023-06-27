@@ -216,6 +216,7 @@ None
 -- !result
 select array2 = [map{null:550},map{505:501}] from sc2;
 -- result:
+None
 0
 0
 0
@@ -223,9 +224,8 @@ select array2 = [map{null:550},map{505:501}] from sc2;
 0
 0
 0
-0
-0
-0
+None
+None
 -- !result
 select array2 = [map{44:440},map{404:401}] from sc2;
 -- result:
@@ -256,15 +256,15 @@ None
 select map1 = map{14:41,null:11,12:31} from sc2;
 -- result:
 None
-0
-0
-0
-0
-0
-0
-0
-0
-0
+None
+None
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select map1 = map{44:44,46:14,42:34} from sc2;
 -- result:
@@ -300,36 +300,36 @@ select map2 = map{505:[5,50,51,23]} from sc2;
 0
 0
 0
+None
 0
-0
-0
+None
 0
 -- !result
 select map2 = map{null:null} from sc2;
 -- result:
-0
-0
-0
-0
-0
-0
-0
-0
-0
-0
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select map2 = map{null:[4,null,41,23]} from sc2;
 -- result:
-0
-0
-0
-0
-0
-0
-0
-0
-0
-0
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select map2 = map{101:[1,10,11,23]} from sc2;
 -- result:
@@ -339,9 +339,9 @@ select map2 = map{101:[1,10,11,23]} from sc2;
 0
 1
 1
+None
 0
-0
-0
+None
 0
 -- !result
 select map1 = map{46:14,42:34,44:44} from sc2;
@@ -373,15 +373,15 @@ None
 select map1 = map{null:null, 54:45,56:15} from sc2;
 -- result:
 None
-0
-0
-0
-0
-0
-0
-0
-0
-0
+None
+None
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select map3 = map{505:row(null, 52)} from sc2;
 -- result:
@@ -398,16 +398,16 @@ None
 -- !result
 select map2 = map{null:[4,null,41,23]} from sc2;
 -- result:
-0
-0
-0
-0
-0
-0
-0
-0
-0
-0
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select st1 = row(2,null, map{202:null}, row(222,220)) from sc2;
 -- result:
@@ -417,7 +417,7 @@ None
 0
 0
 0
-0
+None
 0
 0
 0
