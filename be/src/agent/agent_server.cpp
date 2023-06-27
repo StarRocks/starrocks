@@ -291,7 +291,7 @@ void AgentServer::Impl::stop() {
 #undef STOP_POOL
 }
 
-AgentServer::Impl::~Impl() {}
+AgentServer::Impl::~Impl() = default;
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.

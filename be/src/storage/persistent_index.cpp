@@ -2046,15 +2046,15 @@ Status ImmutableIndex::_get_in_fixlen_shard(size_t shard_idx, size_t n, const Sl
                                             std::unique_ptr<ImmutableIndexShard>* shard) const {
     const auto& shard_info = _shards[shard_idx];
     uint8_t candidate_idxes[kBucketSizeMax];
-    for (size_t i = 0; i < keys_info.size(); i++) {
-        IndexHash h(keys_info[i].second);
+    for (const auto& key_info : keys_info) {
+        IndexHash h(key_info.second);
         auto pageid = h.page() % shard_info.npage;
         auto bucketid = h.bucket() % shard_info.nbucket;
         auto& bucket_info = (*shard)->bucket(pageid, bucketid);
         uint8_t* bucket_pos = (*shard)->pages[bucket_info.pageid].pack(bucket_info.packid);
         auto nele = bucket_info.size;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        auto key_idx = keys_info[i].first;
+        auto key_idx = key_info.first;
         const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
         auto kv_pos = bucket_pos + pad(nele, kPackSize);
         values[key_idx] = NullIndexValue;
@@ -2077,15 +2077,15 @@ Status ImmutableIndex::_get_in_varlen_shard(size_t shard_idx, size_t n, const Sl
                                             std::unique_ptr<ImmutableIndexShard>* shard) const {
     const auto& shard_info = _shards[shard_idx];
     uint8_t candidate_idxes[kBucketSizeMax];
-    for (size_t i = 0; i < keys_info.size(); i++) {
-        IndexHash h(keys_info[i].second);
+    for (const auto& key_info : keys_info) {
+        IndexHash h(key_info.second);
         auto pageid = h.page() % shard_info.npage;
         auto bucketid = h.bucket() % shard_info.nbucket;
         auto& bucket_info = (*shard)->bucket(pageid, bucketid);
         uint8_t* bucket_pos = (*shard)->pages[bucket_info.pageid].pack(bucket_info.packid);
         auto nele = bucket_info.size;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        auto key_idx = keys_info[i].first;
+        auto key_idx = key_info.first;
         const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
         auto offset_pos = bucket_pos + pad(nele, kPackSize);
         values[key_idx] = NullIndexValue;
@@ -2200,9 +2200,9 @@ Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, con
 
 static void split_keys_info_by_shard(std::vector<KeyInfo>& keys_info, std::vector<KeysInfo>& keys_info_by_shards) {
     uint32_t shard_bits = log2(keys_info_by_shards.size());
-    for (size_t i = 0; i < keys_info.size(); i++) {
-        auto& key_idx = keys_info[i].first;
-        auto& hash = keys_info[i].second;
+    for (const auto& key_info : keys_info) {
+        auto& key_idx = key_info.first;
+        auto& hash = key_info.second;
         size_t shard = IndexHash(hash).shard(shard_bits);
         keys_info_by_shards[shard].key_infos.emplace_back(key_idx, hash);
     }
@@ -3506,8 +3506,8 @@ Status merge_shard_kvs_fixed_len_with_delete(std::vector<KVRef>& l0_kvs, std::ve
     phmap::flat_hash_set<KVRef, KVRefHash, KVRefEq<KeySize>> kvs_set;
     kvs_set.reserve(estimated_size);
     DCHECK(!l1_kvs.empty());
-    for (size_t i = 0; i < l1_kvs.size(); i++) {
-        for (const auto& kv : l1_kvs[i]) {
+    for (auto& l1_kv : l1_kvs) {
+        for (const auto& kv : l1_kv) {
             auto [it, inserted] = kvs_set.emplace(kv);
             if (!inserted) {
                 DCHECK(it->hash == kv.hash) << "upsert kv in set, hash should be the same";
@@ -3538,8 +3538,8 @@ Status merge_shard_kvs_var_len_with_delete(std::vector<KVRef>& l0_kvs, std::vect
     phmap::flat_hash_set<KVRef, KVRefHash, KVRefEq<0>> kvs_set;
     kvs_set.reserve(estimate_size);
     DCHECK(!l1_kvs.empty());
-    for (size_t i = 0; i < l1_kvs.size(); i++) {
-        for (const auto& kv : l1_kvs[i]) {
+    for (auto& l1_kv : l1_kvs) {
+        for (const auto& kv : l1_kv) {
             auto [it, inserted] = kvs_set.emplace(kv);
             if (!inserted) {
                 DCHECK(it->hash == kv.hash) << "upsert kv in set, hash should be the same";

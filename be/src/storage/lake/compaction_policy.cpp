@@ -26,7 +26,7 @@ namespace starrocks::lake {
 
 class BaseAndCumulativeCompactionPolicy : public CompactionPolicy {
 public:
-    explicit BaseAndCumulativeCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
+    explicit BaseAndCumulativeCompactionPolicy(TabletPtr tablet) : CompactionPolicy(std::move(tablet)) {}
     ~BaseAndCumulativeCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
@@ -42,7 +42,7 @@ private:
 class SizeTieredCompactionPolicy : public CompactionPolicy {
 public:
     explicit SizeTieredCompactionPolicy(TabletPtr tablet)
-            : CompactionPolicy(tablet),
+            : CompactionPolicy(std::move(tablet)),
               _max_level_size(config::size_tiered_min_level_size *
                               pow(config::size_tiered_level_multiple, config::size_tiered_level_num)) {}
     ~SizeTieredCompactionPolicy() override = default;
@@ -105,7 +105,7 @@ public:
 
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
-    explicit PrimaryCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
+    explicit PrimaryCompactionPolicy(TabletPtr tablet) : CompactionPolicy(std::move(tablet)) {}
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;

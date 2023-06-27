@@ -790,7 +790,7 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
         ScannerCounter counter{};
         switch (tp) {
         case TFileFormatType::FORMAT_PARQUET:
-            p_scanner.reset(new ParquetScanner(&state, &profile, scan_range, &counter, true));
+            p_scanner = std::make_unique<ParquetScanner>(&state, &profile, scan_range, &counter, true);
             break;
         default:
             st = Status::InvalidArgument(fmt::format("format: {} not supported", to_string(tp)));
