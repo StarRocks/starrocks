@@ -22,7 +22,7 @@ Fixed the following issues:
 
 ### Upgrade Notes
 
-If your system has a database named `starrocks`, change it to another name using ALTER DATABASE RENAME before the upgrade. This is because `starrocks` is the name of the default system database that stores privilege information.
+If your system has a database named `starrocks`, change it to another name using ALTER DATABASE RENAME before the upgrade. This is because `starrocks` is the name of a default system database that stores privilege information.
 
 ## 3.0.1
 
@@ -51,7 +51,7 @@ Fixed the following issues:
 
 ### Upgrade Notes
 
-If your system has a database named `starrocks`, change it to another name using ALTER DATABASE RENAME before the upgrade. This is because `starrocks` is the name of the default system database that stores privilege information.
+If your system has a database named `starrocks`, change it to another name using ALTER DATABASE RENAME before the upgrade. This is because `starrocks` is the name of a default system database that stores privilege information.
 
 ## 3.0.0
 
