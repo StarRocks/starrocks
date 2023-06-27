@@ -28,21 +28,6 @@ jobs:
       - run: |
           echo "${{ github.event.pull_request.title }}"
           echo "${{ github.head_ref }}"
-      - name: Save PR number
-        run: |
-          mkdir -p ./pr
-          echo ${{ github.event.number }} > ./pr/NR
-      - uses: actions/upload-artifact@v2
-        with:
-          name: pr
-          path: pr/NR
-      - uses: xSAVIKx/artifact-exists-action@v0
-        id: check-exists
-        with:
-          name: 'pr'
-      - run: |
-          echo "${{ steps.check-exists.outputs.exists }}"
-          exit 1
 
 
   doc-checker:
@@ -400,9 +385,7 @@ jobs:
         timeout-minutes: 60
         run: |
           set -ex
-          rm -rf ./elastic-service
-          ln -s /var/lib/elastic-service ./elastic-service
-          cd elastic-service && git pull
+          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
@@ -441,7 +424,7 @@ jobs:
               exit 1
             fi
             timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover ${{ github.workspace }}/fe/fe-core/target/result/ --github-token ${{ secrets.PAT }} \
+              --cover ${{ github.workspace }}/fe/fe-core/target/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
             pull_status=$?
             time_count=`expr $time_count + 1`
@@ -483,8 +466,9 @@ jobs:
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
     if: always() && (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success')
     steps:
-      - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
       - name: BRANCH INFO
         id: branch
@@ -497,9 +481,7 @@ jobs:
         shell: bash
         timeout-minutes: 90
         run: |
-          rm -rf ./elastic-service
-          ln -s /var/lib/elastic-service ./elastic-service
-          cd elastic-service && git pull
+          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
@@ -547,10 +529,7 @@ jobs:
       - name: Apply for resources
         id: apply_resource
         run: |
-          set -x
-          rm -rf ./elastic-service
-          cp -rf /var/lib/elastic-service ./elastic-service
-          cd elastic-service && git pull
+          rm -rf ./elastic-service && cp -rf /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
           ./bin/elastic-cluster.sh --template ci-admit
           cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
           echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
@@ -558,7 +537,6 @@ jobs:
       - name: Deploy SR
         id: deploy_sr
         run: |
-          set -x
           cd elastic-service
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
@@ -580,10 +558,9 @@ jobs:
       BE_NODE: ${{ needs.deploy.outputs.be }}
       BASE_VERSION: ${{needs.build.outputs.base_version}}
     steps:
-      - name: clean
+      - name: CLEAN
         run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -609,18 +586,14 @@ jobs:
 
       - name: Prepare Tools
         run: |
-          cd ${{ github.workspace }}
-          rm -rf .actions
-          mkdir -p .actions/nose-report-action
+          cd ${{ github.workspace }} && rm -rf .actions && mkdir -p .actions/nose-report-action
           cd .actions/nose-report-action
           git clone https://github.com/StarRocks/action-junit-report.git .
 
       - name: Run Case (${{ needs.deploy.outputs.fe }})
         run: |
           cd ${{ github.workspace }}
-          rm -rf ./elastic-service
-          ln -s /var/lib/elastic-service ./elastic-service
-          cd elastic-service && git pull
+          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
           ./bin/run-sql-tester.sh
 
       - name: UT Reports
@@ -645,8 +618,9 @@ jobs:
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
     steps:
-      - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
       - name: Prepare Tools
         run: |
@@ -658,17 +632,13 @@ jobs:
 
       - name: Run Case
         run: |
-          set -x
           echo "FE: ${{needs.deploy.outputs.fe}}, BE: ${{needs.deploy.outputs.be}}"
 
           cd ${{ github.workspace }}
-          rm -rf ./elastic-service
-          ln -s /var/lib/elastic-service ./elastic-service
-          cd elastic-service && git pull
+          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
 
           cd ${{ github.workspace }}
-          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest
-          cd ./StarRocksTest && git pull
+          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull
 
           cd ${{ github.workspace }}/elastic-service
           ./bin/run-admit.sh
@@ -695,9 +665,7 @@ jobs:
     steps:
       - name: Backup SR Info
         run: |
-          rm -rf ./elastic-service
-          cp -rf /var/lib/elastic-service ./elastic-service
-          cd elastic-service && git pull
+          rm -rf ./elastic-service && cp -rf /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
           ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE --repository ${{ github.repository }}
 
       - name: Clean ECS

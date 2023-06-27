@@ -12,28 +12,42 @@ jobs:
   upload:
     runs-on: [ self-hosted, normal ]
     if: >
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success'
+      github.event.workflow_run.event == 'pull_request'
     steps:
       - name: 'Report Test'
         run: |
           echo workflow
-#
-#  fe-codestyle-check-report:
-#    runs-on: [ self-hosted, normal ]
-#    name: FE
-#    if: >
-#      github.event.workflow_run.event == 'pull_request' &&
-#      github.event.workflow_run.conclusion == 'success'
-#    steps:
-#      - name: Run java checkstyle
-#        if: ${{ steps.java-file.outputs.java == 'true' }}
-#        uses: dbelyaev/action-checkstyle@v0.7.5
-#        with:
-#          workdir: "./fe"
-#          checkstyle_config: checkstyle.xml
-#          reporter: 'github-pr-check'
-#          github_token: ${{ secrets.GITHUB_TOKEN }}
-#          fail_on_error: true
-#          level: error
+
+  FE-UT-REPORT:
+    runs-on: [ self-hosted, normal ]
+    if: >
+      github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - uses: xSAVIKx/artifact-exists-action@v0
+        name: CHECK FE UT FILES
+        id: check-exists
+        with:
+          name: 'FE UT XML'
+
+      - name: Download FE UT XML
+        uses: actions/download-artifact@v3
+        if: steps.check-exists.outputs.exists == 'true'
+        with:
+          name: FE UT XML
+          path: ./fe-ut/
+
+      - name: UT Report
+        if: always()
+        uses: mikepenz/action-junit-report@v3
+        env:
+          github_token: ${{ secrets.PAT }}
+          token: ${{ secrets.PAT }}
+        with:
+          check_name: 'FE UT Report'
+          detailed_summary: true
+          report_paths: ./fe-ut/*.xml
 
