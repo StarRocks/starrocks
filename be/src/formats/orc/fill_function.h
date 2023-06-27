@@ -34,7 +34,7 @@
 namespace starrocks {
 
 using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
-                                    const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx);
+                                    const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx, std::string col_name);
 
 extern const std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_logical_type_mapping;
 extern const std::set<LogicalType> g_starrocks_int_type;
