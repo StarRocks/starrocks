@@ -83,16 +83,12 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
         return Status::EndOfFile("end of file");
     }
 
-<<<<<<< HEAD
-    ChunkPtr chunk_src = std::make_shared<vectorized::Chunk>();
-=======
     if (!_accumulator.empty()) {
         *chunk = _accumulator.pull();
         return {};
     }
 
-    ChunkPtr chunk_src = std::make_shared<Chunk>();
->>>>>>> 49a809d1d ([BugFix] split chunk in SchemaScanChunkSource (#24744))
+    ChunkPtr chunk_src = std::make_shared<vectorized::Chunk>();
     if (chunk_src == nullptr) {
         return Status::InternalError("Failed to allocated new chunk");
     }
