@@ -959,4 +959,7 @@ CONF_mBool(enable_pk_value_column_zonemap, "true");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
+
+CONF_mBool(enable_http_stream_load_limit, "false");
+
 } // namespace starrocks::config
