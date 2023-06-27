@@ -93,21 +93,21 @@ public class LakeTable extends OlapTable {
     @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;
-        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
-        if (storageCacheInfo == null) {
+        DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partitionId);
+        if (dataCacheInfo == null) {
             cacheInfo = tableProperty.getStorageInfo().getCacheInfo();
         } else {
-            cacheInfo = storageCacheInfo.getCacheInfo();
+            cacheInfo = dataCacheInfo.getCacheInfo();
         }
         return cacheInfo;
     }
 
     @Override
-    public void setStorageInfo(FilePathInfo pathInfo, StorageCacheInfo storageCacheInfo) {
+    public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.setStorageInfo(new StorageInfo(pathInfo, storageCacheInfo.getCacheInfo()));
+        tableProperty.setStorageInfo(new StorageInfo(pathInfo, dataCacheInfo.getCacheInfo()));
     }
 
     @Override
@@ -151,13 +151,9 @@ public class LakeTable extends OlapTable {
         if (tableProperty != null) {
             StorageInfo storageInfo = tableProperty.getStorageInfo();
             if (storageInfo != null) {
-                // enable_storage_cache
-                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
-                        String.valueOf(storageInfo.isEnableStorageCache()));
-
-                // storage_cache_ttl
-                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
-                        String.valueOf(storageInfo.getStorageCacheTtlS()));
+                // datacache.enable
+                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                        String.valueOf(storageInfo.isEnableDataCache()));
 
                 // enable_async_write_back
                 properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
