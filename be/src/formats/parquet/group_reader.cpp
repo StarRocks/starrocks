@@ -42,9 +42,7 @@ Status GroupReader::init() {
     RETURN_IF_ERROR(_init_column_readers());
     _dict_filter_ctx.init(_param.read_cols.size());
     _process_columns_and_conjunct_ctxs();
-    RETURN_IF_ERROR(_dict_filter_ctx.rewrite_conjunct_ctxs_to_predicates(_param, _column_readers, &_obj_pool,
-                                                                         &_is_group_filtered));
-    _init_read_chunk();
+
     return Status::OK();
 }
 
