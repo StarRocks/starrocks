@@ -39,6 +39,15 @@ public class AutoType {
         return (Class) PRIMITIVE_TO_WRAPPER.get(primitiveType);
     }
 
+
+
+
+
+
+
+
+
+
     static {
         WRAPPER_TO_PRIMITIVE.put(Boolean.class, Boolean.TYPE);
         WRAPPER_TO_PRIMITIVE.put(Character.class, Character.TYPE);
