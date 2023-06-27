@@ -147,6 +147,8 @@ public:
 
     Status update_max_threads(int max_threads);
 
+    ThreadPool* get_thread_pool() { return _replicate_pool.get(); }
+
     // NOTE: we use SERIAL mode here to ensure all segment from one tablet are synced in order.
     std::unique_ptr<ReplicateToken> create_replicate_token(
             const DeltaWriterOptions* opt,
