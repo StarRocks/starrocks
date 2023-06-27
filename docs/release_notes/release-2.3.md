@@ -1,5 +1,29 @@
 # StarRocks version 2.3
 
+## 2.3.14
+
+Release date: June 27, 2023
+
+### Improvements
+
+- Optimized the I/O concurrency of Scan nodes used in external table queries, which reduces memory usage and improves the stability of data loading from external tables. [#23617](https://github.com/StarRocks/starrocks/pull/23617) [#23624](https://github.com/StarRocks/starrocks/pull/23624) [#23626](https://github.com/StarRocks/starrocks/pull/23626)
+- Optimized the error message for Broker Load jobs. The error message contains retry information and the name of erroneous files. [#18038](https://github.com/StarRocks/starrocks/pull/18038) [#21982](https://github.com/StarRocks/starrocks/pull/21982)
+- Optimized the error message returned when CREATE TABLE times out and added parameter tuning tips. [#24510](https://github.com/StarRocks/starrocks/pull/24510)
+- Optimized the error message returned when ALTER TABLE fails because the table status is not Normal. [#24381](https://github.com/StarRocks/starrocks/pull/24381)
+- Ignores full-width spaces in the CREATE TABLE statement. [#23885](https://github.com/StarRocks/starrocks/pull/23885)
+- Optimized the Broker access timeout to increase the success rate of Broker Load jobs. [#22699](https://github.com/StarRocks/starrocks/pull/22699)
+- For Primary Key tables, the `VersionCount` field returned by SHOW TABLET contains Rowsets that are in the Pending state. [#23847](https://github.com/StarRocks/starrocks/pull/23847)
+- Optimized the Persistent Index policy. [#22140](https://github.com/StarRocks/starrocks/pull/22140)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When users load Parquet data into StarRocks, DATETIME values overflow during type conversion, causing data errors. [#22356](https://github.com/StarRocks/starrocks/pull/22356)
+- Bucket information is lost after Dynamic Partitioning is disabled. [#22595](https://github.com/StarRocks/starrocks/pull/22595)
+- Using unsupported properties in the CREATE TABLE statement causes null pointer exceptions (NPEs). [#23859](https://github.com/StarRocks/starrocks/pull/23859)
+- Table permission filtering in `information_schema` becomes ineffective. As a result, users can view tables they do not have permission to. [#23804](https://github.com/StarRocks/starrocks/pull/23804)
+
 ## 2.3.13
 
 Release date: June 1, 2023
