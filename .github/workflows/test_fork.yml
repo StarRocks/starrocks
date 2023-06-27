@@ -419,16 +419,15 @@ jobs:
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
           ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/
           ossutil64 --config-file ~/.ossutilconfig cp fe/fe-core/target/result/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ --recursive --force
-          
 
       - name: Upload UT XML
         if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: FE UT XML
-          path: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
-          retention-days: 1
-          if-no-files-found: error
+        run: |
+          branch=${{ steps.branch.outputs.branch }}
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/
+          ossutil64 --config-file ~/.ossutilconfig cp ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ --recursive --force
 
       - name: Upload log
         if: always()

@@ -29,22 +29,16 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
-      - uses: xSAVIKx/artifact-exists-action@v0
-        name: CHECK FE UT FILES
-        id: check-exists
-        with:
-          name: 'FE UT XML'
-
       - name: Download FE UT XML
-        uses: actions/download-artifact@v3
-        id: download-fe-ut-xml
-        if: steps.check-exists.outputs.exists == 'true'
-        with:
-          name: 'FE UT XML'
-          path: ./fe-ut/
+        run: |
+          cd ${{ github.workspace }}
+          mkdir fe-ut && cd fe-ut
+          branch=${{ github.event.workflow_run.base_ref }}
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          ossutil64 --config-file ~/.ossutilconfig cp oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ . --recursive
 
       - name: UT Report
-        if: steps.download-fe-ut-xml.conclusion == 'success'
         uses: mikepenz/action-junit-report@v3
         env:
           github_token: ${{ secrets.PAT }}
@@ -56,11 +50,12 @@ jobs:
 
       # Increase
       - name: Incremental Coverage Report
-        if: steps.download-fe-ut-result.conclusion == 'success'
         run: |
           cd ${{ github.workspace }}
           mkdir fe-result && cd fe-result
           branch=${{ github.event.workflow_run.base_ref }}
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
           ossutil64 --config-file ~/.ossutilconfig cp oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ . --recursive
           
           cd ${{ github.workspace }}
