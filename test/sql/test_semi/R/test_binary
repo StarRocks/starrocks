@@ -39,21 +39,17 @@ insert into sc2 values (5, [15,25,35,45], [map{NULL: 550}, map{505: 501}], [row(
 insert into sc2 values (1, [11,3,31,41], [map{11: 110}, map{101: 101}], [row(11, 12), row(12, 13)], map{14: 41, 3: 11, 12: 31}, map{101: [1, 10, 11, 23]}, map{101: row(3, 12)}, row(1, [1, 10, 11], map{101: 111, 3: 3}, row(111, 110)));
 -- result:
 -- !result
-insert into sc2 values (2, [12,22,32,42], [map{22: 220}, map{3: 201}], [row(21, 22), 3], 3, map{202: [2, 20, 3, 23]}, map{202: row(21, 22)}, row(2, 3, map{202: 3}, row(222, 220)));
+insert into sc2 values (2, [12,22,32,42], [map{22: 220}, map{3: 201}], [row(21, 22), row(12, 13)], map{34: 43, 36: 13, 32: 3}, map{202: [2, 20, 3, 23]}, map{202: row(21, 22)}, row(2, [2, 3, 4], map{202: 3}, row(222, 220)));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: types struct<col1 tinyint(4), col2 tinyint(4)> and TINYINT cannot be matched.')
 -- !result
-insert into sc2 values (3, 3, [map{33: 3}, map{303: 301}], [row(31, 32), row(3, 33)], map{34: 43, 36: 13, 32: 3}, map{303: 3}, map{303: row(31, 32)}, 3);
+insert into sc2 values (3, [12,22,32,42], [map{33: 3}, map{303: 301}], [row(31, 32), row(3, 33)], map{34: 43, 36: 13, 32: 3}, map{303: [4, 3, 41, 23]}, map{303: row(31, 32)}, row(2, [2, 3, 4], map{201: 3}, row(222, 220)));
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Cannot cast '3' from TINYINT to ARRAY<INT>.")
 -- !result
-insert into sc2 values (4, [14,24,3,44], [map{44: 440}, map{404: 401}], [row(41, 42), row(42, 43)], map{44: 44, 46: 14, 42: 34}, map{3: [4, 3, 41, 23]}, map{404: row(41, 42)}, row(3, [4, 3, 41], map{3: 444}, 3));
+insert into sc2 values (4, [14,24,3,44], [map{44: 440}, map{404: 401}], [row(41, 42), row(42, 43)], map{44: 44, 46: 14, 42: 34}, map{3: [4, 3, 41, 23]}, map{404: row(41, 42)}, row(3, [4, 3, 41], map{3: 444}, row(110, 330)));
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Cannot cast 'row(3, [4,3,41], map{3:444}, 3)' from struct<col1 tinyint(4), col2 array<tinyint(4)>, col3 map<tinyint(4),smallint(6)>, col4 tinyint(4)> to struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>.")
 -- !result
-insert into sc2 values (5, [15,25,35,45], [map{3: 550}, map{505: 501}], [row(51, 52), row(3, 53)], map{54: 45, 56: 15, 3: 3}, map{3: 3}, map{505: row(3, 52)}, row(5, [5, 50, 51], 3, row(3, 550)));
+insert into sc2 values (5, [15,25,35,45], [map{3: 550}, map{505: 501}], [row(51, 52), row(3, 53)], map{54: 45, 56: 15, 3: 3}, map{3: [2, 20, 3, 23]}, map{505: row(3, 52)}, row(5, [5, 50, 51], map{4:555}, row(3, 550)));
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Cannot cast 'map{3:3}' from MAP<TINYINT,TINYINT> to MAP<INT,ARRAY<INT>>.")
 -- !result
 select * from sc2 where array1 is null;
 -- result:
@@ -65,6 +61,7 @@ select * from sc2 where array1 = [11,null,31,41];
 select * from sc2 where array1 = [15,25,35,45];
 -- result:
 5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
+5	[15,25,35,45]	[{3:550},{505:501}]	[{"a":51,"b":52},{"a":3,"b":53}]	{54:45,56:15,3:3}	{3:[2,20,3,23]}	{505:{"c":3,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":{4:555},"s4":{"e":3,"f":550}}
 -- !result
 select * from sc2 where array1 = [map{"a":21,"b":22},null];
 -- result:
@@ -86,6 +83,7 @@ select * from sc2 where array2 = [map{null:550},map{505:501}];
 select * from sc2 where array2 = [map{44:440},map{404:401}];
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
 select * from sc2 where map1 = null;
 -- result:
@@ -96,6 +94,7 @@ select * from sc2 where map1 = map{14:41,null:11,12:31};
 select * from sc2 where map1 = map{44:44,46:14,42:34};
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
 select * from sc2 where map1 = map{34:43,36:13,32:null};
 -- result:
@@ -129,6 +128,7 @@ select * from sc2 where map2 = map{101:[1,10,11,23]};
 select * from sc2 where map1 = map{46:14,42:34,44:44};
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
 select * from sc2 where map1 = map{54:45,56:15};
 -- result:
@@ -157,19 +157,27 @@ select * from sc2 where st1 = null;
 select array1 = [11,null,31,41] from sc2;
 -- result:
 0
+0
+None
+0
 None
 None
 0
 0
-None
+0
+0
 -- !result
 select array1 = [15,25,35,45] from sc2;
 -- result:
 0
+0
 None
 0
 0
 0
+0
+0
+1
 1
 -- !result
 select array1 = [map{"a":21,"b":22},null] from sc2;
@@ -183,6 +191,10 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 40. D
 select array3 = [named_struct("a",21,"b",22),null] from sc2;
 -- result:
 None
+None
+0
+0
+0
 0
 0
 0
@@ -192,6 +204,10 @@ None
 select array3 = [row(21,22),null] from sc2;
 -- result:
 None
+None
+0
+0
+0
 0
 0
 0
@@ -200,20 +216,28 @@ None
 -- !result
 select array2 = [map{null:550},map{505:501}] from sc2;
 -- result:
-None
-None
-None
-None
-None
-None
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
 select array2 = [map{44:440},map{404:401}] from sc2;
 -- result:
 0
 0
 0
-None
+0
+0
+0
 1
+1
+0
 0
 -- !result
 select map1 = null from sc2;
@@ -224,21 +248,33 @@ None
 None
 None
 None
+None
+None
+None
+None
 -- !result
 select map1 = map{14:41,null:11,12:31} from sc2;
 -- result:
 None
-None
-None
-None
-None
-None
+0
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
 select map1 = map{44:44,46:14,42:34} from sc2;
 -- result:
 None
 0
 0
+0
+0
+0
+1
 1
 0
 0
@@ -247,6 +283,10 @@ select map1 = map{34:43,36:13,32:null} from sc2;
 -- result:
 None
 None
+None
+None
+0
+0
 0
 0
 0
@@ -257,42 +297,62 @@ select map2 = map{505:[5,50,51,23]} from sc2;
 0
 0
 0
-None
-None
+0
+0
+0
+0
+0
+0
 0
 -- !result
 select map2 = map{null:null} from sc2;
 -- result:
-None
-None
-None
-None
-None
-None
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
 select map2 = map{null:[4,null,41,23]} from sc2;
 -- result:
-None
-None
-None
-None
-None
-None
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
 select map2 = map{101:[1,10,11,23]} from sc2;
 -- result:
 0
 0
+0
+0
 1
-None
-None
 1
+0
+0
+0
+0
 -- !result
 select map1 = map{46:14,42:34,44:44} from sc2;
 -- result:
 None
 0
 0
+0
+0
+0
+1
 1
 0
 0
@@ -305,15 +365,23 @@ None
 0
 0
 0
+0
+0
+0
+0
 -- !result
 select map1 = map{null:null, 54:45,56:15} from sc2;
 -- result:
 None
-None
-None
-None
-None
-None
+0
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
 select map3 = map{505:row(null, 52)} from sc2;
 -- result:
@@ -322,30 +390,46 @@ select map3 = map{505:row(null, 52)} from sc2;
 0
 0
 0
+0
+0
+0
+None
 None
 -- !result
 select map2 = map{null:[4,null,41,23]} from sc2;
 -- result:
-None
-None
-None
-None
-None
-None
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
 select st1 = row(2,null, map{202:null}, row(222,220)) from sc2;
 -- result:
 None
 None
-0
-0
 None
+0
+0
+0
+0
+0
+0
 0
 -- !result
 select st1 = named_struct("s1", 5,"s2",[5,50,51],"s3",null,"s4", row(null,550)) from sc2;
 -- result:
 0
+0
 None
+0
+0
+0
 0
 0
 None
@@ -353,6 +437,10 @@ None
 -- !result
 select array1 = null from sc2;
 -- result:
+None
+None
+None
+None
 None
 None
 None
@@ -368,6 +456,10 @@ None
 None
 None
 None
+None
+None
+None
+None
 -- !result
 select * from sc2 where array1 = [11,3,31,41];
 -- result:
@@ -376,6 +468,7 @@ select * from sc2 where array1 = [11,3,31,41];
 select * from sc2 where array1 = [15,25,35,45];
 -- result:
 5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
+5	[15,25,35,45]	[{3:550},{505:501}]	[{"a":51,"b":52},{"a":3,"b":53}]	{54:45,56:15,3:3}	{3:[2,20,3,23]}	{505:{"c":3,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":{4:555},"s4":{"e":3,"f":550}}
 -- !result
 select * from sc2 where array1 = [map{"a":21,"b":22},3];
 -- result:
@@ -385,20 +478,21 @@ select * from sc2 where array3 = [map{"a":21,"b":22},3];
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: types MAP<VARCHAR,TINYINT> and TINYINT cannot be matched.')
 -- !result
-select * from sc2 where array3 = [named_struct("a",21,"b",22),3];
+select * from sc2 where array3 = [named_struct("a",21,"b",22), row(12, 13)];
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: types struct<a tinyint(4), b tinyint(4)> and TINYINT cannot be matched.')
+2	[12,22,32,42]	[{22:220},{3:201}]	[{"a":21,"b":22},{"a":12,"b":13}]	{34:43,36:13,32:3}	{202:[2,20,3,23]}	{202:{"c":21,"b":22}}	{"s1":2,"s2":[2,3,4],"s3":{202:3},"s4":{"e":222,"f":220}}
 -- !result
-select * from sc2 where array3 = [row(21,22),3];
+select * from sc2 where array3 = [row(21,22)];
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: types struct<col1 tinyint(4), col2 tinyint(4)> and TINYINT cannot be matched.')
 -- !result
 select * from sc2 where array2 = [map{3:550},map{505:501}];
 -- result:
+5	[15,25,35,45]	[{3:550},{505:501}]	[{"a":51,"b":52},{"a":3,"b":53}]	{54:45,56:15,3:3}	{3:[2,20,3,23]}	{505:{"c":3,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":{4:555},"s4":{"e":3,"f":550}}
 -- !result
 select * from sc2 where array2 = [map{44:440},map{404:401}];
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
 select * from sc2 where map1 = map{14:41,3:11,12:31};
 -- result:
@@ -407,56 +501,35 @@ select * from sc2 where map1 = map{14:41,3:11,12:31};
 select * from sc2 where map1 = map{44:44,46:14,42:34};
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
 select * from sc2 where map1 = map{34:43,36:13,32:3};
 -- result:
+2	[12,22,32,42]	[{22:220},{3:201}]	[{"a":21,"b":22},{"a":12,"b":13}]	{34:43,36:13,32:3}	{202:[2,20,3,23]}	{202:{"c":21,"b":22}}	{"s1":2,"s2":[2,3,4],"s3":{202:3},"s4":{"e":222,"f":220}}
+3	[12,22,32,42]	[{33:3},{303:301}]	[{"a":31,"b":32},{"a":3,"b":33}]	{34:43,36:13,32:3}	{303:[4,3,41,23]}	{303:{"c":31,"b":32}}	{"s1":2,"s2":[2,3,4],"s3":{201:3},"s4":{"e":222,"f":220}}
 -- !result
 select * from sc2 where map2 = map{505:[5,50,51,23]};
 -- result:
 -- !result
-select cast(row(1, 3) as struct<a int, b array<int>>);
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 52. Detail message: Invalid type cast from struct<col1 tinyint(4), col2 tinyint(4)> to struct<a int(11), b array<int(11)>> in sql `row(1, 3)`.')
--- !result
-select cast(map{1: 3} as map<int, array<int>>);
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 45. Detail message: Invalid type cast from map<tinyint(4),tinyint(4)> to map<int(11),array<int(11)>> in sql `map{1:3}`.')
--- !result
-select cast(row(1, TRUE) as struct<a int, b map<int, int>>);
--- result:
-{"a":1,"b":null}
--- !result
-select * from sc2 where map2 = map{3:3};
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 38. Detail message: Column type map<int(11),array<int(11)>> does not support binary predicate operation with type map<tinyint(4),tinyint(4)>.')
--- !result
 select * from sc2 where map2 = map{3:[4,3,41,23]};
 -- result:
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
-select * from sc2 where map2 = map{101:[1,10,11,23]};
+select * from sc2 where map2 = map{101:[1,10,11,44]};
 -- result:
-1	[11,null,31,41]	[{11:110},{101:101}]	[{"a":11,"b":12},{"a":12,"b":13}]	{14:41,null:11,12:31}	{101:[1,10,11,23]}	{101:{"c":null,"b":12}}	{"s1":1,"s2":[1,10,11],"s3":{101:111,null:null},"s4":{"e":111,"f":110}}
-1	[11,3,31,41]	[{11:110},{101:101}]	[{"a":11,"b":12},{"a":12,"b":13}]	{14:41,3:11,12:31}	{101:[1,10,11,23]}	{101:{"c":3,"b":12}}	{"s1":1,"s2":[1,10,11],"s3":{101:111,3:3},"s4":{"e":111,"f":110}}
 -- !result
 select * from sc2 where map1 = map{46:14,42:34,44:44};
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
--- !result
-select * from sc2 where map1 = map{54:45,56:15};
--- result:
--- !result
-select * from sc2 where map1 = map{3:3, 54:45,56:15};
--- result:
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
 select * from sc2 where map3 = map{505:row(3, 52)};
 -- result:
+5	[15,25,35,45]	[{3:550},{505:501}]	[{"a":51,"b":52},{"a":3,"b":53}]	{54:45,56:15,3:3}	{3:[2,20,3,23]}	{505:{"c":3,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":{4:555},"s4":{"e":3,"f":550}}
 -- !result
-select * from sc2 where map2 = map{3:[4,3,41,23]};
+select * from sc2 where st1 = row(2,[2,3,4], map{202:3}, row(222,220));
 -- result:
--- !result
-select * from sc2 where st1 = row(2,3, map{202:3}, row(222,220));
--- result:
-E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 63. Detail message: Column type struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>> does not support binary predicate operation with type struct<col1 tinyint(4), col2 tinyint(4), col3 map<smallint(6),tinyint(4)>, col4 struct<col1 smallint(6), col2 smallint(6)>>.')
+2	[12,22,32,42]	[{22:220},{3:201}]	[{"a":21,"b":22},{"a":12,"b":13}]	{34:43,36:13,32:3}	{202:[2,20,3,23]}	{202:{"c":21,"b":22}}	{"s1":2,"s2":[2,3,4],"s3":{202:3},"s4":{"e":222,"f":220}}
 -- !result
 select * from sc2 where st1 = named_struct("s1", 5,"s2",[5,50,51],"s3",3,"s4", row(3,550));
 -- result:
@@ -469,6 +542,7 @@ select * from sc2 where array1 <=> [11,null,31,41];
 select * from sc2 where array1 <=> [15,25,35,45];
 -- result:
 5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
+5	[15,25,35,45]	[{3:550},{505:501}]	[{"a":51,"b":52},{"a":3,"b":53}]	{54:45,56:15,3:3}	{3:[2,20,3,23]}	{505:{"c":3,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":{4:555},"s4":{"e":3,"f":550}}
 -- !result
 select * from sc2 where array1 <=> [map{"a":21,"b":22},null];
 -- result:
@@ -493,6 +567,7 @@ select * from sc2 where array2 <=> [map{null:550},map{505:501}];
 select * from sc2 where array2 <=> [map{44:440},map{404:401}];
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
 select * from sc2 where map1 <=> null;
 -- result:
@@ -505,6 +580,7 @@ select * from sc2 where map1 <=> map{14:41,null:11,12:31};
 select * from sc2 where map1 <=> map{44:44,46:14,42:34};
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
 select * from sc2 where map1 <=> map{34:43,36:13,32:null};
 -- result:
@@ -529,6 +605,7 @@ select * from sc2 where map2 <=> map{101:[1,10,11,23]};
 select * from sc2 where map1 <=> map{46:14,42:34,44:44};
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
 select * from sc2 where map1 <=> map{54:45,56:15};
 -- result:
