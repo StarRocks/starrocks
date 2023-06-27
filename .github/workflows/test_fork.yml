@@ -413,7 +413,6 @@ jobs:
 
       - name: Upload Result
         if: always()
-        uses: actions/upload-artifact@v3
         run: |
           branch=${{ steps.branch.outputs.branch }}
           repo="${{ github.repository }}"

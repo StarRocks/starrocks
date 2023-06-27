@@ -55,20 +55,6 @@ jobs:
           report_paths: ./fe-ut/*.xml
 
       # Increase
-      - uses: xSAVIKx/artifact-exists-action@v0
-        name: CHECK FE RESULT FILES
-        id: check-result-exists
-        with:
-          name: 'FE RESULT'
-
-      - name: Download FE UT XML
-        uses: actions/download-artifact@v3
-        id: download-fe-ut-result
-        if: steps.check-result-exists.outputs.exists == 'true'
-        with:
-          name: 'FE RESULT'
-          path: ./fe-result/
-
       - name: Incremental Coverage Report
         if: steps.download-fe-ut-result.conclusion == 'success'
         run: |
