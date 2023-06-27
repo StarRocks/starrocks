@@ -29,6 +29,7 @@ static const std::string AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.s3.use_aws_s
 static const std::string AWS_S3_USE_INSTANCE_PROFILE = "aws.s3.use_instance_profile";
 static const std::string AWS_S3_ACCESS_KEY = "aws.s3.access_key";
 static const std::string AWS_S3_SECRET_KEY = "aws.s3.secret_key";
+static const std::string AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
 static const std::string AWS_S3_IAM_ROLE_ARN = "aws.s3.iam_role_arn";
 static const std::string AWS_S3_EXTERNAL_ID = "aws.s3.external_id";
 static const std::string AWS_S3_REGION = "aws.s3.region";
@@ -75,6 +76,7 @@ public:
         aws_cloud_credential.use_instance_profile = get_or_default(properties, AWS_S3_USE_INSTANCE_PROFILE, false);
         aws_cloud_credential.access_key = get_or_default(properties, AWS_S3_ACCESS_KEY, std::string());
         aws_cloud_credential.secret_key = get_or_default(properties, AWS_S3_SECRET_KEY, std::string());
+        aws_cloud_credential.session_token = get_or_default(properties, AWS_S3_SESSION_TOKEN, std::string());
         aws_cloud_credential.iam_role_arn = get_or_default(properties, AWS_S3_IAM_ROLE_ARN, std::string());
         aws_cloud_credential.external_id = get_or_default(properties, AWS_S3_EXTERNAL_ID, std::string());
         aws_cloud_credential.region = get_or_default(properties, AWS_S3_REGION, std::string());

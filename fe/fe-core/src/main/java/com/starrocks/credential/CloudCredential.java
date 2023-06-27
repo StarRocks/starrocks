@@ -39,7 +39,7 @@ public interface CloudCredential {
      */
     void toThrift(List<TCloudProperty> properties);
 
-    // Generate unique credential string, used in FileSystem cache
+    // Generate unique credential string, used as cache key in FileSystem cache
     String getCredentialString();
 
     // Convert to the protobuf used by staros.
