@@ -680,7 +680,6 @@ public:
 
     static long compute_daynr(uint year, uint month, uint day);
     static int compute_weekday(long daynr, bool sunday_first_day_of_week);
-    static int compute_weekday_iso(long daynr);
     static uint32_t compute_days_in_year(uint year);
     static uint week_mode(uint mode);
     static int32_t compute_week(uint year, uint month, uint day, uint week_behaviour);
