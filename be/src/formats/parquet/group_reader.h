@@ -82,7 +82,10 @@ public:
                 int64_t row_group_first_row);
     ~GroupReader() = default;
 
+    // init used to init column reader, init dict_filter_ctx and devide active/lazy
     Status init();
+    // we need load dict for dict_filter, so prepare should be after collec_io_range
+    Status prepare();
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);

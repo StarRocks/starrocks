@@ -48,6 +48,13 @@ Status GroupReader::init() {
     return Status::OK();
 }
 
+Status GroupReader::prepare() {
+    RETURN_IF_ERROR(_dict_filter_ctx.rewrite_conjunct_ctxs_to_predicates(_param, _column_readers, &_obj_pool,
+                                                                         &_is_group_filtered));
+    _init_read_chunk();
+    return Status::OK();
+}
+
 Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     if (_is_group_filtered) {
         *row_count = 0;

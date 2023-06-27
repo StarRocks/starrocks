@@ -484,14 +484,15 @@ Status FileReader::_init_group_readers() {
     }
 
     if (!_row_group_readers.empty()) {
-        // collect io range of the first rowgroup
-        _collect_io_range_of_cur_group();
+        // prepare first row group
+        RETURN_IF_ERROR(_prepare_cur_row_group());
     }
 
     return Status::OK();
 }
 
-void FileReader::_collect_io_range_of_cur_group() {
+Status FileReader::_prepare_cur_row_group() {
+    auto& r = _row_group_readers[_cur_row_group_idx];
     // if coalesce read enabled, we have to
     // 0. clear last group memory
     // 1. allocate shared buffered input stream and
@@ -501,7 +502,6 @@ void FileReader::_collect_io_range_of_cur_group() {
         // clear last group memory;
         _sb_stream->release();
         std::vector<io::SharedBufferedInputStream::IORange> ranges;
-        auto& r = _row_group_readers[_cur_row_group_idx];
         int64_t end_offset = 0;
         r->collect_io_ranges(&ranges, &end_offset);
         int32_t counter = _scanner_ctx->lazy_column_coalesce_counter->load(std::memory_order_relaxed);
@@ -514,6 +514,9 @@ void FileReader::_collect_io_range_of_cur_group() {
         _sb_stream->set_io_ranges(ranges, counter >= 0);
         _group_reader_param.sb_stream = _sb_stream;
     }
+
+    // prepare row group
+    return r->prepare();
 }
 
 Status FileReader::get_next(ChunkPtr* chunk) {
@@ -538,8 +541,8 @@ Status FileReader::get_next(ChunkPtr* chunk) {
                 _row_group_readers[_cur_row_group_idx]->close();
                 _cur_row_group_idx++;
                 if (_cur_row_group_idx < _row_group_size) {
-                    // collect io of new group
-                    _collect_io_range_of_cur_group();
+                    // prepare new group
+                    RETURN_IF_ERROR(_prepare_cur_row_group());
                 }
                 return Status::OK();
             }

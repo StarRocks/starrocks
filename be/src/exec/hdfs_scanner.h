@@ -171,7 +171,7 @@ struct HdfsScannerParams {
     bool use_block_cache = false;
     bool enable_populate_block_cache = false;
 
-    std::atomic<int32_t>* lazy_column_colease_counter;
+    std::atomic<int32_t>* lazy_column_coalesce_counter;
 };
 
 struct HdfsScannerContext {

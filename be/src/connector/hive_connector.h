@@ -56,8 +56,8 @@ public:
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
     const std::string get_custom_coredump_msg() const override;
-    std::atomic<int32_t>* get_lazy_column_colease_counter() {
-        return _provider->_scan_node->get_lazy_column_colease_counter();
+    std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
+        return _provider->_scan_node->get_lazy_column_coalesce_counter();
     }
 
     int64_t raw_rows_read() const override;
