@@ -101,6 +101,11 @@ class WorkGroupDriverQueue : public FactoryMethod<DriverQueue, WorkGroupDriverQu
     friend class FactoryMethod<DriverQueue, WorkGroupDriverQueue>;
 
 public:
+    static constexpr size_t QUEUE_SIZE = 8;
+    const double RATIO_OF_ADJACENT_QUEUE = ratio_of_adjacent_queue();
+
+    static double ratio_of_adjacent_queue() { return config::pipeline_driver_queue_ratio_of_adjacent_queue; }
+
     ~WorkGroupDriverQueue() override = default;
     void close() override;
 

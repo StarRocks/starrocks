@@ -46,123 +46,7 @@ Operators _gen_operators() {
 }
 
 void _set_driver_level(DriverRawPtr driver, int level) {
-    driver->set_driver_queue_level(level % QuerySharedDriverQueue::QUEUE_SIZE);
-}
-
-PARALLEL_TEST(QuerySharedDriverQueueTest, test_basic) {
-    QuerySharedDriverQueue queue;
-
-    // Prepare drivers.
-    QueryContext query_context;
-    auto driver71 = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
-    _set_driver_level(driver71.get(), 7);
-    driver71->driver_acct().update_last_time_spent(5'000'000L * 1);
-
-    auto driver72 = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
-    _set_driver_level(driver72.get(), 7 + QuerySharedDriverQueue::QUEUE_SIZE);
-    driver72->driver_acct().update_last_time_spent(5'000'000L * 1);
-
-    auto driver61 = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
-    _set_driver_level(driver61.get(), 6);
-    driver61->driver_acct().update_last_time_spent(30'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue());
-
-    auto driver51 = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
-    _set_driver_level(driver51.get(), 5);
-    driver51->driver_acct().update_last_time_spent(20'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue() *
-                                                   QuerySharedDriverQueue::ratio_of_adjacent_queue());
-
-    std::vector<DriverRawPtr> in_drivers = {driver71.get(), driver72.get(), driver61.get(), driver51.get()};
-    std::vector<DriverRawPtr> out_drivers = {driver71.get(), driver72.get(), driver51.get(), driver61.get()};
-
-    // Put back drivers to queue.
-    for (auto* in_driver : in_drivers) {
-        queue.update_statistics(in_driver);
-        queue.put_back(in_driver);
-    }
-
-    // Take drivers from queue.
-    for (auto* out_driver : out_drivers) {
-        auto maybe_driver = queue.take(true);
-        ASSERT_TRUE(maybe_driver.ok());
-        ASSERT_EQ(out_driver, maybe_driver.value());
-    }
-}
-
-PARALLEL_TEST(QuerySharedDriverQueueTest, test_cancel) {
-    QuerySharedDriverQueue queue;
-
-    // prepare drivers
-    auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, -1);
-    _set_driver_level(driver1.get(), 1);
-    auto driver2 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, -1);
-    _set_driver_level(driver2.get(), 1);
-    auto driver3 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, -1);
-    _set_driver_level(driver3.get(), 1);
-    auto driver4 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, -1);
-    _set_driver_level(driver4.get(), 1);
-
-    auto cancel_operation = [&queue](DriverRawPtr driver) {
-        if (driver == nullptr) {
-            return;
-        }
-        queue.cancel(driver);
-    };
-
-    std::vector<DriverRawPtr> in_drivers = {driver1.get(), driver2.get(), driver3.get(), driver4.get()};
-
-    std::vector<std::function<void()>> ops_before_get = {
-            [cancel_operation] { return cancel_operation(nullptr); },
-            [cancel_operation, capture0 = driver4.get()] { return cancel_operation(capture0); },
-            [cancel_operation, capture0 = driver3.get()] { return cancel_operation(capture0); },
-            [cancel_operation] { return cancel_operation(nullptr); }};
-
-    std::vector<DriverRawPtr> out_drivers = {driver1.get(), driver4.get(), driver3.get(), driver2.get()};
-
-    for (auto* in_driver : in_drivers) {
-        queue.put_back(in_driver);
-    }
-
-    for (size_t i = 0; i < out_drivers.size(); i++) {
-        ops_before_get[i]();
-        auto maybe_driver = queue.take(true);
-        ASSERT_TRUE(maybe_driver.ok());
-        ASSERT_EQ(out_drivers[i], maybe_driver.value());
-    }
-}
-
-PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_block) {
-    QuerySharedDriverQueue queue;
-
-    // Prepare drivers.
-    QueryContext query_context;
-    auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
-    _set_driver_level(driver1.get(), 1);
-
-    auto consumer_thread = std::make_shared<std::thread>([&queue, &driver1] {
-        auto maybe_driver = queue.take(true);
-        ASSERT_TRUE(maybe_driver.ok());
-        ASSERT_EQ(driver1.get(), maybe_driver.value());
-    });
-
-    sleep(1);
-    queue.update_statistics(driver1.get());
-    queue.put_back(driver1.get());
-
-    consumer_thread->join();
-}
-
-PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_close) {
-    QuerySharedDriverQueue queue;
-
-    auto consumer_thread = std::make_shared<std::thread>([&queue] {
-        auto maybe_driver = queue.take(true);
-        ASSERT_TRUE(maybe_driver.status().is_cancelled());
-    });
-
-    sleep(1);
-    queue.close();
-
-    consumer_thread->join();
+    driver->set_driver_queue_level(level % WorkGroupDriverQueue::QUEUE_SIZE);
 }
 
 class WorkGroupDriverQueueTest : public ::testing::Test {
@@ -202,24 +86,24 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
     sum_wg2_time_spent += 5'000'000L * 1;
 
     auto driver272 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
-    _set_driver_level(driver272.get(), 7 + QuerySharedDriverQueue::QUEUE_SIZE);
+    _set_driver_level(driver272.get(), 7 + WorkGroupDriverQueue::QUEUE_SIZE);
     driver272->driver_acct().update_last_time_spent(5'000'000L * 1);
     driver272->set_workgroup(_wg2);
     sum_wg2_time_spent += 5'000'000L * 1;
 
     auto driver261 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
     _set_driver_level(driver261.get(), 6);
-    driver261->driver_acct().update_last_time_spent(30'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue());
+    driver261->driver_acct().update_last_time_spent(30'000'000L * WorkGroupDriverQueue::ratio_of_adjacent_queue());
     driver261->set_workgroup(_wg2);
-    sum_wg2_time_spent += 30'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue();
+    sum_wg2_time_spent += 30'000'000L * WorkGroupDriverQueue::ratio_of_adjacent_queue();
 
     auto driver251 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
     _set_driver_level(driver251.get(), 5);
-    driver251->driver_acct().update_last_time_spent(20'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue() *
-                                                    QuerySharedDriverQueue::ratio_of_adjacent_queue());
+    driver251->driver_acct().update_last_time_spent(20'000'000L * WorkGroupDriverQueue::ratio_of_adjacent_queue() *
+                                                    WorkGroupDriverQueue::ratio_of_adjacent_queue());
     driver251->set_workgroup(_wg2);
-    sum_wg2_time_spent += 20'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue() *
-                          QuerySharedDriverQueue::ratio_of_adjacent_queue();
+    sum_wg2_time_spent += 20'000'000L * WorkGroupDriverQueue::ratio_of_adjacent_queue() *
+                          WorkGroupDriverQueue::ratio_of_adjacent_queue();
 
     // Prepare drivers for _wg1.
     auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
