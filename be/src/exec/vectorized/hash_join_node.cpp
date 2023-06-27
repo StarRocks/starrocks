@@ -490,6 +490,10 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     lhs_operators.emplace_back(std::move(probe_op));
 
+    if (limit() != -1) {
+        lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
     // Use ChunkAccumulateOperator, when any following condition occurs:
     // - not left outer join,
     // - left outer join, with conjuncts or runtime filters.
@@ -497,10 +501,6 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                                  !_other_join_conjunct_ctxs.empty() || lhs_operators.back()->has_runtime_filters();
     if (need_accumulate_chunk) {
         lhs_operators.emplace_back(std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
-    }
-
-    if (limit() != -1) {
-        lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
     return lhs_operators;
