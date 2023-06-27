@@ -20,6 +20,10 @@
 - LDAP 账号没有密码也能登录。 [#24862](https://github.com/StarRocks/starrocks/pull/24862)
 - CANCEL LOAD 在表不存在时会失败。 [#24922](https://github.com/StarRocks/starrocks/pull/24922)
 
+### 升级注意事项
+
+- 如果您系统中有名为 `starrocks` 的数据库，请先通过 ALTER DATABASE RENAME 改名后再进行升级。
+
 ## 3.0.1
 
 发布日期： 2023 年 6 月 1 日
@@ -44,6 +48,10 @@
 - Routine Load 过程中 BE crash。[#20677](https://github.com/StarRocks/starrocks/issues/20677)
 - 创建分区表时指定不支持的 Properties 导致 NPE。[#21374](https://github.com/StarRocks/starrocks/issues/21374)
 - SHOW TABLE STATUS 结果展示不全。[#24279](https://github.com/StarRocks/starrocks/issues/24279)
+
+### 升级注意事项
+
+- 如果您系统中有名为 `starrocks` 的数据库，请先通过 ALTER DATABASE RENAME 改名后再进行升级。
 
 ## 3.0.0
 
