@@ -183,6 +183,7 @@ public class StmtExecutor {
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
+    private List<StmtExecutor> subStmtExecutors;
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -660,6 +661,13 @@ public class StmtExecutor {
 
     }
 
+    public void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
+        if (subStmtExecutors == null) {
+            subStmtExecutors = Lists.newArrayList();
+        }
+        subStmtExecutors.add(subStmtExecutor);
+    }
+
     // Because this is called by other thread
     public void cancel() {
         if (parsedStmt instanceof DeleteStmt && ((DeleteStmt) parsedStmt).shouldHandledByDeleteHandler()) {
@@ -669,6 +677,11 @@ public class StmtExecutor {
                 GlobalStateMgr.getCurrentState().getDeleteHandler().killJob(jobId);
             }
         } else {
+            if (subStmtExecutors != null && !subStmtExecutors.isEmpty()) {
+                for (StmtExecutor sub : subStmtExecutors) {
+                    sub.cancel();
+                }
+            }
             Coordinator coordRef = coord;
             if (coordRef != null) {
                 coordRef.cancel();

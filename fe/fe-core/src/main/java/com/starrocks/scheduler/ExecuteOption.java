@@ -11,6 +11,7 @@ public class ExecuteOption {
     private Map<String, String> taskRunProperties;
     // indicates whether the current execution is manual
     private boolean isManual = false;
+    private boolean isSync = false;
 
     public ExecuteOption() {
     }
@@ -51,5 +52,13 @@ public class ExecuteOption {
 
     public void setManual() {
         this.isManual = true;
+    }
+
+    public boolean getIsSync() {
+        return isSync;
+    }
+
+    public void setSync(boolean isSync) {
+        this.isSync = isSync;
     }
 }
