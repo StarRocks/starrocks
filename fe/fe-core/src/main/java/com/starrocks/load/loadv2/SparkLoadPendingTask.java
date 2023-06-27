@@ -531,6 +531,11 @@ public class SparkLoadPendingTask extends LoadTask {
         } catch (UserException e) {
             throw new LoadException(e.getMessage());
         }
+        // add generated column mapping
+        for (ImportColumnDesc columnDesc : Load.getMaterializedShadowColumnDesc(table, db.getFullName(), false)) {
+            copiedColumnExprList.add(columnDesc);
+            exprByName.put(columnDesc.getColumnName(), columnDesc.getExpr());
+        }
         // add shadow column mapping when schema change
         for (ImportColumnDesc columnDesc : Load.getSchemaChangeShadowColumnDesc(table, exprByName)) {
             copiedColumnExprList.add(columnDesc);

@@ -224,7 +224,7 @@ public class Load {
         return shadowColumnDescs;
     }
 
-    public static List<ImportColumnDesc> getMaterializedShadowColumnDesc(Table tbl, String dbName) {
+    public static List<ImportColumnDesc> getMaterializedShadowColumnDesc(Table tbl, String dbName, boolean analyze) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
             if (!column.isMaterializedColumn()) {
@@ -240,12 +240,15 @@ public class Load {
 
             // If fe restart and execute the streamload, this re-analyze is needed.
             Expr expr = column.materializedColumnExpr();
-            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
-                new Scope(RelationId.anonymous(), new RelationFields(
-                        tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                col.getType(), tableName, null))
-                            .collect(Collectors.toList()))), connectContext);
-    
+            // In case of spark load, we should get the unanalyzed expression
+            if (analyze) {
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
+                    new Scope(RelationId.anonymous(), new RelationFields(
+                            tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                    col.getType(), tableName, null))
+                                .collect(Collectors.toList()))), connectContext);
+            }
+
             ImportColumnDesc importColumnDesc = new ImportColumnDesc(column.getName(), expr);
             shadowColumnDescs.add(importColumnDesc);
         }
@@ -312,6 +315,7 @@ public class Load {
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         Set<String> mappingColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        Set<String> mappingColumnRef = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ImportColumnDesc importColumnDesc : columnExprs) {
             String columnName = importColumnDesc.getColumnName();
 
@@ -326,6 +330,13 @@ public class Load {
                 }
                 importColumnNames.add(columnName);
                 continue;
+            } else {
+                Expr expr = importColumnDesc.getExpr();
+                List<SlotRef> slots = Lists.newArrayList();
+                expr.collect(SlotRef.class, slots);
+                for (SlotRef slot : slots) {
+                    mappingColumnRef.add(slot.getColumnName());
+                }
             }
 
             if (mappingColumnNames.contains(columnName)) {
@@ -336,6 +347,17 @@ public class Load {
                 throw new DdlException("Mapping column is not in table. column: " + columnName);
             }
             mappingColumnNames.add(columnName);
+        }
+
+        for (String refName : mappingColumnRef) {
+            Column refColumn = tbl.getColumn(refName);
+            if (refColumn == null) {
+                continue;
+            }
+
+            if (refColumn.isMaterializedColumn()) {
+                throw new DdlException("Mapping column can not ref generated column: " + refName);
+            }
         }
 
         // We make a copy of the columnExprs so that our subsequent changes
@@ -440,7 +462,7 @@ public class Load {
             }
         }
     
-        copiedColumnExprs.addAll(getMaterializedShadowColumnDesc(tbl, dbName));
+        copiedColumnExprs.addAll(getMaterializedShadowColumnDesc(tbl, dbName, true));
         // get shadow column desc when table schema change
         copiedColumnExprs.addAll(getSchemaChangeShadowColumnDesc(tbl, columnExprMap));
 
@@ -484,29 +506,22 @@ public class Load {
             varcharColumns.addAll(columnsFromPath);
         }
         Set<String> exprArgsColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        Set<String> exprMaterializedColumnArgsColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ImportColumnDesc importColumnDesc : copiedColumnExprs) {
             if (importColumnDesc.isColumn()) {
                 continue;
             }
+            // if the colunm is ref by generated column, it should not be treated as VARCHAR
+            if (tbl.getColumn(importColumnDesc.getColumnName()) != null &&
+                    tbl.getColumn(importColumnDesc.getColumnName()).isMaterializedColumn()) {
+                continue;
+            }
+
             List<SlotRef> slots = Lists.newArrayList();
             importColumnDesc.getExpr().collect(SlotRef.class, slots);
             for (SlotRef slot : slots) {
                 String slotColumnName = slot.getColumnName();
                 exprArgsColumns.add(slotColumnName);
             }
-
-            if (tbl.getColumn(importColumnDesc.getColumnName()) != null &&
-                    tbl.getColumn(importColumnDesc.getColumnName()).isMaterializedColumn()) {
-                for (SlotRef slot : slots) {
-                    String slotColumnName = slot.getColumnName();
-                    exprMaterializedColumnArgsColumns.add(slotColumnName);
-                }
-            }
-        }
-
-        for (String colName : exprMaterializedColumnArgsColumns) {
-            exprArgsColumns.remove(colName);
         }
 
         // init slot desc add expr map, also transform hadoop functions
@@ -743,6 +758,11 @@ public class Load {
                                             Map<String, Expr> mvDefineExpr, Map<String, SlotDescriptor> slotDescByName,
                                             boolean useVectorizedLoad) throws UserException {
         for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
+            // only for normal column here
+            if (tbl.getColumn(entry.getKey()) != null && tbl.getColumn(entry.getKey()).isMaterializedColumn()) {
+                continue;
+            }
+
             ExprSubstitutionMap smap = new ExprSubstitutionMap();
             List<SlotRef> slots = Lists.newArrayList();
             entry.getValue().collect(SlotRef.class, slots);
@@ -759,6 +779,44 @@ public class Load {
                 SlotRef slotRef = new SlotRef(slotDesc);
                 slotRef.setColumnName(slot.getColumnName());
                 smap.getRhs().add(slotRef);
+            }
+            Expr expr = entry.getValue().clone(smap);
+
+            expr = Expr.analyzeAndCastFold(expr);
+
+            // check if contain aggregation
+            List<FunctionCallExpr> funcs = Lists.newArrayList();
+            expr.collect(FunctionCallExpr.class, funcs);
+            for (FunctionCallExpr fn : funcs) {
+                if (fn.isAggregateFunction()) {
+                    throw new UserException("Don't support aggregation function in load expression");
+                }
+            }
+            exprsByName.put(entry.getKey(), expr);
+        }
+
+        for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
+            // only for generated column here
+            if (tbl.getColumn(entry.getKey()) == null || !tbl.getColumn(entry.getKey()).isMaterializedColumn()) {
+                continue;
+            }
+
+            ExprSubstitutionMap smap = new ExprSubstitutionMap();
+            List<SlotRef> slots = Lists.newArrayList();
+            entry.getValue().collect(SlotRef.class, slots);
+            for (SlotRef slot : slots) {
+                SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
+                // In this case, generated column ref some mapping column
+                // and the expression should be replace by mapping column expression.
+                if (slotDesc == null) {
+                    smap.getLhs().add(slot);
+                    smap.getRhs().add(exprsByName.get(slot.getColumnName()));
+                } else {
+                    smap.getLhs().add(slot);
+                    SlotRef slotRef = new SlotRef(slotDesc);
+                    slotRef.setColumnName(slot.getColumnName());
+                    smap.getRhs().add(slotRef);
+                }
             }
             Expr expr = entry.getValue().clone(smap);
 
