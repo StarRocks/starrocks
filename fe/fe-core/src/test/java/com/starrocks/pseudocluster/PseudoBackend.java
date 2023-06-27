@@ -76,6 +76,8 @@ import com.starrocks.proto.UnlockTabletMetadataRequest;
 import com.starrocks.proto.UnlockTabletMetadataResponse;
 import com.starrocks.proto.UploadSnapshotsRequest;
 import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.VacuumRequest;
+import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
@@ -1086,6 +1088,11 @@ public class PseudoBackend {
 
         @Override
         public Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<VacuumResponse> vacuum(VacuumRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }
