@@ -1716,6 +1716,7 @@ public class ViewPlanTest extends PlanTestBase {
         Assert.assertEquals(sqlPlan, viewPlan);
     }
 
+<<<<<<< HEAD
     @Test
     public void testListViews() throws TException {
         ExecuteEnv instance = ExecuteEnv.getInstance();
@@ -1727,5 +1728,36 @@ public class ViewPlanTest extends PlanTestBase {
         params.type = TTableType.VIEW;
         TListTableStatusResult result = frontendService.listTableStatus(params);
         Assert.assertTrue(result.tables.size() > 0);
+=======
+
+    @Test
+    public void testLateralJoin() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE json_test (" +
+                " v_id INT," +
+                " v_json json, " +
+                " v_SMALLINT SMALLINT" +
+                ") DUPLICATE KEY (v_id) " +
+                "DISTRIBUTED BY HASH (v_id) " +
+                "properties(\"replication_num\"=\"1\") ;"
+        );
+        String sql = "    SELECT\n" +
+                "         v_id\n" +
+                "        , get_json_string(ie.value,'$.b') as b\n" +
+                "        ,get_json_string(ie.value,'$.c') as c\n" +
+                "    FROM\n" +
+                "      json_test ge\n" +
+                "      ,lateral json_each(cast (ge.v_json as json) -> '$.')ie";
+
+        testView(sql);
+
+        sql = "    SELECT\n" +
+                "         v_id\n" +
+                "        , get_json_string(ie.value,'$.b') as b\n" +
+                "        ,get_json_string(ie.value,'$.c') as c\n" +
+                "    FROM\n" +
+                "      json_test ge\n" +
+                "      ,lateral json_each(cast (ge.v_json as json) -> '$.') ie(`key`, `value`)";
+        testView(sql);
+>>>>>>> 31c173250 ([BugFix] Fix create view with lateral join bug (#25824))
     }
 }
