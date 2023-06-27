@@ -385,11 +385,11 @@ public class AnalyzeStmtTest {
         analyzeSuccess("select distinct v4 from tarray");
         analyzeSuccess("select * from tarray order by v4");
         analyzeSuccess("select DENSE_RANK() OVER(partition by v3 order by v4) from tarray");
+        analyzeSuccess("select * from tarray join tarray y using(v4)");
+        analyzeFail("select * from tarray join tarray y using(v5)");
         analyzeFail("select avg(v4) from tarray");
         analyzeFail("select count(*) from tarray group by v5");
         analyzeFail("select distinct v5 from tarray");
-        analyzeFail("select * from tarray join tarray y using(v4)");
-        analyzeFail("select * from tarray join tarray y using(v5)");
         analyzeFail("select * from tarray order by v5");
         analyzeFail("select DENSE_RANK() OVER(partition by v5 order by v4) from tarray");
     }
