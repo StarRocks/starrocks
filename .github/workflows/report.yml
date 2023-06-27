@@ -67,11 +67,18 @@ jobs:
         if: steps.check-result-exists.outputs.exists == 'true'
         with:
           name: 'FE RESULT'
-          path: ./fe-ut/
+          path: ./fe-result/
 
       - name: Incremental Coverage Report
         if: steps.download-fe-ut-result.conclusion == 'success'
         run: |
+          source ~/.profile
+          cd ${{ github.workspace }}
+          mkdir fe-result && cd fe-result
+          branch=${{ github.event.workflow_run.base_ref }}
+          ossutil64 cp oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ . --recursive
+          
+          cd ${{ github.workspace }}
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           time_count=0
           pull_status=1
@@ -82,7 +89,7 @@ jobs:
               exit 1
             fi
             timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover ${{ github.workspace }}/fe/fe-core/target/result/ --github-token ${{ secrets.PAT }} \
+              --cover ${{ github.workspace }}/fe-result/ --github-token ${{ secrets.PAT }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
             pull_status=$?
             time_count=`expr $time_count + 1`

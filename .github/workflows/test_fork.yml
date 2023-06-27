@@ -414,11 +414,14 @@ jobs:
       - name: Upload Result
         if: always()
         uses: actions/upload-artifact@v3
-        with:
-          name: FE RESULT
-          path: fe/fe-core/target/result/
-          retention-days: 1
-          if-no-files-found: error
+        run: |
+          branch=${{ steps.branch.outputs.branch }}
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          source ~/.profile
+          ossutil64 rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/
+          ossutil64 cp fe/fe-core/target/result/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ --recursive --force
+          
 
       - name: Upload UT XML
         if: always()
