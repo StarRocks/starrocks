@@ -183,6 +183,7 @@ vectorized_functions = [
 
     [10320, "conv", "VARCHAR", ["BIGINT", "TINYINT", "TINYINT"], "MathFunctions::conv_int"],
     [10321, "conv", "VARCHAR", ["VARCHAR", "TINYINT", "TINYINT"], "MathFunctions::conv_string"],
+    
     [10322, "square", "DOUBLE", ["DOUBLE"], "MathFunctions::square"], 
 
     # 20xxx: bit functions
