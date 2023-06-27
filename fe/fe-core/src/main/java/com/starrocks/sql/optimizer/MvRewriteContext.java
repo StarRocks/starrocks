@@ -15,9 +15,11 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
@@ -43,6 +45,7 @@ public class MvRewriteContext {
     private ScalarOperator mvPruneConjunct;
 
     private final List<ScalarOperator> onPredicates;
+    private List<JoinDeriveContext> joinDeriveContexts;
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -57,6 +60,7 @@ public class MvRewriteContext {
         this.queryColumnRefRewriter = queryColumnRefRewriter;
         this.queryPredicateSplit = queryPredicateSplit;
         this.onPredicates = onPredicates;
+        this.joinDeriveContexts = Lists.newArrayList();
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -104,5 +108,13 @@ public class MvRewriteContext {
 
     public List<ScalarOperator> getOnPredicates() {
         return onPredicates;
+    }
+
+    public void addJoinDeriveContext(JoinDeriveContext joinDeriveContext) {
+        joinDeriveContexts.add(joinDeriveContext);
+    }
+
+    public List<JoinDeriveContext> getJoinDeriveContexts() {
+        return joinDeriveContexts;
     }
 }
