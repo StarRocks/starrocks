@@ -545,6 +545,116 @@ TEST_F(VectorizedBinaryPredicateStringTest, nullEqExpr) {
     }
 }
 
+class FakeConstExpr : public starrocks::Expr {
+public:
+    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
+
+    Expr* clone(ObjectPool*) const override { return nullptr; }
+
+    ColumnPtr _column;
+};
+
+class VectorizedBinaryPredicateArrayTest : public ::testing::Test {
+public:
+    void SetUp() override {
+        expr_node.opcode = TExprOpcode::INVALID_OPCODE;
+        expr_node.child_type = TPrimitiveType::VARCHAR;
+        expr_node.node_type = TExprNodeType::BINARY_PRED;
+        expr_node.num_children = 2;
+        expr_node.__isset.opcode = true;
+        expr_node.__isset.child_type = true;
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+
+        std::vector<TTypeNode> types_list;
+
+        TTypeNode type_array;
+        type_array.type = TTypeNodeType::ARRAY;
+        types_list.push_back(type_array);
+
+        TTypeNode type_scalar;
+        TScalarType scalar_type;
+        scalar_type.__set_type(TPrimitiveType::INT);
+        type_scalar.__set_scalar_type(scalar_type);
+        types_list.push_back(type_scalar);
+
+        TTypeDesc type_desc;
+        type_desc.__set_types(types_list);
+
+        expr_node.__set_child_type_desc(type_desc);
+    }
+
+    FakeConstExpr* new_fake_const_expr(ColumnPtr value, const TypeDescriptor& type) {
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::INT_LITERAL);
+        node.__set_num_children(0);
+        node.__set_type(type.to_thrift());
+        FakeConstExpr* e = _objpool.add(new FakeConstExpr(node));
+        e->_column = std::move(value);
+        return e;
+    }
+
+public:
+    TExprNode expr_node;
+    ObjectPool _objpool;
+};
+
+TEST_F(VectorizedBinaryPredicateArrayTest, arrayGT) {
+    expr_node.opcode = TExprOpcode::GT;
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+
+    TypeDescriptor type_arr_int = array_type(TYPE_INT);
+    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    array0->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)4)}); // [11,4]
+    array0->append_datum(DatumArray{Datum(), Datum()});                      // [NULL, NULL]
+    array0->append_datum(DatumArray{Datum(), Datum((int32_t)1)});            // [NULL, 1]
+    auto array_expr0 = MockExpr(type_arr_int, array0);
+
+    auto array1 = ColumnHelper::create_column(type_arr_int, false);
+    array1->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
+    array1->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
+    array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});           // [NULL, 1]
+    auto array_expr1 = MockExpr(type_arr_int, array1);
+    expr->add_child(&array_expr0);
+    expr->add_child(&array_expr1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_FALSE(ptr->is_nullable());
+
+    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]); // TODO: should be null
+    ASSERT_FALSE(v->get_data()[2]); // TODO: should be null
+}
+
+TEST_F(VectorizedBinaryPredicateArrayTest, arrayConstGT) {
+    expr_node.opcode = TExprOpcode::GT;
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+
+    TypeDescriptor type_arr_int = array_type(TYPE_INT);
+    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    array0->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)4)}); // [11,4]
+    array0->append_datum(DatumArray{Datum(), Datum()});                      // [NULL, NULL]
+    array0->append_datum(DatumArray{Datum(), Datum((int32_t)1)});            // [NULL, 1]
+    auto array_expr0 = MockExpr(type_arr_int, array0);
+
+    auto array = ColumnHelper::create_column(type_arr_int, false);
+    array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
+    auto const_col = ConstColumn::create(array, 3);
+    auto* const_array = new_fake_const_expr(const_col, type_arr_int);
+    expr->add_child(&array_expr0);
+    expr->add_child(const_array);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_FALSE(ptr->is_nullable());
+
+    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_TRUE(v->get_data()[1]); // TODO: should be null
+    ASSERT_TRUE(v->get_data()[2]); // TODO: should be null
+}
+
 class VectorizedBinaryPredicateMapTest : public ::testing::Test {
 public:
     void SetUp() override {

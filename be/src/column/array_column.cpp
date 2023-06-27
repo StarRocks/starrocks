@@ -422,7 +422,9 @@ bool ArrayColumn::equals(size_t left, const Column& rhs, size_t right) const {
 }
 
 void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* output) const {
-    CHECK(size() == rhs_column.size()) << "Two input columns must have same rows";
+    if (size() != rhs_column.size()) {
+        throw std::runtime_error("Two input columns in comparison must have same rows");
+    }
 
     size_t rows = size();
     output->resize(rows);

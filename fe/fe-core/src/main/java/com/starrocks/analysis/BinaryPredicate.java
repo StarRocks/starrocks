@@ -40,6 +40,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -193,14 +194,10 @@ public class BinaryPredicate extends Predicate implements Writable {
             return Type.JSON;
         }
         if (type1.isArrayType() || type2.isArrayType()) {
-            // Must both be array
-            if (!type1.matchesType(type2)) {
-                return Type.INVALID;
-            }
-            return type1;
+            return TypeManager.getCommonSuperType(type1, type2);
         }
         if (type1.isComplexType() || type2.isComplexType()) {
-            // We don't support complex type for binary predicate.
+            // We don't support complex type (map/struct) for binary predicate.
             return Type.INVALID;
         }
         if (t1 == PrimitiveType.VARCHAR && t2 == PrimitiveType.VARCHAR) {

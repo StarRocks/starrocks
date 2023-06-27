@@ -739,13 +739,38 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean canJoinOn() {
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isArrayType();
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canJoinOn();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().canJoinOn() && ((MapType) this).getValueType().canJoinOn();
+        }
+        if (isStructType()) {
+            for (StructField sf : ((StructType) this).getFields()) {
+                if (!sf.getType().canJoinOn()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
     }
 
     public boolean canGroupBy() {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canGroupBy();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().canGroupBy() && ((MapType) this).getValueType().canGroupBy();
+        }
+        if (isStructType()) {
+            for (StructField sf : ((StructType) this).getFields()) {
+                if (!sf.getType().canGroupBy()) {
+                    return false;
+                }
+            }
+            return true;
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
     }
@@ -807,7 +832,7 @@ public abstract class Type implements Cloneable {
     }
 
     public static final String NOT_SUPPORT_JOIN_ERROR_MSG =
-            "Type (nested) percentile/hll/bitmap/json/struct/map not support join";
+            "Type (nested) percentile/hll/bitmap/json not support join";
 
     public static final String NOT_SUPPORT_GROUP_BY_ERROR_MSG =
             "Type (nested) percentile/hll/bitmap/json not support group-by";
