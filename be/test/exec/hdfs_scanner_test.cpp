@@ -1655,6 +1655,37 @@ TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
     }
 }
 
+TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
+    SlotDesc csv_descs[] = {{"uuid", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string bom_file = "./be/test/exec/test_data/csv_scanner/bom.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(bom_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(bom_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
+
+        status = scanner->get_next(_runtime_state, &chunk);
+        EXPECT_TRUE(status.ok());
+        EXPECT_EQ(3, chunk->num_rows());
+
+        EXPECT_EQ("['5c3ffda0d1d7']", chunk->debug_row(0));
+        EXPECT_EQ("['62ef51eae5d8']", chunk->debug_row(1));
+        scanner->close(_runtime_state);
+    }
+}
+
 TEST_F(HdfsScannerTest, TestCSVNewlyAddColumn) {
     SlotDesc csv_descs[] = {{"name1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
                             {"age", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
