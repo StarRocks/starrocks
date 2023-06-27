@@ -53,6 +53,9 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -78,6 +81,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.util.ThreadUtil;
 import org.junit.Assert;
 
 import java.io.IOException;
@@ -291,7 +295,20 @@ public class StarRocksAssert {
         checkAlterJob();
         return this;
     }
-    
+
+    private void waitingTaskFinish(TaskRun taskRun) {
+        MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+        int retryCount = 0;
+        int maxRetry = 5;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            if (mvContext.getNextPartitionStart() == null && mvContext.getNextPartitionEnd() == null) {
+                break;
+            }
+            retryCount++;
+        }
+    }
+
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
