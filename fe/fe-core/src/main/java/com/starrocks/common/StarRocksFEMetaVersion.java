@@ -29,5 +29,5 @@ public class StarRocksFEMetaVersion {
     public static final int VERSION_4 = 4;
 
     // note: when increment meta version, should assign the latest version to VERSION_CURRENT
-    public static final int VERSION_CURRENT = VERSION_3;
+    public static final int VERSION_CURRENT = VERSION_4;
 }
