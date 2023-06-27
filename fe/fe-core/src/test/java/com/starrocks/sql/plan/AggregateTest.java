@@ -699,15 +699,15 @@ public class AggregateTest extends PlanTestBase {
     public void testMultiCountDistinct() throws Exception {
         String queryStr = "select count(distinct k1, k2) from baseall group by k3";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("group by: 1: k1, 2: k2, 3: k3"));
+        Assert.assertTrue(explainString, explainString.contains("group by: 1: k1, 2: k2, 3: k3"));
 
         queryStr = "select count(distinct k1) from baseall";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("multi_distinct_count(1: k1)"));
+        Assert.assertTrue(explainString, explainString.contains("multi_distinct_count(1: k1)"));
 
         queryStr = "select count(distinct k1, k2),  count(distinct k4) from baseall group by k3";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("13:HASH JOIN\n" +
+        Assert.assertTrue(explainString, explainString.contains("17:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: k3 <=> 17: k3"));
@@ -1471,7 +1471,7 @@ public class AggregateTest extends PlanTestBase {
         sql =
                 "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "13:HASH JOIN\n" +
+        assertContains(plan, "17:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 13: t1a <=> 15: t1a");

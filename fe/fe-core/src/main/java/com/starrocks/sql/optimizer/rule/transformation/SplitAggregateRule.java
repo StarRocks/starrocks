@@ -371,7 +371,8 @@ public class SplitAggregateRule extends TransformationRule {
         List<ColumnRefOperator> partitionByCols;
 
         boolean shouldFurtherSplit = false;
-        if (isSuitableForParallelization(input)) {
+        if (isSuitableForParallelization(input)
+                || oldAgg.getGroupingKeys().containsAll(distinctGlobal.getGroupingKeys())) {
             partitionByCols = oldAgg.getGroupingKeys();
         } else {
             partitionByCols = distinctGlobal.getGroupingKeys();
