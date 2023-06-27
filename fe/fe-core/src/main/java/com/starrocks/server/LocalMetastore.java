@@ -115,10 +115,11 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -490,6 +491,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
             DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
             GlobalStateMgr.getCurrentState().getEditLog().logDropDb(info);
+
+            // 5. Drop Pipes
+            PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+            pipeManager.dropPipesOfDb(dbName, db.getId());
 
             LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), isForceDrop);
         } finally {
@@ -1079,7 +1084,7 @@ public class LocalMetastore implements ConnectorMetadata {
             copiedTable.getPartitionInfo().setTabletType(partitionId, partitionDesc.getTabletType());
             copiedTable.getPartitionInfo().setReplicationNum(partitionId, partitionDesc.getReplicationNum());
             copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
-            copiedTable.getPartitionInfo().setStorageCacheInfo(partitionId, partitionDesc.getStorageCacheInfo());
+            copiedTable.getPartitionInfo().setDataCacheInfo(partitionId, partitionDesc.getDataCacheInfo());
 
             Partition partition =
                     createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
@@ -1165,7 +1170,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     partitionInfo.getReplicationNum(partition.getId()),
                     partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
                     ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
-                    ((SingleRangePartitionDesc) partitionDescs.get(0)).getStorageCacheInfo());
+                    ((SingleRangePartitionDesc) partitionDescs.get(0)).getDataCacheInfo());
             partitionInfoV2List.add(info);
             AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
             GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
@@ -1181,7 +1186,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
                             ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
-                            ((SingleRangePartitionDesc) partitionDescs.get(i)).getStorageCacheInfo());
+                            ((SingleRangePartitionDesc) partitionDescs.get(i)).getDataCacheInfo());
 
                     partitionInfoV2List.add(info);
                 }
@@ -1393,7 +1398,7 @@ public class LocalMetastore implements ConnectorMetadata {
             } else if (partitionType == PartitionType.UNPARTITIONED) {
                 // insert overwrite job will create temp partition and replace the single partition.
                 partitionInfo.addPartition(partition.getId(), info.getDataProperty(), info.getReplicationNum(),
-                        info.isInMemory(), info.getStorageCacheInfo());
+                        info.isInMemory(), info.getDataCacheInfo());
             } else {
                 throw new DdlException("Unsupported partition type: " + partitionType.name());
             }
@@ -1955,9 +1960,9 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     void setLakeStorageInfo(OlapTable table, String storageVolumeId, Map<String, String> properties) throws DdlException {
-        StorageCacheInfo storageCacheInfo = null;
+        DataCacheInfo dataCacheInfo = null;
         try {
-            storageCacheInfo = PropertyAnalyzer.analyzeStorageCacheInfo(properties);
+            dataCacheInfo = PropertyAnalyzer.analyzeDataCacheInfo(properties);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
@@ -1966,7 +1971,7 @@ public class LocalMetastore implements ConnectorMetadata {
         FilePathInfo pathInfo = !storageVolumeId.isEmpty() ?
                 stateMgr.getStarOSAgent().allocateFilePath(storageVolumeId, table.getId()) :
                 stateMgr.getStarOSAgent().allocateFilePath(table.getId());
-        table.setStorageInfo(pathInfo, storageCacheInfo);
+        table.setStorageInfo(pathInfo, dataCacheInfo);
     }
 
     void registerTable(Database db, Table table, CreateTableStmt stmt) throws DdlException {
@@ -2811,8 +2816,8 @@ public class LocalMetastore implements ConnectorMetadata {
             partitionInfo.setIsInMemory(partitionId, false);
             partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
             StorageInfo storageInfo = materializedView.getTableProperty().getStorageInfo();
-            partitionInfo.setStorageCacheInfo(partitionId,
-                    storageInfo == null ? null : storageInfo.getStorageCacheInfo());
+            partitionInfo.setDataCacheInfo(partitionId,
+                    storageInfo == null ? null : storageInfo.getDataCacheInfo());
             Long version = Partition.PARTITION_INIT_VERSION;
             Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
             buildPartitions(db, materializedView, Collections.singletonList(partition));
@@ -4037,8 +4042,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
                 if (copiedTbl.isCloudNativeTable()) {
-                    partitionInfo.setStorageCacheInfo(newPartitionId,
-                            partitionInfo.getStorageCacheInfo(oldPartitionId));
+                    partitionInfo.setDataCacheInfo(newPartitionId,
+                            partitionInfo.getDataCacheInfo(oldPartitionId));
                 }
 
                 copiedTbl.setDefaultDistributionInfo(entry.getValue().getDistributionInfo());
@@ -4510,7 +4515,7 @@ public class LocalMetastore implements ConnectorMetadata {
             partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(sourcePartitionId));
             partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(sourcePartitionId));
             if (copiedTbl.isCloudNativeTableOrMaterializedView()) {
-                partitionInfo.setStorageCacheInfo(newPartitionId, partitionInfo.getStorageCacheInfo(sourcePartitionId));
+                partitionInfo.setDataCacheInfo(newPartitionId, partitionInfo.getDataCacheInfo(sourcePartitionId));
             }
 
             Partition newPartition =

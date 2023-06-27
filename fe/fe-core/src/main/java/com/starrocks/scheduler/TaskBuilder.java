@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.pipe.PipeTaskDesc;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -36,6 +37,17 @@ import java.util.concurrent.TimeUnit;
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
 public class TaskBuilder {
+
+    public static Task buildPipeTask(PipeTaskDesc desc) {
+        Task task = new Task(desc.getUniqueTaskName());
+        task.setSource(Constants.TaskSource.PIPE);
+        task.setCreateTime(System.currentTimeMillis());
+        task.setDbName(desc.getDbName());
+        task.setDefinition(desc.getSqlTask());
+        task.setProperties(desc.getProperties());
+        task.setType(Constants.TaskType.EVENT_TRIGGERED);
+        return task;
+    }
 
     public static Task buildTask(SubmitTaskStmt submitTaskStmt, ConnectContext context) {
         String taskName = submitTaskStmt.getTaskName();

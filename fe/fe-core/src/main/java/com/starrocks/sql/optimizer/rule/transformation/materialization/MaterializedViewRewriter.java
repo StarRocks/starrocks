@@ -1300,7 +1300,7 @@ public class MaterializedViewRewriter {
         EquationRewriter queryExprToMvExprRewriter =
                 buildEquationRewriter(mvColumnRefToScalarOp, rewriteContext, isMVBased, true, useEc);
         List<ScalarOperator> candidates = rewriteScalarOpToTarget(rewrittenConjuncts, queryExprToMvExprRewriter,
-                rewriteContext.getOutputMapping(), new ColumnRefSet(rewriteContext.getQueryColumnSet()));
+                rewriteContext.getOutputMapping(), new ColumnRefSet(rewriteContext.getQueryColumnSet()), false, null);
         if (candidates == null || candidates.isEmpty()) {
             return null;
         }
@@ -1351,29 +1351,41 @@ public class MaterializedViewRewriter {
         ScalarOperator mvOtherPreds = MvUtils.canonizePredicate(Utils.compoundAnd(
                 mvCompensationToQuery.getRangePredicates(),
                 mvCompensationToQuery.getResidualPredicates()));
+        List<ScalarOperator> rewrittenFailedPredicates = Lists.newArrayList();
+        OptExpression queryExpression = rewriteContext.getQueryExpression();
         if (!ConstantOperator.TRUE.equals(mvEqualPreds)) {
             mvEqualPreds = columnRewriter.rewriteViewToQueryWithQueryEc(mvEqualPreds);
-            mvEqualPreds =
-                    rewriteScalarOperatorToTarget(mvEqualPreds, queryExprMap, rewriteContext, mvToQueryRefSet, true);
+            mvEqualPreds = rewriteScalarOperatorToTarget(
+                    mvEqualPreds, queryExprMap, rewriteContext, mvToQueryRefSet, true, true, rewrittenFailedPredicates);
         }
         if (!ConstantOperator.TRUE.equals(mvOtherPreds)) {
             mvOtherPreds = columnRewriter.rewriteViewToQueryWithViewEc(mvOtherPreds);
-            mvOtherPreds =
-                    rewriteScalarOperatorToTarget(mvOtherPreds, queryExprMap, rewriteContext, mvToQueryRefSet, false);
+            mvOtherPreds = rewriteScalarOperatorToTarget(
+                    mvOtherPreds, queryExprMap, rewriteContext, mvToQueryRefSet, false, true, rewrittenFailedPredicates);
         }
-        if (mvEqualPreds == null || mvOtherPreds == null) {
+        ScalarOperator mvCompensationPredicates = Utils.compoundAnd(mvEqualPreds, mvOtherPreds);
+        if (!rewrittenFailedPredicates.isEmpty()) {
+            Pair<ScalarOperator, OptExpression> rewrittenPair = tryRewritePredicates(rewriteContext, mvToQueryRefSet,
+                    rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory(), rewrittenFailedPredicates);
+            if (rewrittenPair == null) {
+                logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot rewrite compensations other predicates" +
+                        " from view to query, rewrittenFailedPredicates:%s", rewrittenFailedPredicates);
+                return null;
+            }
+            mvCompensationPredicates = Utils.compoundAnd(mvCompensationPredicates, rewrittenPair.first);
+            queryExpression = rewrittenPair.second;
+        }
+        if (mvCompensationPredicates == null) {
             logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot rewrite compensations from view to query, " +
                     "mvEqualPreds:%s, mvOtherPreds:%s", (mvEqualPreds == null), (mvOtherPreds == null));
             return null;
         }
-        final ScalarOperator mvCompensationPredicates = Utils.compoundAnd(mvEqualPreds, mvOtherPreds);
 
         // for mv: select a, b from t where a < 10;
         // query: select a, b from t where a < 20;
         // queryBasedRewrite will return the tree of "select a, b from t where a >= 10 and a < 20"
         // which is realized by adding the compensation predicate to original query expression
-        final OptExpression queryInput = queryBasedRewrite(rewriteContext,
-                mvCompensationPredicates, mvRewriteContext.getQueryExpression());
+        final OptExpression queryInput = queryBasedRewrite(rewriteContext, mvCompensationPredicates, queryExpression);
         if (queryInput == null) {
             logMVRewrite(mvRewriteContext, "Rewrite union failed: cannot rewrite MV based on query");
             return null;
@@ -1393,18 +1405,62 @@ public class MaterializedViewRewriter {
         return createUnion(queryInput, viewInput, rewriteContext);
     }
 
+    // retry to rewrite the rewritten failed predicates by enforcing the columns not exists in query
+    private Pair<ScalarOperator, OptExpression> tryRewritePredicates(
+            RewriteContext rewriteContext,
+            ColumnRefSet mvToQueryRefSet,
+            OptExpression query,
+            ColumnRefFactory queryRefFactory,
+            List<ScalarOperator> predicatesToEnforce) {
+        List<ColumnRefOperator> columns = Lists.newArrayList();
+        for (ScalarOperator predicate : predicatesToEnforce) {
+            predicate.getColumnRefs(columns);
+        }
+        // check every columns to enforce should be in the Scan Operator
+        for (ColumnRefOperator column : columns) {
+            if (queryRefFactory.getRelationId(column.getId()) == -1) {
+                return null;
+            }
+        }
+        ColumnEnforcer columnEnforcer = new ColumnEnforcer(query, columns);
+        OptExpression newQuery = columnEnforcer.enforce();
+        mvRewriteContext.setEnforcedColumns(columnEnforcer.getEnforcedColumns());
+
+        final List<LogicalScanOperator> queryScanOps = MvUtils.getScanOperator(newQuery);
+        final List<ColumnRefOperator> queryScanOutputColRefs = queryScanOps.stream()
+                .map(scan -> scan.getOutputColumns())
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+
+        mvToQueryRefSet.except(queryScanOutputColRefs);
+
+        OptExpression expr = newQuery.getOp() instanceof LogicalAggregationOperator ? newQuery.inputAt(0) : newQuery;
+        final Map<ColumnRefOperator, ScalarOperator> queryExprMap =
+                MvUtils.getColumnRefMap(expr, rewriteContext.getQueryRefFactory());
+
+        ScalarOperator newPredicate = rewriteScalarOperatorToTarget(Utils.compoundAnd(predicatesToEnforce), queryExprMap,
+                rewriteContext, mvToQueryRefSet, false, false, null);
+        if (newPredicate == null) {
+            return null;
+        }
+        return new Pair<>(newPredicate, newQuery);
+    }
+
+
     private ScalarOperator rewriteScalarOperatorToTarget(
             ScalarOperator predicate,
             Map<ColumnRefOperator, ScalarOperator> exprMap,
             RewriteContext rewriteContext,
             ColumnRefSet originalRefSet,
-            boolean isEqual) {
+            boolean isEqual,
+            boolean isUnion,
+            List<ScalarOperator> rewrittenFailedPredciates) {
         final EquationRewriter equationRewriter = isEqual ?
                 buildEquationRewriter(exprMap, rewriteContext, false, false) :
                 buildEquationRewriter(exprMap, rewriteContext, true, false);
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         final List<ScalarOperator> rewrittens =
-                rewriteScalarOpToTarget(conjuncts, equationRewriter, null, originalRefSet);
+                rewriteScalarOpToTarget(conjuncts, equationRewriter, null, originalRefSet, isUnion, rewrittenFailedPredciates);
         if (rewrittens == null || rewrittens.isEmpty()) {
             return null;
         }
@@ -1437,10 +1493,48 @@ public class MaterializedViewRewriter {
 
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             deriveLogicalProperty(newQueryExpr);
+            if (mvRewriteContext.getEnforcedColumns() != null && !mvRewriteContext.getEnforcedColumns().isEmpty()) {
+                newQueryExpr = pruneEnforcedColumns(newQueryExpr);
+                deriveLogicalProperty(newQueryExpr);
+            }
             return newQueryExpr;
 
         }
         return null;
+    }
+
+    private OptExpression pruneEnforcedColumns(OptExpression queryExpr) {
+        List<OptExpression> newInputs = Lists.newArrayList();
+        for (OptExpression input : queryExpr.getInputs()) {
+            OptExpression newInput = pruneEnforcedColumns(input);
+            newInputs.add(newInput);
+        }
+        Operator newOp = doPruneEnforcedColumns(queryExpr);
+        return OptExpression.create(newOp, newInputs);
+    }
+
+    private Operator doPruneEnforcedColumns(OptExpression queryExpr) {
+        Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
+        if (queryExpr.getOp().getProjection() != null) {
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap = queryExpr.getOp().getProjection().getColumnRefMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
+                if (mvRewriteContext.getEnforcedColumns().contains(entry.getKey())) {
+                    continue;
+                }
+                newColumnRefMap.put(entry.getKey(), entry.getValue());
+            }
+        } else {
+            List<ColumnRefOperator> outputColumns =
+                    queryExpr.getOutputColumns().getColumnRefOperators(materializationContext.getQueryRefFactory());
+            outputColumns = outputColumns.stream()
+                    .filter(column -> !mvRewriteContext.getEnforcedColumns().contains(column)).collect(Collectors.toList());
+            outputColumns.stream().forEach(column -> newColumnRefMap.put(column, column));
+        }
+        Projection newProjection = new Projection(newColumnRefMap);
+        Operator.Builder builder = OperatorBuilderFactory.build(queryExpr.getOp());
+        builder.withOperator(queryExpr.getOp());
+        builder.setProjection(newProjection);
+        return builder.build();
     }
 
     // pushdown predicates on join nodes
@@ -1834,19 +1928,29 @@ public class MaterializedViewRewriter {
         return mvOptExpr;
     }
 
-    protected List<ScalarOperator> rewriteScalarOpToTarget(List<ScalarOperator> exprsToRewrites,
-                                                           EquationRewriter equationRewriter,
-                                                           Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
-                                                           ColumnRefSet originalColumnSet) {
+    protected List<ScalarOperator> rewriteScalarOpToTarget(
+            List<ScalarOperator> exprsToRewrites,
+            EquationRewriter equationRewriter,
+            Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
+            ColumnRefSet originalColumnSet, boolean isUnion,
+            List<ScalarOperator> rewrittenFailedPredciates) {
         List<ScalarOperator> rewrittenExprs = Lists.newArrayList();
         equationRewriter.setOutputMapping(outputMapping);
         for (ScalarOperator expr : exprsToRewrites) {
             ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(expr);
             if (expr.isVariable() && expr == rewritten) {
                 // it means it can not be rewritten  by target
+                if (isUnion) {
+                    rewrittenFailedPredciates.add(expr);
+                    continue;
+                }
                 return Lists.newArrayList();
             }
             if (originalColumnSet != null && !isAllExprReplaced(rewritten, originalColumnSet)) {
+                if (isUnion) {
+                    rewrittenFailedPredciates.add(expr);
+                    continue;
+                }
                 // it means there is some column that can not be rewritten by outputs of mv
                 return Lists.newArrayList();
             }

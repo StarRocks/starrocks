@@ -103,6 +103,7 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -1030,6 +1031,10 @@ public class JournalEntity implements Writable {
             case OperationType.OP_CREATE_STORAGE_VOLUME:
             case OperationType.OP_UPDATE_STORAGE_VOLUME:
                 data = StorageVolume.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_PIPE:
+                data = PipeOpEntry.read(in);
                 isRead = true;
                 break;
             default: {
