@@ -102,9 +102,9 @@ public class TablesProcDirTest {
             }
         };
 
-        db.createTable(tb1);
-        db.createTable(tb2);
-        db.createTable(tb3);
+        db.registerTableUnlock(tb1);
+        db.registerTableUnlock(tb2);
+        db.registerTableUnlock(tb3);
     }
 
     @Test

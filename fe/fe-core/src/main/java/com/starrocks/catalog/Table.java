@@ -643,8 +643,12 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     /**
      * onCreate is called when this table is created
      */
-    public void onCreate() {
+    public void onReload() {
         // Do nothing by default.
+    }
+
+    public void onCreate(Database database) {
+        onReload();
     }
 
     /**

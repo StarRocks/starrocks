@@ -296,7 +296,7 @@ public class CreateTableTest {
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1'); "));
 
         ExceptionChecker
-                .expectThrowsWithMsg(DdlException.class, "Table 'atbl6' already exists",
+                .expectThrowsWithMsg(AnalysisException.class, "Table 'atbl6' already exists",
                         () -> createTable("create table test.atbl6\n" + "(k1 int, k2 int, k3 int)\n"
                                 + "duplicate key(k1, k2, k3)\n" + "distributed by hash(k1) buckets 1\n"
                                 + "properties('replication_num' = '1');"));

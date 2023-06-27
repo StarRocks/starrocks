@@ -182,7 +182,7 @@ public class FileTable extends Table {
     }
 
     @Override
-    public void onCreate() {
+    public void onReload() {
     }
 
     @Override

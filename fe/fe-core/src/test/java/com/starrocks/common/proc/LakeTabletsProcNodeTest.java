@@ -100,7 +100,7 @@ public class LakeTabletsProcNodeTest {
 
         // Db
         Database db = new Database(dbId, "test_db");
-        db.createTable(table);
+        db.registerTableUnlock(table);
 
         // Check
         LakeTabletsProcDir procDir = new LakeTabletsProcDir(db, table, index);

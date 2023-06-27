@@ -48,10 +48,11 @@ public class CreateTableLikeAnalyzer {
 
         StatementBase statementBase =
                 SqlParser.parseOneWithStarRocksDialect(createTableStmt.get(0), context.getSessionVariable());
-        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, context);
         if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
             parsedCreateTableStmt.setTableName(stmt.getTableName());
+            com.starrocks.sql.analyzer.Analyzer.analyze(parsedCreateTableStmt, context);
+
             if (stmt.isSetIfNotExists()) {
                 parsedCreateTableStmt.setIfNotExists();
             }

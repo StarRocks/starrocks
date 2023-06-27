@@ -586,7 +586,7 @@ public class PropertyAnalyzer {
         return bfFpp;
     }
 
-    public static String analyzeColocate(Map<String, String> properties) throws AnalysisException {
+    public static String analyzeColocate(Map<String, String> properties) {
         String colocateGroup = null;
         if (properties != null && properties.containsKey(PROPERTIES_COLOCATE_WITH)) {
             colocateGroup = properties.get(PROPERTIES_COLOCATE_WITH);

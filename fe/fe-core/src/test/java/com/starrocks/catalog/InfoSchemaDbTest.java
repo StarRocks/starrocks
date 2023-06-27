@@ -82,9 +82,7 @@ public class InfoSchemaDbTest {
     public void testNormal() throws IOException {
         Database db = new InfoSchemaDb();
 
-        Assert.assertFalse(db.createTable(null));
-        Assert.assertFalse(db.createMaterializedWithLock(null, false));
-        Assert.assertFalse(db.createTableWithLock(null, false));
+        Assert.assertFalse(db.registerTableUnlock(null));
         db.dropTable("authors");
         db.dropTableWithLock("authors");
         db.write(null);

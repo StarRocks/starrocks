@@ -15,7 +15,6 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.storagevolume.StorageVolume;
 
@@ -39,12 +38,8 @@ public class StorageVolumePEntryObject implements PEntryObject {
             return new StorageVolumePEntryObject(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID);
         } else {
             StorageVolume sv = null;
-            try {
-                sv = mgr.getStorageVolumeMgr().getStorageVolumeByName(name);
+            sv = mgr.getStorageVolumeMgr().getStorageVolumeByName(name);
             // TODO: Change it to MetaNotFoundException
-            } catch (AnalysisException e) {
-                throw new PrivObjNotFoundException("unknown storage volume: " + tokens.get(0));
-            }
             if (sv == null) {
                 throw new PrivObjNotFoundException("cannot find storage volume: " + tokens.get(0));
             }

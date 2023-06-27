@@ -92,7 +92,7 @@ public class TabletStatMgrTest {
 
         // Db
         Database db = new Database();
-        db.createTable(table);
+        db.registerTableUnlock(table);
 
         TTabletStatResult result = new TTabletStatResult();
         Map<Long, TTabletStat> tabletsStats = Maps.newHashMap();
@@ -161,7 +161,7 @@ public class TabletStatMgrTest {
 
         // db
         Database db = new Database(dbId, "db");
-        db.createTable(table);
+        db.registerTableUnlock(table);
 
         new MockUp<BrpcProxy>() {
             @Mock
