@@ -173,7 +173,16 @@ ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
         _memory_manager->update_memory_usage(-memory_usage);
     }
     if (selected_partition_chunks.empty()) {
-        throw std::runtime_error("local exchange gets empty shuffled chunk.");
+        std::string msg;
+        if (_partition_chunk_queue.empty()) {
+            msg = "_partition_chunk_queue is empty";
+        } else if (rows_num + _partition_chunk_queue.front().size > state->chunk_size()) {
+            msg = std::format("row_num ({}) + _partition_chunk_queue.front().size ({}) > chunk_size ({})", rows_num,
+                              _partition_chunk_queue.front().size, state->chunk_size());
+        } else {
+            msg = "unknown error";
+        }
+        throw std::runtime_error("local exchange gets empty shuffled chunk, as " + msg);
     }
     // Unlock during merging partition chunks into a full chunk.
     ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot();
