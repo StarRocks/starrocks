@@ -1,0 +1,21 @@
+name: Report on the pull request
+
+# read-write repo token
+# access to secrets
+on:
+  workflow_run:
+    workflows: ["PR TEST PIPELINE"]
+    types:
+      - completed
+
+jobs:
+  upload:
+    runs-on: [self-hosted, normal]
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: 'Report Test'
+        run: |
+          echo workflow
+
