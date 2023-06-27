@@ -37,6 +37,7 @@
 #include <memory>
 
 #include "common/status.h"
+#include "util/concurrent_limiter.h"
 
 namespace starrocks {
 
@@ -60,6 +61,8 @@ private:
     std::unique_ptr<WebPageHandler> _web_page_handler;
 
     std::vector<HttpHandler*> _http_handlers;
+
+    std::unique_ptr<ConcurrentLimiter> _http_concurrent_limiter;
 };
 
 } // namespace starrocks
