@@ -31,6 +31,7 @@
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
 
@@ -335,6 +336,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     new_first_unfinished = i + 1;
                     continue;
                 }
+            }
+            if (time_spent >= OVERLOADED_MAX_TIME_SPEND_NS) {
+                StarRocksMetrics::instance()->pipe_driver_overloaded.increment(1);
             }
             // yield when total chunks moved or time spent on-core for evaluation
             // exceed the designated thresholds.
