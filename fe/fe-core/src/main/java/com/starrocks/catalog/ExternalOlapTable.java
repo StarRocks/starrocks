@@ -320,7 +320,7 @@ public class ExternalOlapTable extends OlapTable {
     }
 
     @Override
-    public void onCreate() {
+    public void onReload() {
         GlobalStateMgr.getCurrentState().getStarRocksRepository().registerTable(this);
     }
 
