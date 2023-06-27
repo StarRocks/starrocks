@@ -72,7 +72,7 @@ jobs:
           mkdir -p ${{ github.workspace }}/starrocks
 
       - name: BRANCH INFO
-        id: branch`
+        id: branch
         run: |
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
