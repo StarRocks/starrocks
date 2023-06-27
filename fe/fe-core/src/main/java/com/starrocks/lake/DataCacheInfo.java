@@ -22,20 +22,18 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 
 import java.io.IOException;
 
-public class StorageCacheInfo implements GsonPreProcessable, GsonPostProcessable {
-    // cache ttl:
-    // -1 indicates "cache forever"
-    // 0 indicates "disable cache"
+public class DataCacheInfo implements GsonPreProcessable, GsonPostProcessable {
     @SerializedName(value = "cacheInfoBytes")
     private byte[] cacheInfoBytes;
     private FileCacheInfo cacheInfo;
 
-    public StorageCacheInfo(FileCacheInfo cacheInfo) {
+    public DataCacheInfo(FileCacheInfo cacheInfo) {
         this.cacheInfo = cacheInfo;
     }
 
-    public StorageCacheInfo(boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
-        this.cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
+    public DataCacheInfo(boolean enableCache, boolean asyncWriteBack) {
+        long ttl = enableCache ? Long.MAX_VALUE : 0;
+        this.cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(ttl)
                 .setAsyncWriteBack(asyncWriteBack).build();
     }
 
@@ -43,15 +41,11 @@ public class StorageCacheInfo implements GsonPreProcessable, GsonPostProcessable
         return cacheInfo;
     }
 
-    public boolean isEnableStorageCache() {
+    public boolean isEnabled() {
         return cacheInfo.getEnableCache();
     }
 
-    public long getStorageCacheTtlS() {
-        return cacheInfo.getTtlSeconds();
-    }
-
-    public boolean isEnableAsyncWriteBack() {
+    public boolean isAsyncWriteBack() {
         return cacheInfo.getAsyncWriteBack();
     }
 

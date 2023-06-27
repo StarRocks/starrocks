@@ -34,7 +34,7 @@ class MemTracker;
 class SegmentPB;
 class PTabletInfo;
 class FileSystem;
-class DeltaWriterOptions;
+struct DeltaWriterOptions;
 
 using DeltaWriterOptions = starrocks::DeltaWriterOptions;
 
@@ -146,6 +146,8 @@ public:
     Status init(const std::vector<DataDir*>& data_dirs);
 
     Status update_max_threads(int max_threads);
+
+    ThreadPool* get_thread_pool() { return _replicate_pool.get(); }
 
     // NOTE: we use SERIAL mode here to ensure all segment from one tablet are synced in order.
     std::unique_ptr<ReplicateToken> create_replicate_token(

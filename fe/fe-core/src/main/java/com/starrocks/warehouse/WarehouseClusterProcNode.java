@@ -12,28 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.warehouse;
 
-import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.proc.ProcNodeInterface;
+import com.starrocks.common.proc.ProcResult;
 
-public class SuspendWarehouseStmt extends DdlStmt {
-    private String whName;
+public class WarehouseClusterProcNode implements ProcNodeInterface {
+    private final Warehouse warehouse;
 
-    public SuspendWarehouseStmt(String whName) {
-        this(whName, NodePosition.ZERO);
-    }
-
-    public SuspendWarehouseStmt(String whName, NodePosition pos) {
-        super(pos);
-        this.whName = whName;
-    }
-
-    public String getFullWhName() {
-        return whName;
+    public WarehouseClusterProcNode(Warehouse wh) {
+        this.warehouse = wh;
     }
 
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSuspendWarehouseStatement(this, context);
+    public ProcResult fetchResult() throws AnalysisException {
+        return warehouse.getClusterProcData();
     }
 }

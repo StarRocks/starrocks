@@ -27,9 +27,7 @@
 #include "storage/tablet_manager.h"
 #include "util/pretty_printer.h"
 
-namespace starrocks {
-
-namespace lake {
+namespace starrocks::lake {
 
 UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()),
@@ -189,7 +187,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
                                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
                                                 int64_t tablet_id, DeletesMap* new_deletes) {
     CHECK(condition_column >= 0);
-    auto tablet_column = tablet_schema.column(condition_column);
+    const auto& tablet_column = tablet_schema.column(condition_column);
     std::vector<uint32_t> read_column_ids;
     read_column_ids.push_back(condition_column);
 
@@ -258,7 +256,8 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
 }
 
 Status UpdateManager::_handle_index_op(Tablet* tablet, const TabletMetadata& metadata, const int64_t base_version,
-                                       const MetaFileBuilder* builder, std::function<void(LakePrimaryIndex&)> op) {
+                                       const MetaFileBuilder* builder,
+                                       const std::function<void(LakePrimaryIndex&)>& op) {
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -342,7 +341,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
     watch.reset();
 
     std::shared_ptr<FileSystem> fs;
-    auto fetch_values_from_segment = [&](std::string segment_name, uint32_t segment_id,
+    auto fetch_values_from_segment = [&](const std::string& segment_name, uint32_t segment_id,
                                          const TabletSchema* tablet_schema,
                                          const std::vector<uint32_t>& rowids) -> Status {
         std::string path = tablet->segment_location(segment_name);
@@ -389,7 +388,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
                                                   auto_increment_state->schema.get(), rowids));
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();
-    LOG(INFO) << "UpdateManager get_column_values " << cost_str.str();
+    VLOG(2) << "UpdateManager get_column_values " << cost_str.str();
     return Status::OK();
 }
 
@@ -414,7 +413,7 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
 Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec) {
     std::string filepath = _location_provider->tablet_metadata_location(tsid.tablet_id, meta_ver);
     MetaFileReader reader(filepath, false);
-    RETURN_IF_ERROR(reader.load());
+    RETURN_IF_ERROR(reader.load_by_cache(filepath, _tablet_mgr));
     RETURN_IF_ERROR(reader.get_del_vec(_tablet_mgr, tsid.segment_id, delvec));
     return Status::OK();
 }
@@ -528,7 +527,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     builder->apply_opcompaction(op_compaction);
     cost_str << " [apply meta] " << watch.elapsed_time();
 
-    LOG(INFO) << strings::Substitute(
+    VLOG(2) << strings::Substitute(
             "lake publish_primary_compaction: tablet_id:$0 input_rowset_size:$1 max_rowset_id:$2"
             " total_deletes:$3 total_rows:$4 base_ver:$5 new_ver:$6 cost:$7",
             tablet->id(), op_compaction.input_rowsets_size(), max_rowset_id, total_deletes, total_rows, base_version,
@@ -653,6 +652,4 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     }
 }
 
-} // namespace lake
-
-} // namespace starrocks
+} // namespace starrocks::lake

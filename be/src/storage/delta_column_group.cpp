@@ -92,7 +92,7 @@ Status DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(const
     return Status::OK();
 }
 
-void DeltaColumnGroupListHelper::garbage_collection(DeltaColumnGroupList& dcg_list, TabletSegmentId tsid,
+void DeltaColumnGroupListHelper::garbage_collection(DeltaColumnGroupList& dcg_list, const TabletSegmentId& tsid,
                                                     int64_t min_readable_version,
                                                     std::vector<std::pair<TabletSegmentId, int64_t>>& garbage_dcgs) {
     auto dcg_itr = dcg_list.begin();
@@ -115,7 +115,7 @@ void DeltaColumnGroupListHelper::garbage_collection(DeltaColumnGroupList& dcg_li
                 }
             }
             if (need_free) {
-                garbage_dcgs.push_back(std::make_pair(tsid, (*dcg_itr)->version()));
+                garbage_dcgs.emplace_back(tsid, (*dcg_itr)->version());
                 dcg_itr = dcg_list.erase(dcg_itr);
             } else {
                 for (uint32_t cid : cids) {

@@ -54,6 +54,13 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergRESTCatalog.class);
     public static final String LOCATION_PROPERTY = "location";
 
+    // Not all RestCatalog is tabular, here just used to handle tabular specifically
+    // If we are using tabular rest catalog, we must use S3FileIO
+    private static final String TABULAR_API = "https://api.tabular.io/ws";
+    // This parameter we don't expose to user, just some people are using docker hosted tabular, it's url may
+    // not the "https://api.tabular.io/ws"
+    public static final String KEY_ENABLE_TABULAR_SUPPORT = "enable_tabular_support";
+
     private final Configuration conf;
     private final RESTCatalog delegate;
 
@@ -71,6 +78,11 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
+
+        if (copiedProperties.get("uri").equalsIgnoreCase(TABULAR_API)) {
+            copiedProperties.put("header.x-tabular-s3-access", "vended_credentials");
+            copiedProperties.put(KEY_ENABLE_TABULAR_SUPPORT, "true");
+        }
 
         delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);
     }

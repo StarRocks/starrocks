@@ -18,13 +18,11 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
@@ -42,9 +40,6 @@ public class ShowWarehousesStmtTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
-        String createWarehouse = "CREATE WAREHOUSE warehouse_1";
-        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(createWarehouse);
-        Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         starRocksAssert = new StarRocksAssert();
@@ -65,9 +60,10 @@ public class ShowWarehousesStmtTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         ShowResultSetMetaData metaData = resultSet.getMetaData();
-        Assert.assertEquals("Warehouse", metaData.getColumn(0).getName());
-        Assert.assertEquals("State", metaData.getColumn(1).getName());
-        Assert.assertEquals("ClusterCount", metaData.getColumn(2).getName());
-        Assert.assertEquals("INITIALIZING", resultSet.getResultRows().get(0).get(1).toString());
+        Assert.assertEquals("Id", metaData.getColumn(0).getName());
+        Assert.assertEquals("Warehouse", metaData.getColumn(1).getName());
+        Assert.assertEquals("State", metaData.getColumn(2).getName());
+        Assert.assertEquals("ClusterCount", metaData.getColumn(3).getName());
+        Assert.assertEquals("INITIALIZING", resultSet.getResultRows().get(0).get(2).toString());
     }
 }

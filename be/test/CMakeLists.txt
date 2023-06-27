@@ -198,7 +198,7 @@ set(EXEC_FILES
         ./storage/lake/async_delta_writer_test.cpp
         ./storage/lake/compaction_policy_test.cpp
         ./storage/lake/delta_writer_test.cpp
-        ./storage/lake/gc_test.cpp
+        ./storage/lake/vacuum_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/compaction_task_test.cpp
         ./storage/lake/schema_change_test.cpp
@@ -366,6 +366,7 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
+        ./util/concurrent_limiter_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp

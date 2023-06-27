@@ -23,6 +23,7 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,9 +70,12 @@ public class Cluster implements Writable {
     }
 
     public List<Long> getComputeNodeIds() {
-        // ask starMgr for node lists
         List<Long> nodeIds = new ArrayList<>();
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            return nodeIds;
+        }
         try {
+            // ask starMgr for node lists
             nodeIds = GlobalStateMgr.getCurrentStarOSAgent().
                     getWorkersByWorkerGroup(workerGroupId);
         } catch (UserException e) {

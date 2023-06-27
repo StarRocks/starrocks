@@ -408,9 +408,9 @@ public:
     }
 
 private:
-    StatusOr<ColumnPtr> _evaluate_general(const Columns columns) {
+    StatusOr<ColumnPtr> _evaluate_general(const Columns& columns) {
         std::vector<ColumnViewer<Type>> viewers;
-        for (auto value : columns) {
+        for (auto& value : columns) {
             viewers.push_back(ColumnViewer<Type>(value));
         }
         // choose not null
@@ -436,7 +436,7 @@ private:
         return builder.build(ColumnHelper::is_all_const(columns));
     }
 
-    StatusOr<ColumnPtr> _evaluate_complex(const Columns columns) { // without only-null columns
+    StatusOr<ColumnPtr> _evaluate_complex(const Columns& columns) { // without only-null columns
         int size = columns[0]->size();
         int col_size = columns.size();
         auto res = ColumnHelper::cast_to_nullable_column(columns[0]->clone_empty());
