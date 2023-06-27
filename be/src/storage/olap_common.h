@@ -262,6 +262,8 @@ struct OlapReaderStatistics {
 
     int64_t runtime_stats_filtered = 0;
 
+    int64_t read_pk_index_ns = 0;
+
     // ------ for lake tablet ------
     int64_t pages_from_local_disk = 0;
 
