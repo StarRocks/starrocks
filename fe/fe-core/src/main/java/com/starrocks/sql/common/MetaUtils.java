@@ -92,7 +92,7 @@ public class MetaUtils {
     public static Database getDatabase(String catalogName, String dbName) {
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
         if (db == null) {
-            throw new SemanticException("Database %s is not found", dbName);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         return db;
     }

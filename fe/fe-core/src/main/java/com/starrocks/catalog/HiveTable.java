@@ -435,7 +435,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void onCreate() {
+    public void onReload() {
         if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTableFromResource(
                     String.join(".", getCatalogName(), hiveDbName, hiveTableName));

@@ -127,7 +127,7 @@ public class DiskAndTabletLoadReBalancerTest {
                 distributionInfo);
         table.addPartition(partition);
         Database database = new Database(dbId, "database");
-        database.createTable(table);
+        database.registerTableUnlock(table);
 
         new Expectations() {
             {
@@ -287,7 +287,7 @@ public class DiskAndTabletLoadReBalancerTest {
                 distributionInfo);
         table.addPartition(partition);
         Database database = new Database(dbId, "database");
-        database.createTable(table);
+        database.registerTableUnlock(table);
 
         new Expectations() {
             {
@@ -467,7 +467,7 @@ public class DiskAndTabletLoadReBalancerTest {
         table.addPartition(partition1);
         table.addPartition(partition2);
         Database database = new Database(dbId, "database");
-        database.createTable(table);
+        database.registerTableUnlock(table);
 
         new Expectations() {
             {
@@ -656,7 +656,7 @@ public class DiskAndTabletLoadReBalancerTest {
                 distributionInfo);
         table.addPartition(partition);
         Database database = new Database(dbId, "database");
-        database.createTable(table);
+        database.registerTableUnlock(table);
 
         new Expectations() {
             {

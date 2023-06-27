@@ -166,7 +166,7 @@ public class LakeTableSchemaChangeJobTest {
         DataCacheInfo dataCacheInfo = new DataCacheInfo(false, false);
         partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
 
-        db.createTable(table);
+        db.registerTableUnlock(table);
 
         ColumnDef c1 = new ColumnDef("c1", TypeDef.create(PrimitiveType.DOUBLE));
         AddColumnClause alter = new AddColumnClause(c1, null, null, null);
@@ -509,7 +509,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
-        db.createTable(table);
+        db.registerTableUnlock(table);
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
@@ -569,7 +569,7 @@ public class LakeTableSchemaChangeJobTest {
         });
         Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
-        db.createTable(table);
+        db.registerTableUnlock(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
 
         exception = Assert.assertThrows(AlterCancelException.class, () -> {
@@ -578,7 +578,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
-        db.createTable(table);
+        db.registerTableUnlock(table);
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
@@ -807,7 +807,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // Add table back to database
-        db.createTable(table);
+        db.registerTableUnlock(table);
 
         // We've mocked ColumnTypeConverter.publishVersion to throw RpcException, should this runFinishedRewritingJob will fail but
         // should not throw any exception.

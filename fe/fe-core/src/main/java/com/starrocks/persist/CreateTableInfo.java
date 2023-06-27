@@ -61,9 +61,10 @@ public class CreateTableInfo implements Writable {
         // for persist
     }
 
-    public CreateTableInfo(String dbName, Table table) {
+    public CreateTableInfo(String dbName, Table table, String storageVolumeId) {
         this.dbName = dbName;
         this.table = table;
+        this.storageVolumeId = storageVolumeId;
     }
 
     public String getDbName() {
@@ -72,10 +73,6 @@ public class CreateTableInfo implements Writable {
 
     public Table getTable() {
         return table;
-    }
-
-    public void setStorageVolumeId(String storageVolumeId) {
-        this.storageVolumeId = storageVolumeId;
     }
 
     public String getStorageVolumeId() {

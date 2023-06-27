@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -279,7 +278,7 @@ public class CreateTableLikeTest {
         String createTableLikeSql = "create table test.testAbTbl1 like test.testAbTbl1";
         String newDbName = "test";
         String newTblName = "testAbTbl1";
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Table 'testAbTbl1' already exists",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Table 'testAbTbl1' already exists",
                 () -> checkCreateOlapTableLike(createTableSql, createTableLikeSql, newDbName, newDbName, newTblName,
                         newTblName));
         // 2. create table with not existed DB

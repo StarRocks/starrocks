@@ -557,7 +557,7 @@ public class EsTable extends Table implements GsonPostProcessable {
     }
 
     @Override
-    public void onCreate() {
+    public void onReload() {
         GlobalStateMgr.getCurrentState().getEsRepository().registerTable(this);
     }
 
