@@ -228,9 +228,10 @@ public:
 
             size_t i = 0;
             for (i = 0; (i + 8) < size; i += 8) {
-                uint64_t partial_all_null;
-                memcpy(&partial_all_null, null_data_ptr, 8);
-                if (partial_all_null != 0) {
+                uint64_t partial_null_value;
+                memcpy(&partial_null_value, null_data_ptr, 8);
+                // it means there are some not-null values in it.
+                if (partial_null_value != 0) {
                     for (int j = 0; j < 8; j++) {
                         if (!null_data_ptr[j]) {
                             slices[i + j] = _dict[dict_codes[i + j]];
