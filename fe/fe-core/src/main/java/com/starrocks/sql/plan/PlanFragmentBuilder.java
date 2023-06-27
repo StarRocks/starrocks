@@ -1869,7 +1869,7 @@ public class PlanFragmentBuilder {
         }
 
         // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
-        //
+        // sum function is update function, but count is merge function
         private void setMergeAggFn(List<FunctionCallExpr> aggregateExprList, int singleDistinctFunctionPos) {
             for (int i = 0; i < aggregateExprList.size(); i++) {
                 if (i != singleDistinctFunctionPos) {
