@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "common/config.h"
+#include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
@@ -143,7 +144,7 @@ void WorkGroup::init() {
                                   : ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
     _mem_tracker = std::make_shared<starrocks::MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
                                                            ExecEnv::GetInstance()->query_pool_mem_tracker());
-    _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
+    _driver_sched_entity.set_queue(std::make_unique<pipeline::WorkGroupDriverQueue>());
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
 }

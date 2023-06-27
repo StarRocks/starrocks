@@ -95,54 +95,6 @@ private:
     std::atomic<int64_t> _accu_consume_time = 0;
 };
 
-class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriverQueue> {
-    friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
-
-public:
-    QuerySharedDriverQueue();
-    ~QuerySharedDriverQueue() override = default;
-    void close() override;
-    void put_back(const DriverRawPtr driver) override;
-    void put_back(const std::vector<DriverRawPtr>& drivers) override;
-    void put_back_from_executor(const DriverRawPtr driver) override;
-
-    void update_statistics(const DriverRawPtr driver) override;
-
-    // Return cancelled status, if the queue is closed.
-    StatusOr<DriverRawPtr> take(const bool block) override;
-
-    void cancel(DriverRawPtr driver) override;
-
-    size_t size() const override;
-
-    bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override { return false; }
-
-    static double ratio_of_adjacent_queue() { return config::pipeline_driver_queue_ratio_of_adjacent_queue; }
-    static constexpr size_t QUEUE_SIZE = 8;
-
-private:
-    // When the driver at the i-th level costs _level_time_slices[i],
-    // it will move to (i+1)-th level.
-    int _compute_driver_level(const DriverRawPtr driver) const;
-
-private:
-    // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
-    // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2.0s, 3.0s, 4.2s, 5.6s, 7.4s.
-    // it will move to next level.
-    const int64_t LEVEL_TIME_SLICE_BASE_NS = config::pipeline_driver_queue_level_time_slice_base_ns;
-    const double RATIO_OF_ADJACENT_QUEUE = ratio_of_adjacent_queue();
-
-    SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
-    // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.
-    int64_t _level_time_slices[QUEUE_SIZE];
-
-    size_t _num_drivers = 0;
-
-    mutable std::mutex _global_mutex;
-    std::condition_variable _cv;
-    bool _is_closed = false;
-};
-
 // WorkGroupDriverQueue contains two levels of queues.
 // The first level is the work group queue, and the second level is the driver queue in a work group.
 class WorkGroupDriverQueue : public FactoryMethod<DriverQueue, WorkGroupDriverQueue> {

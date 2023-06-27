@@ -229,8 +229,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&wg_driver_executor_thread_pool));
-    _wg_driver_executor =
-            new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
+    _wg_driver_executor = new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool));
     _wg_driver_executor->initialize(_max_executor_threads);
 
     int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
