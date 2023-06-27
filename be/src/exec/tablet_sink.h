@@ -106,7 +106,7 @@ private:
     // This method will change _validate_selection
     void _validate_data(RuntimeState* state, Chunk* chunk);
 
-    Status _init_node_channels(RuntimeState* state);
+    Status _init_node_channels(RuntimeState* state, IndexIdToTabletBEMap& index_id_to_tablet_be_map);
 
     // When compute buckect hash, we should use real string for char column.
     // So we need to pad char column after compute buckect hash.
@@ -223,8 +223,6 @@ private:
     std::set<int64_t> _failed_channels;
     // enable colocate index
     bool _colocate_mv_index{false};
-    // map index_id to TabletBEMap(map tablet_id to backend id)
-    IndexIdToTabletBEMap _index_id_to_tablet_be_map;
 
     bool _enable_replicated_storage = false;
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;

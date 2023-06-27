@@ -46,6 +46,9 @@ public:
     virtual bool is_full();
     virtual bool is_close_done();
 
+    // mutable
+    IndexIdToTabletBEMap* index_id_to_tablet_be_map() { return &_index_id_to_tablet_be_map; }
+
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
             func(it.second);

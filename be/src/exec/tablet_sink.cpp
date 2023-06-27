@@ -236,8 +236,10 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     _load_mem_limit = state->get_load_mem_limit();
 
+    // map index_id to TabletBEMap(map tablet_id to backend id)
+    IndexIdToTabletBEMap index_id_to_tablet_be_map;
     // open all channels
-    RETURN_IF_ERROR(_init_node_channels(state));
+    RETURN_IF_ERROR(_init_node_channels(state, index_id_to_tablet_be_map));
 
     std::vector<IndexChannel*> index_channels;
     for (const auto& channel : _channels) {
@@ -247,22 +249,23 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     for (auto& it : _node_channels) {
         node_channels[it.first] = it.second.get();
     }
+
     if (_colocate_mv_index) {
         _tablet_sink_sender = std::make_unique<TabletSinkColocateSender>(
-                _load_id, _txn_id, _index_id_to_tablet_be_map, _vectorized_partition, std::move(index_channels),
-                std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage, _write_quorum_type,
-                _num_repicas);
+                _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
+                std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
+                _write_quorum_type, _num_repicas);
 
     } else {
         _tablet_sink_sender = std::make_unique<TabletSinkSender>(
-                _load_id, _txn_id, _index_id_to_tablet_be_map, _vectorized_partition, std::move(index_channels),
-                std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage, _write_quorum_type,
-                _num_repicas);
+                _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
+                std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
+                _write_quorum_type, _num_repicas);
     }
     return Status::OK();
 }
 
-Status OlapTableSink::_init_node_channels(RuntimeState* state) {
+Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBEMap& index_id_to_tablet_be_map) {
     const auto& partitions = _vectorized_partition->get_partitions();
     for (int i = 0; i < _schema->indexes().size(); ++i) {
         // collect all tablets belong to this rollup
@@ -316,7 +319,7 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
                 tablets.emplace_back(std::move(tablet_info));
             }
         }
-        _index_id_to_tablet_be_map.emplace(index->index_id, std::move(tablet_to_be));
+        index_id_to_tablet_be_map.emplace(index->index_id, std::move(tablet_to_be));
 
         auto channel = std::make_unique<IndexChannel>(this, index->index_id);
         RETURN_IF_ERROR(channel->init(state, tablets, false));
@@ -391,6 +394,7 @@ Status OlapTableSink::_automatic_create_partition() {
 
 Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTablePartition>& partitions) {
     std::map<int64_t, std::vector<PTabletWithPartition>> index_tablets_map;
+    IndexIdToTabletBEMap index_tablet_bes_map;
     for (auto& t_part : partitions) {
         for (auto& index : t_part.indexes) {
             std::vector<PTabletWithPartition> tablets;
@@ -416,6 +420,8 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
                     replica->set_host(node_info->host);
                     replica->set_port(node_info->brpc_port);
                     replica->set_node_id(node_id);
+
+                    index_tablet_bes_map[index.index_id][tablet].emplace_back(node_id);
                 }
 
                 index_tablets_map[index.index_id].emplace_back(std::move(tablet_info));
@@ -424,8 +430,21 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
     }
 
     for (auto& channel : _channels) {
+        int64_t index_id = channel->index_id();
         // initialize index channel
-        RETURN_IF_ERROR(channel->init(_runtime_state, index_tablets_map[channel->_index_id], true));
+        RETURN_IF_ERROR(channel->init(_runtime_state, index_tablets_map[index_id], true));
+
+        // add into index_id_to_tablet_be_map
+        auto* index_id_to_tablet_be_map = _tablet_sink_sender->index_id_to_tablet_be_map();
+        if (index_id_to_tablet_be_map->find(index_id) == index_id_to_tablet_be_map->end()) {
+            LOG(WARNING) << "Incremental tablet open failed, index_id=" << index_id
+                         << " not found in index_id_to_tablet_be_map";
+            return Status::InternalError(
+                    "Incremental tablet open failed, index_id not found in index_id_to_tablet_be_map");
+        }
+        for (auto& [tablet_id, bes] : index_tablet_bes_map[index_id]) {
+            (*index_id_to_tablet_be_map)[index_id].emplace(tablet_id, std::move(bes));
+        }
 
         // incremental open new partition's tablet on storage side
         channel->for_each_node_channel([](NodeChannel* ch) { ch->try_incremental_open(); });
