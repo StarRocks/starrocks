@@ -564,4 +564,60 @@ const char* DeltaWriter::_replica_state_name(ReplicaState state) const {
     return "";
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
+    // 1. get pk column from chunk
+    vector<uint32_t> pk_columns;
+    for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
+        pk_columns.push_back((uint32_t)i);
+    }
+    Schema pkey_schema = ChunkHelper::convert_schema(*_tablet_schema, pk_columns);
+    std::unique_ptr<Column> pk_column;
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+        CHECK(false) << "create column for primary key encoder failed";
+    }
+    auto col = pk_column->clone();
+
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    std::unique_ptr<Column> upserts = std::move(col);
+
+    std::vector<uint64_t> rss_rowids;
+    rss_rowids.resize(upserts->size());
+
+    // 2. probe index
+    RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *upserts, nullptr, &rss_rowids));
+
+    std::vector<uint8_t> filter;
+    uint32_t gen_num = 0;
+    for (uint32_t i = 0; i < rss_rowids.size(); i++) {
+        uint64_t v = rss_rowids[i];
+        uint32_t rssid = v >> 32;
+        if (rssid == (uint32_t)-1) {
+            filter.emplace_back(1);
+            ++gen_num;
+        } else {
+            filter.emplace_back(0);
+        }
+    }
+
+    // 3. fill the non-existing rows
+    std::vector<int64_t> ids(gen_num);
+    int64_t table_id = _tablet->tablet_meta()->table_id();
+    RETURN_IF_ERROR(StorageEngine::instance()->get_next_increment_id_interval(table_id, gen_num, ids));
+
+    for (int i = 0; i < _vectorized_schema.num_fields(); i++) {
+        const TabletColumn& tablet_column = _tablet_schema->column(i);
+        if (tablet_column.is_auto_increment()) {
+            auto& column = chunk.get_column_by_index(i);
+            RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(column))->fill_range(ids, filter));
+            break;
+        }
+    }
+
+    return Status::OK();
+}
+
+} // namespace starrocks
+>>>>>>> 90c0bae03 ([BugFix] Disable in-tablet parallel, add counter and get index timeout for pointer query using pk index (#25850))

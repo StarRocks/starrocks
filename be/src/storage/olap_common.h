@@ -463,6 +463,28 @@ struct OlapReaderStatistics {
     int64_t total_columns_data_page_count = 0;
 
     int64_t runtime_stats_filtered = 0;
+<<<<<<< HEAD
+=======
+
+    int64_t read_pk_index_ns = 0;
+
+    // ------ for lake tablet ------
+    int64_t pages_from_local_disk = 0;
+
+    int64_t compressed_bytes_read_local_disk = 0;
+    int64_t compressed_bytes_read_remote = 0;
+    // bytes read requested from be, same as compressed_bytes_read for local tablet
+    int64_t compressed_bytes_read_request = 0;
+
+    int64_t io_count = 0;
+    int64_t io_count_local_disk = 0;
+    int64_t io_count_remote = 0;
+    int64_t io_count_request = 0;
+
+    int64_t io_ns_local_disk = 0;
+    int64_t io_ns_remote = 0;
+    // ------ for lake tablet ------
+>>>>>>> 90c0bae03 ([BugFix] Disable in-tablet parallel, add counter and get index timeout for pointer query using pk index (#25850))
 };
 
 typedef uint32_t ColumnId;
