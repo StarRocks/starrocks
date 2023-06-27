@@ -177,7 +177,7 @@ ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
         if (_partition_chunk_queue.empty()) {
             msg = "_partition_chunk_queue is empty";
         } else if (rows_num + _partition_chunk_queue.front().size > state->chunk_size()) {
-            msg = std::format("row_num ({}) + _partition_chunk_queue.front().size ({}) > chunk_size ({})", rows_num,
+            msg = fmt::format("row_num ({}) + _partition_chunk_queue.front().size ({}) > chunk_size ({})", rows_num,
                               _partition_chunk_queue.front().size, state->chunk_size());
         } else {
             msg = "unknown error";
