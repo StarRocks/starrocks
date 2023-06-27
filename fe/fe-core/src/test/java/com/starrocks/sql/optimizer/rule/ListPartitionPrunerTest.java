@@ -211,6 +211,130 @@ public class ListPartitionPrunerTest {
     }
 
     @Test
+    public void testExternalTableBinaryPredicate2() throws AnalysisException {
+        // string_col=01   1
+        // string_col=02   2
+        // string_col=03   3
+        // string_col=1   4
+        // string_col=10   5
+        // string_col=11   6
+        // string_col=12   7
+        // string_col=21   8
+
+        ColumnRefOperator stringColumn = new ColumnRefOperator(1, Type.STRING, "string_col", true);
+
+        // column -> partition values
+        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
+        TreeMap<LiteralExpr, Set<Long>> stringPartitionValuesMap = Maps.newTreeMap();
+        columnToPartitionValuesMap.put(stringColumn, stringPartitionValuesMap);
+        stringPartitionValuesMap.put(new StringLiteral("01"), Sets.newHashSet(1L));
+        stringPartitionValuesMap.put(new StringLiteral("02"), Sets.newHashSet(2L));
+        stringPartitionValuesMap.put(new StringLiteral("03"), Sets.newHashSet(3L));
+        stringPartitionValuesMap.put(new StringLiteral("1"), Sets.newHashSet(4L));
+        stringPartitionValuesMap.put(new StringLiteral("10"), Sets.newHashSet(5L));
+        stringPartitionValuesMap.put(new StringLiteral("11"), Sets.newHashSet(6L));
+        stringPartitionValuesMap.put(new StringLiteral("12"), Sets.newHashSet(7L));
+        stringPartitionValuesMap.put(new StringLiteral("21"), Sets.newHashSet(8L));
+
+        Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
+        columnToNullPartitions.put(stringColumn, Sets.newHashSet(9L));
+
+        List<ScalarOperator> conjuncts = Lists.newArrayList();
+        ListPartitionPruner pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, stringColumn, ConstantOperator.createVarchar("01")));
+        Assert.assertEquals(Lists.newArrayList(1L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, stringColumn, ConstantOperator.createVarchar("1")));
+        Assert.assertEquals(Lists.newArrayList(4L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE, stringColumn, ConstantOperator.createVarchar("03")));
+        Assert.assertEquals(Lists.newArrayList(3L, 4L, 5L, 6L, 7L, 8L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, stringColumn, ConstantOperator.createVarchar("03")));
+        Assert.assertEquals(Lists.newArrayList(1L, 2L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(Type.INT, stringColumn),
+                ConstantOperator.createInt(1)));
+        Assert.assertEquals(Lists.newArrayList(1L, 4L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GT, new CastOperator(Type.INT, stringColumn),
+                ConstantOperator.createInt(3)));
+        Assert.assertEquals(Lists.newArrayList(5L, 6L, 7L, 8L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(Type.INT, stringColumn),
+                ConstantOperator.createInt(3)));
+        Assert.assertEquals(Lists.newArrayList(1L, 2L, 4L), pruner.prune());
+    }
+
+    @Test
+    public void testExternalTableBinaryPredicate3() throws AnalysisException {
+        // int_col=1   1
+        // int_col=2   2
+        // int_col=3   3
+        // int_col=10   4
+        // int_col=11   5
+        // int_col=12   6
+        // int_col=20   7
+        // int_col=21   8
+
+        ColumnRefOperator intColumn = new ColumnRefOperator(1, Type.INT, "int_col", true);
+
+        // column -> partition values
+        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
+        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap = Maps.newTreeMap();
+        columnToPartitionValuesMap.put(intColumn, intPartitionValuesMap);
+        intPartitionValuesMap.put(new IntLiteral(1), Sets.newHashSet(1L));
+        intPartitionValuesMap.put(new IntLiteral(2), Sets.newHashSet(2L));
+        intPartitionValuesMap.put(new IntLiteral(3), Sets.newHashSet(3L));
+        intPartitionValuesMap.put(new IntLiteral(10), Sets.newHashSet(4L));
+        intPartitionValuesMap.put(new IntLiteral(11), Sets.newHashSet(5L));
+        intPartitionValuesMap.put(new IntLiteral(12), Sets.newHashSet(6L));
+        intPartitionValuesMap.put(new IntLiteral(20), Sets.newHashSet(7L));
+        intPartitionValuesMap.put(new IntLiteral(21), Sets.newHashSet(8L));
+
+        Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
+        columnToNullPartitions.put(intColumn, Sets.newHashSet(9L));
+
+        List<ScalarOperator> conjuncts = Lists.newArrayList();
+        ListPartitionPruner pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, intColumn, ConstantOperator.createInt(1)));
+        Assert.assertEquals(Lists.newArrayList(1L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE, intColumn, ConstantOperator.createInt(3)));
+        Assert.assertEquals(Lists.newArrayList(3L, 4L, 5L, 6L, 7L, 8L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, intColumn, ConstantOperator.createInt(3)));
+        Assert.assertEquals(Lists.newArrayList(1L, 2L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(Type.STRING, intColumn),
+                ConstantOperator.createVarchar("1")));
+        Assert.assertEquals(Lists.newArrayList(1L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GT, new CastOperator(Type.STRING, intColumn),
+                ConstantOperator.createVarchar("3")));
+        Assert.assertEquals(Lists.newArrayList(), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(Type.STRING, intColumn),
+                ConstantOperator.createVarchar("2")));
+        Assert.assertEquals(Lists.newArrayList(1L, 4L, 5L, 6L), pruner.prune());
+    }
+
+
+
+    @Test
     public void testSpecifyPartition() throws AnalysisException {
         // 2 partition columns
         // int_col1=0/int_col2=10    0
