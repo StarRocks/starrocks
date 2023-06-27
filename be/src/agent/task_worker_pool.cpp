@@ -499,8 +499,7 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         int64_t start_ts = MonotonicMillis();
-        run_publish_version_task(token.get(), publish_version_task, finish_task_request, affected_dirs,
-                                 wait_time);
+        run_publish_version_task(token.get(), publish_version_task, finish_task_request, affected_dirs, wait_time);
         batch_publish_latency += MonotonicMillis() - start_ts;
         priority_tasks.pop();
 
