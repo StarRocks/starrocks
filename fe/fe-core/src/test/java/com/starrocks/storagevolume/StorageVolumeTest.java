@@ -275,6 +275,16 @@ public class StorageVolumeTest {
         AzBlobFileStoreInfo azBlobFileStoreInfo = fileStore.getAzblobFsInfo();
         Assert.assertEquals("endpoint", azBlobFileStoreInfo.getEndpoint());
         Assert.assertEquals("shared_key", azBlobFileStoreInfo.getCredential().getSharedKey());
+
+        sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa/bbb"),
+                storageParams, true, "");
+        cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
+        fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertTrue(fileStore.hasAzblobFsInfo());
+        azBlobFileStoreInfo = fileStore.getAzblobFsInfo();
+        Assert.assertEquals("endpoint", azBlobFileStoreInfo.getEndpoint());
+        Assert.assertEquals("shared_key", azBlobFileStoreInfo.getCredential().getSharedKey());
     }
 
     @Test
@@ -289,6 +299,16 @@ public class StorageVolumeTest {
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
         Assert.assertTrue(fileStore.hasAzblobFsInfo());
         AzBlobFileStoreInfo azBlobFileStoreInfo = fileStore.getAzblobFsInfo();
+        Assert.assertEquals("endpoint", azBlobFileStoreInfo.getEndpoint());
+        Assert.assertEquals("sas_token", azBlobFileStoreInfo.getCredential().getSasToken());
+
+        sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa/bbb"),
+                storageParams, true, "");
+        cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.AZURE, cloudConfiguration.getCloudType());
+        fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertTrue(fileStore.hasAzblobFsInfo());
+        azBlobFileStoreInfo = fileStore.getAzblobFsInfo();
         Assert.assertEquals("endpoint", azBlobFileStoreInfo.getEndpoint());
         Assert.assertEquals("sas_token", azBlobFileStoreInfo.getCredential().getSasToken());
     }

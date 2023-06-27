@@ -23,8 +23,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,8 +33,6 @@ import java.util.stream.Collectors;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
-
-    public static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
 
     @Override
     public StorageVolume getStorageVolumeByName(String svName) {
