@@ -28,10 +28,18 @@ jobs:
       - run: |
           echo "${{ github.event.pull_request.title }}"
           echo "${{ github.head_ref }}"
+      - name: Save PR number
+        run: |
+          mkdir -p ./pr
+          echo ${{ github.event.number }} > ./pr/NR
+      - uses: actions/upload-artifact@v2
+        with:
+          name: pr
+          path: pr/NR
       - uses: xSAVIKx/artifact-exists-action@v0
         id: check-exists
         with:
-          name: 'coverage-artifact'
+          name: 'pr'
       - run: |
           echo "${{ steps.check-exists.outputs.exists }}"
           exit 1
