@@ -141,6 +141,7 @@ void AgentServer::Impl::init_or_die() {
     BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", 1, 1, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
                                    _thread_pool_publish_version);
 #else
+<<<<<<< HEAD
     int max_publish_version_worker_count = config::transaction_publish_version_worker_count;
     if (max_publish_version_worker_count <= 0) {
         max_publish_version_worker_count = CpuInfo::num_cores();
@@ -149,6 +150,19 @@ void AgentServer::Impl::init_or_die() {
     BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
                                    max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
                                    _thread_pool_publish_version);
+=======
+        int max_publish_version_worker_count = config::transaction_publish_version_worker_count;
+        if (max_publish_version_worker_count <= 0) {
+            max_publish_version_worker_count = CpuInfo::num_cores();
+        }
+        max_publish_version_worker_count =
+                std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                       max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                       _thread_pool_publish_version);
+        REGISTER_GAUGE_STARROCKS_METRIC(publish_version_queue_count,
+                                        [this]() { return _thread_pool_publish_version->num_queued_tasks(); });
+>>>>>>> 5f5680232 ([Enhancement] add metrics for some thread pool queue (#25831))
 #endif
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
