@@ -78,7 +78,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
     }
 
     public String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
-                                    Optional<Boolean> enabled, String comment)
+                                      Optional<Boolean> enabled, String comment)
             throws DdlException, AlreadyExistsException, AnalysisException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (exists(name)) {
@@ -163,12 +163,8 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     public boolean exists(String svKey) throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            try {
-                StorageVolume sv = getStorageVolumeByName(svKey);
-                return sv != null;
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
-            }
+            StorageVolume sv = getStorageVolumeByName(svKey);
+            return sv != null;
         }
     }
 
@@ -228,13 +224,19 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
+    public String getStorageVolumeIdOfTable(long tableId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return tableToStorageVolume.get(tableId);
+        }
+    }
+
     public String getStorageVolumeIdOfDb(long dbId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return dbToStorageVolume.get(dbId);
         }
     }
 
-    public StorageVolume getDefaultStorageVolume() throws AnalysisException {
+    public StorageVolume getDefaultStorageVolume() {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return getStorageVolume(getDefaultStorageVolumeId());
         }
@@ -246,11 +248,14 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void replayCreateStorageVolume(StorageVolume sv) {}
+    public void replayCreateStorageVolume(StorageVolume sv) {
+    }
 
-    public void replayUpdateStorageVolume(StorageVolume sv) {}
+    public void replayUpdateStorageVolume(StorageVolume sv) {
+    }
 
-    public void replayDropStorageVolume(DropStorageVolumeLog log) {}
+    public void replayDropStorageVolume(DropStorageVolumeLog log) {
+    }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STORAGE_VOLUME_MGR, 1);
@@ -281,7 +286,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
+    public abstract StorageVolume getStorageVolumeByName(String svKey);
 
     public abstract StorageVolume getStorageVolume(String storageVolumeId);
 

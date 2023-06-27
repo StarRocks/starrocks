@@ -124,7 +124,7 @@ CONF_Int32(delete_worker_count_normal_priority, "2");
 // The count of thread to high priority delete.
 CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
-CONF_Int32(alter_tablet_worker_count, "3");
+CONF_mInt32(alter_tablet_worker_count, "3");
 // The count of parallel clone task per storage path
 CONF_mInt32(parallel_clone_task_per_path, "8");
 // The count of thread to clone. Deprecated
@@ -672,7 +672,7 @@ CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
-CONF_Int64(pipeline_connector_scan_thread_num_per_cpu, "8");
+CONF_Double(pipeline_connector_scan_thread_num_per_cpu, "8");
 // Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
@@ -835,19 +835,9 @@ CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
-CONF_mInt64(lake_gc_metadata_max_versions, "10");
-CONF_mInt64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
-CONF_mInt64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
-// This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
-// The actual effective value is max(lake_gc_segment_expire_seconds, 86400)
-CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
-CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
-CONF_mBool(experimental_lake_enable_fast_gc, "true");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
-CONF_mBool(lake_enable_aggressive_gc, "false");
-CONF_mBool(lake_aggressive_gc_high_priority, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -991,5 +981,7 @@ CONF_mInt32(primary_key_limit_size, "128");
 // You could enable this config to speed up the point lookup query,
 // otherwise, StarRocks will use zone map for one column filter
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
+
+CONF_mBool(enable_http_stream_load_limit, "false");
 
 } // namespace starrocks::config

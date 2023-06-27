@@ -170,7 +170,7 @@ private:
 
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
-    bool _is_incremental_channel;
+    bool _is_incremental_channel{false};
 };
 
 LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
@@ -180,8 +180,7 @@ LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletMa
           _tablet_manager(tablet_manager),
           _key(key),
           _mem_tracker(mem_tracker),
-          _mem_pool(std::make_unique<MemPool>()),
-          _is_incremental_channel(false) {}
+          _mem_pool(std::make_unique<MemPool>()) {}
 
 LakeTabletsChannel::~LakeTabletsChannel() {
     _mem_pool.reset();
@@ -364,6 +363,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         auto remain = request.timeout_ms();
         remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
         LOG(INFO) << msg << ", wait for all senders closed ...";
+
+        // unlock write lock so that incremental open can aquire read lock
+        rolk.unlock();
         drain_senders(remain * 1000, msg);
     }
 }

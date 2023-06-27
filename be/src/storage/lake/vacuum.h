@@ -12,29 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast;
+#pragma once
 
-import com.starrocks.sql.parser.NodePosition;
+#include "gen_cpp/lake_service.pb.h"
 
-public class ResumeWarehouseStmt extends DdlStmt {
-    private String whName;
+namespace starrocks::lake {
 
-    public ResumeWarehouseStmt(String whName) {
-        this(whName, NodePosition.ZERO);
-    }
+class TabletManager;
 
-    public ResumeWarehouseStmt(String whName, NodePosition pos) {
-        super(pos);
-        this.whName = whName;
-    }
+void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response);
 
-    public String getFullWhName() {
-        return whName;
-    }
+void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response);
 
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitResumeWarehouseStatement(this, context);
-    }
-
-}
+} // namespace starrocks::lake

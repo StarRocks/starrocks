@@ -36,7 +36,7 @@ public:
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema);
     // *captured_rowsets* is captured forward before creating TabletReader.
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
-                 const std::vector<RowsetSharedPtr>& captured_rowsets);
+                 std::vector<RowsetSharedPtr> captured_rowsets);
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                  RowSourceMaskBuffer* mask_buffer);
     ~TabletReader() override { close(); }

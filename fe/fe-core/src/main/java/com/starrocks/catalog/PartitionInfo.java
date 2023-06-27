@@ -40,7 +40,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.thrift.TStorageMedium;
@@ -85,7 +85,7 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
     // for lake table
     // storage cache, ttl and enable_async_write_back
     @SerializedName(value = "idToStorageCacheInfo")
-    protected Map<Long, StorageCacheInfo> idToStorageCacheInfo;
+    protected Map<Long, DataCacheInfo> idToStorageCacheInfo;
 
 
     public PartitionInfo() {
@@ -169,12 +169,12 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         idToTabletType.put(partitionId, tabletType);
     }
 
-    public StorageCacheInfo getStorageCacheInfo(long partitionId) {
+    public DataCacheInfo getDataCacheInfo(long partitionId) {
         return idToStorageCacheInfo.get(partitionId);
     }
 
-    public void setStorageCacheInfo(long partitionId, StorageCacheInfo storageCacheInfo) {
-        idToStorageCacheInfo.put(partitionId, storageCacheInfo);
+    public void setDataCacheInfo(long partitionId, DataCacheInfo dataCacheInfo) {
+        idToStorageCacheInfo.put(partitionId, dataCacheInfo);
     }
 
     public void dropPartition(long partitionId) {
@@ -197,10 +197,10 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
     public void addPartition(long partitionId, DataProperty dataProperty,
                              short replicationNum,
                              boolean isInMemory,
-                             StorageCacheInfo storageCacheInfo) {
+                             DataCacheInfo dataCacheInfo) {
         this.addPartition(partitionId, dataProperty, replicationNum, isInMemory);
-        if (storageCacheInfo != null) {
-            idToStorageCacheInfo.put(partitionId, storageCacheInfo);
+        if (dataCacheInfo != null) {
+            idToStorageCacheInfo.put(partitionId, dataCacheInfo);
         }
     }
 

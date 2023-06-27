@@ -138,7 +138,7 @@ public class DeleteTest {
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
         Database db = new Database(dbId, dbName);
-        db.createTable(table);
+        db.registerTableUnlock(table);
         return db;
     }
 

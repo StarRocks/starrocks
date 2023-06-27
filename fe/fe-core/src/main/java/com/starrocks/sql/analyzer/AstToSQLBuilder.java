@@ -22,9 +22,11 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import org.apache.commons.collections4.CollectionUtils;
@@ -32,6 +34,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
 
@@ -242,6 +245,59 @@ public class AstToSQLBuilder {
                 sqlBuilder.append(" AS ");
                 sqlBuilder.append("`").append(node.getAlias().getTbl()).append("`");
             }
+            return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitTableFunction(TableFunctionRelation node, Void scope) {
+            StringBuilder sqlBuilder = new StringBuilder();
+
+            sqlBuilder.append(node.getFunctionName());
+            sqlBuilder.append("(");
+
+            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+            sqlBuilder.append(Joiner.on(",").join(childSql));
+
+            sqlBuilder.append(")");
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getColumnOutputNames() != null) {
+                    sqlBuilder.append("(");
+                    String names = node.getColumnOutputNames().stream().map(c -> "`" + c + "`")
+                            .collect(Collectors.joining(","));
+                    sqlBuilder.append(names);
+                    sqlBuilder.append(")");
+                }
+            }
+
+            return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void scope) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            sqlBuilder.append("TABLE(");
+
+            TableFunctionRelation tableFunction = (TableFunctionRelation) node.getRight();
+            sqlBuilder.append(tableFunction.getFunctionName());
+            sqlBuilder.append("(");
+            sqlBuilder.append(
+                    tableFunction.getChildExpressions().stream().map(this::visit).collect(Collectors.joining(",")));
+            sqlBuilder.append(")");
+            sqlBuilder.append(")"); // TABLE(
+
+            if (tableFunction.getAlias() != null) {
+                sqlBuilder.append(" ").append(tableFunction.getAlias().getTbl());
+                if (tableFunction.getColumnOutputNames() != null) {
+                    sqlBuilder.append("(");
+                    String names = tableFunction.getColumnOutputNames().stream().map(c -> "`" + c + "`")
+                            .collect(Collectors.joining(","));
+                    sqlBuilder.append(names);
+                    sqlBuilder.append(")");
+                }
+            }
+
             return sqlBuilder.toString();
         }
 

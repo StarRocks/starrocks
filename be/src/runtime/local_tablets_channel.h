@@ -160,7 +160,7 @@ private:
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
     void _commit_tablets(const PTabletWriterAddChunkRequest& request,
-                         std::shared_ptr<LocalTabletsChannel::WriteContext> context);
+                         const std::shared_ptr<LocalTabletsChannel::WriteContext>& context);
 
     LoadChannel* _load_channel;
 

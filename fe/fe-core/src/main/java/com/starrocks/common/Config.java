@@ -783,13 +783,6 @@ public class Config extends ConfigBase {
     public static long min_bytes_per_broker_scanner = 67108864L; // 64MB
 
     /**
-     * Maximal concurrency of broker scanners.
-     * Do not set this if you know what you are doing.
-     */
-    @ConfField(mutable = true)
-    public static int max_broker_concurrency = 100;
-
-    /**
      * Default insert load timeout
      */
     @ConfField(mutable = true)
@@ -2114,12 +2107,6 @@ public class Config extends ConfigBase {
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
 
-    /**
-     * default storage cache ttl of lake table
-     */
-    @ConfField(mutable = true)
-    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
-
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
@@ -2225,6 +2212,25 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static int experimental_lake_publish_version_threads = 16;
+
+    @ConfField(mutable = true)
+    public static int lake_autovacuum_max_previous_versions = 0;
+
+    @ConfField
+    public static int lake_autovacuum_parallel_partitions = 8;
+
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_partition_naptime_seconds = 180;
+
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_grace_period_minutes = 5;
+
+    /**
+     * time threshold in hours, if a partition has not been updated for longer than this
+     * threshold, auto vacuum operations will no longer be triggered for that partition.
+     */
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_stale_partition_threshold = 12;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
@@ -2394,4 +2400,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int external_table_commit_timeout_ms = 10000; // 10s
+
+    @ConfField(mutable = false)
+    public static int pipe_listener_interval_millis = 1000;
+    @ConfField(mutable = false)
+    public static int pipe_scheduler_interval_millis = 1000;
 }

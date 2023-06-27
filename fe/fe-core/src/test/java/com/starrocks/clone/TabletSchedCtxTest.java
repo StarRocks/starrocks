@@ -128,7 +128,7 @@ public class TabletSchedCtxTest {
                 KeysType.AGG_KEYS);
         olapTable.addPartition(partition);
         Database db = new Database();
-        db.createTable(olapTable);
+        db.registerTableUnlock(olapTable);
         GlobalStateMgr.getCurrentState().getIdToDb().put(DB_ID, db);
 
         // prepare clusterLoadStatistic
