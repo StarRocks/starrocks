@@ -320,7 +320,7 @@ DROP MATERIALIZED VIEW store_amt;
 
 ### 精确去重
 
-以下示例基于一张广告业务相关的明细表 `advertiser_view_record`，其中记录了点击日期 `click_time`、广告代码 `advertiser`、点击渠道 `channel` 以及点击用户 ID `user_id`。
+以下示例基于一张广告业务相关的明细表 `advertiser_view_record`，其中记录了点击日期 `click_time`、广告客户 `advertiser`、点击渠道 `channel` 以及点击用户 ID `user_id`。
 
 ```SQL
 CREATE TABLE advertiser_view_record(
