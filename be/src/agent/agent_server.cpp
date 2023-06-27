@@ -130,12 +130,77 @@ void AgentServer::Impl::init_or_die() {
         CHECK(st.ok()) << st;                                                            \
     } while (false)
 
+<<<<<<< HEAD
     // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
     // But it seems that there's no limit for the number of tablets of a partition.
     // Since a large queue size brings a little overhead, a big one is chosen here.
     BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", config::transaction_publish_version_worker_count,
                                    config::transaction_publish_version_worker_count,
                                    DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_publish_version);
+=======
+// The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
+// But it seems that there's no limit for the number of tablets of a partition.
+// Since a large queue size brings a little overhead, a big one is chosen here.
+#ifdef BE_TEST
+        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", 1, 1, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                       _thread_pool_publish_version);
+#else
+        int max_publish_version_worker_count = config::transaction_publish_version_worker_count;
+        if (max_publish_version_worker_count <= 0) {
+            max_publish_version_worker_count = CpuInfo::num_cores();
+        }
+        max_publish_version_worker_count =
+                std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                       max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                       _thread_pool_publish_version);
+        REGISTER_GAUGE_STARROCKS_METRIC(publish_version_queue_count,
+                                        [this]() { return _thread_pool_publish_version->num_queued_tasks(); });
+#endif
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_drop);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("create_tablet", config::create_tablet_worker_count,
+                                       config::create_tablet_worker_count, std::numeric_limits<int>::max(),
+                                       _thread_pool_create_tablet);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("alter_tablet", 0, config::alter_tablet_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_alter_tablet);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("clear_transaction", 0, config::clear_transaction_task_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_clear_transaction);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("storage_medium_migrate", 0, config::storage_medium_migrate_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_storage_medium_migrate);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("check_consistency", 0, config::check_consistency_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_check_consistency);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("manual_compaction", 0, 1, std::numeric_limits<int>::max(),
+                                       _thread_pool_compaction);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("upload", 0, config::upload_worker_count, std::numeric_limits<int>::max(),
+                                       _thread_pool_upload);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("download", 0, config::download_worker_count, std::numeric_limits<int>::max(),
+                                       _thread_pool_download);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("make_snapshot", 0, config::make_snapshot_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_make_snapshot);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("release_snapshot", 0, config::release_snapshot_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_release_snapshot);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("move_dir", 0, 1, std::numeric_limits<int>::max(), _thread_pool_move_dir);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("update_tablet_meta_info", 0, 1, std::numeric_limits<int>::max(),
+                                       _thread_pool_update_tablet_meta_info);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("drop_auto_increment_map_dir", 0, 1, std::numeric_limits<int>::max(),
+                                       _thread_pool_drop_auto_increment_map);
+
+>>>>>>> 5f5680232 ([Enhancement] add metrics for some thread pool queue (#25831))
 #ifndef BE_TEST
     // Currently FE can have at most num_of_storage_path * schedule_slot_num_per_path(default 2) clone tasks
     // scheduled simultaneously, but previously we have only 3 clone worker threads by default,
