@@ -1947,4 +1947,41 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
     }
 }
 
+TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/map_type_mismatched.orc";
+
+    SlotDesc c0{"col_string", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)};
+    SlotDesc c1{"col_map", TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP)};
+    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    // ORC's actual type is decimal
+    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+
+    SlotDesc slot_descs[] = {c0, c1, {""}};
+
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+    reader.set_use_orc_column_names(true);
+    reader.set_case_sensitive(true);
+    auto input_stream = orc::readLocalFile(input_orc_file);
+    Status st = reader.init(std::move(input_stream));
+    DCHECK(st.ok()) << st.get_error_msg();
+
+    st = reader.read_next();
+    DCHECK(st.ok()) << st.get_error_msg();
+    ChunkPtr ckptr = reader.create_chunk();
+    DCHECK(ckptr != nullptr);
+    st = reader.fill_chunk(&ckptr);
+    DCHECK(st.ok()) << st.get_error_msg();
+    ChunkPtr result = reader.cast_chunk(&ckptr);
+    DCHECK(result != nullptr);
+
+    EXPECT_EQ(result->num_rows(), 20);
+    EXPECT_EQ(result->num_columns(), 2);
+
+    EXPECT_EQ("['1', {-2147483648:'0.999999999'}]", result->debug_row(0));
+}
+
 } // namespace starrocks
