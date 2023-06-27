@@ -409,17 +409,26 @@ int ArrayColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_
     size_t rhs_end = rhs_array._offsets->get_data()[right + 1];
 
     if (lhs_end - lhs_offset != rhs_end - rhs_offset) {
-        return 0;
+        return EQUALS_FALSE;
     }
+
+    int ret = EQUALS_TRUE;
     while (lhs_offset < lhs_end) {
-        auto res = _elements->equals(lhs_offset, *(rhs_array._elements.get()), rhs_offset, safe_eq);
-        if (res != 1) {
-            return res;
+        auto tmp = _elements->equals(lhs_offset, *(rhs_array._elements.get()), rhs_offset, safe_eq);
+
+        // return directly if false
+        if (tmp == EQUALS_FALSE) {
+            return EQUALS_FALSE;
+        } else if (tmp == EQUALS_NULL) {
+            // need check all if is null
+            ret = EQUALS_NULL;
         }
+
         lhs_offset++;
         rhs_offset++;
     }
-    return 1;
+
+    return safe_eq ? EQUALS_TRUE : ret;
 }
 
 void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* output) const {

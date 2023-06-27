@@ -57,6 +57,10 @@ public:
     static const uint64_t MAX_CAPACITY_LIMIT = static_cast<uint64_t>(UINT32_MAX) + 1;
     static const uint64_t MAX_LARGE_CAPACITY_LIMIT = UINT64_MAX;
 
+    static const int EQUALS_FALSE = 0;
+    static const int EQUALS_NULL = -1;
+    static const int EQUALS_TRUE = 1;
+
     // mutable operations cannot be applied to shared data when concurrent
     using Ptr = std::shared_ptr<Column>;
     // mutable means you could modify the data safely
@@ -349,6 +353,7 @@ public:
     // For some columns equals will be overwritten for more efficient
     // When safe equals, 0: false, 1: true
     // When unsafe equals, -1: NULL, 0: false, 1: true
+    // return: EQUALS_FALSE, EQUALS_NULL, EQUALS_TRUE
     virtual int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const {
         return compare_at(left, right, rhs, -1) == 0;
     }

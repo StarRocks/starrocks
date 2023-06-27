@@ -310,13 +310,18 @@ int StructColumn::equals(size_t left, const Column& rhs, size_t right, bool safe
     if (_fields.size() != rhs_struct._fields.size()) {
         return false;
     }
+
+    int ret = EQUALS_TRUE;
     for (int i = 0; i < _fields.size(); ++i) {
-        auto res = _fields[i]->equals(left, *rhs_struct._fields[i].get(), right, safe_eq);
-        if (res != 1) {
-            return res;
+        auto tmp = _fields[i]->equals(left, *rhs_struct._fields[i].get(), right, safe_eq);
+        if (tmp == 0) {
+            return 0;
+        } else if (tmp == EQUALS_NULL) {
+            ret = EQUALS_NULL;
         }
     }
-    return 1;
+
+    return safe_eq ? EQUALS_TRUE : ret;
 }
 
 void StructColumn::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {

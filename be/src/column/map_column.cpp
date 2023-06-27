@@ -422,30 +422,39 @@ int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq
         return false;
     }
 
+    bool has_null = false;
     for (uint32_t i = lhs_offset; i < lhs_end; ++i) {
         bool found = false;
         for (uint32_t j = rhs_offset; j < rhs_end; ++j) {
             int res = _keys->equals(i, *(rhs_map._keys.get()), j, safe_eq);
-            if (res == -1) {
-                return -1;
-            } else if (res == 0) {
+            if (res == EQUALS_FALSE) {
+                continue;
+            }
+
+            // key is null && isn't safe eq, don't need check value
+            has_null |= (res == EQUALS_NULL);
+            if (res == EQUALS_NULL && !safe_eq) {
                 continue;
             }
 
             // So two keys is the same
             res = _values->equals(i, *(rhs_map._values.get()), j, safe_eq);
-            if (res != 1) {
-                return res;
+            if (res == EQUALS_FALSE) {
+                return EQUALS_FALSE;
             }
+            has_null |= (res == EQUALS_NULL);
             found = true;
             break;
         }
         if (!found) {
-            return 0;
+            return EQUALS_FALSE;
         }
     }
 
-    return 1;
+    // unsafe eq && has null, should return NULL
+    // unsafe eq && none null, should return TRUE
+    // safe eq, should return TRUE
+    return !safe_eq && has_null ? EQUALS_NULL : EQUALS_TRUE;
 }
 
 void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
