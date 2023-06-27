@@ -26,6 +26,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
@@ -205,10 +206,35 @@ public class InsertPlanner {
                     Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 }
+<<<<<<< HEAD
                 dataSink = new OlapTableSink(olapTable, olapTuple, insertStmt.getTargetPartitionIds(),
+=======
+                boolean nullExprInAutoIncrement = false;
+                // In INSERT INTO SELECT, if AUTO_INCREMENT column
+                // is specified, the column values must not be NULL
+                if (!(queryRelation instanceof ValuesRelation) &&
+                        !(targetTable instanceof MaterializedView)) {
+                    boolean specifyAutoIncrementColumn = false;
+                    if (insertStmt.getTargetColumnNames() != null) {
+                        for (String colName : insertStmt.getTargetColumnNames()) {
+                            for (Column col : olapTable.getBaseSchema()) {
+                                if (col.isAutoIncrement() && col.getName().equals(colName)) {
+                                    specifyAutoIncrementColumn = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (insertStmt.getTargetColumnNames() == null || specifyAutoIncrementColumn) {
+                        nullExprInAutoIncrement = true;
+                    }
+
+                }
+                dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
+>>>>>>> 1fedf4062 ([BugFix] AUTO_INCREMENT column can be inserted by null using SELECT (#24795) (#24797))
                         canUsePipeline, olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
-                        false, enableAutomaticPartition);
+                        nullExprInAutoIncrement, enableAutomaticPartition);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
             } else {
@@ -259,8 +285,9 @@ public class InsertPlanner {
             if (insertStatement.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
                     if (isAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
-                        throw new SemanticException("AUTO_INCREMENT column: " + targetColumn.getName() +
-                                                    " must not be NULL");
+                        throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
+                                                     targetColumn.getName() + " You can use `default` for an" +
+                                                     " AUTO INCREMENT column");
                     }
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
                         if (isAutoIncrement) {
@@ -277,8 +304,9 @@ public class InsertPlanner {
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (isAutoIncrement && row.get(idx).getType() == Type.NULL) {
-                            throw new SemanticException("AUTO_INCREMENT column: " + targetColumn.getName() +
-                                                        " must not be NULL");
+                            throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
+                                                        targetColumn.getName() + " You can use `default` for an" +
+                                                        " AUTO INCREMENT column");
                         }
                         if (row.get(idx) instanceof DefaultValueExpr) {
                             if (isAutoIncrement) {
