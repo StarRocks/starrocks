@@ -259,7 +259,7 @@ public:
                              vector<std::unique_ptr<vectorized::Column>>* columns);
 
     Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
-                                std::vector<uint64_t>* rss_rowids);
+                                std::vector<uint64_t>* rss_rowids, int64_t timeout_ms = 0);
 
     Status get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& keys, EditVersion* read_version,
                                        std::vector<uint64_t>* rss_rowids);
@@ -407,7 +407,7 @@ private:
     // used for async apply, make sure at most 1 thread is doing applying
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
-    mutable std::mutex _index_lock;
+    mutable std::timed_mutex _index_lock;
     // apply process is running currently
     bool _apply_running = false;
 
