@@ -34,44 +34,9 @@
 
 #pragma once
 
-#include <memory>
-#include <queue>
-#include <set>
-#include <string>
-#include <thread>
-#include <unordered_map>
-#include <utility>
-#include <vector>
-
-#include "common/object_pool.h"
-#include "common/status.h"
-#include "common/tracer.h"
-#include "exec/data_sink.h"
-#include "exec/tablet_info.h"
-#include "exec/tablet_sink_index_channel.h"
 #include "exec/tablet_sink_sender.h"
-#include "gen_cpp/Types_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
-#include "gen_cpp/internal_service.pb.h"
-#include "runtime/mem_tracker.h"
-#include "util/bitmap.h"
-#include "util/compression/block_compression.h"
-#include "util/raw_container.h"
-#include "util/ref_count_closure.h"
-#include "util/reusable_closure.h"
-#include "util/threadpool.h"
 
-namespace starrocks {
-
-class Bitmap;
-class MemTracker;
-class RuntimeProfile;
-class RowDescriptor;
-class TupleDescriptor;
-class ExprContext;
-class TExpr;
-
-namespace stream_load {
+namespace starrocks::stream_load {
 
 class AddBatchCounter;
 class NodeChannel;
@@ -257,7 +222,9 @@ private:
     // BeId
     std::set<int64_t> _failed_channels;
     // enable colocate index
-    bool _colocate_mv_index = config::enable_load_colocate_mv;
+    bool _colocate_mv_index{false};
+    // map index_id to TabletBEMap(map tablet_id to backend id)
+    IndexIdToTabletBEMap _index_id_to_tablet_be_map;
 
     bool _enable_replicated_storage = false;
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
@@ -276,5 +243,4 @@ private:
     Status _automatic_partition_status;
 };
 
-} // namespace stream_load
-} // namespace starrocks
+} // namespace starrocks::stream_load

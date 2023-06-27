@@ -346,6 +346,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Preconditions.checkNotNull(indexMeta);
         indexMeta.setDbId(dbId);
         indexMeta.setViewDefineSql(viewDefineSql);
+        indexMeta.setColocateMVIndex(isColocateMVIndex);
         tbl.rebuildFullSchema();
     }
 
@@ -615,16 +616,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
             partition.visualiseShadowIndex(rollupIndexId, false);
         }
-        if (isColocateMVIndex) {
-            // colocate mv
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db != null) {
-                db.writeLock();
-                tbl.addTableToColocateGroupIfSet(dbId, rollupIndexName);
-                db.writeUnlock();
-            }
-        }
-
         tbl.rebuildFullSchema();
         tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
     }
@@ -638,20 +629,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         if (jobState.isFinalState()) {
             return false;
         }
-        //colocate mv
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db != null) {
-            db.writeLock();
-            try {
-                OlapTable table = (OlapTable) db.getTable(tableId);
-                if (table != null) {
-                    table.removeMaterializedViewWhenJobCanceled(rollupIndexName);
-                }
-            } finally {
-                db.writeUnlock();
-            }
-        }
-
         cancelInternal();
 
         jobState = JobState.CANCELLED;

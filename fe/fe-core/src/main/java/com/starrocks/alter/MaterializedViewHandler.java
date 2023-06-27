@@ -351,8 +351,13 @@ public class MaterializedViewHandler extends AlterHandler {
             viewDefineSql = AstToSQLBuilder.toSQL(queryStatement);
         }
 
+        // Check table is in colocate group if the mv wants to use colocate mv optimization.
         boolean isColocateMv = PropertyAnalyzer.analyzeBooleanProp(properties,
                 PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false);
+        if (isColocateMv && Strings.isNullOrEmpty(olapTable.getColocateGroup())) {
+            throw new AnalysisException(String.format("Please ensure table %s is in colocate group if you want to use " +
+                    "mv colocate optimization.", olapTable.getName()));
+        }
         RollupJobV2 mvJob = new RollupJobV2(jobId, dbId, tableId, olapTable.getName(), timeoutMs,
                 baseIndexId, mvIndexId, baseIndexName, mvName,
                 mvColumns, baseSchemaHash, mvSchemaHash,
@@ -753,8 +758,6 @@ public class MaterializedViewHandler extends AlterHandler {
             String mvName = dropMaterializedViewStmt.getMvName();
             // Step1: check drop mv index operation
             checkDropMaterializedView(mvName, olapTable);
-            // check whether it is colocate mv, then remove if so
-            olapTable.removeColocateMaterializedView(mvName);
             // Step2; drop data in memory
             long mvIndexId = dropMaterializedView(mvName, olapTable);
             // Step3: log drop mv operation

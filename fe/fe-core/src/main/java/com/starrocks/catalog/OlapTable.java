@@ -78,7 +78,6 @@ import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -190,11 +189,6 @@ public class OlapTable extends Table {
 
     @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
-
-    @SerializedName(value = "colocateMv")
-    protected Set<String> colocateMaterializedViewNames = Sets.newHashSet();
-    @SerializedName(value = "isInColocateMvGroup")
-    protected boolean isInColocateMvGroup = false;
 
     @SerializedName(value = "indexes")
     protected TableIndexes indexes;
@@ -1204,97 +1198,31 @@ public class OlapTable extends Table {
         this.colocateGroup = colocateGroup;
     }
 
-    public Set<String> getColocateMaterializedViewNames() {
-        return colocateMaterializedViewNames;
-    }
-
-    public void setColocateMaterializedViewNames(Set<String> colocateMaterializedViewNames) {
-        this.colocateMaterializedViewNames = colocateMaterializedViewNames;
-    }
-
-    public boolean isInColocateMvGroup() {
-        return isInColocateMvGroup;
-    }
-
-    public void setInColocateMvGroup(boolean inColocateMvGroup) {
-        this.isInColocateMvGroup = inColocateMvGroup;
-    }
-
-    public void addColocateMaterializedView(String mvName) {
-        colocateMaterializedViewNames.add(mvName);
-    }
-
-    // 1. remove the materialized view name from the set colocateMaterializedViewNames
-    // 2. the base table will be removed from the colocate group
-    // only the currently deleted materialized view is the only colocate mv of the base table
-    public void removeColocateMaterializedView(String mvName) {
-        if (colocateMaterializedViewNames.contains(mvName)) {
-            if (colocateMaterializedViewNames.size() == 1 && isInColocateMvGroup()) {
-                ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
-                colocateTableIndex.removeTable(this.id, null, false /* isReplay */);
-                setInColocateMvGroup(false);
-                setColocateGroup(null);
-            }
-            colocateMaterializedViewNames.remove(mvName);
-        }
-    }
-
-    // If all indexes except the basic index are all colocate, we can use colocate mv index optimization.
     public boolean isEnableColocateMVIndex() {
-        if (!isInColocateMvGroup()) {
+        if (!isOlapTableOrMaterializedView()) {
             return false;
         }
-        for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
-            if (indexMeta.getIndexId() == baseIndexId) {
-                continue;
-            }
-            String mvName = getIndexNameById(indexMeta.getIndexId());
-            if (!colocateMaterializedViewNames.contains(mvName)) {
-                return false;
-            }
-        }
-        return true;
-    }
 
-    // this will be called when rollupJobV2 is finished
-    public void addTableToColocateGroupIfSet(Long dbId, String rollupIndexName) {
-        if (colocateMaterializedViewNames.contains(rollupIndexName)) {
-            return;
+        // If the table's colocate group is empty, return false
+        if (Strings.isNullOrEmpty(colocateGroup)) {
+            return false;
         }
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
-        if (!colocateTableIndex.isColocateTable(this.id) && colocateMaterializedViewNames.contains(rollupIndexName)) {
-            String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
-            String colocateGroupName;
-            if (!Strings.isNullOrEmpty(this.colocateGroup)) {
-                colocateGroupName = this.colocateGroup;
-            } else {
-                colocateGroupName = dbName + ":" + getName();
-            }
-            try {
-                colocateTableIndex.addTableToGroup(dbId, this, colocateGroupName, null, false /* isReplay */);
-            } catch (DdlException e) {
-                // should not happen, just log an error here
-                LOG.error(e.getMessage());
-            }
-            setInColocateMvGroup(true);
-            addColocateMaterializedView(rollupIndexName);
-            if (!colocateGroupName.equalsIgnoreCase(this.colocateGroup)) {
-                setColocateGroup(colocateGroupName);
-            }
 
-            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
-            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
-            ColocatePersistInfo info =
-                    ColocatePersistInfo.createForAddTable(groupId, this.id, backendsPerBucketSeq);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
+        // If there is only one meta, return false
+        if (indexIdToMeta.size() == 1) {
+            return false;
         }
-    }
 
-    // when the state of rollupJobV2 is canceled
-    // just remove the materialized view from the set
-    // for the materialized view is added to the set before the rollupJobV2 running
-    public void removeMaterializedViewWhenJobCanceled(String rollupIndexName) {
-        colocateMaterializedViewNames.remove(rollupIndexName);
+        // If the colocate group is not stable, return false
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+        if (colocateIndex.isGroupUnstable(colocateIndex.getGroup(getId()))) {
+            return false;
+        }
+
+        // If all indexes except the basic index are all colocate, we can use colocate mv index optimization.
+        return indexIdToMeta.values().stream()
+                .filter(x -> x.getIndexId() != baseIndexId)
+                .allMatch(MaterializedIndexMeta::isColocateMVIndex);
     }
 
     // when the table is creating new rollup and enter finishing state, should tell be not auto load to new rollup

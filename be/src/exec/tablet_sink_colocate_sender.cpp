@@ -14,37 +14,22 @@
 
 #include "exec/tablet_sink_colocate_sender.h"
 
-#include "agent/master_info.h"
-#include "agent/utils.h"
-#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/nullable_column.h"
 #include "common/statusor.h"
-#include "config.h"
-#include "exec/pipeline/query_context.h"
-#include "exec/pipeline/stream_epoch_manager.h"
-#include "exec/tablet_sink.h"
 #include "exprs/expr.h"
-#include "gutil/strings/fastmem.h"
-#include "gutil/strings/join.h"
-#include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "serde/protobuf_serde.h"
-#include "simd/simd.h"
-#include "storage/storage_engine.h"
-#include "storage/tablet_manager.h"
-#include "types/hll.h"
-#include "util/brpc_stub_cache.h"
-#include "util/compression/compression_utils.h"
-#include "util/defer_op.h"
-#include "util/thread.h"
-#include "util/thrift_rpc_helper.h"
-#include "util/uid_util.h"
 
 namespace starrocks::stream_load {
+
+TabletSinkColocateSender::TabletSinkColocateSender(
+        PUniqueId load_id, int64_t txn_id, IndexIdToTabletBEMap index_id_to_tablet_be_map,
+        OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
+        std::unordered_map<int64_t, NodeChannel*> node_channels, std::vector<ExprContext*> output_expr_ctxs,
+        bool enable_replicated_storage, TWriteQuorumType::type write_quorum_type, int num_repicas)
+        : TabletSinkSender(load_id, txn_id, std::move(index_id_to_tablet_be_map), vectorized_partition,
+                           std::move(channels), std::move(node_channels), std::move(output_expr_ctxs),
+                           enable_replicated_storage, write_quorum_type, num_repicas) {}
 
 Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
                                             const std::vector<OlapTablePartition*>& partitions,
@@ -96,19 +81,39 @@ Status TabletSinkColocateSender::_send_chunks(const OlapTableSchemaParam* schema
                                               const std::vector<std::vector<int64_t>>& index_tablet_ids,
                                               const std::vector<uint16_t>& selection_idx) {
     Status err_st = Status::OK();
+    // use 1th index to generate selective vel.
     auto* index = schema->indexes()[0];
+    DCHECK_LT(0, index_tablet_ids.size());
     auto& tablet_id_selections = index_tablet_ids[0];
+    DCHECK(_index_id_to_tablet_be_map.find(index->index_id) != _index_id_to_tablet_be_map.end());
+    auto& tablet_to_bes = _index_id_to_tablet_be_map.find(index->index_id)->second;
+
     for (auto& it : _node_channels) {
         _node_select_idx.clear();
         _node_select_idx.reserve(selection_idx.size());
 
         auto* node = it.second;
-        // use 1th index to generate selective vel.
-        auto& node_tablet_ids = node->tablet_ids_of_index(index->index_id);
-        for (unsigned short selection : selection_idx) {
-            auto choose_tablet_id = tablet_id_selections[selection];
-            if (node_tablet_ids.find(choose_tablet_id) != node_tablet_ids.end()) {
-                _node_select_idx.emplace_back(selection);
+        if (_enable_replicated_storage) {
+            for (unsigned short selection : selection_idx) {
+                auto choose_tablet_id = tablet_id_selections[selection];
+                DCHECK(tablet_to_bes.find(choose_tablet_id) != tablet_to_bes.end());
+                auto& be_ids = tablet_to_bes.find(choose_tablet_id)->second;
+                DCHECK_LT(be_ids.size(), 0);
+                // TODO(meegoo): add backlist policy
+                // first replica is primary replica, which determined by FE now
+                // only send to primary replica when enable replicated storage engine
+                // NOTE: FE will keep all indexes' primary tablet is in the same node.
+                if (be_ids[0] == node->node_id()) {
+                    _node_select_idx.emplace_back(selection);
+                }
+            }
+        } else {
+            auto& node_tablet_ids = node->tablet_ids_of_index(index->index_id);
+            for (unsigned short selection : selection_idx) {
+                auto choose_tablet_id = tablet_id_selections[selection];
+                if (node_tablet_ids.find(choose_tablet_id) != node_tablet_ids.end()) {
+                    _node_select_idx.emplace_back(selection);
+                }
             }
         }
         auto st = node->add_chunks(chunk, index_tablet_ids, _node_select_idx, 0, _node_select_idx.size());
@@ -139,7 +144,6 @@ Status TabletSinkColocateSender::try_open(RuntimeState* state) {
 }
 
 bool TabletSinkColocateSender::is_open_done() {
-    VLOG(1) << "_colocate_mv_index:" << _colocate_mv_index;
     if (UNLIKELY(!_colocate_mv_index)) {
         return TabletSinkSender::is_open_done();
     }
@@ -170,7 +174,7 @@ Status TabletSinkColocateSender::open_wait() {
             LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
                          << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
                          << ", errmsg=" << st.get_error_msg();
-            err_st = st.clone_and_append(string(" be:") + ch->node_info()->host);
+            err_st = st.clone_and_append(std::string(" be:") + ch->node_info()->host);
             this->_mark_as_failed(ch);
         }
         // disable colocate mv index load if other BE not supported
