@@ -256,6 +256,13 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  order by: 3: v3 ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
+        sql = "select percent_rank() over(partition by v2 order by v3) from t0";
+        assertPlanContains(sql, " 2:ANALYTIC\n" +
+                "  |  functions: [, percent_rank(), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
         sql =
                 "select sum(v1) over(partition by v2 order by v3 range between unbounded preceding and unbounded following) " +
                         "from t0";
@@ -1024,5 +1031,17 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "0 | row(1, 2)\n" +
                 "         1 | row(2, 3)\n" +
                 "         2 | row(3, 4)");
+    }
+
+    @Test
+    public void testSelectReal() throws Exception {
+        String sql = "select real '10.3'";
+        assertPlanContains(sql, "<slot 2> : 10.3");
+
+        sql = "select cast('1.1' as real)";
+        assertPlanContains(sql, "<slot 2> : 1.1");
+
+        sql = "select cast(v1 / v2 as real) from t0";
+        assertPlanContains(sql, "CAST(CAST(1: v1 AS DOUBLE) / CAST(2: v2 AS DOUBLE) AS FLOAT)");
     }
 }

@@ -18,6 +18,7 @@
 #include <fmt/core.h>
 #include <glog/logging.h>
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -38,7 +39,9 @@
 #include "serde/column_array_serde.h"
 
 namespace starrocks::spill {
-SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
+
+SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
+    total_spill_bytes = total_spill_bytes_;
     spill_timer = ADD_TIMER(profile, "SpillTime");
     spill_rows = ADD_COUNTER(profile, "SpilledRows", TUnit::UNIT);
     flush_timer = ADD_TIMER(profile, "SpillFlushTimer");
@@ -47,7 +50,6 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     restore_timer = ADD_TIMER(profile, "SpillRestoreTimer");
     shuffle_timer = ADD_TIMER(profile, "SpillShuffleTimer");
     split_partition_timer = ADD_TIMER(profile, "SplitPartitionTimer");
-
     flush_bytes = ADD_COUNTER(profile, "SpillFlushBytes", TUnit::BYTES);
     restore_bytes = ADD_COUNTER(profile, "SpillRestoreBytes", TUnit::BYTES);
     serialize_timer = ADD_TIMER(profile, "SpillSerializeTimer");

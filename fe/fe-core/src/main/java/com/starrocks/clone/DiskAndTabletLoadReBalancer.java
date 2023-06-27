@@ -297,8 +297,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
     @Override
     public Long getToDeleteReplicaId(Long tabletId) {
-        Long beId = cachedReplicaId.remove(tabletId);
-        return beId == null ? -1L : beId;
+        Long replicaId = cachedReplicaId.remove(tabletId);
+        return replicaId == null ? -1L : replicaId;
     }
 
     private void setCachedReplicaId(Long tabletId, Long replicaId) {
@@ -1119,6 +1119,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         for (Pair<Long, Long> partition : partitions) {
             PartitionStat pStat = partitionStats.get(partition);
             // skew <= 1 means partition is balanced
+            // break all partitions because they are sorted by skew in desc order.
             if (pStat.skew <= 1) {
                 break;
             }
@@ -1131,6 +1132,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             } else {
                 tablets = getPartitionTablets(pStat.dbId, pStat.tableId, partition.first, partition.second, null,
                         Pair.create(beId, paths));
+            }
+
+            // partition may be dropped or materializedIndex may be replaced.
+            if (tablets.size() <= 1) {
+                continue;
             }
             boolean tabletFound = false;
             do {

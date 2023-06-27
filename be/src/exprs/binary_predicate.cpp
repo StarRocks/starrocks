@@ -123,23 +123,24 @@ public:
             return ColumnHelper::create_const_null_column(l->size());
         }
 
-        const ColumnPtr& data1 = FunctionHelper::get_data_column_of_nullable(l);
-        const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(r);
+        auto* data1 =
+                ColumnHelper::get_data_column(ColumnHelper::unpack_and_duplicate_const_column(l->size(), l).get());
+        auto* data2 =
+                ColumnHelper::get_data_column(ColumnHelper::unpack_and_duplicate_const_column(r->size(), r).get());
 
-        // Todo: need handle constant
         DCHECK(data1->is_array());
         DCHECK(data2->is_array());
-        auto lhs_arr = down_cast<ArrayColumn&>(*data1.get());
-        auto rhs_arr = down_cast<ArrayColumn&>(*data2.get());
+        auto lhs_arr = down_cast<ArrayColumn&>(*data1);
+        auto rhs_arr = down_cast<ArrayColumn&>(*data2);
 
-        ColumnBuilder<TYPE_BOOLEAN> builder(ptr->num_rows());
+        ColumnBuilder<TYPE_BOOLEAN> builder(l->size());
         std::vector<int8_t> cmp_result;
         lhs_arr.compare_column(rhs_arr, &cmp_result);
 
         // Convert the compare result (-1, 0, 1) to the predicate result (true/false)
         _comparator.eval(cmp_result, &builder);
 
-        ColumnPtr data_result = builder.build(ColumnHelper::is_all_const(ptr->columns()));
+        ColumnPtr data_result = builder.build(false); // non-const columns as unfolded earlier
 
         if (l->has_null() || r->has_null()) {
             NullColumnPtr null_flags = FunctionHelper::union_nullable_column(l, r);

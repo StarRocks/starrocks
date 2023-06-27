@@ -54,6 +54,8 @@ public:
 protected:
     Status _fill_buffer() override;
 
+    void _trim_row_delimeter(Record* record);
+
 private:
     RandomAccessFile* _file;
     size_t _offset = 0;
@@ -87,6 +89,7 @@ Status HdfsScannerCSVReader::next_record(Record* record) {
     } else {
         _remain_length -= consume;
     }
+    _trim_row_delimeter(record);
     return Status::OK();
 }
 
@@ -129,6 +132,16 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     }
 
     return Status::OK();
+}
+
+void HdfsScannerCSVReader::_trim_row_delimeter(Record* record) {
+    // For default row delemiter which is line break, we need to trim the windows line break
+    // if the file was written in windows platfom.
+    if (_parse_options.row_delimiter == "\n") {
+        while (record->size > 0 && record->data[record->size - 1] == '\r') {
+            record->size--;
+        }
+    }
 }
 
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
@@ -341,7 +354,22 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     }
     {
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
-        RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
+
+        // if reading start of file, skipping UTF-8 BOM
+        bool has_bom = false;
+        if (scan_range->offset == 0) {
+            CSVReader::Record first_line;
+            reader->next_record(&first_line);
+            if (first_line.size >= 3 && (unsigned char)first_line.data[0] == 0xEF &&
+                (unsigned char)first_line.data[1] == 0xBB && (unsigned char)first_line.data[2] == 0xBF) {
+                has_bom = true;
+            }
+        }
+        if (has_bom) {
+            RETURN_IF_ERROR(reader->reset(scan_range->offset + 3, scan_range->length - 3));
+        } else {
+            RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
+        }
         if (scan_range->offset != 0) {
             // Always skip first record of scan range with non-zero offset.
             // Notice that the first record will read by previous scan range.

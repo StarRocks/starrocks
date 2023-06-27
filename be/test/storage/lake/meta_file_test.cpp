@@ -24,7 +24,6 @@
 #include "fs/fs_util.h"
 #include "storage/del_vector.h"
 #include "storage/lake/fixed_location_provider.h"
-#include "storage/lake/gc.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
