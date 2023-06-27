@@ -223,10 +223,28 @@ public:
                 slices[i] = _dict[dict_codes[i]];
             }
         } else if (!all_null) {
-            for (size_t i = 0; i < dict_codes.size(); i++) {
-                if (!null_data[i]) {
+            size_t size = dict_codes.size();
+            const uint8_t* null_data_ptr = null_data.data();
+
+            size_t i = 0;
+            for (i = 0; (i + 8) < size; i += 8) {
+                uint64_t partial_all_null;
+                memcpy(&partial_all_null, null_data_ptr, 8);
+                if (partial_all_null != 0) {
+                    for (int j = 0; j < 8; j++) {
+                        if (!null_data_ptr[j]) {
+                            slices[i + j] = _dict[dict_codes[i + j]];
+                        }
+                    }
+                }
+                null_data_ptr += 8;
+            }
+
+            while (i < size) {
+                if (!null_data_ptr[i]) {
                     slices[i] = _dict[dict_codes[i]];
                 }
+                i += 1;
             }
         }
 
