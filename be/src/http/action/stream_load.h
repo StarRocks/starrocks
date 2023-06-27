@@ -47,10 +47,11 @@ namespace starrocks {
 class ExecEnv;
 class Status;
 class StreamLoadContext;
+class ConcurrentLimiter;
 
 class StreamLoadAction : public HttpHandler {
 public:
-    explicit StreamLoadAction(ExecEnv* exec_env);
+    explicit StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter);
     ~StreamLoadAction() override;
 
     void handle(HttpRequest* req) override;
@@ -71,6 +72,7 @@ private:
 
 private:
     ExecEnv* _exec_env;
+    ConcurrentLimiter* _http_concurrent_limiter = nullptr;
 };
 
 } // namespace starrocks

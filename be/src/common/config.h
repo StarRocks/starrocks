@@ -982,4 +982,6 @@ CONF_mInt32(primary_key_limit_size, "128");
 // otherwise, StarRocks will use zone map for one column filter
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
+CONF_mBool(enable_http_stream_load_limit, "false");
+
 } // namespace starrocks::config
