@@ -20,6 +20,7 @@ import org.apache.iceberg.aws.AwsProperties;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -45,6 +46,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_EXTE
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_IAM_ROLE_ARN;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SECRET_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
@@ -53,6 +55,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_EXTERN
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SESSION_TOKEN;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 
@@ -66,6 +69,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
     private boolean s3UseInstanceProfile;
     private String s3AccessKey;
     private String s3SecretKey;
+    private String s3SessionToken;
     private String s3IamRoleArn;
     private String s3ExternalId;
     private String s3Region;
@@ -75,6 +79,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
     private boolean glueUseInstanceProfile;
     private String glueAccessKey;
     private String glueSecretKey;
+    private String glueSessionToken;
     private String glueIamRoleArn;
     private String glueExternalId;
     private String glueRegion;
@@ -88,6 +93,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         s3UseInstanceProfile = Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_INSTANCE_PROFILE, "false"));
         s3AccessKey = properties.getOrDefault(AWS_S3_ACCESS_KEY, "");
         s3SecretKey = properties.getOrDefault(AWS_S3_SECRET_KEY, "");
+        s3SessionToken = properties.getOrDefault(AWS_S3_SESSION_TOKEN, "");
         s3IamRoleArn = properties.getOrDefault(AWS_S3_IAM_ROLE_ARN, "");
         s3ExternalId = properties.getOrDefault(AWS_S3_EXTERNAL_ID, "");
         s3Region = properties.getOrDefault(AWS_S3_REGION, "");
@@ -98,6 +104,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         glueUseInstanceProfile = Boolean.parseBoolean(properties.getOrDefault(AWS_GLUE_USE_INSTANCE_PROFILE, "false"));
         glueAccessKey = properties.getOrDefault(AWS_GLUE_ACCESS_KEY, "");
         glueSecretKey = properties.getOrDefault(AWS_GLUE_SECRET_KEY, "");
+        glueSessionToken = properties.getOrDefault(AWS_GLUE_SESSION_TOKEN, "");
         glueIamRoleArn = properties.getOrDefault(AWS_GLUE_IAM_ROLE_ARN, "");
         glueExternalId = properties.getOrDefault(AWS_GLUE_EXTERNAL_ID, "");
         glueRegion = properties.getOrDefault(AWS_GLUE_REGION, "");
@@ -139,7 +146,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         }
 
         AwsCredentialsProvider baseAWSCredentialsProvider =
-                getBaseAWSCredentialsProvider(s3UseInstanceProfile, s3AccessKey, s3SecretKey);
+                getBaseAWSCredentialsProvider(s3UseInstanceProfile, s3AccessKey, s3SecretKey, s3SessionToken);
         S3ClientBuilder s3ClientBuilder = S3Client.builder();
         if (!s3IamRoleArn.isEmpty()) {
             s3ClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
@@ -169,7 +176,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         }
 
         AwsCredentialsProvider baseAWSCredentialsProvider =
-                getBaseAWSCredentialsProvider(glueUseInstanceProfile, glueAccessKey, glueSecretKey);
+                getBaseAWSCredentialsProvider(glueUseInstanceProfile, glueAccessKey, glueSecretKey, glueSessionToken);
         GlueClientBuilder glueClientBuilder = GlueClient.builder();
         if (!glueIamRoleArn.isEmpty()) {
             glueClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
@@ -190,11 +197,16 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         return glueClientBuilder.build();
     }
 
-    private AwsCredentialsProvider getBaseAWSCredentialsProvider(boolean useInstanceProfile, String accessKey, String secretKey) {
+    private AwsCredentialsProvider getBaseAWSCredentialsProvider(boolean useInstanceProfile, String accessKey,
+                                                                 String secretKey, String sessionToken) {
         if (useInstanceProfile) {
             return InstanceProfileCredentialsProvider.builder().build();
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
-            return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
+            if (!sessionToken.isEmpty()) {
+                return StaticCredentialsProvider.create(AwsSessionCredentials.create(accessKey, secretKey, sessionToken));
+            } else {
+                return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
+            }
         } else {
             Preconditions.checkArgument(false, "Unreachable");
             return AnonymousCredentialsProvider.create();
