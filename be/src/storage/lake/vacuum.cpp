@@ -228,4 +228,149 @@ void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, Va
     st.to_protobuf(response->mutable_status());
 }
 
+Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_dir,
+                           const std::vector<int64_t>& tablet_ids) {
+    DCHECK(tablet_mgr != nullptr);
+    DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
+
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
+
+    std::unordered_map<int64_t, std::vector<int64_t>> tablet_versions;
+    //                 ^^^^^^^ tablet id
+    //                                     ^^^^^^^^^ version number
+
+    auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
+    auto data_dir = join_path(root_dir, kSegmentDirectoryName);
+    auto log_dir = join_path(root_dir, kTxnLogDirectoryName);
+
+    std::vector<std::string> txn_logs;
+    RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(log_dir, [&](std::string_view name) {
+        if (is_txn_log(name)) {
+            auto [tablet_id, txn_id] = parse_txn_log_filename(name);
+            if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
+                return true;
+            }
+        } else if (is_txn_vlog(name)) {
+            auto [tablet_id, version] = parse_txn_vlog_filename(name);
+            if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
+                return true;
+            }
+        } else {
+            return true;
+        }
+
+        txn_logs.emplace_back(name);
+
+        return true;
+    })));
+
+    for (const auto& log_name : txn_logs) {
+        auto res = tablet_mgr->get_txn_log(join_path(log_dir, log_name), false);
+        if (res.status().is_not_found()) {
+            continue;
+        } else if (!res.ok()) {
+            return res.status();
+        } else {
+            auto log = std::move(res).value();
+            if (log->has_op_write()) {
+                const auto& op = log->op_write();
+                RETURN_IF_ERROR(delete_rowset_files(fs.get(), data_dir, op.rowset()));
+                for (const auto& f : op.dels()) {
+                    RETURN_IF_ERROR(delete_file_ignore_not_found(fs.get(), join_path(data_dir, f)));
+                }
+            }
+            if (log->has_op_compaction()) {
+                const auto& op = log->op_compaction();
+                RETURN_IF_ERROR(delete_rowset_files(fs.get(), data_dir, op.output_rowset()));
+            }
+            if (log->has_op_schema_change()) {
+                const auto& op = log->op_schema_change();
+                for (const auto& rowset : op.rowsets()) {
+                    RETURN_IF_ERROR(delete_rowset_files(fs.get(), data_dir, rowset));
+                }
+            }
+            RETURN_IF_ERROR(delete_file_ignore_not_found(fs.get(), join_path(log_dir, log_name)));
+        }
+    }
+
+    RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(meta_dir, [&](std::string_view name) {
+        if (!is_tablet_metadata(name)) {
+            return true;
+        }
+        auto [tablet_id, version] = parse_tablet_metadata_filename(name);
+        if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
+            return true;
+        }
+        tablet_versions[tablet_id].emplace_back(version);
+        return true;
+    })));
+
+    for (auto& [tablet_id, versions] : tablet_versions) {
+        DCHECK(!versions.empty());
+        std::sort(versions.begin(), versions.end());
+
+        TabletMetadataPtr latest_metadata = nullptr;
+
+        // Find metadata files that has garbage data files and delete all those files
+        for (int64_t garbage_version = versions.back(); garbage_version >= versions[0]; /**/) {
+            auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, garbage_version));
+            auto res = tablet_mgr->get_tablet_metadata(path, false);
+            if (res.status().is_not_found()) {
+                break;
+            } else if (!res.ok()) {
+                LOG(ERROR) << "Fail to read " << path << ": " << res.status();
+                return res.status();
+            } else {
+                auto metadata = std::move(res).value();
+                if (latest_metadata == nullptr) {
+                    latest_metadata = metadata;
+                }
+                for (const auto& rowset : metadata->compaction_inputs()) {
+                    RETURN_IF_ERROR(delete_rowset_files(fs.get(), data_dir, rowset));
+                }
+                for (const auto& file : metadata->orphan_files()) {
+                    RETURN_IF_ERROR(delete_file_ignore_not_found(fs.get(), join_path(data_dir, file.name())));
+                }
+                if (metadata->has_prev_garbage_version()) {
+                    garbage_version = metadata->prev_garbage_version();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Delete all data files referenced in the latest version
+        if (latest_metadata != nullptr) {
+            for (const auto& rowset : latest_metadata->rowsets()) {
+                RETURN_IF_ERROR(delete_rowset_files(fs.get(), data_dir, rowset));
+            }
+            if (latest_metadata->has_delvec_meta()) {
+                for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
+                    RETURN_IF_ERROR(delete_file_ignore_not_found(fs.get(), join_path(data_dir, f.name())));
+                }
+            }
+        }
+
+        // TODO: batch delete
+        // Note: Delete files with smaller version numbers first
+        for (auto version : versions) {
+            auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
+            RETURN_IF_ERROR(delete_file_ignore_not_found(fs.get(), path));
+        }
+    }
+
+    return Status::OK();
+}
+
+void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& request, DeleteTabletResponse* response) {
+    DCHECK(tablet_mgr != nullptr);
+    DCHECK(request.tablet_ids_size() > 0);
+    DCHECK(response != nullptr);
+    std::vector<int64_t> tablet_ids(request.tablet_ids().begin(), request.tablet_ids().end());
+    std::sort(tablet_ids.begin(), tablet_ids.end());
+    auto root_dir = tablet_mgr->tablet_root_location(tablet_ids[0]);
+    auto st = delete_tablets_impl(tablet_mgr, root_dir, tablet_ids);
+    st.to_protobuf(response->mutable_status());
+}
+
 } // namespace starrocks::lake

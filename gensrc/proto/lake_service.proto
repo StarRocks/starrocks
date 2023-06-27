@@ -52,6 +52,7 @@ message DeleteTabletRequest {
 
 message DeleteTabletResponse {
     repeated int64 failed_tablets = 1;
+    optional StatusPB status = 2;
 }
 
 message CompactRequest {

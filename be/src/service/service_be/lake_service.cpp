@@ -196,30 +196,25 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
         return;
     }
 
+    auto tablet_mgr = _env->lake_tablet_manager();
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DROP);
-    auto latch = BThreadCountDownLatch(request->tablet_ids_size());
-    bthread::Mutex response_mtx;
-    for (auto tablet_id : request->tablet_ids()) {
-        auto task = [&, tablet_id]() {
-            auto res = _env->lake_tablet_manager()->delete_tablet(tablet_id);
-            if (!res.ok()) {
-                LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
-                std::lock_guard l(response_mtx);
-                response->add_failed_tablets(tablet_id);
-            }
-            latch.count_down();
-        };
-
-        auto st = thread_pool->submit_func(task);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit drop tablet task: " << st;
-            std::lock_guard l(response_mtx);
-            response->add_failed_tablets(tablet_id);
-            latch.count_down();
-        }
+    auto latch = BThreadCountDownLatch(1);
+    auto st = thread_pool->submit_func([&]() {
+        lake::delete_tablets(tablet_mgr, *request, response);
+        latch.count_down();
+    });
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to submit delete tablet task: " << st;
+        st.to_protobuf(response->mutable_status());
+        latch.count_down();
     }
 
     latch.wait();
+
+    // Fill failed_tablets for backward compatibility
+    if (response->status().status_code() != 0) {
+        response->mutable_failed_tablets()->CopyFrom(request->tablet_ids());
+    }
 }
 
 void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,

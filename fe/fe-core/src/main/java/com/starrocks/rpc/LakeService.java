@@ -57,7 +57,7 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = /*6 hours=*/21600000)
     Future<CompactResponse> compact(CompactRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = 5000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = /*10 minutes=*/60000)
     Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "delete_data", onceTalkTimeout = 300000)
