@@ -33,6 +33,7 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "service/backend_options.h"
+#include "util/concurrent_limiter.h"
 #include "util/string_util.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -110,6 +111,8 @@ public:
     void ref() { _refs.fetch_add(1); }
     // If unref() returns true, this object should be delete
     bool unref() { return _refs.fetch_sub(1) == 1; }
+
+    bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
 
 public:
     // 1) Before the stream load receiving thread exits, Fragment may have been destructed.
@@ -202,6 +205,8 @@ public:
     // max buffer size for JSON format is 4GB.
     static constexpr int64_t kJSONMaxBufferSize = 4294967296;
     ByteBufferPtr buffer = nullptr;
+
+    std::unique_ptr<ConcurrentLimiterGuard> _http_limiter_guard;
 
 public:
     ExecEnv* exec_env() { return _exec_env; }

@@ -823,4 +823,6 @@ CONF_mInt64(load_tablet_timeout_seconds, "30");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
+CONF_mBool(enable_http_stream_load_limit, "false");
+
 } // namespace starrocks::config
