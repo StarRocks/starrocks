@@ -941,4 +941,15 @@ CONF_mBool(enable_pk_value_column_zonemap, "true");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
+<<<<<<< HEAD
+=======
+
+// If your sort key cardinality is very high,
+// You could enable this config to speed up the point lookup query,
+// otherwise, StarRocks will use zone map for one column filter
+CONF_mBool(enable_short_key_for_one_column_filter, "false");
+
+CONF_mBool(enable_http_stream_load_limit, "false");
+
+>>>>>>> c547fa988 ([Enhancement] support http concurrent limit for stream load (#25809))
 } // namespace starrocks::config

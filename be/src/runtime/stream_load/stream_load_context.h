@@ -36,6 +36,7 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "service/backend_options.h"
+#include "util/concurrent_limiter.h"
 #include "util/string_util.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -154,6 +155,8 @@ public:
     // If unref() returns true, this object should be delete
     bool unref() { return _refs.fetch_sub(1) == 1; }
 
+    bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
+
 public:
     // 1) Before the stream load receiving thread exits, Fragment may have been destructed.
     // At this time, mem_tracker may have been destructed,
@@ -251,6 +254,8 @@ public:
     ByteBufferPtr buffer = nullptr;
 
     TStreamLoadPutRequest request;
+
+    std::unique_ptr<ConcurrentLimiterGuard> _http_limiter_guard;
 
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }

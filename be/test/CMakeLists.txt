@@ -324,6 +324,11 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
+<<<<<<< HEAD
+=======
+        ./util/concurrent_limiter_test.cpp
+        ./gutil/cpu_test.cc
+>>>>>>> c547fa988 ([Enhancement] support http concurrent limit for stream load (#25809))
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         )
