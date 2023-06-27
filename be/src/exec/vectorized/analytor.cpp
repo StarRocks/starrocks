@@ -455,23 +455,10 @@ Status Analytor::add_chunk(const vectorized::ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
-<<<<<<< HEAD:be/src/exec/vectorized/analytor.cpp
-        auto check_if_overflow = [](vectorized::Column* maybe_nullable_column) {
-            auto* column = vectorized::ColumnHelper::get_data_column(maybe_nullable_column);
-            if (!column->is_binary()) {
-                return Status::OK();
-            }
-
-            auto* binary_column = down_cast<vectorized::BinaryColumn*>(column);
-            if (binary_column->get_bytes().size() > std::numeric_limits<uint32_t>::max()) {
-                return Status::InternalError(
-                        strings::Substitute("Binary column size overflow: $0", binary_column->get_bytes().size()));
-=======
-        auto check_if_overflow = [](Column* column) {
+        auto check_if_overflow = [](vectorized::Column* column) {
             std::string msg;
             if (column->capacity_limit_reached(&msg)) {
                 return Status::InternalError(msg);
->>>>>>> 1976de5f6 ([BugFix] Use capacity_limit_reached to check overflow (#25958)):be/src/exec/analytor.cpp
             }
             return Status::OK();
         };
