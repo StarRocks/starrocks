@@ -22,6 +22,8 @@ jobs:
     runs-on: [ self-hosted, normal ]
     if: >
       github.event.workflow_run.event == 'pull_request'
+    env:
+      PR_NUMBER: ${{ github.event.workflow_run.event.number }}
     steps:
       - name: CLEAN
         run: |
@@ -35,13 +37,14 @@ jobs:
 
       - name: Download FE UT XML
         uses: actions/download-artifact@v3
+        id: download-fe-ut-xml
         if: steps.check-exists.outputs.exists == 'true'
         with:
-          name: FE UT XML
+          name: 'FE UT XML'
           path: ./fe-ut/
 
       - name: UT Report
-        if: always()
+        if: steps.download-fe-ut-xml.conclusion == 'success'
         uses: mikepenz/action-junit-report@v3
         env:
           github_token: ${{ secrets.PAT }}
@@ -50,4 +53,38 @@ jobs:
           check_name: 'FE UT Report'
           detailed_summary: true
           report_paths: ./fe-ut/*.xml
+
+      # Increase
+      - uses: xSAVIKx/artifact-exists-action@v0
+        name: CHECK FE RESULT FILES
+        id: check-result-exists
+        with:
+          name: 'FE RESULT'
+
+      - name: Download FE UT XML
+        uses: actions/download-artifact@v3
+        id: download-fe-ut-result
+        if: steps.check-result-exists.outputs.exists == 'true'
+        with:
+          name: 'FE RESULT'
+          path: ./fe-ut/
+
+      - name: Incremental Coverage Report
+        if: steps.download-fe-ut-result.conclusion == 'success'
+        run: |
+          rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+          time_count=0
+          pull_status=1
+          export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+          export PATH=$JAVA_HOME/bin:$PATH;
+          while (( $pull_status != 0 )); do
+            if (( $time_count == 3 )); then
+              exit 1
+            fi
+            timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover ${{ github.workspace }}/fe/fe-core/target/result/ --github-token ${{ secrets.PAT }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+            pull_status=$?
+            time_count=`expr $time_count + 1`
+          done
 

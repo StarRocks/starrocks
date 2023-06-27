@@ -411,24 +411,14 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
-      - name: Incremental Coverage Report
-        run: |
-          rm -rf ./coverchecker
-          ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
-          time_count=0
-          pull_status=1
-          export JAVA_HOME=/var/local/env/jdk1.8.0_202;
-          export PATH=$JAVA_HOME/bin:$PATH;
-          while (( $pull_status != 0 )); do
-            if (( $time_count == 3 )); then
-              exit 1
-            fi
-            timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover ${{ github.workspace }}/fe/fe-core/target/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
-              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
-            pull_status=$?
-            time_count=`expr $time_count + 1`
-          done
+      - name: Upload Result
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: FE RESULT
+          path: fe/fe-core/target/result/
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Upload UT XML
         if: always()
