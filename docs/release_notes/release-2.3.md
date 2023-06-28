@@ -7,7 +7,7 @@ Release date: June 28, 2023
 ### Improvements
 
 - Optimized the error message returned when CREATE TABLE times out and added parameter tuning tips. [#24510](https://github.com/StarRocks/starrocks/pull/24510)
-- Optimized the memory usage for the Primary Key tables with a large number of accumulated versions.  [#20760](https://github.com/StarRocks/starrocks/pull/20760)
+- Optimized the memory usage for the Primary Key tables with a large number of accumulated tablet versions. [#20760](https://github.com/StarRocks/starrocks/pull/20760)
 - The synchronization of Olap external table metadata has been changed to occur during data loading. [#24739](https://github.com/StarRocks/starrocks/pull/24739)
 - Removed the dependency of NetworkTime on system clocks to fix incorrect NetworkTime caused by inconsistent system clocks across servers. [#24858](https://github.com/StarRocks/starrocks/pull/24858)
 
@@ -18,7 +18,7 @@ Fixed the following issues:
 - When low cardinality dictionary optimization is applied for small tables that undergo frequent TRUNCATE operations, queries may encounter errors. [#23185](https://github.com/StarRocks/starrocks/pull/23185)
 - BEs may crash when a view that contains UNION whose first child is a constant NULL is queried. [#13792](https://github.com/StarRocks/starrocks/pull/13792)  
 - In some cases, a query based on Bitmap Index may return an error. [#23484](https://github.com/StarRocks/starrocks/pull/23484)
-- The result of rounding a double or float value into a decimal value in BE is inconsistent with the result in FE. [#23152](https://github.com/StarRocks/starrocks/pull/23152)
+- The result of rounding a DOUBLE or FLOAT value into a DECIMAL value in BE is inconsistent with the result in FE. [#23152](https://github.com/StarRocks/starrocks/pull/23152)
 - The schema change sometimes may be hung if data loading occurs simultaneously with the schema change. [#23456](https://github.com/StarRocks/starrocks/pull/23456)
 - When a Parquet file is loaded into StarRocks by using Broker Load, Spark connector or Flink connector, it may occasionally cause BE OOM issues. [#25254](https://github.com/StarRocks/starrocks/pull/25254)
 - The error message `unknown error` is returned when an constant is specified in the ORDER BY clause and there is a LIMIT clause in the query. [#25538](https://github.com/StarRocks/starrocks/pull/25538)
