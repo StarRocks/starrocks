@@ -19,12 +19,23 @@ package com.starrocks.load.loadv2;
 
 public class TaskAttachment {
     private long taskId;
+    private long leftTimeMs;
 
     public TaskAttachment(long taskId) {
         this.taskId = taskId;
+        this.leftTimeMs = 0;
+    }
+
+    public TaskAttachment(long taskId, long leftTimeMs) {
+        this.taskId = taskId;
+        this.leftTimeMs = leftTimeMs;
     }
 
     public long getTaskId() {
         return taskId;
+    }
+
+    public long getLeftTimeMs() {
+        return leftTimeMs;
     }
 }

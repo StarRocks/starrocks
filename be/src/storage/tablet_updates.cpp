@@ -451,6 +451,11 @@ int64_t TabletUpdates::max_version() const {
     return _edit_version_infos.empty() ? 0 : _edit_version_infos.back()->version.major();
 }
 
+int64_t TabletUpdates::max_readable_version() const {
+    std::lock_guard rl(_lock);
+    return _edit_version_infos.empty() ? 0 : _edit_version_infos[_apply_version_idx]->version.major();
+}
+
 Status TabletUpdates::get_rowsets_total_stats(const std::vector<uint32_t>& rowsets, size_t* total_rows,
                                               size_t* total_dels) {
     string err_rowsets;
@@ -2681,7 +2686,8 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
             LOG(WARNING) << "tablet delete when get_tablet_info_extra tablet:" << _tablet.tablet_id();
         } else {
             min_readable_version = _edit_version_infos[0]->version.major();
-            auto& last = _edit_version_infos.back();
+            //auto& last = _edit_version_infos.back();
+            auto& last = _edit_version_infos[_apply_version_idx];
             version = last->version.major();
             rowsets = last->rowsets;
             has_pending = _pending_commits.size() > 0;

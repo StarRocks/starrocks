@@ -157,6 +157,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     request.label = ctx->label;
     // set timestamp
     request.__set_timestamp(GetCurrentTimeMicros());
+    LOG(INFO) << "stream load timeout second is " << ctx->timeout_second;
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
     }
@@ -181,6 +182,8 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     }
     ctx->txn_id = result.txnId;
     ctx->need_rollback = true;
+    LOG(INFO) << "result timeout is " << result.timeout;
+    ctx->load_deadline_sec = UnixSeconds() + result.timeout;
 
     return Status::OK();
 }
@@ -230,6 +233,39 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         LOG(WARNING) << "commit transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
         if (status.code() == TStatusCode::PUBLISH_TIMEOUT) {
             ctx->need_rollback = false;
+            if (config::enable_sync_publish) {
+                //wait for apply finish
+                TGetLoadTxnStatusRequest v_request;
+                TGetLoadTxnStatusResult v_result;
+                set_request_auth(&v_request, ctx->auth);
+                v_request.db = ctx->db;
+                v_request.tbl = ctx->table;
+                v_request.txnId = ctx->txn_id;
+                int64_t load_deadline_sec =
+                        std::min(ctx->load_deadline_sec, UnixSeconds() + config::txn_wait_publish_timeout_sec);
+                while (load_deadline_sec > UnixSeconds() + 60 + config::txn_commit_rpc_timeout_ms / 1000) {
+                    sleep(60);
+                    auto visiable_st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                            master_addr.hostname, master_addr.port,
+                            [&v_request, &v_result](FrontendServiceConnection& client) {
+                                client->getLoadTxnStatus(v_result, v_request);
+                            },
+                            config::txn_commit_rpc_timeout_ms);
+                    if (visiable_st.is_thrift_rpc_error()) {
+                        return status;
+                    } else if (!visiable_st.ok()) {
+                        return status;
+                    } else {
+                        if (v_result.status == TTransactionStatus::VISIBLE) {
+                            return Status::OK();
+                        } else if (v_result.status == TTransactionStatus::COMMITTED) {
+                            continue;
+                        } else {
+                            return status;
+                        }
+                    }
+                }
+            }
         }
         return status;
     }

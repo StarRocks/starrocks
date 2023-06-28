@@ -493,6 +493,8 @@ CONF_Int32(thrift_rpc_max_body_size, "0");
 // txn commit rpc timeout
 CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
 
+CONF_mInt32(txn_wait_publish_timeout_sec, "1800");
+
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
 
@@ -1031,6 +1033,9 @@ CONF_mInt32(primary_key_limit_size, "128");
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
+CONF_mInt32(finish_publish_vesion_internal, "100");
+
+CONF_mBool(enable_sync_publish, "true");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
 

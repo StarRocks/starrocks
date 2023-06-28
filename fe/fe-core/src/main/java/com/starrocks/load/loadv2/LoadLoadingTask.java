@@ -272,7 +272,8 @@ public class LoadLoadingTask extends LoadTask {
                         curCoordinator.getTrackingUrl(),
                         TabletCommitInfo.fromThrift(curCoordinator.getCommitInfos()),
                         TabletFailInfo.fromThrift(curCoordinator.getFailInfos()),
-                        curCoordinator.getRejectedRecordPaths());
+                        curCoordinator.getRejectedRecordPaths(),
+                        getLeftTimeMs());
             } else {
                 throw new LoadException(status.getErrorMsg());
             }

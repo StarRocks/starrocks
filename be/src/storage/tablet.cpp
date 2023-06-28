@@ -958,7 +958,21 @@ Version Tablet::_max_continuous_version_from_beginning_unlocked() const {
 
 int64_t Tablet::max_continuous_version() const {
     if (_updates != nullptr) {
-        return _updates->max_version();
+        return config::enable_sync_publish ? _updates->max_readable_version() : _updates->max_version();
+    } else {
+        std::shared_lock rdlock(_meta_lock);
+        int64_t v = _timestamped_version_tracker.get_max_continuous_version();
+        if (tablet_state() == TABLET_RUNNING) {
+            // only check when tablet in running state
+            DCHECK_EQ(v, _max_continuous_version_from_beginning_unlocked().second);
+        }
+        return v;
+    }
+}
+
+int64_t Tablet::max_readable_version() const {
+    if (_updates != nullptr) {
+        return _updates->max_readable_version();
     } else {
         std::shared_lock rdlock(_meta_lock);
         int64_t v = _timestamped_version_tracker.get_max_continuous_version();

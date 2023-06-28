@@ -86,6 +86,7 @@ struct TFinishTaskRequest {
     15: optional i64 copy_size
     16: optional i64 copy_time_ms
     17: optional list<TTabletVersionPair> tablet_versions;
+    18: optional list<TTabletVersionPair> tablet_publish_versions;
 }
 
 struct TTablet {

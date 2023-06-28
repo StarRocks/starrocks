@@ -59,6 +59,17 @@ public class BrokerLoadingTaskAttachment extends TaskAttachment {
         this.rejectedRecordPaths = rejectedRecordPaths;
     }
 
+    public BrokerLoadingTaskAttachment(long taskId, Map<String, String> counters, String trackingUrl,
+                                       List<TabletCommitInfo> commitInfoList, List<TabletFailInfo> failInfoList,
+                                       List<String> rejectedRecordPaths, long leftTimeMs) {
+        super(taskId, leftTimeMs);
+        this.trackingUrl = trackingUrl;
+        this.counters = counters;
+        this.commitInfoList = commitInfoList;
+        this.failInfoList = failInfoList;
+        this.rejectedRecordPaths = rejectedRecordPaths;
+    }
+
     public String getCounter(String key) {
         return counters.get(key);
     }

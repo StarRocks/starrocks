@@ -383,6 +383,12 @@ public class BrokerLoadJob extends BulkLoadJob {
                     dbId, transactionId, commitInfos, failInfos,
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
                             finishTimestamp, state, failMsg));
+            // wait apply finish    
+            LOG.info("commitAndPublish left time: {}", attachment.getLeftTimeMs());
+            //GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+            //          db, transactionId, commitInfos, failInfos, attachment.getLeftTimeMs(),
+            //          new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
+            //                    finishTimestamp, state, failMsg));
             MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
             // collect table-level metrics
             loadingStatus.travelTableCounters(kv -> {
