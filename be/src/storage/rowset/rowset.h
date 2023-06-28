@@ -341,6 +341,8 @@ public:
     // only used in unit test
     Status get_segment_sk_index(std::vector<std::string>* sk_index_values);
 
+    Status verify();
+
 protected:
     friend class RowsetFactory;
 
