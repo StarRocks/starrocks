@@ -139,7 +139,7 @@ public class BDBJournalCursorTest {
         journal.batchWriteCommit();
 
         for (int i = 1; i <= 5; ++ i) {
-            // <<< read from i to 6
+            // read from i to 6
             LOG.info("pretend I'm reading from {} to 6", i);
             BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, i, -1);
             for (int j = i; j <= 6; ++ j) {
@@ -151,7 +151,7 @@ public class BDBJournalCursorTest {
         }
 
         //
-        // <<< read 6->6
+        // read 6->6
         //
         BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 6, -1);
         JournalEntity entity = bdbJournalCursor.next();
@@ -161,14 +161,14 @@ public class BDBJournalCursorTest {
         Assert.assertNull(bdbJournalCursor.next());
 
         //
-        // >>> write 7
+        // write 7
         //
         journal.batchWriteBegin();
         journal.batchWriteAppend(7, makeBuffer(7));
         journal.batchWriteCommit();
 
         //
-        // <<< read 7
+        // read 7
         //
         bdbJournalCursor.refresh();
         entity = bdbJournalCursor.next();

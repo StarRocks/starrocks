@@ -212,6 +212,8 @@ struct TQueryOptions {
   96: optional i64 spillable_operator_mask;
   // used to judge whether the profile need to report to FE, only meaningful when enable_profile=true
   97: optional i64 load_profile_collect_second;
+
+  101: optional i64 runtime_profile_report_interval = 30;
 }
 
 

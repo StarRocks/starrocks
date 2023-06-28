@@ -32,7 +32,8 @@ public:
     ExecStateReporter();
 
     static TReportExecStatusParams create_report_exec_status_params(QueryContext* query_ctx,
-                                                                    FragmentContext* fragment_ctx, const Status& status,
+                                                                    FragmentContext* fragment_ctx,
+                                                                    RuntimeProfile* profile, const Status& status,
                                                                     bool done);
     static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
                                      const TNetworkAddress& fe_addr);

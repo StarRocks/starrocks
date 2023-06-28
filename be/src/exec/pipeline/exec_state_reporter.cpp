@@ -42,11 +42,11 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
 
 TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(QueryContext* query_ctx,
                                                                             FragmentContext* fragment_ctx,
+                                                                            RuntimeProfile* profile,
                                                                             const Status& status, bool done) {
     TReportExecStatusParams params;
     auto* runtime_state = fragment_ctx->runtime_state();
     DCHECK(runtime_state != nullptr);
-    auto* profile = runtime_state->runtime_profile();
     DCHECK(profile != nullptr);
     auto* exec_env = fragment_ctx->runtime_state()->exec_env();
     DCHECK(exec_env != nullptr);
@@ -66,7 +66,7 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
             runtime_state->update_report_load_status(&params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
-        if (query_ctx->is_report_profile()) {
+        if (query_ctx->enable_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
         }
