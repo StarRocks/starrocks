@@ -37,7 +37,6 @@ package com.starrocks.load.routineload;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -104,18 +103,18 @@ public abstract class RoutineLoadTaskInfo {
     protected StreamLoadTask streamLoadTask = null;
 
     public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
-                               long timeToExecuteMs) {
+                               long timeToExecuteMs, long taskTimeoutMs) {
         this.id = id;
         this.jobId = jobId;
         this.createTimeMs = System.currentTimeMillis();
         this.taskScheduleIntervalMs = taskScheduleIntervalMs;
-        this.timeoutMs = 1000 * Config.routine_load_task_timeout_second;
+        this.timeoutMs = taskTimeoutMs;
         this.timeToExecuteMs = timeToExecuteMs;
     }
 
     public RoutineLoadTaskInfo(UUID id, long jobId, long taskSchedulerIntervalMs,
-                               long timeToExecuteMs, long previousBeId) {
-        this(id, jobId, taskSchedulerIntervalMs, timeToExecuteMs);
+                               long timeToExecuteMs, long previousBeId, long taskTimeoutMs) {
+        this(id, jobId, taskSchedulerIntervalMs, timeToExecuteMs, taskTimeoutMs);
         this.previousBeId = previousBeId;
     }
 

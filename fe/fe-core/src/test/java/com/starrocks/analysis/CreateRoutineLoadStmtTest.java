@@ -148,6 +148,61 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testTaskTimeout() {
+        {
+            String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
+                    + " PROPERTIES( \"desired_concurrent_number\"=\"3\",\n"
+                    + "\"task_consume_second\" = \"5\",\n"
+                    + "\"task_timeout_second\" = \"15\"\n"
+                    + ")\n"
+                    + "FROM KAFKA\n"
+                    + "(\n"
+                    + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                    + "\"kafka_topic\" = \"topictest\"\n"
+                    + ");";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
+            CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            Assert.assertEquals(15, createRoutineLoadStmt.getTaskTimeoutSecond());
+            Assert.assertEquals(5, createRoutineLoadStmt.getTaskConsumeSecond());
+        }
+
+        {
+            String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
+                    + " PROPERTIES( \"desired_concurrent_number\"=\"3\",\n"
+                    + "\"timezone\" = \"Asia/Shanghai\"\n"
+                    + ")\n"
+                    + "FROM KAFKA\n"
+                    + "(\n"
+                    + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                    + "\"kafka_topic\" = \"topictest\"\n"
+                    + ");";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
+            CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            Assert.assertEquals(Config.routine_load_task_timeout_second, createRoutineLoadStmt.getTaskTimeoutSecond());
+            Assert.assertEquals(Config.routine_load_task_consume_second, createRoutineLoadStmt.getTaskConsumeSecond());
+        }
+
+        {
+            String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
+                    + " PROPERTIES( \"desired_concurrent_number\"=\"3\",\n"
+                    + "\"task_timeout_second\" = \"20\"\n"
+                    + ")\n"
+                    + "FROM KAFKA\n"
+                    + "(\n"
+                    + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                    + "\"kafka_topic\" = \"topictest\"\n"
+                    + ");";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
+            CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            Assert.assertEquals(20, createRoutineLoadStmt.getTaskTimeoutSecond());
+            Assert.assertEquals(5, createRoutineLoadStmt.getTaskConsumeSecond());
+        }
+    }
+
+    @Test
     public void testLoadColumns() {
         String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1" +
                 " COLUMNS(`k1`, `k2`, `k3`, `k4`, `k5`," +

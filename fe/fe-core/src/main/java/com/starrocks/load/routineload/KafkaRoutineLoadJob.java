@@ -214,7 +214,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
                     KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(), id,
                             taskSchedIntervalS * 1000,
-                            timeToExecuteMs, taskKafkaProgress);
+                            timeToExecuteMs, taskKafkaProgress, taskTimeoutSecond * 1000);
                     routineLoadTaskInfoList.add(kafkaTaskInfo);
                     result.add(kafkaTaskInfo);
                 }

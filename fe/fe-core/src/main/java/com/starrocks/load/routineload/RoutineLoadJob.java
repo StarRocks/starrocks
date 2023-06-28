@@ -280,6 +280,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected long committedTaskNum = 0;
     @SerializedName("at")
     protected long abortedTaskNum = 0;
+    @SerializedName("tcs")
+    protected long taskConsumeSecond = Config.routine_load_task_consume_second;
+    @SerializedName("tts")
+    protected long taskTimeoutSecond = Config.routine_load_task_timeout_second;
 
     // The tasks belong to this job
     protected List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
@@ -386,6 +390,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         } else {
             throw new UserException("Invalid format type.");
         }
+        taskConsumeSecond = stmt.getTaskConsumeSecond();
+        taskTimeoutSecond = stmt.getTaskTimeoutSecond();
     }
 
     private void setRoutineLoadDesc(RoutineLoadDesc routineLoadDesc) {
@@ -440,6 +446,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected void writeUnlock() {
         lock.writeLock().unlock();
+    }
+
+    public long getTaskConsumeSecond() {
+        return taskConsumeSecond;
+    }
+
+    public long getTaskTimeoutSecond() {
+        return taskTimeoutSecond;
     }
 
     public boolean isTrimspace() {
@@ -817,7 +831,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
                 StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
-                        Config.routine_load_task_timeout_second, true);
+                        taskTimeoutSecond, true);
                 streamLoadTask.setTxnId(txnId);
                 streamLoadTask.setLabel(label);
                 streamLoadTask.setTUniqueId(loadId);
@@ -1515,6 +1529,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         jobProperties.put("maxBatchRows", String.valueOf(maxBatchRows));
         jobProperties.put("currentTaskConcurrentNum", String.valueOf(currentTaskConcurrentNum));
         jobProperties.put("desireTaskConcurrentNum", String.valueOf(desireTaskConcurrentNum));
+        jobProperties.put("taskConsumeSecond", String.valueOf(taskConsumeSecond));
+        jobProperties.put("taskTimeoutSecond", String.valueOf(taskTimeoutSecond));
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
@@ -1586,6 +1602,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         out.writeLong(totalTaskExcutionTimeMs);
         out.writeLong(committedTaskNum);
         out.writeLong(abortedTaskNum);
+        out.writeLong(taskConsumeSecond);
+        out.writeLong(taskTimeoutSecond);
 
         origStmt.write(out);
         out.writeInt(jobProperties.size());
@@ -1650,6 +1668,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         totalTaskExcutionTimeMs = in.readLong();
         committedTaskNum = in.readLong();
         abortedTaskNum = in.readLong();
+        taskConsumeSecond = in.readLong();
+        taskTimeoutSecond = in.readLong();
 
         origStmt = OriginStatement.read(in);
 
@@ -1765,6 +1785,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY)) {
             this.maxBatchRows = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)) {
+            this.taskConsumeSecond = Long.parseLong(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)) {
+            this.taskTimeoutSecond = Long.parseLong(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
         }
         this.jobProperties.putAll(copiedJobProperties);
     }

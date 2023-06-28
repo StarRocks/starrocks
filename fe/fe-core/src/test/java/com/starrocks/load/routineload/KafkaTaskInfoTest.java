@@ -17,6 +17,7 @@ package com.starrocks.load.routineload;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
@@ -59,7 +60,8 @@ public class KafkaTaskInfoTest {
                 1L,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
-                offset1);
+                offset1,
+                Config.routine_load_task_timeout_second * 1000);
         Assert.assertTrue(kafkaTaskInfo1.readyToExecute());
 
         Map<Integer, Long> offset2 = Maps.newHashMap();
@@ -68,7 +70,8 @@ public class KafkaTaskInfoTest {
                 1L,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
-                offset2);
+                offset2,
+                Config.routine_load_task_timeout_second * 1000);
         Assert.assertFalse(kafkaTaskInfo2.readyToExecute());
     }
 
@@ -99,7 +102,8 @@ public class KafkaTaskInfoTest {
                 1L,
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
-                offset);
+                offset,
+                Config.routine_load_task_timeout_second * 1000);
         // call readyExecute to cache latestPartOffset
         kafkaTaskInfo.readyToExecute();
 

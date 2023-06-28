@@ -102,6 +102,7 @@ public class AlterRoutineLoadStmtTest {
                 + "\"desired_concurrent_number\"=\"3\",\n"
                 + "\"max_batch_interval\" = \"21\",\n"
                 + "\"strict_mode\" = \"false\",\n"
+                + "\"task_consume_second\" = \"5\",\n"
                 + "\"timezone\" = \"Africa/Abidjan\"\n"
                 + ")\n"
                 + "FROM KAFKA\n"
@@ -115,7 +116,7 @@ public class AlterRoutineLoadStmtTest {
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
 
-        Assert.assertEquals(7, stmt.getAnalyzedJobProperties().size());
+        Assert.assertEquals(9, stmt.getAnalyzedJobProperties().size());
         Assert.assertTrue(
                 stmt.getAnalyzedJobProperties().containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
         Assert.assertTrue(
@@ -123,6 +124,8 @@ public class AlterRoutineLoadStmtTest {
         Assert.assertEquals("0.3", stmt.getAnalyzedJobProperties().get(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY));
         Assert.assertTrue(
                 stmt.getAnalyzedJobProperties().containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
+        Assert.assertEquals("5", stmt.getAnalyzedJobProperties().get(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
+        Assert.assertEquals("20", stmt.getAnalyzedJobProperties().get(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
         Assert.assertTrue(stmt.hasDataSourceProperty());
         Assert.assertEquals(1, stmt.getDataSourceProperties().getCustomKafkaProperties().size());
         Assert.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("group.id"));
