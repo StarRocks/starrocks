@@ -129,10 +129,13 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     _query_ctx->extend_query_lifetime();
 
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
-        _query_ctx->set_report_profile();
+        _query_ctx->set_enable_profile();
     }
     if (query_options.__isset.pipeline_profile_level) {
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
+    }
+    if (query_options.__isset.runtime_profile_report_interval) {
+        _query_ctx->set_runtime_profile_report_interval(query_options.runtime_profile_report_interval);
     }
 
     bool enable_query_trace = false;

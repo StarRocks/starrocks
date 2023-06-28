@@ -53,6 +53,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.load.loadv2.BulkLoadJob;
@@ -121,9 +122,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class Coordinator {
@@ -166,12 +170,13 @@ public class Coordinator {
     // same as backend_exec_states_.size() after Exec()
     // instance id -> dummy value
     private MarkedCountDownLatch<TUniqueId, Long> profileDoneSignal;
+    private final AtomicReference<MarkedCountDownLatch<TUniqueId, Long>> runtimeProfileSignal = new AtomicReference<>();
     private final boolean isBlockQuery;
     private int numReceivedRows = 0;
     private List<String> deltaUrls;
     private Map<String, String> loadCounters;
     private String trackingUrl;
-    private Set<String> rejectedRecordPaths = new HashSet<>();
+    private final Set<String> rejectedRecordPaths = new HashSet<>();
     // for export
     private List<String> exportFiles;
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
@@ -188,6 +193,9 @@ public class Coordinator {
     private final CoordinatorPreprocessor coordinatorPreprocessor;
 
     private boolean thriftServerHighLoad;
+
+    private Supplier<RuntimeProfile> topProfileSupplier;
+    private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(0L);
 
     // only used for sync stream load profile
     // so only init relative data structure
@@ -417,7 +425,7 @@ public class Coordinator {
 
     public List<String> getRejectedRecordPaths() {
         return rejectedRecordPaths.stream().collect(Collectors.toList());
-    }   
+    }
 
     public long getStartTime() {
         return this.queryGlobals.getTimestamp_ms();
@@ -464,6 +472,10 @@ public class Coordinator {
 
     public List<TSinkCommitInfo> getSinkCommitInfos() {
         return sinkCommitInfos;
+    }
+
+    public void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
+        this.topProfileSupplier = topProfileSupplier;
     }
 
     public boolean isUsingBackend(Long backendID) {
@@ -1551,6 +1563,18 @@ public class Coordinator {
                 sinkCommitInfos.addAll(params.sink_commit_infos);
             }
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
+        } else {
+            long now = System.currentTimeMillis();
+            long lastTime = lastRuntimeProfileUpdateTime.get();
+            if (topProfileSupplier != null &&
+                    connectContext != null &&
+                    connectContext.getSessionVariable().isEnableProfile() &&
+                    now - lastTime > connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 1000L &&
+                    lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
+                RuntimeProfile profile = topProfileSupplier.get();
+                profile.addChild(buildMergedQueryProfile(null));
+                ProfileManager.getInstance().pushProfile(profile);
+            }
         }
 
         if (params.isSetLoad_type()) {
@@ -1651,36 +1675,34 @@ public class Coordinator {
         return false;
     }
 
-    public void mergeIsomorphicProfiles(PQueryStatistics statistics) {
+    public RuntimeProfile buildMergedQueryProfile(PQueryStatistics statistics) {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
 
         if (!sessionVariable.isEnableProfile()) {
-            return;
+            return queryProfile;
         }
 
         if (!coordinatorPreprocessor.isUsePipeline()) {
-            return;
+            return queryProfile;
         }
 
         int profileLevel = sessionVariable.getPipelineProfileLevel();
         if (profileLevel >= TPipelineProfileLevel.DETAIL.getValue()) {
-            return;
+            return queryProfile;
         }
 
+        RuntimeProfile newQueryProfile = new RuntimeProfile(queryProfile.getName());
+        newQueryProfile.copyAllInfoStringsFrom(queryProfile);
+        newQueryProfile.copyAllCountersFrom(queryProfile);
+
+        List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            RuntimeProfile newFragmentProfile = new RuntimeProfile(fragmentProfile.getName());
+            newFragmentProfiles.add(newFragmentProfile);
+            newFragmentProfile.copyAllInfoStringsFrom(fragmentProfile);
+            newFragmentProfile.copyAllCountersFrom(fragmentProfile);
+
             if (fragmentProfile.getChildList().isEmpty()) {
-                continue;
-            }
-
-            RuntimeProfile instanceProfile0 = fragmentProfile.getChildList().get(0).first;
-            if (instanceProfile0.getChildList().isEmpty()) {
-                continue;
-            }
-            RuntimeProfile pipelineProfile0 = instanceProfile0.getChildList().get(0).first;
-
-            // pipeline engine must have a counter named DegreeOfParallelism
-            // some fragment may still execute in non-pipeline mode
-            if (pipelineProfile0.getCounter("DegreeOfParallelism") == null) {
                 continue;
             }
 
@@ -1694,32 +1716,31 @@ public class Coordinator {
                 backendAddresses.add(instanceProfile.getInfoString("Address"));
                 instanceProfile.removeInfoString("Address");
             });
-            fragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
-            Counter backendNum = fragmentProfile.addCounter("BackendNum", TUnit.UNIT, null);
+            newFragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+            Counter backendNum = newFragmentProfile.addCounter("BackendNum", TUnit.UNIT, null);
             backendNum.setValue(backendAddresses.size());
 
             // Setup number of instance
-            Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT, null);
+            Counter counter = newFragmentProfile.addCounter("InstanceNum", TUnit.UNIT, null);
             counter.setValue(instanceProfiles.size());
 
-            // After merge, all merged metrics will gather into the first profile
-            // which is instanceProfile0
-            RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles);
+            RuntimeProfile mergedInstanceProfile = RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles);
+            Preconditions.checkState(mergedInstanceProfile != null);
 
-            fragmentProfile.copyAllInfoStringsFrom(instanceProfile0);
-            fragmentProfile.copyAllCountersFrom(instanceProfile0);
+            newFragmentProfile.copyAllInfoStringsFrom(mergedInstanceProfile);
+            newFragmentProfile.copyAllCountersFrom(mergedInstanceProfile);
 
-            // Remove the instance profile from the hierarchy
-            fragmentProfile.removeAllChildren();
-            instanceProfile0.getChildList().forEach(pair -> {
+            mergedInstanceProfile.getChildList().forEach(pair -> {
                 RuntimeProfile pipelineProfile = pair.first;
                 foldUnnecessaryLimitOperators(pipelineProfile);
-                fragmentProfile.addChild(pipelineProfile);
+                newFragmentProfile.addChild(pipelineProfile);
             });
+
+            newQueryProfile.addChild(newFragmentProfile);
         }
 
         // Remove redundant MIN/MAX metrics if MIN and MAX are identical
-        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+        for (RuntimeProfile fragmentProfile : newFragmentProfiles) {
             RuntimeProfile.removeRedundantMinMaxMetrics(fragmentProfile);
         }
 
@@ -1731,7 +1752,7 @@ public class Coordinator {
         // NetworkTime(for ExchangeOperator)
         long queryCumulativeOperatorTime = 0;
         boolean foundResultSink = false;
-        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+        for (RuntimeProfile fragmentProfile : newFragmentProfiles) {
             Counter instanceAllocatedMemoryUsage = fragmentProfile.getCounter("InstanceAllocatedMemoryUsage");
             if (instanceAllocatedMemoryUsage != null) {
                 queryAllocatedMemoryUsage += instanceAllocatedMemoryUsage.getValue();
@@ -1748,8 +1769,8 @@ public class Coordinator {
                     if (!foundResultSink & operatorProfile.getName().contains("RESULT_SINK")) {
                         long executionWallTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
                         Counter executionTotalTime =
-                                queryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
-                        queryProfile.getCounterTotalTime().setValue(0);
+                                newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
+                        newQueryProfile.getCounterTotalTime().setValue(0);
                         executionTotalTime.setValue(executionWallTime);
                         foundResultSink = true;
                     }
@@ -1776,21 +1797,23 @@ public class Coordinator {
             }
         }
         Counter queryAllocatedMemoryUsageCounter =
-                queryProfile.addCounter("QueryAllocatedMemoryUsage", TUnit.BYTES, null);
+                newQueryProfile.addCounter("QueryAllocatedMemoryUsage", TUnit.BYTES, null);
         queryAllocatedMemoryUsageCounter.setValue(queryAllocatedMemoryUsage);
         Counter queryDeallocatedMemoryUsageCounter =
-                queryProfile.addCounter("QueryDeallocatedMemoryUsage", TUnit.BYTES, null);
+                newQueryProfile.addCounter("QueryDeallocatedMemoryUsage", TUnit.BYTES, null);
         queryDeallocatedMemoryUsageCounter.setValue(queryDeallocatedMemoryUsage);
         Counter queryCumulativeOperatorTimer =
-                queryProfile.addCounter("QueryCumulativeOperatorTime", TUnit.TIME_NS, null);
+                newQueryProfile.addCounter("QueryCumulativeOperatorTime", TUnit.TIME_NS, null);
         queryCumulativeOperatorTimer.setValue(queryCumulativeOperatorTime);
-        queryProfile.getCounterTotalTime().setValue(0);
+        newQueryProfile.getCounterTotalTime().setValue(0);
 
-        Counter queryCumulativeCpuTime = queryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
+        Counter queryCumulativeCpuTime = newQueryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
         queryCumulativeCpuTime.setValue(statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs);
-        Counter queryPeakMemoryUsage = queryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
+        Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
         queryPeakMemoryUsage.setValue(
                 statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes);
+
+        return newQueryProfile;
     }
 
     /**
