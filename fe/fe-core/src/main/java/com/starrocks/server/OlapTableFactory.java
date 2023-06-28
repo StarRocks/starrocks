@@ -262,12 +262,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                     PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
             table.setIsInMemory(isInMemory);
 
-            boolean enablePersistentIndex =
-                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
-                            false);
-            if (enablePersistentIndex && table.isCloudNativeTable()) {
-                throw new DdlException("Cannot create cloud native table with persistent index yet");
-            }
+        boolean enablePersistentIndex =
+                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
+                        false);
 
             table.setEnablePersistentIndex(enablePersistentIndex);
 
