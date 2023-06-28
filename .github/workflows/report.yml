@@ -1,13 +1,10 @@
 name: Report on the pull request
 
-# read-write repo token
-# access to secrets
 on:
   workflow_run:
     workflows: [ "CI PIPELINE 2" ]
     types:
       - completed
-
 
 permissions: write-all
 
