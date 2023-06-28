@@ -17,7 +17,6 @@ package com.starrocks.server;
 import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.credential.CloudConfigurationConstants;
@@ -101,7 +100,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         }
     }
 
-    public void createOrUpdateBuiltinStorageVolume() throws DdlException, AnalysisException, AlreadyExistsException {
+    public void createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
         if (Config.cloud_native_storage_type.isEmpty()) {
             return;
         }
