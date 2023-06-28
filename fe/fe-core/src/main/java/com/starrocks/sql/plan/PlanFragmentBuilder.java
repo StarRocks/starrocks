@@ -1061,7 +1061,6 @@ public class PlanFragmentBuilder {
 
         public PlanFragment visitPhysicalPaimonScan(OptExpression optExpression, ExecPlan context) {
             PhysicalPaimonScanOperator node = (PhysicalPaimonScanOperator) optExpression.getOp();
-            ScanOperatorPredicates predicates = node.getScanOperatorPredicates();
 
             Table referenceTable = node.getTable();
             context.getDescTbl().addReferencedTable(referenceTable);
@@ -1075,14 +1074,18 @@ public class PlanFragmentBuilder {
                     new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
             paimonScanNode.computeStatistics(optExpression.getStatistics());
             try {
+                // set predicate
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    paimonScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                paimonScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
                 HDFSScanNodePredicates scanNodePredicates = paimonScanNode.getScanNodePredicates();
-                scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
-                scanNodePredicates.setIdToPartitionKey(predicates.getIdToPartitionKey());
-
-                paimonScanNode.setupScanRangeLocations(context.getDescTbl());
-
-                prepareCommonExpr(scanNodePredicates, predicates, context);
-                prepareMinMaxExpr(scanNodePredicates, predicates, context);
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (Exception e) {
                 LOG.warn("Paimon scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
