@@ -8,7 +8,7 @@
 
 > **注意**
 >
-> 导出操作需要目标表的 EXPORT 权限。如果您的用户账号没有 EXPORT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+> 导出操作需要目标表的 EXPORT 权限。如果您的用户账号没有 EXPORT 权限，请参考 [GRANT](../account-management/GRANT.md) 给用户赋权。
 
 ## 语法
 

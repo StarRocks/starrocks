@@ -6,7 +6,7 @@ Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入�
 
 > **注意**
 >
-> Broker Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+> Broker Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../account-management/GRANT.md) 给用户赋权。
 
 ## 语法
 
