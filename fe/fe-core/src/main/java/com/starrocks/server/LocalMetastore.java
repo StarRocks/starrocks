@@ -3560,6 +3560,8 @@ public class LocalMetastore implements ConnectorMetadata {
             materializedView.addPartition(partition);
         }
 
+        MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
+
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");

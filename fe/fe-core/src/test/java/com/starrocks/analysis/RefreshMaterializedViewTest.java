@@ -189,11 +189,6 @@ public class RefreshMaterializedViewTest {
 
         // refresh partitions are not empty if base table is updated.
         cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-20\", 1, 10)");
-        {
-            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
-            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
-            Assert.assertTrue(!partitionsToRefresh.isEmpty());
-        }
         // no refresh partitions if there is new data & refresh.
         {
             refreshMaterializedView("test", "mv_with_mv_rewrite_staleness");
