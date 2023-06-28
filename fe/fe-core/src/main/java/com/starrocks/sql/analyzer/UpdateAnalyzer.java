@@ -151,6 +151,7 @@ public class UpdateAnalyzer {
                 Expr expr = col.materializedColumnExpr();
                 item = new SelectListItem(expr, col.getName());
                 mcToItem.put(col, item);
+                selectList.addItem(item);
                 assignColumnList.add(col);
             } else if (!updateStmt.usePartialUpdate() || col.isKey()) {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
@@ -176,6 +177,34 @@ public class UpdateAnalyzer {
 
             SelectListItem item = mcToItem.get(column);
             Expr orginExpr = item.getExpr();
+
+            ExpressionAnalyzer.analyzeExpression(orginExpr,
+                new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
+                    table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
+                        tableName, null)).collect(Collectors.toList()))), session);
+
+            // check if all the expression refers are sepecfied in
+            // partial update mode
+            if (updateStmt.usePartialUpdate()) {
+                List<SlotRef> checkSlots = Lists.newArrayList();
+                orginExpr.collect(SlotRef.class, checkSlots);
+                int matchCount = 0;
+                if (checkSlots.size() != 0) {
+                    for (SlotRef slot : checkSlots) {
+                        Column refColumn = table.getColumn(slot.getColumnName());
+                        for (Column assignColumn : assignColumnList) {
+                            if (assignColumn.equals(refColumn)) {
+                                ++matchCount;
+                                break;
+                            }
+                        }
+                    }
+                }
+    
+                if (matchCount != checkSlots.size()) {
+                    throw new SemanticException("All ref Column must be sepecfied in partial update mode");
+                }
+            }
 
             List<Expr> outputExprs = Lists.newArrayList();
             for (Column col : table.getBaseSchema()) {

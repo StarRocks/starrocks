@@ -193,4 +193,34 @@ SHOW CREATE TABLE t;
 
 ALTER TABLE t ADD COLUMN (newcol5 BIGINT DEFAULT "0", newcol6 BIGINT AS id * 1000);
 
-DROP DATABASE test_add_multiple_column
+DROP DATABASE test_add_multiple_column;
+
+-- name: test_update
+CREATE DATABASE test_update;
+USE test_update;
+
+CREATE TABLE t ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT AS v2) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+INSERT INTO t VALUES (1, 2, 3);
+
+SET partial_update_mode = "row";
+UPDATE t SET v1 = 100 where id = 1;
+SELECT * FROM t;
+UPDATE t SET v1 = 200 where v3 = 3;
+SELECT * FROM t;
+UPDATE t SET v2 = 300 where v3 = 3;
+SELECT * FROM t;
+UPDATE t SET v2 = 400 where v3 = 300;
+SELECT * FROM t;
+
+INSERT INTO t VALUES (1, 2, 3);
+SET partial_update_mode = "column";
+UPDATE t SET v1 = 100 where id = 1;
+SELECT * FROM t;
+UPDATE t SET v1 = 200 where v3 = 3;
+SELECT * FROM t;
+UPDATE t SET v2 = 300 where v3 = 3;
+SELECT * FROM t;
+UPDATE t SET v2 = 400 where v3 = 300;
+SELECT * FROM t;
+
+DROP DATABASE test_update;

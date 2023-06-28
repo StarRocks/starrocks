@@ -595,6 +595,89 @@ ALTER TABLE t ADD COLUMN (newcol5 BIGINT DEFAULT "0", newcol6 BIGINT AS id * 100
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Can not add normal column and Materialized Column in the same time.')
 -- !result
-DROP DATABASE test_add_multiple_column
+DROP DATABASE test_add_multiple_column;
+-- result:
+-- !result
+-- name: test_update
+CREATE DATABASE test_update;
+-- result:
+-- !result
+USE test_update;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT AS v2) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1, 2, 3);
+-- result:
+-- !result
+SET partial_update_mode = "row";
+-- result:
+-- !result
+UPDATE t SET v1 = 100 where id = 1;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	100	3	3
+-- !result
+UPDATE t SET v1 = 200 where v3 = 3;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	200	3	3
+-- !result
+UPDATE t SET v2 = 300 where v3 = 3;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	200	300	300
+-- !result
+UPDATE t SET v2 = 400 where v3 = 300;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	200	400	400
+-- !result
+INSERT INTO t VALUES (1, 2, 3);
+-- result:
+-- !result
+SET partial_update_mode = "column";
+-- result:
+-- !result
+UPDATE t SET v1 = 100 where id = 1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: All ref Column must be sepecfied in partial update mode.')
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	3	3
+-- !result
+UPDATE t SET v1 = 200 where v3 = 3;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: All ref Column must be sepecfied in partial update mode.')
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	3	3
+-- !result
+UPDATE t SET v2 = 300 where v3 = 3;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	300	300
+-- !result
+UPDATE t SET v2 = 400 where v3 = 300;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	400	400
+-- !result
+DROP DATABASE test_update;
 -- result:
 -- !result
