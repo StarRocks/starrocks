@@ -23,11 +23,11 @@ create table t0 (
 insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  2048));
 -- result:
 -- !result
-select count(*) from t0 l, t0 r;
+select count(*) from t0 l join [broadcast] t0 r;
 -- result:
 4194304
 -- !result
-select l.*, r.* from t0 l, t0 r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
+select l.*, r.* from t0 l join [broadcast] t0 r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
 -- result:
 1	4095	1	4095
 1	4095	2	4094
@@ -66,7 +66,7 @@ select l.*, r.* from t0 l, t0 r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0
 7	4089	2	4094
 8	4088	1	4095
 -- !result
-select count(*) from t0 l, t0 r where r.c0 = 1;
+select count(*) from t0 l join [broadcast] t0 r where r.c0 = 1;
 -- result:
 2048
 -- !result
@@ -81,4 +81,60 @@ select count(*) from t0 l join [broadcast] t0 r where l.c0 < 0;
 select count(d.c0) from t0 d join [broadcast] (select l.c0 from t0 l join t0 r) t;
 -- result:
 8589934592
+-- !result
+create table empty_t like t0;
+-- result:
+-- !result
+select count(*) from t0 l join [broadcast] empty_t r;
+-- result:
+0
+-- !result
+select l.*, r.* from t0 l join [broadcast] empty_t r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
+-- result:
+-- !result
+select count(*) from t0 l join [broadcast] empty_t r where r.c0 = 1;
+-- result:
+0
+-- !result
+select count(*) from t0 l join [broadcast] empty_t r where r.c0 < 0;
+-- result:
+0
+-- !result
+select count(*) from t0 l join [broadcast] empty_t r where l.c0 < 0;
+-- result:
+0
+-- !result
+select count(d.c0) from t0 d join [broadcast] (select l.c0 from t0 l join empty_t r) t;
+-- result:
+0
+-- !result
+select count(*) from empty_t l, t0 r;
+-- result:
+0
+-- !result
+select l.*, r.* from empty_t l, t0 r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
+-- result:
+-- !result
+select count(*) from empty_t l, t0 r where r.c0 = 1;
+-- result:
+0
+-- !result
+select count(*) from empty_t l join [broadcast] t0 r where r.c0 < 0;
+-- result:
+0
+-- !result
+select count(*) from empty_t l join [broadcast] t0 r where l.c0 < 0;
+-- result:
+0
+-- !result
+select count(d.c0) from empty_t d join [broadcast] (select l.c0 from t0 l join t0 r) t;
+-- result:
+0
+-- !result
+select count(*) from (select 1) tbl, (select sleep(1) as c2) tbr;
+-- result:
+1
+-- !result
+select c2 from (select c3,c2 from (select sleep(1) as c2) tbr join [broadcast] (select 1 c3) tbl where c3 + c2 = 0) tb join [broadcast] t0;
+-- result:
 -- !result
