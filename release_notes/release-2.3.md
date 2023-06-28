@@ -1,29 +1,5 @@
 # StarRocks version 2.3
 
-## 2.3.14
-
-发布日期：2023 年 6 月 27 日
-
-### 功能优化
-
-- 优化外表 Scan 节点的 I/O 并发数量，减少内存使用，并限制内存使用比例，提升外表导入稳定性。[#23617](https://github.com/StarRocks/starrocks/pull/23617) [#23624](https://github.com/StarRocks/starrocks/pull/23624) [#23626](https://github.com/StarRocks/starrocks/pull/23626)
-- 优化 Broker Load 的报错信息，增加出错文件的名称提示以及重试信息。[#18038](https://github.com/StarRocks/starrocks/pull/18038) [#21982](https://github.com/StarRocks/starrocks/pull/21982)
-- 优化 CREATE TABLE 的超时报错信息，增加参数调整建议。[#24510](https://github.com/StarRocks/starrocks/pull/24510)
-- 优化因表状态为非 Normal 导致 ALTER TABLE 失败场景下的报错信息。[#24381](https://github.com/StarRocks/starrocks/pull/24381)
-- 建表时忽略中文空格。[#23885](https://github.com/StarRocks/starrocks/pull/23885)
-- 优化 Broker 访问超时时间从而降低 Broker Load 导入失败率。[#22699](https://github.com/StarRocks/starrocks/pull/22699)
-- 主键模型 SHOW TABLET 返回的 `VersionCount` 字段包含 Pending 状态的 Rowsets。[#23847](https://github.com/StarRocks/starrocks/pull/23847)
-- 优化 Persistent Index 策略。[#22140](https://github.com/StarRocks/starrocks/pull/22140)
-
-### 问题修复
-
-修复了如下问题：
-
-- 向 StarRocks 导入 Parquet 格式数据时，因日期类型转换溢出而产生数据错误。 [#22356](https://github.com/StarRocks/starrocks/pull/22356)
-- 禁用动态分区后，分桶信息丢失。[#22595](https://github.com/StarRocks/starrocks/pull/22595)
-- 创建分区表时指定不支持的 Properties 会导致空指针。[#21374](https://github.com/StarRocks/starrocks/issues/21374)
-- Information Schema 中的表权限过滤失效。[#23804](https://github.com/StarRocks/starrocks/pull/23804)
-
 ## 2.3.13
 
 发布日期： 2023 年 6 月 1 日
