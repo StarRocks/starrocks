@@ -14,18 +14,26 @@
 
 #pragma once
 
-#include <string_view>
+#include "exec/schema_scanner.h"
+#include "gen_cpp/FrontendService_types.h"
+#include "runtime/runtime_state.h"
 
-#include "common/status.h"
+namespace starrocks {
 
-namespace starrocks::lake {
+class SchemaTablePipeFiles : public SchemaScanner {
+public:
+    SchemaTablePipeFiles();
 
-class TabletManager;
+    ~SchemaTablePipeFiles() override = default;
 
-Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_log_id);
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
-Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_log_id);
+private:
+    Status fill_chunk(ChunkPtr* chunk);
 
-Status delete_garbage_files(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version);
+    size_t _cur_idx{0};
+    static SchemaScanner::ColumnDesc _s_columns[];
+};
 
-} // namespace starrocks::lake
+}; // namespace starrocks

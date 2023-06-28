@@ -539,6 +539,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return candidates;
     }
 
+    public Replica getDecommissionedReplica() {
+        return decommissionedReplica;
+    }
+
     // database lock should be held.
     public void chooseSrcReplica(Map<Long, PathSlot> backendsWorkingSlots) throws SchedException {
         /*
@@ -787,10 +791,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING or REPLICA_MISSING_IN_CLUSTER,
         // we create a new replica with state CLONE
         Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
-        if (db == null || !db.writeLockAndCheckExist()) {
+        if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " not exist");
         }
         try {
+            db.writeLock();
             if (tabletStatus == TabletStatus.REPLICA_MISSING
                     || tabletStatus == TabletStatus.REPLICA_RELOCATING
                     || tabletStatus == TabletStatus.COLOCATE_MISMATCH
@@ -838,10 +843,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         final GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
-        if (db == null || !db.writeLockAndCheckExist()) {
+        if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " does not exist");
         }
         try {
+            db.writeLock();
             OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(
                     globalStateMgr.getDbIncludeRecycleBin(dbId),
                     tblId);

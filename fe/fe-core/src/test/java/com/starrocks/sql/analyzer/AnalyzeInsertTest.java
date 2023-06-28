@@ -92,7 +92,7 @@ public class AnalyzeInsertTest {
             }
         };
         analyzeFail("insert into iceberg_catalog.err_db.tbl values (1)",
-                "Database err_db is not found");
+                "Unknown database 'err_db'");
 
         new Expectations(metadata) {
             {

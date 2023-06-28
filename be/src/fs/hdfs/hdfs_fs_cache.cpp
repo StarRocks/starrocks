@@ -38,7 +38,7 @@ static const std::vector<TCloudProperty>* get_cloud_properties(const FSOptions& 
     return nullptr;
 }
 
-static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr<HdfsFsClient> hdfs_client,
+static Status create_hdfs_fs_handle(const std::string& namenode, const std::shared_ptr<HdfsFsClient>& hdfs_client,
                                     const FSOptions& options) {
     auto hdfs_builder = hdfsNewBuilder();
     hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());

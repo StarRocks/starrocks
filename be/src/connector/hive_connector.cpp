@@ -454,7 +454,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
-    FSOptions fsOptions =
+    auto fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));

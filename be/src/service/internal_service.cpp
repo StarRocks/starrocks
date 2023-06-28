@@ -791,7 +791,7 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
         ScannerCounter counter{};
         switch (tp) {
         case TFileFormatType::FORMAT_PARQUET:
-            p_scanner.reset(new ParquetScanner(&state, &profile, scan_range, &counter, true));
+            p_scanner = std::make_unique<ParquetScanner>(&state, &profile, scan_range, &counter, true);
             break;
 
         case TFileFormatType::FORMAT_ORC:

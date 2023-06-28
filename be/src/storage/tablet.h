@@ -65,9 +65,9 @@ class Tablet;
 class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
-class CompactionCandidate;
-class CompactionContext;
-class TabletBasicInfo;
+struct CompactionCandidate;
+struct CompactionContext;
+struct TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 

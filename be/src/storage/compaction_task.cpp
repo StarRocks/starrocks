@@ -187,7 +187,7 @@ Status CompactionTask::_shortcut_compact(Statistics* statistics) {
     // shortcut compact means hard link old rowset to new rowset directly
     // no need to read and write data
     std::vector<RowsetSharedPtr> data_rowsets;
-    for (auto rowset : _input_rowsets) {
+    for (const auto& rowset : _input_rowsets) {
         if (rowset->num_rows() > 0) {
             // if rowset has data, we should compact it
             data_rowsets.emplace_back(rowset);

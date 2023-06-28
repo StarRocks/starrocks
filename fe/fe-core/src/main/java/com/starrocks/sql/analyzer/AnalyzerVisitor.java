@@ -128,6 +128,11 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.ast.pipe.AlterPipeStmt;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DescPipeStmt;
+import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 
 public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     public void analyze(StatementBase statement, ConnectContext session) {
@@ -823,6 +828,37 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, ConnectContext context) {
         StorageVolumeAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    // -------------------------------------------- Pipe Statement -------------------------------------------------
+    @Override
+    public Void visitCreatePipeStatement(CreatePipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropPipeStatement(DropPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterPipeStatement(AlterPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowPipeStatement(ShowPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDescPipeStatement(DescPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
         return null;
     }
 }

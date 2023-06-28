@@ -15,6 +15,9 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -362,6 +365,19 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "properties('replication_num' = '1');";
         starRocksAssert
                 .withTable(userTagTable);
+
+        String eventTable = "CREATE TABLE `event1` (\n" +
+                "  `event_id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `event_type` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "  `event_time` datetime NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`event_id`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`event_id`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(eventTable);
     }
 
     @Test
@@ -2694,6 +2710,31 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
             String query = "select * from customer, lineorder";
             testRewriteOK(mv, query);
+        }
+
+        {
+            // test compensation predicates are not in output of query
+            String mv = "SELECT `event_id`, `event_type`, `event_time`\n" +
+                    "FROM `event1`\n" +
+                    "WHERE `event_type` = 'click'; ";
+            String query = "select count(event_id) from event1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("UNION");
+        }
+
+        {
+            String mv = "SELECT count(lo_linenumber)\n" +
+                    "FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
+                    "WHERE `c_name` != 'name'; ";
+
+            String query = "SELECT count(lo_linenumber)\n" +
+                    "FROM lineorder inner join customer on lo_custkey = c_custkey";
+            Table table1 = getTable(MATERIALIZED_DB_NAME, "lineorder");
+            PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
+            Table table2 = getTable(MATERIALIZED_DB_NAME, "customer");
+            PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("UNION");
         }
     }
 

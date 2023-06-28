@@ -144,7 +144,7 @@ public class TypeManager {
 
                 if (!Type.canCastTo(expr.getType(), targetType)) {
                     throw new SemanticException("Cannot cast '" + expr.toSql()
-                            + "' from " + expr.getType() + " to " + ((ArrayType) targetType).getItemType());
+                            + "' from " + expr.getType() + " to " + targetType);
                 }
             } else if (expr.getType().isStructType()) {
                 if (!targetType.isStructType()) {
@@ -154,7 +154,7 @@ public class TypeManager {
 
                 if (!Type.canCastTo(expr.getType(), targetType)) {
                     throw new SemanticException("Cannot cast '" + expr.toSql()
-                            + "' from " + expr.getType() + " to " + ((ArrayType) targetType).getItemType());
+                            + "' from " + expr.getType() + " to " + targetType);
                 }
             } else {
                 if (!Type.canCastTo(expr.getType(), targetType)) {

@@ -17,6 +17,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 add_subdirectory(rowset)
 
 add_library(Storage STATIC
@@ -168,7 +172,7 @@ add_library(Storage STATIC
     lake/compaction_scheduler.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
-    lake/gc.cpp
+    lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
     lake/rowset.cpp
