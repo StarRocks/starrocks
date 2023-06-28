@@ -4,7 +4,7 @@
 
 MAP is a complex data type that stores a set of key-value pairs, for example, `{a:1, b:2, c:3}`. Keys in a map must be unique. A nested map can contain up to 14 levels of nesting.
 
-The MAP data type is supported from v3.1 onwards.
+The MAP data type is supported from v3.1 onwards. In v3.1, you can define MAP columns when you create a StarRocks table, load MAP data into that table, and query MAP data. Since v2.5, StarRocks supports querying complex data types MAP and STRUCT from data lakes.
 
 ## Syntax
 
@@ -12,7 +12,7 @@ The MAP data type is supported from v3.1 onwards.
 MAP<key_type,value_type>
 ```
 
-- `key_type`: the data type of the key. The key must be of a primitive type in StarRocks, such as numeric, string, or date. It cannot be of the HLL, JSON, ARRAY, MAP, BITMAP, or STRUCT type.
+- `key_type`: the data type of the key. The key must be of a primitive type supported by StarRocks, such as numeric, string, or date. It cannot be of the HLL, JSON, ARRAY, MAP, BITMAP, or STRUCT type.
 - `value_type`: the data type of the value. The value can be of any supported type.
 
 Keys and values are **natively nullable**.
@@ -46,9 +46,9 @@ DUPLICATE KEY(c0);
 
 Columns with the MAP type have the following restrictions:
 
-- Cannot be used as key columns (may be supported later).
-- Cannot be used as partition key columns (the columns following PARTITION BY).
-- Cannot be used as bucketing columns (the columns following DISTRIBUTED BY).
+- Cannot be used as key columns in a table. They can only be used as value columns.
+- Cannot be used as partition key columns (the columns following PARTITION BY) in a table.
+- Cannot be used as bucketing columns (the columns following DISTRIBUTED BY) in a table.
 
 ## Construct maps in SQL
 
@@ -76,7 +76,7 @@ select map{1:2.2, 1.2:21} as floats_floats; -- Return {1.0:2.2,1.2:21.0}.
 select map{12:"a", "100":1, NULL:NULL} as string_string; -- Return {"12":"a","100":"1",null:null}.
 ```
 
-You can also define the data type using `{}` when you construct a map. The input keys or values must be able to cast into the specified types.
+You can also define the data type using `<>` when you construct a map. The input keys or values must be able to cast into the specified types.
 
 ```SQL
 select map<FLOAT,INT>{1:2}; -- Return {1:2}.
@@ -99,9 +99,6 @@ select map() as empty_map; -- Return {}.
 ## Load MAP data into StarRocks
 
 You can load map data into StarRocks using two methods: [INSERT INTO](../../../loading/InsertInto.md), and [ORC/Parquet loading](../../../loading/BrokerLoad.md).
-
-- INSERT INTO is suitable for small-scale data testing.
-- ORC/Parquet loading is suitable for large-scale data loading.
 
 Note that StarRocks will remove duplicate keys of each map when loading MAP data.
 

@@ -2,11 +2,13 @@
 
 ## Description
 
-STRUCT is widely used to express complex data types. It represents a collection of named fields with different data types. Each field has a name and a type, for example, `<a INT, b INT>`. Field names in a struct must be unique.
+STRUCT is widely used to express complex data types. It represents a collection of elements (also called fields) with different data types, for example, `<a INT, b STRING>`.
 
-Fields can be of primitive data types (such as numeric, string, or date) or complex data types (such as ARRAY or MAP). A field within a STRUCT can also be another STRUCT, ARRAY, or MAP, which allows you to create nested data structures, for example, `STRUCT<a INT, b STRUCT<c INT, d INT>, c MAP<INT, INT>, d ARRAY<INT>>`.
+Field names in a struct must be unique. Fields can be of primitive data types (such as numeric, string, or date) or complex data types (such as ARRAY or MAP).
 
-The STRUCT data type is supported from v3.1 onwards.
+A field within a struct can also be another STRUCT, ARRAY, or MAP, which allows you to create nested data structures, for example, `STRUCT<a INT, b STRUCT<c INT, d INT>, c MAP<INT, INT>, d ARRAY<INT>>`.
+
+The STRUCT data type is supported from v3.1 onwards. In v3.1, you can define STRUCT columns when you create a StarRocks table, load STRUCT data into that table, and query MAP data. Since v2.5, StarRocks supports querying complex data types MAP and STRUCT from data lakes.
 
 ## Syntax
 
@@ -46,9 +48,9 @@ DUPLICATE KEY(c0);
 
 Columns with the STRUCT type have the following restrictions:
 
-- Cannot be used as key columns (maybe supported later).
-- Cannot be used as partition key columns (following PARTITION BY).
-- Cannot be used as bucketing columns (following DISTRIBUTED BY).
+- Cannot be used as key columns in a table. They can only be used as value columns.
+- Cannot be used as partition key columns (following PARTITION BY) in a table.
+- Cannot be used as bucketing columns (following DISTRIBUTED BY) in a table.
 - Only supports the replace() function when used as a value column in an [Aggregate table](../../../table_design/table_types/aggregate_table.md).
 
 ## Construct structs in SQL
@@ -71,9 +73,6 @@ select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- Return {"a":1
 ## Load STRUCT data
 
 You can load STRUCT data into StarRocks using two methods: [INSERT INTO](../../../loading/InsertInto.md), and [ORC/Parquet loading](../../../loading/BrokerLoad.md).
-
-- INSERT INTO is suitable for small-scale data testing.
-- ORC/Parquet loading is suitable for large-scale data loading.
 
 Note that StarRocks automatically casts the data type into the corresponding STRUCT type.
 
@@ -120,11 +119,11 @@ mysql> select row(1, 2, 3, 4).col1;
 +-----------------------+
 
 mysql> select row(2, 4, 6, 8)[2];
-+---------------------+
-| row(1, 2, 3, 4)[2]  |
-+---------------------+
-| 2                   |
-+---------------------+
++--------------------+
+| row(2, 4, 6, 8)[2] |
++--------------------+
+|                  4 |
++--------------------+
 
 mysql> select row(map{'a':1}, 2, 3, 4)[1];
 +-----------------------------+
