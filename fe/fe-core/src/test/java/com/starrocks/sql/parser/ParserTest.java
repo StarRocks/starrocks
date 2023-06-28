@@ -23,6 +23,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -290,6 +291,21 @@ class ParserTest {
             System.out.println(e.getMessage());
             assertContains(e.getMessage(), expecting);
         }
+    }
+
+    @Test
+    void testWrongVariableName() {
+        String res = VariableMgr.findSimilarVarNames("disable_coloce_join");
+        assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
+
+        res = VariableMgr.findSimilarVarNames("SQL_AUTO_NULL");
+        assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'sql_mode_v2'}");
+
+        res = VariableMgr.findSimilarVarNames("pipeline");
+        assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
+
+        res = VariableMgr.findSimilarVarNames("disable_joinreorder");
+        assertContains(res, "{'disable_join_reorder', 'disable_colocate_join', 'enable_predicate_reorder'}");
     }
 
     private static Stream<Arguments> keyWordSqls() {

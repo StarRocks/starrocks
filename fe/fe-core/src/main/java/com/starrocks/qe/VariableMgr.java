@@ -41,7 +41,6 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -56,7 +55,8 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -71,6 +71,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -302,7 +303,8 @@ public class VariableMgr {
 
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable());
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
+                    findSimilarVarNames(setVar.getVariable()));
         }
 
         if (setVar.getType() == SetType.VERBOSE) {
@@ -494,10 +496,11 @@ public class VariableMgr {
     }
 
     // Get variable value through variable name, used to satisfy statement like `SELECT @@comment_version`
-    public static void fillValue(SessionVariable var, VariableExpr desc) throws AnalysisException {
+    public static void fillValue(SessionVariable var, VariableExpr desc) {
         VarContext ctx = getVarContext(desc.getName());
         if (ctx == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName());
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName(),
+                    findSimilarVarNames(desc.getName()));
         }
 
         if (desc.getSetType() == SetType.GLOBAL) {
@@ -558,10 +561,11 @@ public class VariableMgr {
     }
 
     // Get variable value through variable name, used to satisfy statement like `SELECT @@comment_version`
-    public static String getValue(SessionVariable var, VariableExpr desc) throws AnalysisException {
+    public static String getValue(SessionVariable var, VariableExpr desc) {
         VarContext ctx = getVarContext(desc.getName());
         if (ctx == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName());
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName(),
+                    findSimilarVarNames(desc.getName()));
         }
 
         if (desc.getSetType() == SetType.GLOBAL) {
@@ -607,7 +611,8 @@ public class VariableMgr {
     public static String getDefaultValue(String variable) {
         VarContext ctx = getVarContext(variable);
         if (ctx == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable,
+                    findSimilarVarNames(variable));
         }
 
         String value = ctx.getDefaultValue();
@@ -764,6 +769,16 @@ public class VariableMgr {
             ctx = CTX_BY_VAR_NAME.get(ALIASES.get(name));
         }
         return ctx;
+    }
+
+    public static String findSimilarVarNames(String inputName) {
+        JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
+        StringJoiner joiner = new StringJoiner(", ", "{", "}");
+        CTX_BY_VAR_NAME.keySet().stream()
+                .sorted(Comparator.comparingDouble(s ->
+                        jaroWinklerDistance.apply(StringUtils.upperCase(s), StringUtils.upperCase(inputName))))
+                .limit(3).map(e -> "'" + e + "'").forEach(joiner::add);
+        return joiner.toString();
     }
 
     private static class VariableInfo {
