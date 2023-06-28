@@ -75,7 +75,9 @@ public class SqlParser {
                 statements.add(TrinoParserUtils.toStatement(splitter.getPartialStatement(),
                         sessionVariable.getSqlMode()));
             }
-            ConnectContext.get().setRelationAliasCaseInSensitive(true);
+            if (ConnectContext.get() != null) {
+                ConnectContext.get().setRelationAliasCaseInSensitive(true);
+            }
         } catch (ParsingException e) {
             // we only support trino partial syntax, use StarRocks parser to parse now
             if (sql.toLowerCase().contains("select")) {
@@ -103,7 +105,9 @@ public class SqlParser {
             statement.setOrigStmt(new OriginStatement(sql, idx));
             statements.add(statement);
         }
-        ConnectContext.get().setRelationAliasCaseInSensitive(false);
+        if (ConnectContext.get() != null) {
+            ConnectContext.get().setRelationAliasCaseInSensitive(false);
+        }
         return statements;
     }
 
