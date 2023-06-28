@@ -322,6 +322,16 @@ public:
         std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->close(); });
     }
 
+<<<<<<< HEAD
+=======
+    bool is_column_mode_partial_update() const { return _rowset_meta->is_column_mode_partial_update(); }
+
+    // only used in unit test
+    Status get_segment_sk_index(std::vector<std::string>* sk_index_values);
+
+    Status verify();
+
+>>>>>>> dba492c61 ([Enhancement] Add function to check compaction correctness (#25513))
 protected:
     friend class RowsetFactory;
 

@@ -106,6 +106,10 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
     TRACE_COUNTER_INCREMENT("output_segments_num", _output_rowset->num_segments());
     TRACE("[Compaction] output rowset built");
 
+    if (config::enable_rowset_verify) {
+        RETURN_IF_ERROR(_output_rowset->verify());
+    }
+
     return Status::OK();
 }
 

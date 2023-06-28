@@ -295,6 +295,9 @@ public:
 
     void get_basic_info(TabletBasicInfo& info);
 
+    // verify all rowsets of current(max) version in this tablet
+    Status verify();
+
 protected:
     void on_shutdown() override;
 
