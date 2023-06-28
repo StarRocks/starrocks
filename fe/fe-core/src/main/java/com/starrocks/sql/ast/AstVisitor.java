@@ -776,6 +776,12 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    // ---------------------------------------- Compaction Statement ----------------------------------------------------
+
+    public R visitCancelCompactionStatement(CancelCompactionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
     public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {

@@ -173,6 +173,10 @@ public class CompactionMgr {
         return compactionScheduler.getHistory();
     }
 
+    public void cancelCompaction(long txnId) {
+        compactionScheduler.cancelCompaction(txnId);
+    }
+
     public static CompactionMgr loadCompactionManager(DataInput in) throws IOException {
         String json = Text.readString(in);
         CompactionMgr compactionManager = GsonUtils.GSON.fromJson(json, CompactionMgr.class);

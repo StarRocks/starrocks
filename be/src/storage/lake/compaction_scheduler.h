@@ -123,7 +123,7 @@ class CompactionScheduler {
     //    Status::MemoryLimitExceeded is encountered again.
     class Limiter {
     public:
-        constexpr const static int16_t kConcurrencyRestoreTimes = 10;
+        constexpr const static int16_t kConcurrencyRestoreTimes = 2;
 
         explicit Limiter(int16_t total) : _total(total), _free(total), _reserved(0), _success(0) {}
 
