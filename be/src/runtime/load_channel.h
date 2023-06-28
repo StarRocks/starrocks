@@ -98,7 +98,7 @@ public:
 
     void abort();
 
-    void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids);
+    void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason);
 
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
