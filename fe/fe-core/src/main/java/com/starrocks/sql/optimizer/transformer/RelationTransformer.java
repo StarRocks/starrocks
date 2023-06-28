@@ -495,6 +495,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                         .setSelectedTabletId(Lists.newArrayList())
                         .setHintsTabletIds(node.getTabletIds())
                         .setHasTableHints(node.hasTableHints())
+                        .setUsePkIndex(node.isUsePkIndex())
                         .build();
             } else {
                 scanOperator = new LogicalBinlogScanOperator(

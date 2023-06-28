@@ -676,7 +676,7 @@ public class MaterializedViewTest {
         BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), baseMv.getId());
         baseTableInfos.add(baseTableInfo);
         mv.setBaseTableInfos(baseTableInfos);
-        mv.onCreate();
+        mv.onReload();
 
         Assert.assertFalse(mv.isActive());
     }

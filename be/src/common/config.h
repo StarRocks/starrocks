@@ -124,7 +124,7 @@ CONF_Int32(delete_worker_count_normal_priority, "2");
 // The count of thread to high priority delete.
 CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
-CONF_Int32(alter_tablet_worker_count, "3");
+CONF_mInt32(alter_tablet_worker_count, "3");
 // The count of parallel clone task per storage path
 CONF_mInt32(parallel_clone_task_per_path, "8");
 // The count of thread to clone. Deprecated
@@ -304,6 +304,7 @@ CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
+CONF_mInt64(update_compaction_result_bytes, "1073741824");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
@@ -324,6 +325,9 @@ CONF_mInt32(max_compaction_concurrency, "-1");
 
 // Threshold to logging compaction trace, in seconds.
 CONF_mInt32(compaction_trace_threshold, "60");
+
+// If enabled, will verify compaction/schema-change output rowset correctness
+CONF_mBool(enable_rowset_verify, "false");
 
 // Max columns of each compaction group.
 // If the number of schema columns is greater than this,
