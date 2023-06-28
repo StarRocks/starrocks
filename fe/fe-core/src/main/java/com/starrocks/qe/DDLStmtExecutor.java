@@ -876,6 +876,8 @@ public class DDLStmtExecutor {
                 } catch (AlreadyExistsException e) {
                     if (stmt.isSetIfNotExists()) {
                         LOG.info("create storage volume[{}] which already exists", stmt.getName());
+                    } else {
+                        throw e;
                     }
                 }
             });
