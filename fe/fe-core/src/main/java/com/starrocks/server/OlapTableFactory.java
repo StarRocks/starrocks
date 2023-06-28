@@ -359,7 +359,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                 }
                 dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                        DataProperty.getInferredDefaultDataProperty());
+                        DataProperty.getInferredDefaultDataProperty(), false);
                 if (hasMedium) {
                     table.setStorageMedium(dataProperty.getStorageMedium());
                 }
@@ -506,7 +506,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                         hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                     }
                     DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                            DataProperty.getInferredDefaultDataProperty());
+                            DataProperty.getInferredDefaultDataProperty(), false);
                     DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(table, properties);
                     if (table.dynamicPartitionExists() && table.getColocateGroup() != null) {
                         HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
