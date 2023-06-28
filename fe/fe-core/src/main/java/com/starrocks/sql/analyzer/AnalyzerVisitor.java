@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -823,6 +824,13 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, ConnectContext context) {
         StorageVolumeAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    // ---------------------------------------- Cancel Compaction Statement -------------------------------------------
+    @Override
+    public Void visitCancelCompactionStatement(CancelCompactionStmt statement, ConnectContext context) {
+        CancelCompactionStmtAnalyzer.analyze(statement, context);
         return null;
     }
 }
