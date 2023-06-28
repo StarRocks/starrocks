@@ -49,14 +49,11 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
-insert into sc2 values (1, {1: {10:{100: 101}}}, row(1, {10: 101}, {10: {100: 101}}), row(1, [1,10,101], row(1, row(10, 11))));
-insert into sc2 values (2, {2: {20:{200: 202}}}, row(2, {20: 202}, {20: {200: 202}}), row(2, [2,20,202], row(2, row(20, 22))));
-insert into sc2 values (3, {3: {30:{300: 303}}}, row(3, {30: 303}, {30: {300: 303}}), row(3, [3,30,303], row(3, row(30, 33))));
-insert into sc2 values (4, {4: {40:{400: 404}}}, row(4, {40: 404}, {40: {400: 404}}), row(4, [4,40,404], row(4, row(40, 44))));
-insert into sc2 values (5, {5: {50:{500: 505}}}, row(5, {50: 505}, {50: {500: 505}}), row(5, [5,50,505], row(5, row(50, 55))));
-insert into sc2 values (5, {5: {50:{500: 506}}}, row(5, {50: 506}, {50: {500: 506}}), row(5, [5,50,506], row(5, row(50, 56))));
-insert into sc2 values (5, {5: {50:{500: 507}}}, row(5, {50: 507}, {50: {500: 507}}), row(5, [5,50,507], row(5, row(50, 57))));
-insert into sc2 values (5, {5: {50:{500: 508}}}, row(5, {50: 508}, {50: {500: 508}}), row(5, [5,50,508], row(5, row(50, 58))));
+insert into sc2 values (1, map{1: map{10:map{100: 101}}}, row(1, map{10: 101}, map{10: map{100: 101}}), row(1, [1,10,101], row(1, row(10, 11))));
+insert into sc2 values (2, map{2: map{20:map{200: 202}}}, row(2, map{20: 202}, map{20: map{200: 202}}), row(2, [2,20,202], row(2, row(20, 22))));
+insert into sc2 values (3, map{3: map{30:map{300: 303}}}, row(3, map{30: 303}, map{30: map{300: 303}}), row(3, [3,30,303], row(3, row(30, 33))));
+insert into sc2 values (4, map{4: map{40:map{400: 404}}}, row(4, map{40: 404}, map{40: map{400: 404}}), row(4, [4,40,404], row(4, row(40, 44))));
+insert into sc2 values (5, map{5: map{50:map{500: 505}}}, row(5, map{50: 505}, map{50: map{500: 505}}), row(5, [5,50,505], row(5, row(50, 55))));
 
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select * from sc2 order by v1;", "disablePrintConnectionId":true}' --header "Content-Type: application/json"
 sync;

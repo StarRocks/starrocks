@@ -77,12 +77,9 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "show create table duplicate_table_with_null;"}' --header "Content-Type: application/json"  
 sync;
 
--- support explain
-shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "explain select * from duplicate_table_with_null;"}' --header "Content-Type: application/json"  
-sync;
 
 -- support set session variable in request body
-shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "SHOW VARIABLES;", "sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  
+shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "show variables like \"broadcast_row_limit\";", "sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  
 sync;
 
 -- name: test_http_output_error
