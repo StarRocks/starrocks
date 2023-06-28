@@ -246,12 +246,12 @@ public class LakeTable extends OlapTable {
             if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME)) {
                 LocalDateTime upper = LocalDateTime.now();
                 LocalDateTime lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.closed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
+                dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
                 return partitionRange.isConnected(dataCacheRange);
             } else if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
                 LocalDate upper = LocalDate.now();
                 LocalDate lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.closed(PartitionKey.ofDate(lower), PartitionKey.ofDate(upper));
+                dataCacheRange = Range.openClosed(PartitionKey.ofDate(lower), PartitionKey.ofDate(upper));
                 return partitionRange.isConnected(dataCacheRange);
             } else {
                 // If the table was not partitioned by DATE/DATETIME, ignore the property "datacache.partition_duration" and
