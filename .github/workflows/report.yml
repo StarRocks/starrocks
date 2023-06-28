@@ -8,6 +8,9 @@ on:
     types:
       - completed
 
+
+permissions: write-all
+
 jobs:
 
   FE-UT-REPORT:
