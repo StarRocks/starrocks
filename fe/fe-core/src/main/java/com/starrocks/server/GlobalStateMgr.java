@@ -2641,6 +2641,11 @@ public class GlobalStateMgr {
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                        .append("\" = \"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)).append("\"");
             } else {
                 // in memory
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
