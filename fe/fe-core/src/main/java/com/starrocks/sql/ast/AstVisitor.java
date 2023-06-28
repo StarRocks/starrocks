@@ -517,6 +517,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitCancelCompactionStatement(CancelCompactionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ---------------------------------------- Show Statement ---------------------------------------------------------
 
     public R visitShowWarningStatement(ShowWarningStmt statement, C context) {
