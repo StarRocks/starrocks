@@ -43,7 +43,7 @@ public class AliyunCloudConfiguration implements CloudConfiguration {
         Map<String, String> properties = new HashMap<>();
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(true));
         aliyunCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties(properties);
+        tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override

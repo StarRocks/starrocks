@@ -40,7 +40,7 @@ public class GCPCloudConfiguration implements CloudConfiguration {
 
         Map<String, String> properties = new HashMap<>();
         gcpCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties(properties);
+        tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override

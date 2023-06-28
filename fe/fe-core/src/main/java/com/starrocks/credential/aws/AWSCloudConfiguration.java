@@ -74,7 +74,7 @@ public class AWSCloudConfiguration implements CloudConfiguration {
                 String.valueOf(enablePathStyleAccess));
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL));
         awsCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties(properties);
+        tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
