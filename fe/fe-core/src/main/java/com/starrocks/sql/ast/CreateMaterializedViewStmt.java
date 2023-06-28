@@ -113,7 +113,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         FN_NAME_TO_PATTERN.put(FunctionSet.PERCENTILE_UNION, new MVColumnPercentileUnionPattern());
     }
 
-    private final String mvName;
+    private final TableName mvTableName;
     private final Map<String, String> properties;
 
     private final QueryStatement queryStatement;
@@ -133,6 +133,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     //if process is replaying log, isReplay is true, otherwise is false, avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
     private boolean isReplay = false;
 
+<<<<<<< HEAD
     public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties) {
         this(mvName, queryStatement, properties, NodePosition.ZERO);
     }
@@ -141,6 +142,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                                       NodePosition pos) {
         super(pos);
         this.mvName = mvName;
+=======
+    public CreateMaterializedViewStmt(TableName mvTableName, QueryStatement queryStatement, Map<String, String> properties) {
+        super(NodePosition.ZERO);
+        this.mvTableName = mvTableName;
+>>>>>>> 8c450721c ([BugFix] forbid creating sync mv if its db does not match with table's db (#26093))
         this.queryStatement = queryStatement;
         this.properties = properties;
     }
@@ -158,7 +164,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     }
 
     public String getMVName() {
-        return mvName;
+        return mvTableName.getTbl();
     }
 
     public List<MVColumnItem> getMVColumnItemList() {
@@ -306,9 +312,76 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             com.starrocks.sql.analyzer.Analyzer.analyze(statement.getQueryStatement(), context);
             context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
 
+<<<<<<< HEAD
             // forbid explain query
             if (queryStatement.isExplain()) {
                 throw new IllegalArgumentException("Materialized view does not support explain query");
+=======
+        context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
+
+        // forbid explain query
+        if (queryStatement.isExplain()) {
+            throw new IllegalArgumentException("Creating materialized view does not support explain query");
+        }
+
+        if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
+            throw new SemanticException("Materialized view query statement only support select");
+        }
+
+        Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+        if (tables.size() != 1) {
+            throw new SemanticException("The materialized view only support one table in from clause.");
+        }
+        Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
+        Table table = entry.getValue();
+
+        // SyncMV doesn't support mv's database is different from table's db.
+        if (mvTableName != null && !Strings.isNullOrEmpty(mvTableName.getDb()) &&
+                !mvTableName.getDb().equalsIgnoreCase(entry.getKey().getDb())) {
+            throw new SemanticException(String.format("Creating materialized view does not support: MV's db %s is different " +
+                    "from table's db %s", mvTableName.getDb(), entry.getKey().getDb()));
+        }
+
+        if (table instanceof View) {
+            // Only in order to make the error message keep compatibility
+            throw new SemanticException("Do not support alter non-OLAP table[" + table.getName() + "]");
+        } else if (!(table instanceof OlapTable)) {
+            throw new SemanticException("The materialized view only support olap table.");
+        }
+
+        TableName tableName = entry.getKey();
+        setBaseIndexName(table.getName());
+        setDBName(tableName.getDb());
+
+        SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
+        if (!(selectRelation.getRelation() instanceof TableRelation)) {
+            throw new SemanticException("Materialized view query statement only support direct query from table.");
+        }
+        int beginIndexOfAggregation = genColumnAndSetIntoStmt(table, selectRelation);
+        if (selectRelation.isDistinct() || selectRelation.hasAggregation()) {
+            setMvKeysType(KeysType.AGG_KEYS);
+        }
+        if (selectRelation.hasWhereClause()) {
+            throw new SemanticException("The where clause is not supported in add materialized view clause, expr:"
+                    + selectRelation.getWhereClause().toSql());
+        }
+        if (selectRelation.hasHavingClause()) {
+            throw new SemanticException("The having clause is not supported in add materialized view clause, expr:"
+                    + selectRelation.getHavingClause().toSql());
+        }
+        analyzeOrderByClause(selectRelation, beginIndexOfAggregation);
+        if (selectRelation.hasLimit()) {
+            throw new SemanticException("The limit clause is not supported in add materialized view clause, expr:"
+                    + " limit " + selectRelation.getLimit());
+        }
+        final String countPrefix = new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX)
+                .append(FunctionSet.COUNT).append("_").toString();
+        for (MVColumnItem mvColumnItem : getMVColumnItemList()) {
+            if (!isReplay && mvColumnItem.isKey() && !mvColumnItem.getType().canBeMVKey()) {
+                throw new SemanticException(
+                        String.format("Invalid data type of materialized key column '%s': '%s'",
+                                mvColumnItem.getName(), mvColumnItem.getType()));
+>>>>>>> 8c450721c ([BugFix] forbid creating sync mv if its db does not match with table's db (#26093))
             }
 
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
