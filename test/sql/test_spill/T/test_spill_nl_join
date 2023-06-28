@@ -15,9 +15,28 @@ create table t0 (
 insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  2048));
 
 -- test spill for cross join
-select count(*) from t0 l, t0 r;
-select l.*, r.* from t0 l, t0 r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
-select count(*) from t0 l, t0 r where r.c0 = 1;
+select count(*) from t0 l join [broadcast] t0 r;
+select l.*, r.* from t0 l join [broadcast] t0 r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
+select count(*) from t0 l join [broadcast] t0 r where r.c0 = 1;
 select count(*) from t0 l join [broadcast] t0 r where r.c0 < 0;
 select count(*) from t0 l join [broadcast] t0 r where l.c0 < 0;
 select count(d.c0) from t0 d join [broadcast] (select l.c0 from t0 l join t0 r) t;
+
+-- test empty table
+---- build side emtpy
+create table empty_t like t0;
+select count(*) from t0 l join [broadcast] empty_t r;
+select l.*, r.* from t0 l join [broadcast] empty_t r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
+select count(*) from t0 l join [broadcast] empty_t r where r.c0 = 1;
+select count(*) from t0 l join [broadcast] empty_t r where r.c0 < 0;
+select count(*) from t0 l join [broadcast] empty_t r where l.c0 < 0;
+select count(d.c0) from t0 d join [broadcast] (select l.c0 from t0 l join empty_t r) t;
+---- probe side empty
+select count(*) from empty_t l, t0 r;
+select l.*, r.* from empty_t l, t0 r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
+select count(*) from empty_t l, t0 r where r.c0 = 1;
+select count(*) from empty_t l join [broadcast] t0 r where r.c0 < 0;
+select count(*) from empty_t l join [broadcast] t0 r where l.c0 < 0;
+select count(d.c0) from empty_t d join [broadcast] (select l.c0 from t0 l join t0 r) t;
+select count(*) from (select 1) tbl, (select sleep(1) as c2) tbr;
+select c2 from (select c3,c2 from (select sleep(1) as c2) tbr join [broadcast] (select 1 c3) tbl where c3 + c2 = 0) tb join [broadcast] t0;
