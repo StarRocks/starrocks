@@ -111,6 +111,10 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
         statistics->filtered_rows = reader.stats().rows_del_filtered;
     }
 
+    if (config::enable_rowset_verify) {
+        RETURN_IF_ERROR(_output_rowset->verify());
+    }
+
     return Status::OK();
 }
 

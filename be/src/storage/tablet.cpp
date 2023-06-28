@@ -1394,6 +1394,25 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     }
 }
 
+Status Tablet::verify() {
+    int64_t version = max_continuous_version();
+    std::vector<RowsetSharedPtr> rowsets;
+    {
+        std::shared_lock l(get_header_lock());
+        capture_consistent_rowsets(Version(0, version), &rowsets);
+        Rowset::acquire_readers(rowsets);
+    }
+    DeferOp defer([&rowsets]() { Rowset::release_readers(rowsets); });
+    for (auto& rowset : rowsets) {
+        auto st = rowset->verify();
+        if (!st.ok()) {
+            return st.clone_and_append(strings::Substitute("tablet:$0 version:$1 rowset:$2", tablet_id(), version,
+                                                           rowset->rowset_id().to_string()));
+        }
+    }
+    return Status::OK();
+}
+
 std::string Tablet::schema_debug_string() const {
     return _tablet_meta->tablet_schema().debug_string();
 }

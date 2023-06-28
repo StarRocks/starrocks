@@ -1789,6 +1789,7 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index)
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+    EXPECT_TRUE(best_tablet->verify().ok());
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction) {

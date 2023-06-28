@@ -323,6 +323,8 @@ public:
         std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->close(); });
     }
 
+    Status verify();
+
 protected:
     friend class RowsetFactory;
 

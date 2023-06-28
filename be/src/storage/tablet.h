@@ -302,6 +302,9 @@ public:
 
     void set_will_be_force_replaced() { _will_be_force_replaced = true; }
 
+    // verify all rowsets of current(max) version in this tablet
+    Status verify();
+
 protected:
     void on_shutdown() override;
 
