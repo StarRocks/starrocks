@@ -4,7 +4,7 @@ name: Report on the pull request
 # access to secrets
 on:
   workflow_run:
-    workflows: [ "PR TEST PIPELINE" ]
+    workflows: [ "CI PIPELINE 2" ]
     types:
       - completed
 
