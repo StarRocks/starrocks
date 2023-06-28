@@ -606,6 +606,14 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
       - name: Run Case
         run: |
           echo "FE: ${{needs.deploy.outputs.fe}}, BE: ${{needs.deploy.outputs.be}}"
