@@ -18,8 +18,11 @@
 #include <boost/algorithm/string.hpp>
 
 namespace starrocks {
+class Utils {
+public:
     static std::string format_name(const std::string& col_name, bool case_sensitive) {
         return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
     }
+};
 
 } // namespace starrocks
