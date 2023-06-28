@@ -298,9 +298,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         if (UNLIKELY(row_num > runtime_state->chunk_size())) {
                             return Status::InternalError(
                                     fmt::format("Intermediate chunk size must not be greater than {}, actually {} "
-                                                "after operator {} of fragment {} in query {}"),
-                                    runtime_state->chunk_size(), row_num, curr_op->get_name(),
-                                    fragment_ctx()->fragment_instance_id(), fragment_ctx()->query_id());
+                                                "after {}-th operator {} in {}",
+                                                runtime_state->chunk_size(), row_num, i, curr_op->get_name(),
+                                                to_readable_string()));
                         }
 
                         total_rows_moved += row_num;
