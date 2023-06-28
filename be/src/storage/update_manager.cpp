@@ -77,8 +77,14 @@ UpdateManager::~UpdateManager() {
 }
 
 Status UpdateManager::init() {
-    RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").build(&_apply_thread_pool));
     int max_thread_cnt = CpuInfo::num_cores();
+    if (config::transaction_apply_worker_count > 0) {
+        max_thread_cnt = config::transaction_apply_worker_count;
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").set_max_threads(max_thread_cnt).build(&_apply_thread_pool));
+    REGISTER_GAUGE_STARROCKS_METRIC(update_apply_queue_count,
+                                    [this]() { return _apply_thread_pool->num_queued_tasks(); });
+    max_thread_cnt = CpuInfo::num_cores();
     int max_get_thread_cnt =
             config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
     RETURN_IF_ERROR(
