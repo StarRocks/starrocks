@@ -26,10 +26,21 @@ If the input is NULL, NULL is returned. If a key or value in the MAP value is NU
 
 ## Examples
 
-This example uses the Hive table `hive_map`, which contains the following data:
+This example uses table `test_map`, which contains the following data:
 
 ```SQL
-select * from hive_map order by col_int;
+CREATE TABLE test_map(
+    col_int INT,
+    col_map MAP<VARCHAR(50),INT>
+  )
+DUPLICATE KEY(col_int);
+
+INSERT INTO test_map VALUES
+(1,map{"a":1,"b":2}),
+(2,map{"c":3}),
+(3,map{"d":4,"e":5});
+
+SELECT * FROM test_map ORDER BY col_int;
 +---------+---------------+
 | col_int | col_map       |
 +---------+---------------+
@@ -43,7 +54,7 @@ select * from hive_map order by col_int;
 After a Hive catalog is created in your database, you can use this catalog and the map_keys() function to obtain all the keys from each row of the `col_map` column.
 
 ```Plain
-select map_keys(col_map) from hive_map order by col_int;
+select map_keys(col_map) from test_map order by col_int;
 +-------------------+
 | map_keys(col_map) |
 +-------------------+

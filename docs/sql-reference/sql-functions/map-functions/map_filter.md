@@ -2,7 +2,9 @@
 
 ## Description
 
-Filters key-value pairs in a map by applying a Boolean array or a [Lambda expression](../Lambda_expression.md) to each key-value pair. The pair that evaluates to `true` is returned. This function is supported from v3.0.
+Filters key-value pairs in a map by applying a Boolean array or a [Lambda expression](../Lambda_expression.md) to each key-value pair. The pair that evaluates to `true` is returned.
+
+This function is supported from v3.1 onwards.
 
 From v2.5, StarRocks supports querying complex data types MAP and STRUCT from data lakes. MAP is an unordered collection of key-value pairs, for example, `{"a":1, "b":2}`.
 

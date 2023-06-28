@@ -4,7 +4,7 @@
 
 Transforms keys in a map using a [Lambda expression](../Lambda_expression.md) and produces a new key for each entry in the map.
 
-This function is supported from v3.0.
+This function is supported from v3.1 onwards.
 
 From v2.5, StarRocks supports querying complex data types MAP and STRUCT from data lakes. MAP is an unordered collection of key-value pairs, for example, `{"a":1, "b":2}`.
 

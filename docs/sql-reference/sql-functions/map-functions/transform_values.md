@@ -4,7 +4,7 @@
 
 Transforms values in a map using a [Lambda expression](../Lambda_expression.md) and produces a new value for each entry in the map.
 
-This function is supported from v3.0.
+This function is supported from v3.1 onwards.
 
 From v2.5, StarRocks supports querying complex data types MAP and STRUCT from data lakes. MAP is an unordered collection of key-value pairs, for example, `{"a":1, "b":2}`.
 
@@ -50,6 +50,7 @@ mysql> select transform_values((k,v)->1, col_map) from (select map_from_arrays([
 | {1:1,3:1,2:1,null:1}                   |
 +----------------------------------------+
 1 row in set (0.02 sec)
+
 mysql> select transform_values((k,v)->null, col_map) from (select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'abc']) as col_map)A;
 +--------------------------------------------+
 | transform_values((k, v) -> NULL, col_map)  |
