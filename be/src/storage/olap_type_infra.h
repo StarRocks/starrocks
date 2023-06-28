@@ -127,7 +127,7 @@ namespace starrocks {
 
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \
-        return fun.template operator()<type>(std::forward(args)...);
+        return fun.template operator()<type>(std::forward<Args>(args)...);
 
 template <class Functor, class... Args>
 auto field_type_dispatch_basic(LogicalType ftype, Functor fun, Args&&... args) {
