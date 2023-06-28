@@ -24,4 +24,10 @@ void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumRespo
 
 void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response);
 
+// REQUIRES:
+//  - tablet_mgr != NULL
+//  - request.tablet_ids_size() > 0
+//  - response != NULL
+void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& request, DeleteTabletResponse* response);
+
 } // namespace starrocks::lake
