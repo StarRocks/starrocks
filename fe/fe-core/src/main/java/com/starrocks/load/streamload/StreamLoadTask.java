@@ -1046,15 +1046,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
         profile.addChild(summaryProfile);
         if (coord.getQueryProfile() != null) {
-            profile.addChild(coord.getQueryProfile());
             if (!isSyncStreamLoad()) {
                 coord.endProfile();
-                coord.mergeIsomorphicProfiles(null);
+                profile.addChild(coord.buildMergedQueryProfile(null));
+            } else {
+                profile.addChild(coord.getQueryProfile());
             }
         }
 
         ProfileManager.getInstance().pushLoadProfile(profile);
-        return;
     }
 
     public void setLoadState(long loadBytes, long loadRows, long filteredRows, long unselectedRows,

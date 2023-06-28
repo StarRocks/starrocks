@@ -139,7 +139,7 @@ void PipelineDriverPoller::run_internal() {
                 } else if (driver->is_finished()) {
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
-                } else if (driver->is_not_blocked()) {
+                } else if (driver->is_not_blocked() || driver->need_report_exec_state()) {
                     driver->set_driver_state(DriverState::READY);
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);

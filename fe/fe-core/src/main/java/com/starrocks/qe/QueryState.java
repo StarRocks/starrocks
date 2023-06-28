@@ -183,6 +183,16 @@ public class QueryState {
         return packet;
     }
 
+    public String toProfileString() {
+        if (stateType == MysqlStateType.EOF) {
+            return "Finished";
+        } else if (stateType == MysqlStateType.ERR) {
+            return "Error";
+        } else {
+            return "Running";
+        }
+    }
+
     @Override
     public String toString() {
         return String.valueOf(stateType);
