@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -825,4 +826,45 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         StorageVolumeAnalyzer.analyze(statement, context);
         return null;
     }
+<<<<<<< HEAD
+=======
+
+    // -------------------------------------------- Pipe Statement -------------------------------------------------
+    @Override
+    public Void visitCreatePipeStatement(CreatePipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropPipeStatement(DropPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterPipeStatement(AlterPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowPipeStatement(ShowPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDescPipeStatement(DescPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    // ---------------------------------------- Cancel Compaction Statement -------------------------------------------
+    @Override
+    public Void visitCancelCompactionStatement(CancelCompactionStmt statement, ConnectContext context) {
+        CancelCompactionStmtAnalyzer.analyze(statement, context);
+        return null;
+    }
+>>>>>>> 16456aa65 ([Feature] Add user cancel compaction command for cloud native table. (#25375))
 }

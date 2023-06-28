@@ -281,6 +281,19 @@ statement
     | descStorageVolumeStatement
     | setDefaultStorageVolumeStatement
 
+<<<<<<< HEAD
+=======
+    // Pipe Statement
+    | createPipeStatement
+    | dropPipeStatement
+    | alterPipeStatement
+    | showPipeStatement
+    | descPipeStatement
+
+    // Compaction Statement
+    | cancelCompactionStatement
+
+>>>>>>> 16456aa65 ([Feature] Add user cancel compaction command for cloud native table. (#25375))
     //Unsupported Statement
     | unsupportedStatement
     ;
@@ -1256,6 +1269,12 @@ cancelLoadStatement
 alterLoadStatement
     : ALTER LOAD FOR (db=qualifiedName '.')? name=identifier
         jobProperties?
+    ;
+
+// ------------------------------------------- Compaction Statement ----------------------------------------------------------
+
+cancelCompactionStatement
+    : CANCEL COMPACTION WHERE expression
     ;
 
 // ------------------------------------------- Show Statement ----------------------------------------------------------
