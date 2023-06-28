@@ -8,7 +8,7 @@ This is an asynchronous operation. The export result is returned after you submi
 
 > **NOTICE**
 >
-> You can export data out of StarRocks tables only as a user who has the EXPORT privilege on those StarRocks tables. If you do not have the EXPORT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the EXPORT privilege to the user that you use to connect to your StarRocks cluster.
+> You can export data out of StarRocks tables only as a user who has the EXPORT privilege on those StarRocks tables. If you do not have the EXPORT privilege, follow the instructions provided in [GRANT](../account-management/GRANT.md) to grant the EXPORT privilege to the user that you use to connect to your StarRocks cluster.
 
 ## Syntax
 
