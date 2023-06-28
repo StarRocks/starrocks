@@ -108,9 +108,7 @@ private:
     static void _insert_properties(std::unordered_map<std::string, std::string>& properties,
                                    const TCloudConfiguration& t_cloud_configuration) {
         DCHECK(t_cloud_configuration.__isset.cloud_properties);
-        for (const auto& property : t_cloud_configuration.cloud_properties) {
-            properties.insert({property.key, property.value});
-        }
+        properties.insert(t_cloud_configuration.cloud_properties.begin(), t_cloud_configuration.cloud_properties.end());
     }
 
     template <typename ReturnType>

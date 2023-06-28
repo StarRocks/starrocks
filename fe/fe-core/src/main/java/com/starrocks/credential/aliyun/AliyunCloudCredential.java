@@ -18,10 +18,9 @@ import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
-import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.List;
+import java.util.Map;
 
 public class AliyunCloudCredential implements CloudCredential {
 
@@ -53,10 +52,10 @@ public class AliyunCloudCredential implements CloudCredential {
 
     // reuse aws client logic of BE
     @Override
-    public void toThrift(List<TCloudProperty> properties) {
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint));
+    public void toThrift(Map<String, String> properties) {
+        properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey);
+        properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
+        properties.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint);
     }
 
     @Override
