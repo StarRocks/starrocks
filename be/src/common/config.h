@@ -279,7 +279,11 @@ CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
 CONF_mBool(disable_storage_page_cache, "false");
 // whether to enable the bitmap index memory cache
-CONF_mBool(enable_bitmap_memory_page_cache, "false");
+CONF_mBool(enable_bitmap_index_memory_page_cache, "false");
+// whether to enable the zonemap index memory cache
+CONF_mBool(enable_zonemap_index_memory_page_cache, "false");
+// whether to enable the ordinal index memory cache
+CONF_mBool(enable_ordinal_index_memory_page_cache, "false");
 // whether to disable column pool
 CONF_Bool(disable_column_pool, "false");
 
@@ -306,6 +310,7 @@ CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
+CONF_mInt64(update_compaction_result_bytes, "1073741824");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
@@ -326,6 +331,9 @@ CONF_mInt32(max_compaction_concurrency, "-1");
 
 // Threshold to logging compaction trace, in seconds.
 CONF_mInt32(compaction_trace_threshold, "60");
+
+// If enabled, will verify compaction/schema-change output rowset correctness
+CONF_mBool(enable_rowset_verify, "false");
 
 // Max columns of each compaction group.
 // If the number of schema columns is greater than this,
@@ -831,23 +839,18 @@ CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
+// TODO: support runtime change
+CONF_Bool(starlet_use_star_cache, "false");
+CONF_Int32(starlet_star_cache_mem_size_percent, "0");
+CONF_Int32(starlet_star_cache_disk_size_percent, "60");
+CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
-CONF_mInt64(lake_gc_metadata_max_versions, "10");
-CONF_mInt64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
-CONF_mInt64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
-// This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
-// The actual effective value is max(lake_gc_segment_expire_seconds, 86400)
-CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
-CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
-CONF_mBool(experimental_lake_enable_fast_gc, "true");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
-CONF_mBool(lake_enable_aggressive_gc, "false");
-CONF_mBool(lake_aggressive_gc_high_priority, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -991,5 +994,7 @@ CONF_mInt32(primary_key_limit_size, "128");
 // You could enable this config to speed up the point lookup query,
 // otherwise, StarRocks will use zone map for one column filter
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
+
+CONF_mBool(enable_http_stream_load_limit, "false");
 
 } // namespace starrocks::config

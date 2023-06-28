@@ -433,7 +433,7 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
             ip, port, [&request, &result](BackendServiceConnection& client) { client->make_snapshot(result, request); },
             config::make_snapshot_rpc_timeout_ms));
     if (result.status.status_code != TStatusCode::OK) {
-        return Status(result.status);
+        return {result.status};
     }
 
     if (result.__isset.snapshot_path) {
@@ -459,7 +459,7 @@ Status EngineCloneTask::_release_snapshot(const std::string& ip, int port, const
             ip, port, [&snapshot_path, &result](BackendServiceConnection& client) {
                 client->release_snapshot(result, snapshot_path);
             }));
-    return Status(result.status);
+    return {result.status};
 }
 
 Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& remote_url_prefix,

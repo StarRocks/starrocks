@@ -70,7 +70,7 @@
 #include "util/thrift_server.h"
 #include "util/uid_util.h"
 
-#if !_GLIBCXX_USE_CXX11_ABI
+#if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero
 #endif
 
@@ -99,10 +99,10 @@ static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& 
     };
     std::string slevel = boost::algorithm::to_upper_copy(s);
     Aws::Utils::Logging::LogLevel level = Aws::Utils::Logging::LogLevel::Warn;
-    for (int idx = 0; idx < sizeof(levels) / sizeof(levels[0]); idx++) {
-        auto s = Aws::Utils::Logging::GetLogLevelName(levels[idx]);
+    for (auto& idx : levels) {
+        auto s = Aws::Utils::Logging::GetLogLevelName(idx);
         if (s == slevel) {
-            level = levels[idx];
+            level = idx;
             break;
         }
     }

@@ -822,7 +822,8 @@ Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_ver
     return Status::OK();
 }
 
-void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset) {
+void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& version_info,
+                                                        const RowsetSharedPtr& rowset) {
     auto span = Tracer::Instance().start_trace_tablet("apply_column_partial_update_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
 
@@ -838,7 +839,7 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
             strings::Substitute("$0_$1", tablet_id, rowset->rowset_id().to_string()));
     state_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     // when failure happen, remove state cache and record error msg
-    auto failure_handler = [&](const std::string& str, Status st) {
+    auto failure_handler = [&](const std::string& str, const Status& st) {
         manager->update_column_state_cache().remove(state_entry);
         std::string msg = strings::Substitute("$0: $1 $2", str, st.to_string(), debug_string());
         LOG(ERROR) << msg;
@@ -950,7 +951,7 @@ bool TabletUpdates::check_delta_column_generate_from_version(EditVersion begin_v
     return false;
 }
 
-void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset) {
+void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset) {
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
 
@@ -1532,6 +1533,15 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
             compaction_merge_rowsets(_tablet, info->start_version.major(), input_rowsets, rowset_writer.get(), cfg));
     auto output_rowset = rowset_writer->build();
     if (!output_rowset.ok()) return output_rowset.status();
+    if (config::enable_rowset_verify) {
+        auto st = (*output_rowset)->verify();
+        if (!st.ok()) {
+            st = st.clone_and_append(
+                    strings::Substitute("compaction tablet:$0 #input:$1", _tablet.tablet_id(), input_rowsets.size()));
+            LOG(WARNING) << st.get_error_msg();
+            return st;
+        }
+    }
     // 4. commit compaction
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
@@ -1581,7 +1591,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     auto span = Tracer::Instance().start_trace_tablet("commit_compaction", _tablet.tablet_id());
     auto scoped_span = trace::Scope(span);
     _compaction_state = std::make_unique<CompactionState>();
-    const auto status = _compaction_state->load(rowset.get());
+    auto status = _compaction_state->load(rowset.get());
     if (!status.ok()) {
         _compaction_state.reset();
         std::string msg = strings::Substitute("_commit_compaction error: load compaction state failed: $0 $1",
@@ -2054,7 +2064,9 @@ int64_t TabletUpdates::get_compaction_score() {
         }
         rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
     }
-    int64_t total_score = -config::update_compaction_size_threshold;
+    int64_t total_score = 0;
+    size_t total_inputs = 0;
+    size_t total_deletes = 0;
     bool has_error = false;
     {
         std::lock_guard lg(_rowset_stats_lock);
@@ -2067,14 +2079,21 @@ int64_t TabletUpdates::get_compaction_score() {
                 DCHECK(false) << msg;
                 LOG(WARNING) << msg;
                 has_error = true;
+                break;
             } else if (itr->second->compaction_score > 0) {
                 total_score += itr->second->compaction_score;
+                total_inputs += std::max(1UL, itr->second->num_segments);
+                total_deletes += itr->second->num_dels;
             }
         }
     }
     if (has_error) {
         LOG(WARNING) << "error get_compaction_score: " << debug_string();
         // do not do compaction
+        return -1;
+    }
+    if (total_inputs == 1 && total_deletes == 0) {
+        // only 1 input and no delete, no need to do compaction
         return -1;
     }
     return total_score;
@@ -2086,6 +2105,7 @@ struct CompactionEntry {
     size_t num_rows = 0;
     size_t num_dels = 0;
     size_t bytes = 0;
+    size_t num_segments = 0;
 
     bool operator<(const CompactionEntry& rhs) const { return score_per_row > rhs.score_per_row; }
 };
@@ -2100,8 +2120,6 @@ static string int_list_to_string(const vector<uint32_t>& l) {
     }
     return ret;
 }
-
-static const size_t compaction_result_rows_threashold = 10000000;
 
 Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     if (_error) {
@@ -2128,10 +2146,11 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     size_t total_valid_rowsets = 0;
     size_t total_rows = 0;
     size_t total_bytes = 0;
+    size_t total_segments = 0;
     size_t total_rows_after_compaction = 0;
     size_t total_bytes_after_compaction = 0;
     bool has_partial_update_by_column = false;
-    int64_t total_score = -config::update_compaction_size_threshold;
+    int64_t total_score = 0;
     vector<CompactionEntry> candidates;
     {
         std::lock_guard lg(_rowset_stats_lock);
@@ -2152,6 +2171,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
                     total_score += stat.compaction_score;
                     total_rows += stat.num_rows;
                     total_bytes += stat.byte_size;
+                    total_segments += stat.num_segments;
                     // rowset with partial update by column, should contains zero rows and dels.
                     has_partial_update_by_column |= stat.partial_update_by_column;
                     continue;
@@ -2163,6 +2183,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
                 e.num_rows = stat.num_rows;
                 e.num_dels = stat.num_dels;
                 e.bytes = stat.byte_size;
+                e.num_segments = stat.num_segments;
             }
         }
     }
@@ -2170,8 +2191,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     for (auto& e : candidates) {
         size_t new_rows = total_rows_after_compaction + e.num_rows - e.num_dels;
         size_t new_bytes = total_bytes_after_compaction + e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
-        if (info->inputs.size() > 0 && (new_rows > compaction_result_rows_threashold * 3 / 2 ||
-                                        new_bytes > config::update_compaction_size_threshold * 3 / 2)) {
+        if (info->inputs.size() > 0 && new_bytes > config::update_compaction_result_bytes * 2) {
             break;
         }
         // Partial update generate empty rowset, compact them first.
@@ -2183,10 +2203,10 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         total_score += e.score_per_row * (e.num_rows - e.num_dels);
         total_rows += e.num_rows;
         total_bytes += e.bytes;
+        total_segments += e.num_segments;
         total_rows_after_compaction = new_rows;
         total_bytes_after_compaction = new_bytes;
-        if (total_bytes_after_compaction > config::update_compaction_size_threshold ||
-            total_rows_after_compaction > compaction_result_rows_threashold ||
+        if (total_bytes_after_compaction > config::update_compaction_result_bytes ||
             info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
             break;
         }
@@ -2206,8 +2226,8 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id()
               << " version:" << info->start_version.to_string() << " score:" << total_score
               << " pick:" << info->inputs.size() << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
-              << int_list_to_string(info->inputs) << " #rows:" << total_rows << "->" << total_rows_after_compaction
-              << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
+              << int_list_to_string(info->inputs) << " #segments:" << total_segments << " #rows:" << total_rows << "->"
+              << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
               << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
@@ -2510,9 +2530,9 @@ void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
     const int64_t cost_record_read = 4;
     // use double to prevent overflow
     auto delete_bytes = (int64_t)(stats->byte_size * (double)stats->num_dels / stats->num_rows);
-    stats->compaction_score = config::update_compaction_size_threshold +
-                              (cost_record_read + cost_record_write) * delete_bytes -
-                              cost_record_write * stats->byte_size;
+    stats->compaction_score =
+            config::update_compaction_size_threshold * (stats->num_segments > 1 ? stats->num_segments - 1 : 1) +
+            (cost_record_read + cost_record_write) * delete_bytes - cost_record_write * stats->byte_size;
 }
 
 size_t TabletUpdates::_get_rowset_num_deletes(uint32_t rowsetid) {
@@ -2804,7 +2824,7 @@ struct RowsetLoadInfo {
     vector<DeltaColumnGroupList> dcgs;
 };
 
-Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, std::string err_msg_header) {
+Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, const std::string& err_msg_header) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << err_msg_header << "tablet state is not TABLET_NOTREADY, link_from is not allowed"
@@ -2967,7 +2987,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, st
 }
 
 Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                                   ChunkChanger* chunk_changer, std::string err_msg_header) {
+                                   ChunkChanger* chunk_changer, const std::string& err_msg_header) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << err_msg_header << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
@@ -3070,6 +3090,15 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) return new_rowset.status();
 
+        if (config::enable_rowset_verify) {
+            status = (*new_rowset)->verify();
+            if (!status.ok()) {
+                status = status.clone_and_append(strings::Substitute("$0 convert_from base_tablet: $1", err_msg_header,
+                                                                     base_tablet->tablet_id()));
+                LOG(WARNING) << status.get_error_msg();
+                return status;
+            }
+        }
         auto& new_rowset_load_info = new_rowset_load_infos[i];
         new_rowset_load_info.num_segments = (*new_rowset)->num_segments();
         new_rowset_load_info.rowset_id = next_rowset_id;
@@ -3209,7 +3238,7 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
 }
 
 Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                                   ChunkChanger* chunk_changer, std::string err_msg_header) {
+                                   ChunkChanger* chunk_changer, const std::string& err_msg_header) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << err_msg_header << "tablet state is not TABLET_NOTREADY, reorder_from is not allowed"
@@ -3360,6 +3389,16 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) return new_rowset.status();
+
+        if (config::enable_rowset_verify) {
+            status = (*new_rowset)->verify();
+            if (!status.ok()) {
+                status = status.clone_and_append(strings::Substitute("$0 reorder_from base_tablet: $1", err_msg_header,
+                                                                     base_tablet->tablet_id()));
+                LOG(WARNING) << status.get_error_msg();
+                return status;
+            }
+        }
 
         auto& new_rowset_load_info = new_rowset_load_infos[i];
         new_rowset_load_info.num_segments = (*new_rowset)->num_segments();
@@ -3950,7 +3989,7 @@ static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext&
 }
 
 static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDeltaColumnContext& ctx,
-                                                                         std::shared_ptr<FileSystem> fs,
+                                                                         const std::shared_ptr<FileSystem>& fs,
                                                                          ColumnIteratorOptions& iter_opts,
                                                                          uint32_t ucid) {
     // build column iter from delta column group
@@ -3971,8 +4010,8 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                         bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns, void* state) {
     std::vector<uint32_t> unique_column_ids;
-    for (auto i = 0; i < column_ids.size(); ++i) {
-        const TabletColumn& tablet_column = _tablet.tablet_schema().column(column_ids[i]);
+    for (unsigned int column_id : column_ids) {
+        const TabletColumn& tablet_column = _tablet.tablet_schema().column(column_id);
         unique_column_ids.push_back(tablet_column.unique_id());
     }
 
@@ -4054,7 +4093,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         }
     }
     if (state != nullptr && with_default) {
-        AutoIncrementPartialUpdateState* auto_increment_state = (AutoIncrementPartialUpdateState*)state;
+        auto* auto_increment_state = (AutoIncrementPartialUpdateState*)state;
         Rowset* rowset = auto_increment_state->rowset;
         uint32_t id = auto_increment_state->id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
@@ -4094,9 +4133,17 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
 }
 
 Status TabletUpdates::get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
-                                           std::vector<uint64_t>* rss_rowids) {
-    std::lock_guard lg(_index_lock);
-    return get_rss_rowids_by_pk_unlock(tablet, keys, read_version, rss_rowids);
+                                           std::vector<uint64_t>* rss_rowids, int64_t timeout_ms) {
+    if (timeout_ms <= 0) {
+        _index_lock.lock();
+    } else {
+        if (!_index_lock.try_lock_for(std::chrono::milliseconds(timeout_ms))) {
+            return Status::TimedOut("get_rss_rowids_by_pk try lock timeout");
+        }
+    }
+    auto st = get_rss_rowids_by_pk_unlock(tablet, keys, read_version, rss_rowids);
+    _index_lock.unlock();
+    return st;
 }
 
 Status TabletUpdates::get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& keys, EditVersion* read_version,

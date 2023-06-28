@@ -70,7 +70,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
     protected Map<Long, String> tableToStorageVolume = new HashMap<>();
 
     public String createStorageVolume(CreateStorageVolumeStmt stmt)
-            throws AlreadyExistsException, AnalysisException, DdlException {
+            throws AlreadyExistsException, DdlException {
         Map<String, String> params = new HashMap<>();
         Optional<Boolean> enabled = parseProperties(stmt.getProperties(), params);
         return createStorageVolume(stmt.getName(), stmt.getStorageVolumeType(), stmt.getStorageLocations(), params,
@@ -78,8 +78,8 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
     }
 
     public String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
-                                    Optional<Boolean> enabled, String comment)
-            throws DdlException, AlreadyExistsException, AnalysisException {
+                                      Optional<Boolean> enabled, String comment)
+            throws DdlException, AlreadyExistsException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (exists(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
@@ -92,7 +92,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         removeStorageVolume(stmt.getName());
     }
 
-    public void removeStorageVolume(String name) throws AnalysisException, DdlException {
+    public void removeStorageVolume(String name) throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(name);
             Preconditions.checkState(sv != null,
@@ -108,14 +108,14 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws AnalysisException, DdlException {
+    public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws DdlException {
         Map<String, String> params = new HashMap<>();
         Optional<Boolean> enabled = parseProperties(stmt.getProperties(), params);
         updateStorageVolume(stmt.getName(), params, enabled, stmt.getComment());
     }
 
     public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
-            throws AnalysisException, DdlException {
+            throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(name);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
@@ -146,7 +146,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         setDefaultStorageVolume(stmt.getName());
     }
 
-    public void setDefaultStorageVolume(String svKey) throws AnalysisException {
+    public void setDefaultStorageVolume(String svKey) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(svKey);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svKey);
@@ -163,12 +163,8 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     public boolean exists(String svKey) throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            try {
-                StorageVolume sv = getStorageVolumeByName(svKey);
-                return sv != null;
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
-            }
+            StorageVolume sv = getStorageVolumeByName(svKey);
+            return sv != null;
         }
     }
 
@@ -228,13 +224,19 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
+    public String getStorageVolumeIdOfTable(long tableId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return tableToStorageVolume.get(tableId);
+        }
+    }
+
     public String getStorageVolumeIdOfDb(long dbId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return dbToStorageVolume.get(dbId);
         }
     }
 
-    public StorageVolume getDefaultStorageVolume() throws AnalysisException {
+    public StorageVolume getDefaultStorageVolume() {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return getStorageVolume(getDefaultStorageVolumeId());
         }
@@ -246,11 +248,14 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void replayCreateStorageVolume(StorageVolume sv) {}
+    public void replayCreateStorageVolume(StorageVolume sv) {
+    }
 
-    public void replayUpdateStorageVolume(StorageVolume sv) {}
+    public void replayUpdateStorageVolume(StorageVolume sv) {
+    }
 
-    public void replayDropStorageVolume(DropStorageVolumeLog log) {}
+    public void replayDropStorageVolume(DropStorageVolumeLog log) {
+    }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STORAGE_VOLUME_MGR, 1);
@@ -281,7 +286,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
+    public abstract StorageVolume getStorageVolumeByName(String svKey);
 
     public abstract StorageVolume getStorageVolume(String storageVolumeId);
 
@@ -289,7 +294,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     protected abstract String createInternalNoLock(String name, String svType, List<String> locations,
                                                    Map<String, String> params, Optional<Boolean> enabled, String comment)
-            throws AnalysisException, DdlException;
+            throws DdlException;
 
     protected abstract void updateInternalNoLock(StorageVolume sv) throws DdlException;
 

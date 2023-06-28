@@ -87,7 +87,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
-import com.starrocks.common.proc.LakeTabletsProcNode;
+import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -1890,7 +1890,7 @@ public class ShowExecutor {
                             continue;
                         }
                         if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                            LakeTabletsProcNode procNode = new LakeTabletsProcNode(db, olapTable, index);
+                            LakeTabletsProcDir procNode = new LakeTabletsProcDir(db, olapTable, index);
                             tabletInfos.addAll(procNode.fetchComparableResult());
                         } else {
                             LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);

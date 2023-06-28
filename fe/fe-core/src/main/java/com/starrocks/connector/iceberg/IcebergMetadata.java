@@ -221,7 +221,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate) {
+                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
         return getRemoteFileInfos((IcebergTable) table, snapshotId, predicate);
     }
 
@@ -263,7 +263,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             tasks.put(key, builder.build());
         }
 
-        List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(new RemoteFileDesc(tasks.get(key)));
+        List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(RemoteFileDesc.createIcebergRemoteFileDesc(tasks.get(key)));
         remoteFileInfo.setFiles(remoteFileDescs);
 
         return Lists.newArrayList(remoteFileInfo);

@@ -460,7 +460,7 @@ public class StreamLoadInfo {
         partitions = routineLoadJob.getPartitions();
         strictMode = routineLoadJob.isStrictMode();
         timezone = routineLoadJob.getTimezone();
-        timeout = (int) Config.routine_load_task_timeout_second;
+        timeout = (int) routineLoadJob.getTaskTimeoutSecond();
         if (!routineLoadJob.getJsonPaths().isEmpty()) {
             jsonPaths = routineLoadJob.getJsonPaths();
         }

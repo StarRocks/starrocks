@@ -370,12 +370,12 @@ public class AuthenticationManagerTest {
                 testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
         // 7.2.1 replay update user property
         UserPropertyInfo userPropertyInfo = (UserPropertyInfo)
-                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PROP_V2);
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PROP_V3);
         followerManager.replayUpdateUserProperty(userPropertyInfo);
         Assert.assertEquals(555, followerManager.getMaxConn("test"));
         // 7.3 replay drop user
         UserIdentity dropInfo = (UserIdentity)
-                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_USER_V2);
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_USER_V3);
         followerManager.replayDropUser(dropInfo);
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         Assert.assertTrue(followerManager.doesUserExist(UserIdentity.ROOT));

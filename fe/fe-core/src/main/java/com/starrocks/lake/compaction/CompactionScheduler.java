@@ -135,6 +135,7 @@ public class CompactionScheduler extends Daemon {
                 String errorMsg = null;
 
                 if (job.isCompleted()) {
+                    job.getPartition().setMinRetainVersion(0);
                     try {
                         commitCompaction(partition, job);
                         assert job.transactionHasCommitted();
@@ -143,7 +144,9 @@ public class CompactionScheduler extends Daemon {
                         errorMsg = "fail to commit transaction: " + e.getMessage();
                     }
                 } else if (job.isFailed()) {
+                    job.getPartition().setMinRetainVersion(0);
                     errorMsg = Objects.requireNonNull(job.getFailMessage(), "getFailMessage() is null");
+                    LOG.error("Compaction job {} failed: {}", job.getDebugString(), errorMsg);
                     job.abort(); // Abort any executing task, if present.
                 }
 
@@ -284,6 +287,9 @@ public class CompactionScheduler extends Daemon {
             // Note: call `beginTransaction()` in the scope of database reader lock to make sure no shadow index will
             // be added to this table(i.e., no schema change) before calling `beginTransaction()`.
             txnId = beginTransaction(partitionIdentifier);
+
+            partition.setMinRetainVersion(currentVersion);
+
         } catch (BeginTransactionException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
             LOG.error("Fail to create transaction for compaction job. {}", e.getMessage());
             return null;
@@ -295,8 +301,7 @@ public class CompactionScheduler extends Daemon {
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
-        String partitionName = String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName());
-        CompactionJob job = new CompactionJob(partitionName, txnId);
+        CompactionJob job = new CompactionJob(db, table, partition, txnId);
         try {
             List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId);
             for (CompactionTask task : tasks) {
@@ -306,6 +311,7 @@ public class CompactionScheduler extends Daemon {
             return job;
         } catch (Exception e) {
             LOG.error(e);
+            partition.setMinRetainVersion(0);
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             abortTransactionIgnoreError(db.getId(), txnId, e.getMessage());
             job.finish();
@@ -413,6 +419,21 @@ public class CompactionScheduler extends Daemon {
             builder.add(CompactionRecord.build(job));
         }
         return builder.build();
+    }
+
+    @NotNull
+    public void cancelCompaction(long txnId) {
+        for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = runningCompactions.entrySet().iterator();
+                iterator.hasNext(); ) {
+            Map.Entry<PartitionIdentifier, CompactionJob> entry = iterator.next();
+            CompactionJob job = entry.getValue();
+
+            if (job.getTxnId() == txnId) {
+                // just abort compaction task here, the background thread can abort transaction automatically
+                job.abort();
+                break;
+            }
+        }
     }
 
     private static class SynchronizedCircularQueue<E> {

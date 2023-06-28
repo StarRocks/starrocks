@@ -22,6 +22,8 @@ import com.starrocks.proto.CompactResponse;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Objects;
@@ -35,6 +37,7 @@ import java.util.stream.Collectors;
  * node and may include compaction tasks for multiple tablets.
  */
 public class CompactionTask {
+    private static final Logger LOG = LogManager.getLogger(CompactionTask.class);
     private final long nodeId;
     private final LakeService rpcChannel;
     private final CompactRequest request;
@@ -112,12 +115,12 @@ public class CompactionTask {
     }
 
     public void abort() {
-        if (responseFuture == null || responseFuture.isDone()) { // No need to send abort request
-            return;
+        if (!isCompleted()) {
+            LOG.info("abort compaction task, txn_id: {}, node: {}", request.txnId, nodeId);
+            AbortCompactionRequest abortRequest = new AbortCompactionRequest();
+            abortRequest.txnId = request.txnId;
+            Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
         }
-        AbortCompactionRequest abortRequest = new AbortCompactionRequest();
-        abortRequest.txnId = request.txnId;
-        Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
     }
 
     public List<TabletCommitInfo> buildTabletCommitInfo() {
