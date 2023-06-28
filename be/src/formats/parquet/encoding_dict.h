@@ -228,10 +228,17 @@ public:
 
             size_t i = 0;
             for (i = 0; (i + 8) < size; i += 8) {
-                uint64_t partial_null_value;
+                uint64_t partial_null_value = 0;
                 memcpy(&partial_null_value, null_data_ptr, 8);
-                // it means there are some not-null values in it.
-                if (partial_null_value != 0) {
+
+                if (partial_null_value == static_cast<int64_t>(-1)) {
+                    // all values are null values.
+                } else if (partial_null_value == 0) {
+                    // no null values.
+                    for (int j = 0; j < 8; j++) {
+                        slices[i + j] = _dict[dict_codes[i + j]];
+                    }
+                } else {
                     for (int j = 0; j < 8; j++) {
                         if (!null_data_ptr[j]) {
                             slices[i + j] = _dict[dict_codes[i + j]];
