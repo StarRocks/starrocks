@@ -33,7 +33,7 @@ Returns whether any elements of `arr1` match the given predicate in the lambda f
 - The lambda function follows the usage notes in [array_map()](array_map.md). It returns array<bool>.
 - If the input array is null or the lambda function results in null, null is returned.
 - If `arr1` is empty, `false` is returned.
-- Map types can use it by rewriting `any/all_match((k,v)->k>v,map)` to `any/all_match(map_values(transform_values((k,v)->k>v, map)))`.
+- To apply this function to MAP, rewrite `any_match((k,v)->k>v,map)` to `any_match(map_values(transform_values((k,v)->k>v, map)))`. For example, `select any_match(map_values(transform_values((k,v)->k>v, map{2:1})));` returns 1.
 
 ## Examples
 

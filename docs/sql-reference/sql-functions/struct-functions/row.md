@@ -2,11 +2,11 @@
 
 ## Description
 
-Creates a named STRUCT or ROW value from the given values.
-
-The row() and struct() functions are equivalent. They support unnamed struct. You do not need to specify the field names. StarRocks automatically generates column names, like `col1`, `col2`...
+Creates a named STRUCT or ROW value from the given values. It supports unnamed struct. You do not need to specify the field names. StarRocks automatically generates column names, such as `col1, col2,...`.
 
 This function is supported from v3.1 onwards.
+
+struct() is the alias of row().
 
 ## Syntax
 
@@ -27,21 +27,26 @@ Returns a STRUCT value which consists of the input values.
 ## Examples
 
 ```Plaintext
-select row(1,"Star","Rocks");
-+------------------------------------------+
-| row(1, 'Star', 'Rocks')                  |
-+------------------------------------------+
-| {"col1":1,"col2":"Star","col3":"Rocks"}  |
-+-------------------------+
-```
+select row(1,"Apple","Pear");
++-----------------------------------------+
+| row(1, 'Apple', 'Pear')                 |
++-----------------------------------------+
+| {"col1":1,"col2":"Apple","col3":"Pear"} |
++-----------------------------------------+
 
-```Plaintext
-select row("StarRocks", NULL);
-+-----------------------------------+
-| row('StarRocks', NULL)            |
-+-----------------------------------+
-|  {"col1":"StarRocks","col2":null} |
-+------------------------+
+select row("Apple", NULL);
++------------------------------+
+| row('Apple', NULL)           |
++------------------------------+
+| {"col1":"Apple","col2":null} |
++------------------------------+
+
+select struct(1,2,3);
++------------------------------+
+| row(1, 2, 3)                 |
++------------------------------+
+| {"col1":1,"col2":2,"col3":3} |
++------------------------------+
 ```
 
 ## References
