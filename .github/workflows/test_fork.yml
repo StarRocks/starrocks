@@ -361,8 +361,10 @@ jobs:
       - name: BRANCH INFO
         id: branch
         run: |
-          echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - uses: actions/checkout@v3
         with:
@@ -415,19 +417,17 @@ jobs:
         if: always()
         run: |
           branch=${{ steps.branch.outputs.branch }}
-          repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
           ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/
-          ossutil64 --config-file ~/.ossutilconfig cp fe/fe-core/target/result/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ --recursive --force
+          ossutil64 --config-file ~/.ossutilconfig cp fe/fe-core/target/result/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
 
       - name: Upload UT XML
         if: always()
         run: |
           branch=${{ steps.branch.outputs.branch }}
-          repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
           ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/
-          ossutil64 --config-file ~/.ossutilconfig cp ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ --recursive --force
+          ossutil64 --config-file ~/.ossutilconfig cp ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
 
       - name: Upload log
         if: always()
@@ -560,8 +560,10 @@ jobs:
       - name: BRANCH INFO
         id: branch
         run: |
-          echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - name: Checkout PR
         run: |
@@ -574,27 +576,19 @@ jobs:
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
 
-      - name: Prepare Tools
-        run: |
-          cd ${{ github.workspace }} && rm -rf .actions && mkdir -p .actions/nose-report-action
-          cd .actions/nose-report-action
-          git clone https://github.com/StarRocks/action-junit-report.git .
-
       - name: Run Case (${{ needs.deploy.outputs.fe }})
         run: |
           cd ${{ github.workspace }}
           rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
           ./bin/run-sql-tester.sh
 
-      - name: UT Reports
-        uses: ./.actions/nose-report-action
+      - name: Upload SQL-Tester XML
         if: success() || failure()
-        with:
-          check_name: 'SQL-Tester Results'
-          fail_on_failure: true
-          detailed_summary: true
-          token: ${{ secrets.GITHUB_TOKEN }}
-          report_paths: 'test/*.xml'
+        run: |
+          branch=${{ steps.branch.outputs.branch }}
+          bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
+          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/
+          ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
 
   admit:
     runs-on: [self-hosted, normal]
@@ -612,14 +606,6 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
-      - name: Prepare Tools
-        run: |
-          cd ${{ github.workspace }}
-          rm -rf .actions
-          mkdir -p .actions/nose-report-action
-          cd .actions/nose-report-action
-          git clone https://github.com/StarRocks/action-junit-report.git .
-
       - name: Run Case
         run: |
           echo "FE: ${{needs.deploy.outputs.fe}}, BE: ${{needs.deploy.outputs.be}}"
@@ -633,15 +619,13 @@ jobs:
           cd ${{ github.workspace }}/elastic-service
           ./bin/run-admit.sh
 
-      - name: Publish Test Results
-        uses: ./.actions/nose-report-action
+      - name: Upload Admit XML
         if: success() || failure()
-        with:
-          check_name: 'Admit Test Results'
-          fail_on_failure: true
-          detailed_summary: true
-          token: ${{ secrets.GITHUB_TOKEN }}
-          report_paths: 'StarRocksTest/result/*.xml'
+        run: |
+          branch=${{ steps.branch.outputs.branch }}
+          bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
+          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/
+          ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/result oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
 
   Teardown:
     runs-on: [self-hosted, normal]
