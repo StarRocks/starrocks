@@ -236,6 +236,15 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     return false;
                 }
                 auto new_col = new_col_status.value();
+                auto new_schema = new_chunk->schema();
+                if (!new_schema->field(i)->is_nullable() && new_col->is_nullable()) {
+                    LOG(WARNING) << "schema of column(" << new_schema->field(i)->name()
+                                 << ") is not null but data contains null";
+                    return false;
+                }
+                if (new_schema->field(i)->is_nullable()) {
+                    new_col = ColumnHelper::cast_to_nullable_column(new_col);
+                }
                 // TODO: no need to unpack const column later.
                 new_chunk->columns()[i] = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
             } else {
@@ -381,6 +390,14 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     return false;
                 }
                 auto new_col = new_col_status.value();
+                if (!new_schema.field(i)->is_nullable() && new_col->is_nullable()) {
+                    LOG(WARNING) << "schema of column(" << new_schema.field(i)->name()
+                                 << ") is not null but data contains null";
+                    return false;
+                }
+                if (new_schema.field(i)->is_nullable()) {
+                    new_col = ColumnHelper::cast_to_nullable_column(new_col);
+                }
                 new_chunk->columns()[i] = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
             } else {
                 DCHECK(_slot_id_to_index_map.find(ref_column) != _slot_id_to_index_map.end());
