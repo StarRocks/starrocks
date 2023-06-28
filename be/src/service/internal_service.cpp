@@ -90,10 +90,7 @@ using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
 template <typename T>
-PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env)
-        : _exec_env(exec_env),
-          _async_thread_pool("async_thread_pool", config::internal_service_async_thread_num,
-                             config::internal_service_async_thread_num) {}
+PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
 template <typename T>
 PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;
@@ -599,36 +596,32 @@ void PInternalServiceImplBase<T>::collect_query_statistics(google::protobuf::Rpc
 template <typename T>
 void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* controller, const PProxyRequest* request,
                                            PProxyResult* response, google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-
-    GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
-
     int timeout_ms =
             request->has_timeout() ? request->timeout() * 1000 : config::routine_load_kafka_timeout_second * 1000;
 
-    // watch estimates the interval before the task is actually executed.
     MonotonicStopWatch watch;
     watch.start();
+    int wait_ms = 0;
 
-    if (!_async_thread_pool.try_offer([&]() {
-            timeout_ms -= watch.elapsed_time() / 1000 / 1000;
-            _get_info_impl(request, response, &latch, timeout_ms);
-        })) {
+    auto task = [this, controller, request, response, done, timeout_ms, &watch, &wait_ms]() {
+        auto left_ms = timeout_ms - watch.elapsed_time() / 1000 / 1000;
+        this->_get_info_impl(request, response, done, left_ms);
+    };
+
+    if (!_exec_env->load_rpc_pool()->try_offer(std::move(task))) {
+        ClosureGuard closure_guard(done);
         Status::ServiceUnavailable(
-                "too busy to get kafka info, please check the kafka broker status, or set "
-                "internal_service_async_thread_num bigger")
+                fmt::format("too busy to get kafka info, please check the kafka broker status, or set "
+                            "internal_service_async_thread_num larger, query wait ms: {}, query running ms: {}",
+                            wait_ms, timeout_ms - wait_ms))
                 .to_protobuf(response->mutable_status());
-        return;
     }
-
-    latch.wait();
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::_get_info_impl(
-        const PProxyRequest* request, PProxyResult* response,
-        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
-    DeferOp defer([latch] { latch->count_down(); });
+void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, PProxyResult* response,
+                                                 google::protobuf::Closure* done, int timeout_ms) {
+    ClosureGuard closure_guard(done);
 
     if (timeout_ms <= 0) {
         Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
@@ -698,36 +691,33 @@ template <typename T>
 void PInternalServiceImplBase<T>::get_pulsar_info(google::protobuf::RpcController* controller,
                                                   const PPulsarProxyRequest* request, PPulsarProxyResult* response,
                                                   google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-
-    GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
-
     int timeout_ms =
-            request->has_timeout() ? request->timeout() * 1000 : config::routine_load_pulsar_timeout_second * 1000;
+            request->has_timeout() ? request->timeout() * 1000 : config::routine_load_kafka_timeout_second * 1000;
 
-    // watch estimates the interval before the task is actually executed.
     MonotonicStopWatch watch;
     watch.start();
+    int wait_ms = 0;
 
-    if (!_async_thread_pool.try_offer([&]() {
-            timeout_ms -= watch.elapsed_time() / 1000 / 1000;
-            _get_pulsar_info_impl(request, response, &latch, timeout_ms);
-        })) {
+    auto task = [this, controller, request, response, done, timeout_ms, &watch, &wait_ms]() {
+        auto left_ms = timeout_ms - watch.elapsed_time() / 1000 / 1000;
+        this->_get_pulsar_info_impl(request, response, done, left_ms);
+    };
+
+    if (!_exec_env->load_rpc_pool()->try_offer(std::move(task))) {
+        ClosureGuard closure_guard(done);
         Status::ServiceUnavailable(
-                "too busy to get pulsar info, please check the pulsar service status, or set "
-                "internal_service_async_thread_num bigger")
+                fmt::format("too busy to get kafka info, please check the kafka broker status, or set "
+                            "internal_service_async_thread_num larger, query wait ms: {}, query running ms: {}",
+                            wait_ms, timeout_ms - wait_ms))
                 .to_protobuf(response->mutable_status());
-        return;
     }
-
-    latch.wait();
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
-        const PPulsarProxyRequest* request, PPulsarProxyResult* response,
-        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
-    DeferOp defer([latch] { latch->count_down(); });
+void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyRequest* request,
+                                                        PPulsarProxyResult* response, google::protobuf::Closure* done,
+                                                        int timeout_ms) {
+    ClosureGuard closure_guard(done);
 
     if (timeout_ms <= 0) {
         Status::TimedOut("get pulsar info timeout").to_protobuf(response->mutable_status());
@@ -786,6 +776,19 @@ template <typename T>
 void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcController* controller,
                                                   const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                   google::protobuf::Closure* done) {
+    auto task = [=]() { this->_get_file_schema(controller, request, response, done); };
+
+    if (!_exec_env->load_rpc_pool()->try_offer(std::move(task))) {
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable("too busy to get file schema, please set internal_service_async_thread_num larger")
+                .to_protobuf(response->mutable_status());
+    }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcController* controller,
+                                                   const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
+                                                   google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     TGetFileSchemaRequest t_request;
 

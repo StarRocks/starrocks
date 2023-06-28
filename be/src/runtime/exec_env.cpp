@@ -211,6 +211,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     }
     _query_rpc_pool = new PriorityThreadPool("query_rpc", query_rpc_threads, std::numeric_limits<uint32_t>::max());
 
+    int load_rpc_threads = config::internal_service_async_thread_num;
+    if (load_rpc_threads <= 0) {
+        load_rpc_threads = CpuInfo::num_cores();
+    }
+    _load_rpc_pool = new PriorityThreadPool("load_rpc", load_rpc_threads, std::numeric_limits<uint32_t>::max());
+
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
