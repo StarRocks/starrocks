@@ -793,8 +793,7 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
             p_scanner = std::make_unique<ParquetScanner>(&state, &profile, scan_range, &counter, true);
             break;
         default:
-            auto err_msg = fmt::format("get file schema failed, file path: {}, format: {} not supported",
-                                       scan_range.ranges[0].path, to_string(tp));
+            auto err_msg = fmt::format("get file schema failed, format: {} not supported", to_string(tp));
             LOG(WARNING) << err_msg;
             st = Status::InvalidArgument(err_msg);
             return;
@@ -803,9 +802,7 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 
     st = p_scanner->open();
     if (!st.ok()) {
-        auto err_msg = fmt::format("get file schema failed, file path: {}, open scanner error: {}",
-                                   scan_range.ranges[0].path, st);
-        st = Status::InvalidArgument(err_msg);
+        LOG(WARNING) << "open file scanner failed: " << st;
         return;
     }
 
@@ -814,8 +811,7 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
     std::vector<SlotDescriptor> schema;
     st = p_scanner->get_schema(&schema);
     if (!st.ok()) {
-        auto err_msg = fmt::format("get file schema failed, file path: {}, err: {}", scan_range.ranges[0].path, st);
-        st = Status::InvalidArgument(err_msg);
+        LOG(WARNING) << "get schema failed: " << st;
         return;
     }
 
