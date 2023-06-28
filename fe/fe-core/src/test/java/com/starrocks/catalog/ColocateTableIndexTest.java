@@ -159,7 +159,13 @@ public class ColocateTableIndexTest {
         map = groupByName(infos);
         Assert.assertEquals(2, infos.size());
         Assert.assertEquals(String.format("%d*, %d*", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
+        Assert.assertEquals(String.format("[deleted], [deleted]", table1To1.getId(), table1To2.getId()),
+                map.get("group1").get(3));
+
         Assert.assertEquals(String.format("%d", table2To1.getId()), map.get("group2").get(2));
+        Assert.assertEquals(String.format("table2_1", table2To1.getId()), map.get("group2").get(3));
+
+
         LOG.info("after drop db1.table1_2: {}", infos);
 
         // drop db2
@@ -196,8 +202,13 @@ public class ColocateTableIndexTest {
         LOG.info("after create & drop db2: {}", infos);
         Assert.assertEquals(3, infos.size());
         Assert.assertEquals(String.format("%d*, %d*", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
+        Assert.assertEquals("[deleted], [deleted]", map.get("group1").get(3));
         Assert.assertEquals(String.format("%d*", table2To1.getId()), map.get("group2").get(2));
+        Assert.assertEquals(String.format("[deleted], [deleted]", table1To1.getId(), table1To2.getId()),
+                map.get("group1").get(3));
         Assert.assertEquals(String.format("%d*", table2To3.getId()), map.get("group3").get(2));
+        Assert.assertEquals(String.format("[deleted], [deleted]", table1To1.getId(), table1To2.getId()),
+                map.get("group1").get(3));
     }
 
     @Test

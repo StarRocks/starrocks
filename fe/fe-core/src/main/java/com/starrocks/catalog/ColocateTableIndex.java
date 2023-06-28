@@ -73,6 +73,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -638,13 +639,22 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    protected boolean validDbIdAndTableId(long dbId, long tableId) {
+    protected Optional<String> getTableName(long dbId, long tableId) {
+
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
-            return false;
+            return Optional.empty();
         }
-        return database.getTable(tableId) != null;
+        Table table = database.getTable(tableId);
+
+        if (table == null) {
+            return Optional.empty();
+        }
+
+        return Optional.of(table.getName());
     }
+
+
 
     /**
      * After the user executes `DROP TABLE`, we only throw tables into the recycle bin instead of deleting them
@@ -661,17 +671,20 @@ public class ColocateTableIndex implements Writable {
                 GroupId groupId = entry.getValue();
                 info.add(groupId.toString());
                 info.add(entry.getKey());
-                StringBuilder sb = new StringBuilder();
+                StringJoiner tblIdJoiner = new StringJoiner(", ");
+                StringJoiner tblNameJoiner = new StringJoiner(", ");
                 for (Long tableId : group2Tables.get(groupId)) {
-                    if (sb.length() > 0) {
-                        sb.append(", ");
-                    }
-                    sb.append(tableId);
-                    if (!validDbIdAndTableId(groupId.dbId, tableId)) {
-                        sb.append("*");
+                    Optional<String> tblName = getTableName(groupId.dbId, tableId);
+                    if (!tblName.isPresent()) {
+                        tblIdJoiner.add(tableId + "*");
+                        tblNameJoiner.add("[deleted]");
+                    } else {
+                        tblIdJoiner.add(tableId.toString());
+                        tblNameJoiner.add(tblName.get());
                     }
                 }
-                info.add(sb.toString());
+                info.add(tblIdJoiner.toString());
+                info.add(tblNameJoiner.toString());
                 ColocateGroupSchema groupSchema = group2Schema.get(groupId);
                 info.add(String.valueOf(groupSchema.getBucketsNum()));
                 info.add(String.valueOf(groupSchema.getReplicationNum()));
