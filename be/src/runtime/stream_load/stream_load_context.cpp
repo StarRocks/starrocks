@@ -239,7 +239,7 @@ std::string StreamLoadContext::brief(bool detail) const {
 }
 
 bool StreamLoadContext::check_and_set_http_limiter(ConcurrentLimiter* limiter) {
-    _http_limiter_guard.reset(new ConcurrentLimiterGuard());
+    _http_limiter_guard = std::make_unique<ConcurrentLimiterGuard>();
     return _http_limiter_guard->set_limiter(limiter);
 }
 
