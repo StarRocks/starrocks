@@ -44,8 +44,8 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     private Map<String, Long> initialPositions = Maps.newHashMap();
 
     public PulsarTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs, long timeToExecuteMs,
-                          List<String> partitions, Map<String, Long> initialPositions) {
-        super(id, jobId, taskScheduleIntervalMs, timeToExecuteMs);
+                          List<String> partitions, Map<String, Long> initialPositions, long tastTimeoutMs) {
+        super(id, jobId, taskScheduleIntervalMs, timeToExecuteMs, tastTimeoutMs);
         this.partitions = partitions;
         this.initialPositions.putAll(initialPositions);
     }
@@ -139,7 +139,7 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         tRoutineLoadTask.setPulsar_load_info(tPulsarLoadInfo);
         tRoutineLoadTask.setType(TLoadSourceType.PULSAR);
         tRoutineLoadTask.setParams(plan(routineLoadJob));
-        tRoutineLoadTask.setMax_interval_s(Config.routine_load_task_consume_second);
+        tRoutineLoadTask.setMax_interval_s(routineLoadJob.getTaskConsumeSecond());
         tRoutineLoadTask.setMax_batch_rows(routineLoadJob.getMaxBatchRows());
         tRoutineLoadTask.setMax_batch_size(Config.max_routine_load_batch_size);
         if (!routineLoadJob.getFormat().isEmpty() && routineLoadJob.getFormat().equalsIgnoreCase("json")) {
