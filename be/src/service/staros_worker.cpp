@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
+#include "fslib/star_cache_configuration.h"
 #include "gflags/gflags.h"
 #include "gutil/strings/fastmem.h"
 #include "util/debug_util.h"
@@ -331,6 +332,11 @@ void init_staros_worker() {
     FLAGS_cachemgr_evict_high_water = config::starlet_cache_evict_high_water;
     FLAGS_cachemgr_dir_allocate_policy = config::starlet_cache_dir_allocate_policy;
     FLAGS_fs_stream_buffer_size_bytes = config::starlet_fs_stream_buffer_size_bytes;
+
+    fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
+    fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
+    fslib::FLAGS_star_cache_disk_size_percent = config::starlet_star_cache_disk_size_percent;
+    fslib::FLAGS_star_cache_block_size_bytes = config::starlet_star_cache_block_size_bytes;
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
