@@ -348,6 +348,7 @@ public:
             REG_METHOD(Tablet, debug_string);
             REG_METHOD(Tablet, updates);
             REG_METHOD(Tablet, save_meta);
+            REG_METHOD(Tablet, verify);
         }
         {
             auto& cls = m.klass<EditVersionPB>("EditVersionPB");
