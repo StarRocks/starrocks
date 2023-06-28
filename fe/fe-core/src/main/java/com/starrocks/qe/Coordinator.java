@@ -116,7 +116,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutionException;
@@ -128,6 +127,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class Coordinator {
@@ -200,7 +200,7 @@ public class Coordinator {
 
     private boolean thriftServerHighLoad;
 
-    private Callable<RuntimeProfile> queryTopLevelProfileGen;
+    private Supplier<RuntimeProfile> topProfileSupplier;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(0L);
 
     // only used for sync stream load profile
@@ -480,9 +480,8 @@ public class Coordinator {
         return sinkCommitInfos;
     }
 
-    public void setQueryTopLevelProfileGen(
-            Callable<RuntimeProfile> queryTopLevelProfileGen) {
-        this.queryTopLevelProfileGen = queryTopLevelProfileGen;
+    public void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
+        this.topProfileSupplier = topProfileSupplier;
     }
 
     public boolean isUsingBackend(Long backendID) {
@@ -1578,18 +1577,14 @@ public class Coordinator {
         } else {
             long now = System.currentTimeMillis();
             long lastTime = lastRuntimeProfileUpdateTime.get();
-            if (queryTopLevelProfileGen != null &&
+            if (topProfileSupplier != null &&
                     connectContext != null &&
                     connectContext.getSessionVariable().isEnableProfile() &&
                     now - lastTime > connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 1000L &&
                     lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
-                try {
-                    RuntimeProfile profile = queryTopLevelProfileGen.call();
-                    profile.addChild(buildMergedQueryProfile(null));
-                    ProfileManager.getInstance().pushProfile(profile);
-                } catch (Exception e) {
-                    LOG.error("failed to build top level profile", e);
-                }
+                RuntimeProfile profile = topProfileSupplier.get();
+                profile.addChild(buildMergedQueryProfile(null));
+                ProfileManager.getInstance().pushProfile(profile);
             }
         }
 

@@ -832,7 +832,7 @@ public class StmtExecutor {
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
 
         coord.exec();
-        coord.setQueryTopLevelProfileGen(this::buildTopLevelProfile);
+        coord.setTopProfileSupplier(this::buildTopLevelProfile);
 
         // send result
         // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,

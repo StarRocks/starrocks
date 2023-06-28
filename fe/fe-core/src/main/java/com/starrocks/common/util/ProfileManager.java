@@ -98,7 +98,6 @@ public class ProfileManager {
     }
 
     private ProfileManager() {
-        // Only protect profileDeque; profileMap is concurrent, no need to protect
         ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
         readLock = lock.readLock();
         writeLock = lock.writeLock();
