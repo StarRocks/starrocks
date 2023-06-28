@@ -240,6 +240,30 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     LOG(WARNING) << "error materialized view function : " << materialized_function;
                     return false;
                 }
+<<<<<<< HEAD
+=======
+                auto new_col = new_col_status.value();
+                auto new_schema = new_chunk->schema();
+                if (!new_schema->field(i)->is_nullable() && new_col->is_nullable()) {
+                    LOG(WARNING) << "schema of column(" << new_schema->field(i)->name()
+                                 << ") is not null but data contains null";
+                    return false;
+                }
+                if (new_schema->field(i)->is_nullable()) {
+                    new_col = ColumnHelper::cast_to_nullable_column(new_col);
+                }
+                // TODO: no need to unpack const column later.
+                new_chunk->columns()[i] = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
+            } else {
+                LogicalType ref_type = base_tablet_meta->tablet_schema().column(ref_column).type();
+                LogicalType new_type = new_tablet_meta->tablet_schema().column(i).type();
+
+                int reftype_precision = base_tablet_meta->tablet_schema().column(ref_column).precision();
+                int reftype_scale = base_tablet_meta->tablet_schema().column(ref_column).scale();
+                int newtype_precision = new_tablet_meta->tablet_schema().column(i).precision();
+                int newtype_scale = new_tablet_meta->tablet_schema().column(i).scale();
+
+>>>>>>> 60a03043c ([BugFix] fix materialized view with nullable schema (#26091))
                 ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
                 ColumnPtr& new_col = new_chunk->get_column_by_index(i);
                 Field ref_field =
@@ -375,12 +399,30 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     LOG(WARNING) << "error materialized view function : " << materialized_function;
                     return false;
                 }
+<<<<<<< HEAD
                 Status st = converter->convert_materialized(base_col, new_col, ref_type_info.get());
                 if (!st.ok()) {
                     return false;
                 }
                 continue;
             }
+=======
+                auto new_col = new_col_status.value();
+                if (!new_schema.field(i)->is_nullable() && new_col->is_nullable()) {
+                    LOG(WARNING) << "schema of column(" << new_schema.field(i)->name()
+                                 << ") is not null but data contains null";
+                    return false;
+                }
+                if (new_schema.field(i)->is_nullable()) {
+                    new_col = ColumnHelper::cast_to_nullable_column(new_col);
+                }
+                new_chunk->columns()[i] = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
+            } else {
+                DCHECK(_slot_id_to_index_map.find(ref_column) != _slot_id_to_index_map.end());
+                int base_index = _slot_id_to_index_map[ref_column];
+                const TypeInfoPtr& ref_type_info = base_schema.field(base_index)->type();
+                const TypeInfoPtr& new_type_info = new_schema.field(i)->type();
+>>>>>>> 60a03043c ([BugFix] fix materialized view with nullable schema (#26091))
 
             int reftype_precision = ref_type_info->precision();
             int reftype_scale = ref_type_info->scale();
