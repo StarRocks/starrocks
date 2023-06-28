@@ -78,13 +78,14 @@ private:
 
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 
+    static CacheKey get_cache_key(std::string_view scheme, const Configuration& conf);
+
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_from_shard_info(const ShardInfo& info,
                                                                                  const Configuration& conf);
     absl::StatusOr<std::shared_ptr<FileSystem>> new_shared_filesystem(std::string_view scheme,
                                                                       const Configuration& conf);
     absl::Status build_conf_from_shard_info(const ShardInfo& info, Configuration& conf);
-    CacheKey get_cache_key(std::string_view scheme, const Configuration& conf);
     absl::Status invalidate_fs(const ShardInfo& shard);
     absl::StatusOr<std::string> build_scheme_from_shard_info(const ShardInfo& info);
 
