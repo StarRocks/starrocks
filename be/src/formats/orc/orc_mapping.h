@@ -102,6 +102,7 @@ public:
 
 private:
     std::unordered_map<size_t, OrcMappingOrOrcColumnId> _mapping;
+    std::unordered_map<std::string, orc::Type*> _new_mapping;
 
     Status set_include_column_id_by_type(const OrcMappingPtr& mapping, const TypeDescriptor& desc,
                                          std::list<uint64_t>* column_id_list);
@@ -118,7 +119,7 @@ public:
                                                                const std::vector<std::string>* hive_column_names);
 
 private:
-    static Status _check_orc_type_can_converte_2_logical_type(const orc::Type& orc_source_type,
+    static Status _check_orc_type_can_convert_2_logical_type(const orc::Type& orc_source_type,
                                                               const TypeDescriptor& slot_target_type);
 
     static Status _init_orc_mapping_with_orc_column_names(std::unique_ptr<OrcMapping>& mapping,

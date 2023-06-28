@@ -125,7 +125,7 @@ StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
     return orc_mapping;
 }
 
-Status OrcMappingFactory::_check_orc_type_can_converte_2_logical_type(const orc::Type& orc_source_type,
+Status OrcMappingFactory::_check_orc_type_can_convert_2_logical_type(const orc::Type& orc_source_type,
                                                                       const TypeDescriptor& slot_target_type) {
     bool can_convert = true;
     if (orc_source_type.getKind() == orc::TypeKind::LIST) {
@@ -169,7 +169,7 @@ Status OrcMappingFactory::_init_orc_mapping_with_orc_column_names(std::unique_pt
 
         const orc::Type* orc_sub_type = orc_root_type.getSubtype(it->second);
 
-        RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(*orc_sub_type, slot_desc->type()));
+        RETURN_IF_ERROR(_check_orc_type_can_convert_2_logical_type(*orc_sub_type, slot_desc->type()));
 
         size_t need_add_column_id = orc_sub_type->getColumnId();
 
@@ -225,7 +225,7 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
         size_t pos_in_slot_descriptor = it->second;
 
         RETURN_IF_ERROR(
-                _check_orc_type_can_converte_2_logical_type(*orc_sub_type, slot_descs[pos_in_slot_descriptor]->type()));
+                _check_orc_type_can_convert_2_logical_type(*orc_sub_type, slot_descs[pos_in_slot_descriptor]->type()));
 
         OrcMappingPtr need_add_child_mapping = nullptr;
         // handle nested mapping for complex type mapping
@@ -270,7 +270,7 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
             }
             const orc::Type& orc_child_type = *orc_type.getSubtype(it->second);
             const TypeDescriptor& origin_child_type = origin_type.children[index];
-            RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(orc_child_type, origin_child_type));
+            RETURN_IF_ERROR(_check_orc_type_can_convert_2_logical_type(orc_child_type, origin_child_type));
 
             size_t need_add_column_id = orc_child_type.getColumnId();
             OrcMappingPtr need_add_child_mapping = nullptr;
@@ -291,7 +291,7 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
         const orc::Type& orc_child_type = *orc_type.getSubtype(0);
         const TypeDescriptor& origin_child_type = origin_type.children[0];
         // Check Array's element can be converted
-        RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(orc_child_type, origin_child_type));
+        RETURN_IF_ERROR(_check_orc_type_can_convert_2_logical_type(orc_child_type, origin_child_type));
 
         size_t need_add_column_id = orc_child_type.getColumnId();
         OrcMappingPtr need_add_child_mapping = nullptr;
@@ -313,12 +313,12 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
         // Check Map's key can be converted
         if (!origin_type.children[0].is_unknown_type()) {
             RETURN_IF_ERROR(
-                    _check_orc_type_can_converte_2_logical_type(*orc_type.getSubtype(0), origin_type.children[0]));
+                    _check_orc_type_can_convert_2_logical_type(*orc_type.getSubtype(0), origin_type.children[0]));
         }
         // Check Map's value can be converted
         if (!origin_type.children[1].is_unknown_type()) {
             RETURN_IF_ERROR(
-                    _check_orc_type_can_converte_2_logical_type(*orc_type.getSubtype(1), origin_type.children[1]));
+                    _check_orc_type_can_convert_2_logical_type(*orc_type.getSubtype(1), origin_type.children[1]));
         }
 
         // Map's key must be primitivte type

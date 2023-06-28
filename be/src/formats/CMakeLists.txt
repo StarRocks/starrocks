@@ -62,6 +62,7 @@ add_library(Formats STATIC
         parquet/chunk_writer.cpp
         parquet/level_builder.cpp
         parquet/column_chunk_writer.cpp
+        utils.h
         )
 
 add_subdirectory(orc/apache-orc)
