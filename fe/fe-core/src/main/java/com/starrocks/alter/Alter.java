@@ -110,6 +110,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 
@@ -537,6 +538,14 @@ public class Alter {
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
             newMvRefreshScheme.setType(refreshType);
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
+
+            long maxChangedTableRefreshTime = log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values().stream()
+                    .map(x -> x.values().stream().map(
+                            MaterializedView.BasePartitionInfo::getLastRefreshTime).max(Long::compareTo))
+                    .map(x -> x.orElse(null)).filter(Objects::nonNull)
+                    .max(Long::compareTo)
+                    .orElse(System.currentTimeMillis());
+            newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
                     "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
