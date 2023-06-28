@@ -431,13 +431,7 @@ int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq
                 continue;
             }
 
-            // key is null && isn't safe eq, don't need check value
             has_null |= (res == EQUALS_NULL);
-            if (res == EQUALS_NULL && !safe_eq) {
-                found = true;
-                break;
-            }
-
             // So two keys is the same
             res = _values->equals(i, *(rhs_map._values.get()), j, safe_eq);
             if (res == EQUALS_FALSE) {
