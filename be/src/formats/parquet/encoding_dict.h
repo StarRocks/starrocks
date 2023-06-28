@@ -231,7 +231,7 @@ public:
                 uint64_t partial_null_value = 0;
                 memcpy(&partial_null_value, null_data_ptr, 8);
 
-                if (partial_null_value == static_cast<int64_t>(-1)) {
+                if (partial_null_value == 0x0101010101010101L) {
                     // all values are null values.
                 } else if (partial_null_value == 0) {
                     // no null values.
