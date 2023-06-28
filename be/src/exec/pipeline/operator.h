@@ -317,7 +317,7 @@ public:
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
     virtual void close(RuntimeState* state);
-    std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
+    std::string get_name() const { return _name + "_(" + std::to_string(_plan_node_id) + ")"; }
     std::string get_raw_name() const { return _name; }
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.

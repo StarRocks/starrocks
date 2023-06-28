@@ -75,7 +75,10 @@ public:
     size_t num_drivers() const;
 
     bool all_pipelines_finished() const { return _num_finished_pipelines == _pipelines.size(); }
-    void count_down_pipeline(RuntimeState* state, size_t val = 1);
+    void count_down_pipeline(size_t val = 1);
+
+    bool need_report_exec_state();
+    void report_exec_state_if_necessary();
 
     void set_final_status(const Status& status);
 
@@ -190,6 +193,8 @@ private:
     AdaptiveDopParam _adaptive_dop_param;
 
     size_t _expired_log_count = 0;
+
+    std::atomic<int64_t> _last_report_exec_state_ns = MonotonicNanos();
 };
 
 class FragmentContextManager {

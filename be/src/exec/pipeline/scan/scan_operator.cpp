@@ -506,16 +506,15 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
         query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
         DCHECK(query_ctx != nullptr);
     }
-    if (!query_ctx->is_report_profile()) {
+    if (!query_ctx->enable_profile()) {
         return;
     }
     std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
     for (auto i = 0; i < _chunk_source_profiles.size(); i++) {
         profiles[i] = _chunk_source_profiles[i].get();
     }
-    RuntimeProfile::merge_isomorphic_profiles(profiles);
 
-    RuntimeProfile* merged_profile = profiles[0];
+    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), profiles);
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);

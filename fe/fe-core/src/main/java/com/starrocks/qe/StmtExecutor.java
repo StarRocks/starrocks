@@ -241,9 +241,8 @@ public class StmtExecutor {
         return this.coord;
     }
 
-    // At the end of query execution, we begin to add up profile
-    public void initProfile(long beginTimeInNanoSecond) {
-        profile = new RuntimeProfile("Query");
+    private RuntimeProfile buildTopLevelProfile() {
+        RuntimeProfile profile = new RuntimeProfile("Query");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
         summaryProfile.addInfoString(ProfileManager.START_TIME, TimeUtils.longToTimeString(context.getStartTime()));
@@ -254,7 +253,7 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
-        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toString());
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toProfileString());
         summaryProfile.addInfoString("StarRocks Version",
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
@@ -289,13 +288,17 @@ public class StmtExecutor {
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
         profile.addChild(plannerProfile);
         context.getPlannerProfile().build(plannerProfile);
+        return profile;
+    }
 
+    // At the end of query execution, we begin to add up profile
+    private void initProfile(long beginTimeInNanoSecond) {
+        profile = buildTopLevelProfile();
         if (coord != null) {
             if (coord.getQueryProfile() != null) {
                 coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 coord.endProfile();
-                coord.mergeIsomorphicProfiles(getQueryStatisticsForAuditLog());
-                profile.addChild(coord.getQueryProfile());
+                profile.addChild(coord.buildMergedQueryProfile(getQueryStatisticsForAuditLog()));
             }
             coord = null;
         }
@@ -833,6 +836,7 @@ public class StmtExecutor {
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
 
         coord.exec();
+        coord.setTopProfileSupplier(this::buildTopLevelProfile);
 
         // send result
         // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,

@@ -226,9 +226,9 @@ public class RuntimeProfileTest {
             profiles.add(profile2);
         }
 
-        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        Assert.assertNotNull(mergedProfile);
 
-        RuntimeProfile mergedProfile = profiles.get(0);
         Counter mergedTime1 = mergedProfile.getCounter("time1");
         Assert.assertEquals(2000000000L, mergedTime1.getValue());
         Counter mergedMinOfTime1 = mergedProfile.getCounter("__MIN_OF_time1");
@@ -299,9 +299,9 @@ public class RuntimeProfileTest {
             profiles.add(profile2);
         }
 
-        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        Assert.assertNotNull(mergedProfile);
 
-        RuntimeProfile mergedProfile = profiles.get(0);
         Counter mergedTime1 = mergedProfile.getCounter("time1");
         Assert.assertEquals(2500000000L, mergedTime1.getValue());
         Counter mergedMinOfTime1 = mergedProfile.getCounter("__MIN_OF_time1");
@@ -374,9 +374,8 @@ public class RuntimeProfileTest {
             profiles.add(profile2);
         }
 
-        RuntimeProfile.mergeIsomorphicProfiles(profiles);
-
-        RuntimeProfile mergedProfile = profiles.get(0);
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        Assert.assertNotNull(mergedProfile);
 
         Counter mergedTime1 = mergedProfile.getCounter("time1");
         Assert.assertEquals(2000000000L, mergedTime1.getValue());
@@ -483,9 +482,9 @@ public class RuntimeProfileTest {
             profiles.add(profile2);
         }
 
-        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        Assert.assertNotNull(mergedProfile);
 
-        RuntimeProfile mergedProfile = profiles.get(0);
         Assert.assertEquals(13, mergedProfile.getCounterMap().size());
         RuntimeProfile.removeRedundantMinMaxMetrics(mergedProfile);
         Assert.assertEquals(7, mergedProfile.getCounterMap().size());
@@ -539,8 +538,8 @@ public class RuntimeProfileTest {
             profiles.add(profile5);
         }
 
-        RuntimeProfile.mergeIsomorphicProfiles(profiles);
-        RuntimeProfile mergedProfile = profiles.get(0);
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        Assert.assertNotNull(mergedProfile);
 
         Set<String> expectedValues = Sets.newHashSet("value1", "value2", "value3", "value4", "value5", "value6");
         Set<String> actualValues = Sets.newHashSet();

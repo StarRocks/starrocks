@@ -430,6 +430,18 @@ void PipelineDriver::check_short_circuit() {
     }
 }
 
+bool PipelineDriver::need_report_exec_state() {
+    return _fragment_ctx->need_report_exec_state();
+}
+
+void PipelineDriver::report_exec_state() {
+    if (_state == DriverState::NOT_READY || _state == DriverState::FINISH || _state == DriverState::CANCELED ||
+        _state == DriverState::INTERNAL_ERROR) {
+        return;
+    }
+    _fragment_ctx->report_exec_state_if_necessary();
+}
+
 void PipelineDriver::mark_precondition_not_ready() {
     for (auto& op : _operators) {
         _operator_stages[op->get_id()] = OperatorStage::PRECONDITION_NOT_READY;
