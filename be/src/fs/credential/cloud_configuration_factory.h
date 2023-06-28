@@ -113,7 +113,8 @@ private:
             }
         } else {
             DCHECK(t_cloud_configuration.__isset.cloud_properties_v2);
-            properties.insert(t_cloud_configuration.cloud_properties_v2.begin(), t_cloud_configuration.cloud_properties_v2.end());
+            properties.insert(t_cloud_configuration.cloud_properties_v2.begin(),
+                              t_cloud_configuration.cloud_properties_v2.end());
         }
     }
 
