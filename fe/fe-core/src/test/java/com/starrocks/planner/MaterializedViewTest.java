@@ -3325,4 +3325,182 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "     partitions=1/1");
         }
     }
+
+    @Test
+    public void testRightOuterJoin() {
+        {
+            String q = "select empid, depts.deptno from emps\n"
+                    + "right outer join depts using (deptno)";
+            String m = "select empid, depts.deptno from emps\n"
+                    + "right outer join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select empid, depts.deptno from emps\n"
+                    + "right outer join depts using (deptno) where empid = 1";
+            String m = "select empid, depts.deptno from emps\n"
+                    + "right outer join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testFullOuterJoin() {
+        {
+            String q = "select empid, depts.deptno from emps\n"
+                    + "full outer join depts using (deptno)";
+            String m = "select empid, depts.deptno from emps\n"
+                    + "full outer join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select empid, depts.deptno from emps\n"
+                    + "full outer join depts using (deptno) where empid = 1";
+            String m = "select empid, depts.deptno from emps\n"
+                    + "full outer join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testLeftSemiJoinJoin() {
+        {
+            String q = "select empid from emps\n"
+                    + "left semi join depts using (deptno)";
+            String m = "select empid from emps\n"
+                    + "left semi join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select empid from emps\n"
+                    + "left semi join depts using (deptno) where empid = 1";
+            String m = "select empid from emps\n"
+                    + "left semi join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testLeftAntiJoinJoin() {
+        {
+            String q = "select empid from emps\n"
+                    + "left anti join depts using (deptno)";
+            String m = "select empid from emps\n"
+                    + "left anti join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select empid from emps\n"
+                    + "left anti join depts using (deptno) where empid = 1";
+            String m = "select empid from emps\n"
+                    + "left anti join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testRightSemiJoinJoin() {
+        {
+            String q = "select deptno from emps\n"
+                    + "right semi join depts using (deptno)";
+            String m = "select deptno from emps\n"
+                    + "right semi join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select deptno from emps\n"
+                    + "right semi join depts using (deptno) where deptno = 1";
+            String m = "select deptno from emps\n"
+                    + "right semi join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testRightAntiJoinJoin() {
+        {
+            String q = "select deptno from emps\n"
+                    + "left anti join depts using (deptno)";
+            String m = "select deptno from emps\n"
+                    + "left anti join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select deptno from emps\n"
+                    + "right anti join depts using (deptno) where deptno = 1";
+            String m = "select deptno from emps\n"
+                    + "right anti join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testMultiJoinTypes() {
+        {
+            testRewriteOK("select depts.deptno, dependents.empid\n"
+                            + "from depts\n"
+                            + "left outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n",
+                    "select dependents.empid\n"
+                            + "from depts\n"
+                            + "left outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n"
+                            + "where depts.deptno > 10");
+        }
+
+        {
+            testRewriteOK("select depts.deptno, dependents.empid\n"
+                            + "from depts\n"
+                            + "left outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n"
+                            + "where depts.deptno > 10",
+                    "select dependents.empid\n"
+                            + "from depts\n"
+                            + "left outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n"
+                            + "where depts.deptno > 10");
+        }
+
+        {
+            testRewriteOK("select depts.deptno, dependents.empid\n"
+                            + "from depts\n"
+                            + "full outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n",
+                    "select dependents.empid\n"
+                            + "from depts\n"
+                            + "full outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n"
+                            + "where depts.deptno > 10");
+        }
+
+        {
+            testRewriteOK("select depts.deptno\n"
+                            + "from depts\n"
+                            + "left semi join dependents on (depts.name = dependents.name)\n"
+                            + "left anti join emps on (emps.deptno = depts.deptno)\n",
+                    "select depts.deptno\n"
+                            + "from depts\n"
+                            + "left semi join dependents on (depts.name = dependents.name)\n"
+                            + "left anti join emps on (emps.deptno = depts.deptno)\n"
+                            + "where depts.deptno > 10");
+        }
+
+        {
+            testRewriteOK("select emps.empid\n"
+                            + "from depts\n"
+                            + "left semi join dependents on (depts.name = dependents.name)\n"
+                            + "right anti join emps on (emps.deptno = depts.deptno)\n",
+                    "select emps.empid\n"
+                            + "from depts\n"
+                            + "left semi join dependents on (depts.name = dependents.name)\n"
+                            + "right anti join emps on (emps.deptno = depts.deptno)\n"
+                            + "where emps.empid > 10");
+        }
+    }
 }
