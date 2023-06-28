@@ -2752,6 +2752,7 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testTableFunctionReorder() throws Exception {
 
         String sql = "select * from (SELECT * FROM tarray, unnest(v3, v3)) t1 LEFT JOIN " +
@@ -2798,5 +2799,27 @@ public class JoinTest extends PlanTestBase {
                 "                                 WHERE (t0_6.v1) = (subt0.v1)))))";
         String plan = getFragmentPlan(query);
         assertContains(plan, "other join predicates: 1: v1 = 4: v1");
+=======
+    public void testTopFragmentOnComputeNode() throws Exception {
+        String sql = "select t0.v1 from t0 join[shuffle] t1 on t0.v2 = t1.v5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1\n" +
+                "  PARTITION: HASH_PARTITIONED: 2: v2\n" +
+                "\n" +
+                "  RESULT SINK");
+        
+        try {
+            connectContext.getSessionVariable().setPreferComputeNode(true);
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "PLAN FRAGMENT 0\n" +
+                    " OUTPUT EXPRS:1: v1\n" +
+                    "  PARTITION: UNPARTITIONED\n" +
+                    "\n" +
+                    "  RESULT SINK");
+        } finally {
+            connectContext.getSessionVariable().setPreferComputeNode(false);
+        }
+>>>>>>> 8ff962fa43 ([BugFix] Fix empty table output fragment data partition error (#25832))
     }
 }
