@@ -119,7 +119,9 @@ public class ShardDeleter extends FrontendDaemon {
 
             // 2. delete shard
             try {
-                starOSAgent.deleteShards(shards);
+                if (!shards.isEmpty()) {
+                    starOSAgent.deleteShards(shards);
+                }
             } catch (DdlException e) {
                 LOG.warn("failed to delete shard from starMgr");
                 continue;
