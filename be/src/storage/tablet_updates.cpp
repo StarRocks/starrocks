@@ -488,7 +488,7 @@ Status TabletUpdates::_get_apply_version_and_rowsets(int64_t* version, std::vect
     return Status::OK();
 }
 
-Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
+Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
     auto span = Tracer::Instance().start_trace("rowset_commit");
     auto scope_span = trace::Scope(span);
     if (_error) {
@@ -497,7 +497,7 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
     }
     Status st;
     {
-        std::lock_guard wl(_lock);
+        std::unique_lock<std::mutex> ul(_lock);
         if (_edit_version_infos.empty()) {
             string msg = Substitute("tablet deleted when rowset_commit tablet:$0", _tablet.tablet_id());
             LOG(WARNING) << msg;
@@ -546,11 +546,16 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                       << " #pending:" << _pending_commits.size();
             _try_commit_pendings_unlocked();
             _check_for_apply();
+            if (wait_time > 0) {
+                st = _wait_for_version(EditVersion(version, 0), wait_time, ul);
+            }
         }
     }
-    if (!st.ok()) {
+    if (!st.ok() && !st.is_time_out()) {
         LOG(WARNING) << "rowset commit failed tablet:" << _tablet.tablet_id() << " version:" << version
                      << " txn_id: " << rowset->txn_id() << " pending:" << _pending_commits.size() << " msg:" << st;
+    } else if (st.is_time_out()) {
+        st = Status::OK();
     }
     return st;
 }
@@ -899,50 +904,92 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     EditVersion latest_applied_version;
     st = get_latest_applied_version(&latest_applied_version);
 
-    for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-        state.load_upserts(rowset.get(), i);
-        auto& upserts = state.upserts();
-        if (upserts[i] != nullptr) {
-            // apply partial rowset segment
-            st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index);
-            if (!st.ok()) {
-                manager->update_state_cache().remove(state_entry);
-                std::string msg =
-                        strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
-                                            st.to_string(), debug_string());
-                LOG(ERROR) << msg;
-                _set_error(msg);
-                return;
+    if (rowset->rowset_meta()->get_meta_pb().delfile_idxes_size() == 0) {
+        for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+            state.load_upserts(rowset.get(), i);
+            auto& upserts = state.upserts();
+            if (upserts[i] != nullptr) {
+                // apply partial rowset segment
+                st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index);
+                if (!st.ok()) {
+                    manager->update_state_cache().remove(state_entry);
+                    std::string msg =
+                            strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                                st.to_string(), debug_string());
+                    LOG(ERROR) << msg;
+                    _set_error(msg);
+                    return;
+                }
+                st = _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
+                if (!st.ok()) {
+                    manager->update_state_cache().remove(state_entry);
+                    std::string msg =
+                            strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                                st.to_string(), debug_string());
+                    LOG(ERROR) << msg;
+                    _set_error(msg);
+                    return;
+                }
+                manager->index_cache().update_object_size(index_entry, index.memory_usage());
             }
-            st = _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
-            if (!st.ok()) {
-                manager->update_state_cache().remove(state_entry);
-                std::string msg =
-                        strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
-                                            st.to_string(), debug_string());
-                LOG(ERROR) << msg;
-                _set_error(msg);
-                return;
-            }
-            manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            state.release_upserts(i);
         }
-        state.release_upserts(i);
-    }
+        // two states
+        // 1. upgrade from old version. delfile_idxes in rowset meta is empty, we still need to load delete files
+        // 2. pure upsert. no delete files, the following logic will be skip
+        for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
+            state.load_deletes(rowset.get(), i);
+            auto& deletes = state.deletes();
+            delete_op += deletes[i]->size();
+            index.erase(*deletes[i], &new_deletes);
+            state.release_deletes(i);
+        }
+    } else {
+        uint32_t delfile_num = rowset->rowset_meta()->get_meta_pb().delfile_idxes_size();
+        uint32_t upsert_num = rowset->num_segments();
+        DCHECK(rowset->num_delete_files() == delfile_num);
 
-    for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
-        state.load_deletes(rowset.get(), i);
-        auto& deletes = state.deletes();
-        delete_op += deletes[i]->size();
-        st = index.erase(*deletes[i], &new_deletes);
-        if (!st.ok()) {
-            manager->update_state_cache().remove(state_entry);
-            std::string msg = strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
-                                                  st.to_string(), debug_string());
-            LOG(ERROR) << msg;
-            _set_error(msg);
-            return;
+        uint32_t loaded_delfile = 0;
+        uint32_t loaded_upsert = 0;
+        uint32_t i = 0;
+        while (i < delfile_num + upsert_num) {
+            uint32_t del_idx = delfile_num + upsert_num;
+            if (loaded_delfile < delfile_num) {
+                del_idx = rowset->rowset_meta()->get_meta_pb().delfile_idxes(loaded_delfile);
+            }
+            while (i < del_idx) {
+                state.load_upserts(rowset.get(), loaded_upsert);
+                auto& upserts = state.upserts();
+                if (upserts[loaded_upsert] != nullptr) {
+                    // apply partial rowset segment
+                    st = state.apply(&_tablet, rowset.get(), rowset_id, loaded_upsert, latest_applied_version, index);
+                    if (!st.ok()) {
+                        manager->update_state_cache().remove(state_entry);
+                        std::string msg = strings::Substitute(
+                                "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
+                                debug_string());
+                        LOG(ERROR) << msg;
+                        _set_error(msg);
+                        return;
+                    }
+                    _do_update(rowset_id, loaded_upsert, conditional_column, upserts, index, tablet_id, &new_deletes);
+                    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                }
+                i++;
+                loaded_upsert++;
+                state.release_upserts(i);
+            }
+            if (loaded_delfile < delfile_num) {
+                DCHECK(i == del_idx);
+                state.load_deletes(rowset.get(), loaded_delfile);
+                auto& deletes = state.deletes();
+                delete_op += deletes[loaded_delfile]->size();
+                index.erase(*deletes[loaded_delfile], &new_deletes);
+                state.release_deletes(loaded_delfile);
+                i++;
+                loaded_delfile++;
+            }
         }
-        state.release_deletes(i);
     }
 
     PersistentIndexMetaPB index_meta;
@@ -3281,7 +3328,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             if (rowset->start_version() != rowset->end_version()) {
                 return Status::InternalError("mismatched start and end version");
             }
-            RETURN_IF_ERROR(rowset_commit(rowset->end_version(), rowset));
+            RETURN_IF_ERROR(rowset_commit(rowset->end_version(), rowset, 0));
         }
         LOG(INFO) << "load incremental snapshot done " << _debug_string(true);
         return Status::OK();

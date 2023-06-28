@@ -55,7 +55,7 @@ public class TaskBuilder {
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
         Map<String, String> taskProperties = Maps.newHashMap();
-        taskProperties.put(PartitionBasedMaterializedViewRefreshProcessor.MV_ID,
+        taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         taskProperties.putAll(materializedView.getProperties());
 
@@ -71,7 +71,7 @@ public class TaskBuilder {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
-        previousTaskProperties.put(PartitionBasedMaterializedViewRefreshProcessor.MV_ID,
+        previousTaskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         task.setProperties(previousTaskProperties);
         task.setDefinition(

@@ -37,7 +37,8 @@ struct TabletPublishVersionTask {
 };
 
 void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentTaskRequest& publish_version_task,
-                              TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs) {
+                              TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs,
+                              uint32_t wait_time) {
     int64_t start_ts = MonotonicMillis();
     auto& publish_version_req = publish_version_task.task_req;
     int64_t transaction_id = publish_version_req.transaction_id;
@@ -100,7 +101,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                     affected_dirs.insert(tablet->data_dir());
                 }
                 task.st = StorageEngine::instance()->txn_manager()->publish_txn(task.partition_id, tablet, task.txn_id,
-                                                                                task.version, task.rowset);
+                                                                                task.version, task.rowset, wait_time);
                 if (!task.st.ok()) {
                     LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id() << " version:" << task.version
                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
