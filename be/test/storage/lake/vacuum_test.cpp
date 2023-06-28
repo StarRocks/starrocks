@@ -579,4 +579,275 @@ TEST_F(LakeVacuumTest, test_vacuum_3) {
     }
 }
 
+// NOLINTNEXTLINE
+TEST_F(LakeVacuumTest, test_delete_tablets_01) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 700,
+        "version": 2
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 700,
+        "version": 3
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 701,
+        "version": 2
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 701,
+        "version": 3
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 702,
+        "version": 2
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 702,
+        "version": 3
+        }
+        )DEL")));
+
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(700);
+    request.add_tablet_ids(701);
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    EXPECT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code());
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(700, 2)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(700, 3)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(701, 2)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(701, 3)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(702, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(702, 3)));
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeVacuumTest, test_delete_tablets_02) {
+    create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    create_data_file("00000000000459e4_3d9c9edb-a69d-4a06-9093-a9f557e4c3b0.dat");
+    create_data_file("00000000000459e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 800,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ]
+            },
+            {
+                "segments": [
+                    "00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"
+                ]
+            }
+        ],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 800,
+        "version": 3,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000459e4_3d9c9edb-a69d-4a06-9093-a9f557e4c3b0.dat"
+                ]
+            }
+        ],
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ]
+            },
+            {
+                "segments": [
+                    "00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"
+                ]
+            }
+        ],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 800,
+        "version": 4,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000459e4_3d9c9edb-a69d-4a06-9093-a9f557e4c3b0.dat"
+                ]
+            }
+        ],
+        "delvec_meta": {
+            "version_to_file": [
+                {
+                    "key": 4,
+                    "value": {
+                        "name": "00000000000459e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec",
+                        "size": 23
+                    }
+                }
+            ],
+            "delvecs": [
+                {
+                    "key": 10,
+                    "value": {
+                        "version": 4,
+                        "offset": 0,
+                        "size": 23
+                    }
+                }
+            ]
+        },
+        "prev_garbage_version": 3
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(800);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(800, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(800, 3)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(800, 4)));
+
+        EXPECT_FALSE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_FALSE(file_exist("00000000000359e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+        EXPECT_FALSE(file_exist("00000000000459e4_3d9c9edb-a69d-4a06-9093-a9f557e4c3b0.dat"));
+        EXPECT_FALSE(file_exist("00000000000459e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec"));
+    }
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(800);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeVacuumTest, test_delete_tablets_03) {
+    // Referenced in the txn log of tablet id 900 and txn id 2000
+    create_data_file("00000000001259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000001259e4_28dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.del");
+    create_data_file("00000000001259e4_29dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.del");
+
+    // Referenced in the txn log of tablet id 900 and txn id 3000
+    create_data_file("00000000002259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+
+    // Referenced in the txn log of tablet id 900 and txn id 4000
+    create_data_file("00000000003259e4_37dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000003259e4_47dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+
+    // Referenced in the txn log of tablet id 901 and txn id 5000
+    create_data_file("00000000004259e4_47dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 900,
+            "txn_id": 2000,
+            "op_write": {
+                "rowset": {
+                    "segments": ["00000000001259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"]
+                },
+                "dels": [
+                    "00000000001259e4_28dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.del",
+                    "00000000001259e4_29dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.del"
+                ]
+            }
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 900,
+            "txn_id": 3000,
+            "op_compaction": {
+                "output_rowset": {
+                    "segments": ["00000000002259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"]
+                }
+            }
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 900,
+            "txn_id": 4000,
+            "op_schema_change": {
+                "rowsets": [
+                    {
+                         "segments": ["00000000003259e4_37dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"]
+                    },
+                    {
+                        "segments": ["00000000003259e4_47dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"]
+                    }
+                ]
+            }
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 901,
+            "txn_id": 5000,
+            "op_write": {
+                "rowset": {
+                    "segments": ["00000000004259e4_47dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"]
+                }
+            }
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(900);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        EXPECT_FALSE(file_exist(txn_log_filename(900, 2000)));
+        EXPECT_FALSE(file_exist(txn_log_filename(900, 3000)));
+        EXPECT_FALSE(file_exist(txn_log_filename(900, 4000)));
+        EXPECT_TRUE(file_exist(txn_log_filename(901, 5000)));
+
+        // Referenced in the txn log of tablet id 900 and txn id 2000
+        EXPECT_FALSE(file_exist("00000000001259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_FALSE(file_exist("00000000001259e4_28dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.del"));
+        EXPECT_FALSE(file_exist("00000000001259e4_29dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.del"));
+        // Referenced in the txn log of tablet id 900 and txn id 3000
+        EXPECT_FALSE(file_exist("00000000002259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        // Referenced in the txn log of tablet id 900 and txn id 4000
+        EXPECT_FALSE(file_exist("00000000003259e4_37dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_FALSE(file_exist("00000000003259e4_47dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        // Referenced in the txn log of tablet id 901 and txn id 5000
+        EXPECT_TRUE(file_exist("00000000004259e4_47dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+    }
+}
+
 } // namespace starrocks::lake
