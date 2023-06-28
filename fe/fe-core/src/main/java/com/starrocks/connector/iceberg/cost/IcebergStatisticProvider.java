@@ -81,7 +81,7 @@ public class IcebergStatisticProvider {
         String catalogName = icebergTable.getCatalogName();
 
         List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, icebergTable, null, snapshotId, icebergPredicate);
+                catalogName, icebergTable, null, snapshotId, icebergPredicate, null);
 
         if (splits.isEmpty()) {
             return new IcebergFileStats(1);

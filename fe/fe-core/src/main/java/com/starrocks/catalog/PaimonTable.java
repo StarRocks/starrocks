@@ -22,8 +22,11 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.types.DataField;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
@@ -36,12 +39,13 @@ public class PaimonTable extends Table {
     private final String catalogName;
     private final String databaseName;
     private final String tableName;
-    org.apache.paimon.table.Table paimonTable;
-    private List<String> partColumnNames;
+    private final AbstractFileStoreTable paimonNativeTable;
+    private final List<String> partColumnNames;
+    private final List<String> paimonFieldNames;
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        String catalogType, String metastoreUris, String warehousePath,
-                       org.apache.paimon.table.Table paimonTable) {
+                       org.apache.paimon.table.Table paimonNativeTable) {
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
@@ -49,7 +53,11 @@ public class PaimonTable extends Table {
         this.catalogType = catalogType;
         this.metastoreUris = metastoreUris;
         this.warehousePath = warehousePath;
-        this.paimonTable = paimonTable;
+        this.paimonNativeTable = (AbstractFileStoreTable) paimonNativeTable;
+        this.partColumnNames = paimonNativeTable.partitionKeys();
+        this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
+                .map(DataField::name)
+                .collect(Collectors.toList());
     }
 
     public String getCatalogName() {
@@ -64,18 +72,22 @@ public class PaimonTable extends Table {
         return tableName;
     }
 
-    public org.apache.paimon.table.Table getNativeTable() {
-        return paimonTable;
+    public AbstractFileStoreTable getNativeTable() {
+        return paimonNativeTable;
     }
 
     @Override
     public String getTableLocation() {
-        return String.format("%s/%s/%s", warehousePath, databaseName, tableName);
+        return paimonNativeTable.location().toString();
     }
 
     @Override
     public List<String> getPartitionColumnNames() {
-        return partColumnNames = paimonTable.partitionKeys();
+        return partColumnNames;
+    }
+
+    public List<String> getFieldNames() {
+        return paimonFieldNames;
     }
 
     @Override
@@ -100,5 +112,4 @@ public class PaimonTable extends Table {
         tTableDescriptor.setPaimonTable(tPaimonTable);
         return tTableDescriptor;
     }
-
 }
