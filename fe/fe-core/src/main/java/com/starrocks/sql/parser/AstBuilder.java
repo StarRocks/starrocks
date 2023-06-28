@@ -1502,7 +1502,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new IllegalArgumentException(
                         "Distribution by is not supported by SYNC refresh type in materialized view");
             }
-            return new CreateMaterializedViewStmt(tableName.getTbl(), queryStatement, properties);
+            return new CreateMaterializedViewStmt(tableName, queryStatement, properties);
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
