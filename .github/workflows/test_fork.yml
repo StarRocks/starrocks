@@ -418,7 +418,7 @@ jobs:
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/
+          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ -rf
           ossutil64 --config-file ~/.ossutilconfig cp fe/fe-core/target/result/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
 
       - name: Upload UT XML
@@ -426,7 +426,7 @@ jobs:
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/
+          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ -rf
           ossutil64 --config-file ~/.ossutilconfig cp ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
 
       - name: Upload log
@@ -587,7 +587,7 @@ jobs:
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/
+          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ -rf
           ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
 
   admit:
@@ -632,7 +632,7 @@ jobs:
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/
+          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ -rf
           ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/result oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
 
   Teardown:
