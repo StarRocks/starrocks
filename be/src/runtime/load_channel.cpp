@@ -219,10 +219,10 @@ void LoadChannel::abort() {
     }
 }
 
-void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids) {
+void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason) {
     auto channel = get_tablets_channel(index_id);
     if (channel != nullptr) {
-        channel->abort(tablet_ids);
+        channel->abort(tablet_ids, reason);
     }
 }
 
