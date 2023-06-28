@@ -252,6 +252,11 @@ public class TableFunctionTable extends Table {
     }
 
     @Override
+    public String toString() {
+        return String.format("TABLE('path'='%s', 'format'='%s')", path, format);
+    }
+
+    @Override
     public boolean isSupported() {
         return true;
     }
