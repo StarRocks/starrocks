@@ -314,8 +314,8 @@ int StructColumn::equals(size_t left, const Column& rhs, size_t right, bool safe
     int ret = EQUALS_TRUE;
     for (int i = 0; i < _fields.size(); ++i) {
         auto tmp = _fields[i]->equals(left, *rhs_struct._fields[i].get(), right, safe_eq);
-        if (tmp == 0) {
-            return 0;
+        if (tmp == EQUALS_FALSE) {
+            return EQUALS_FALSE;
         } else if (tmp == EQUALS_NULL) {
             ret = EQUALS_NULL;
         }
