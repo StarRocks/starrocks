@@ -1,0 +1,140 @@
+-- name: test_spill_nl_join
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set pipeline_dop = 2;
+-- result:
+-- !result
+set @spillable_operator_mask = bit_shift_left(1, 4);
+-- result:
+-- !result
+set @@spillable_operator_mask = @spillable_operator_mask;
+-- result:
+-- !result
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  2048));
+-- result:
+-- !result
+select count(*) from t0 l join [broadcast] t0 r;
+-- result:
+4194304
+-- !result
+select l.*, r.* from t0 l join [broadcast] t0 r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
+-- result:
+1	4095	1	4095
+1	4095	2	4094
+1	4095	3	4093
+1	4095	4	4092
+1	4095	5	4091
+1	4095	6	4090
+1	4095	7	4089
+1	4095	8	4088
+2	4094	1	4095
+2	4094	2	4094
+2	4094	3	4093
+2	4094	4	4092
+2	4094	5	4091
+2	4094	6	4090
+2	4094	7	4089
+3	4093	1	4095
+3	4093	2	4094
+3	4093	3	4093
+3	4093	4	4092
+3	4093	5	4091
+3	4093	6	4090
+4	4092	1	4095
+4	4092	2	4094
+4	4092	3	4093
+4	4092	4	4092
+4	4092	5	4091
+5	4091	1	4095
+5	4091	2	4094
+5	4091	3	4093
+5	4091	4	4092
+6	4090	1	4095
+6	4090	2	4094
+6	4090	3	4093
+7	4089	1	4095
+7	4089	2	4094
+8	4088	1	4095
+-- !result
+select count(*) from t0 l join [broadcast] t0 r where r.c0 = 1;
+-- result:
+2048
+-- !result
+select count(*) from t0 l join [broadcast] t0 r where r.c0 < 0;
+-- result:
+0
+-- !result
+select count(*) from t0 l join [broadcast] t0 r where l.c0 < 0;
+-- result:
+0
+-- !result
+select count(d.c0) from t0 d join [broadcast] (select l.c0 from t0 l join t0 r) t;
+-- result:
+8589934592
+-- !result
+create table empty_t like t0;
+-- result:
+-- !result
+select count(*) from t0 l join [broadcast] empty_t r;
+-- result:
+0
+-- !result
+select l.*, r.* from t0 l join [broadcast] empty_t r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
+-- result:
+-- !result
+select count(*) from t0 l join [broadcast] empty_t r where r.c0 = 1;
+-- result:
+0
+-- !result
+select count(*) from t0 l join [broadcast] empty_t r where r.c0 < 0;
+-- result:
+0
+-- !result
+select count(*) from t0 l join [broadcast] empty_t r where l.c0 < 0;
+-- result:
+0
+-- !result
+select count(d.c0) from t0 d join [broadcast] (select l.c0 from t0 l join empty_t r) t;
+-- result:
+0
+-- !result
+select count(*) from empty_t l, t0 r;
+-- result:
+0
+-- !result
+select l.*, r.* from empty_t l, t0 r where l.c0 + r.c0 < 10 order by l.c0, l.c1, r.c0, r.c1;
+-- result:
+-- !result
+select count(*) from empty_t l, t0 r where r.c0 = 1;
+-- result:
+0
+-- !result
+select count(*) from empty_t l join [broadcast] t0 r where r.c0 < 0;
+-- result:
+0
+-- !result
+select count(*) from empty_t l join [broadcast] t0 r where l.c0 < 0;
+-- result:
+0
+-- !result
+select count(d.c0) from empty_t d join [broadcast] (select l.c0 from t0 l join t0 r) t;
+-- result:
+0
+-- !result
+select count(*) from (select 1) tbl, (select sleep(1) as c2) tbr;
+-- result:
+1
+-- !result
+select c2 from (select c3,c2 from (select sleep(1) as c2) tbr join [broadcast] (select 1 c3) tbl where c3 + c2 = 0) tb join [broadcast] t0;
+-- result:
+-- !result
