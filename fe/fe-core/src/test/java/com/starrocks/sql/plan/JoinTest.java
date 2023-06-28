@@ -2751,4 +2751,27 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 19: v4 = 1");
     }
+
+    @Test
+    public void testTopFragmentOnComputeNode() throws Exception {
+        String sql = "select t0.v1 from t0 join[shuffle] t1 on t0.v2 = t1.v5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1\n" +
+                "  PARTITION: HASH_PARTITIONED: 2: v2\n" +
+                "\n" +
+                "  RESULT SINK");
+        
+        try {
+            connectContext.getSessionVariable().setPreferComputeNode(true);
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "PLAN FRAGMENT 0\n" +
+                    " OUTPUT EXPRS:1: v1\n" +
+                    "  PARTITION: UNPARTITIONED\n" +
+                    "\n" +
+                    "  RESULT SINK");
+        } finally {
+            connectContext.getSessionVariable().setPreferComputeNode(false);
+        }
+    }
 }
