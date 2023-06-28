@@ -117,7 +117,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         FN_NAME_TO_PATTERN.put(FunctionSet.PERCENTILE_UNION, new MVColumnPercentileUnionPattern());
     }
 
-    private final String mvName;
+    private final TableName mvTableName;
     private final Map<String, String> properties;
 
     private final QueryStatement queryStatement;
@@ -138,9 +138,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     // avoid throwing error during replay process, only in Rollup or MaterializedIndexMeta is true.
     private boolean isReplay = false;
 
-    public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties) {
+    public CreateMaterializedViewStmt(TableName mvTableName, QueryStatement queryStatement, Map<String, String> properties) {
         super(NodePosition.ZERO);
-        this.mvName = mvName;
+        this.mvTableName = mvTableName;
         this.queryStatement = queryStatement;
         this.properties = properties;
     }
@@ -158,7 +158,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     }
 
     public String getMVName() {
-        return mvName;
+        return mvTableName.getTbl();
     }
 
     public List<MVColumnItem> getMVColumnItemList() {
@@ -280,18 +280,28 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
             throw new SemanticException("Materialized view query statement only support select");
         }
+
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
         if (tables.size() != 1) {
             throw new SemanticException("The materialized view only support one table in from clause.");
         }
         Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
         Table table = entry.getValue();
+
+        // SyncMV doesn't support mv's database is different from table's db.
+        if (mvTableName != null && !Strings.isNullOrEmpty(mvTableName.getDb()) &&
+                !mvTableName.getDb().equalsIgnoreCase(entry.getKey().getDb())) {
+            throw new SemanticException(String.format("Creating materialized view does not support: MV's db %s is different " +
+                    "from table's db %s", mvTableName.getDb(), entry.getKey().getDb()));
+        }
+
         if (table instanceof View) {
             // Only in order to make the error message keep compatibility
             throw new SemanticException("Do not support alter non-OLAP table[" + table.getName() + "]");
         } else if (!(table instanceof OlapTable)) {
             throw new SemanticException("The materialized view only support olap table.");
         }
+
         TableName tableName = entry.getKey();
         setBaseIndexName(table.getName());
         setDBName(tableName.getDb());

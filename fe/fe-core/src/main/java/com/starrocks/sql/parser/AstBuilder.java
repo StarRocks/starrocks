@@ -1584,7 +1584,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "DISTRIBUTION BY"),
                         distributionDesc.getPos());
             }
-            return new CreateMaterializedViewStmt(tableName.getTbl(), queryStatement, properties);
+            return new CreateMaterializedViewStmt(tableName, queryStatement, properties);
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
