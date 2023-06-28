@@ -1477,6 +1477,15 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
             compaction_merge_rowsets(_tablet, info->start_version.major(), input_rowsets, rowset_writer.get(), cfg));
     auto output_rowset = rowset_writer->build();
     if (!output_rowset.ok()) return output_rowset.status();
+    if (config::enable_rowset_verify) {
+        auto st = (*output_rowset)->verify();
+        if (!st.ok()) {
+            st = st.clone_and_append(
+                    strings::Substitute("compaction tablet:$0 #input:$1", _tablet.tablet_id(), input_rowsets.size()));
+            LOG(WARNING) << st.get_error_msg();
+            return st;
+        }
+    }
     // 4. commit compaction
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
@@ -1808,6 +1817,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
                 max_rowset_id, max_src_rssid, _debug_compaction_stats(info->inputs, rowset_id));
         LOG(ERROR) << msg << debug_string();
         _set_error(msg + _debug_version_info(true));
+        CHECK(output_rowset->verify().ok()) << msg;
     }
 }
 
@@ -2967,6 +2977,15 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) return new_rowset.status();
 
+        if (config::enable_rowset_verify) {
+            status = (*new_rowset)->verify();
+            if (!status.ok()) {
+                status = status.clone_and_append(
+                        strings::Substitute("convert_from base_tablet: $0", base_tablet->tablet_id()));
+                LOG(WARNING) << status.get_error_msg();
+                return status;
+            }
+        }
         auto& new_rowset_load_info = new_rowset_load_infos[i];
         new_rowset_load_info.num_segments = (*new_rowset)->num_segments();
         new_rowset_load_info.rowset_id = next_rowset_id;
@@ -3245,6 +3264,16 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) return new_rowset.status();
+
+        if (config::enable_rowset_verify) {
+            status = (*new_rowset)->verify();
+            if (!status.ok()) {
+                status = status.clone_and_append(
+                        strings::Substitute("reorder_from base_tablet: $0", base_tablet->tablet_id()));
+                LOG(WARNING) << status.get_error_msg();
+                return status;
+            }
+        }
 
         auto& new_rowset_load_info = new_rowset_load_infos[i];
         new_rowset_load_info.num_segments = (*new_rowset)->num_segments();

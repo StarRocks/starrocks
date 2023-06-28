@@ -328,6 +328,9 @@ CONF_mInt32(max_compaction_concurrency, "-1");
 // Threshold to logging compaction trace, in seconds.
 CONF_mInt32(compaction_trace_threshold, "60");
 
+// If enabled, will verify compaction/schema-change output rowset correctness
+CONF_mBool(enable_rowset_verify, "false");
+
 // Max columns of each compaction group.
 // If the number of schema columns is greater than this,
 // the columns will be divided into groups for vertical compaction.

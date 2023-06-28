@@ -502,4 +502,118 @@ Status Rowset::get_segment_sk_index(std::vector<std::string>* sk_index_values) {
     return Status::OK();
 }
 
+static int compare_row(const Chunk& l, size_t l_row_id, const Chunk& r, size_t r_row_id) {
+    const size_t ncolumn = l.num_columns();
+    for (size_t i = 0; i < ncolumn; i++) {
+        auto v = l.columns()[i]->compare_at(l_row_id, r_row_id, *r.columns()[i], -1);
+        if (v != 0) {
+            return v;
+        }
+    }
+    return 0;
+}
+
+static Status report_duplicate(const Chunk& chunk, size_t idx, int64_t row_id0, int64_t row_id1) {
+    return Status::Corruption(
+            strings::Substitute("duplicate row $0 row:$1==row:$2", chunk.debug_row(idx), row_id0, row_id1));
+}
+
+static Status report_unordered(const Chunk& chunk0, size_t idx0, int64_t row_id0, const Chunk& chunk1, size_t idx1,
+                               int64_t row_id1) {
+    return Status::Corruption(strings::Substitute("unordered row row:$0 $1 > row:$2 $3", row_id0,
+                                                  chunk0.debug_row(idx0), row_id1, chunk1.debug_row(idx1)));
+}
+
+static Status is_ordered(ChunkIteratorPtr& iter, bool unique) {
+    ChunkUniquePtr chunks[2];
+    chunks[0] = ChunkHelper::new_chunk(iter->schema(), iter->chunk_size());
+    chunks[1] = ChunkHelper::new_chunk(iter->schema(), iter->chunk_size());
+    size_t chunk_idx = 0;
+    int64_t row_idx = 0;
+    while (true) {
+        auto& cur = *chunks[chunk_idx];
+        cur.reset();
+        auto st = iter->get_next(&cur);
+        if (st.is_end_of_file()) {
+            break;
+        } else if (!st.ok()) {
+            return st;
+        }
+        auto& prev = *chunks[(chunk_idx + 1) % 2];
+        // check first row in this chunk is GT/GE last row in previous chunk
+        if (prev.has_rows()) {
+            auto cmp = compare_row(prev, prev.num_rows() - 1, cur, 0);
+            if (cmp == 0) {
+                if (unique) {
+                    return report_duplicate(cur, 0, row_idx - 1, row_idx);
+                }
+            } else if (cmp > 0) {
+                return report_unordered(prev, prev.num_rows() - 1, row_idx - 1, cur, 0, row_idx);
+            }
+        }
+        // check rows in this chunk is ordered
+        for (size_t i = 1; i < cur.num_rows(); i++) {
+            auto cmp = compare_row(cur, i - 1, cur, i);
+            if (cmp == 0) {
+                if (unique) {
+                    return report_duplicate(cur, i, row_idx + i - 1, row_idx + i);
+                }
+            } else if (cmp > 0) {
+                return report_unordered(cur, i - 1, row_idx + i - 1, cur, i, row_idx + i);
+            }
+        }
+        row_idx += cur.num_rows();
+        chunk_idx = (chunk_idx + 1) % 2;
+    }
+    return Status::OK();
+}
+
+Status Rowset::verify() {
+    vector<ColumnId> key_columns;
+    vector<ColumnId> order_columns;
+    bool is_pk_ordered = false;
+    for (int i = 0; i < _schema->num_key_columns(); i++) {
+        key_columns.push_back(i);
+    }
+    if (!_schema->sort_key_idxes().empty() && key_columns != _schema->sort_key_idxes()) {
+        order_columns = _schema->sort_key_idxes();
+    } else {
+        order_columns = key_columns;
+        is_pk_ordered = _schema->keys_type() == PRIMARY_KEYS;
+    }
+    Schema order_schema = ChunkHelper::convert_schema(*_schema, order_columns);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.sorted = false;
+    rs_opts.stats = &stats;
+    rs_opts.use_page_cache = false;
+    rs_opts.tablet_schema = _schema;
+
+    std::vector<ChunkIteratorPtr> iters;
+    RETURN_IF_ERROR(get_segment_iterators(order_schema, rs_opts, &iters));
+
+    // overlapping segments will return multiple iterators, so segment idx is known
+    Status st;
+    if (rowset_meta()->is_segments_overlapping()) {
+        for (size_t i = 0; i < iters.size(); i++) {
+            st = is_ordered(iters[i], is_pk_ordered);
+            if (!st.ok()) {
+                st = st.clone_and_append(strings::Substitute("segment:$0", i));
+                break;
+            }
+        }
+    } else {
+        // non-overlapping segments will return one iterator, so segment idx is unknown
+        if (iters.size() != 1) {
+            st = Status::Corruption("non-overlapping segments should return one iterator");
+        } else {
+            st = is_ordered(iters[0], is_pk_ordered);
+        }
+    }
+    if (!st.ok()) {
+        st.clone_and_append(strings::Substitute("rowset:$0 path:$1", rowset_id().to_string(), rowset_path()));
+    }
+    return st;
+}
+
 } // namespace starrocks
