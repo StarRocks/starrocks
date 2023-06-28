@@ -155,7 +155,7 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
 
         // analyze data property
         this.partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(allProperties,
-                DataProperty.getInferredDefaultDataProperty());
+                DataProperty.getInferredDefaultDataProperty(), false);
 
         // analyze replication num
         this.replicationNum =
