@@ -10,7 +10,7 @@ on:
       - main
 
 concurrency:
-  group: ${{ github.event.number }}
+  group: ${{ github.event.number }}-2
   cancel-in-progress: true
 
 
