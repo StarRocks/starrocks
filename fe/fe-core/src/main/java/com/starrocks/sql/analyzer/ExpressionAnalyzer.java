@@ -1566,7 +1566,7 @@ public class ExpressionAnalyzer {
                         node.setValue(SqlModeHelper.decode((long) node.getValue()));
                     }
                 }
-            } catch (AnalysisException | DdlException e) {
+            } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }
             return null;
