@@ -115,7 +115,7 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
 
         // analyze data property
         partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(partitionAndTableProperties,
-                DataProperty.getInferredDefaultDataProperty());
+                DataProperty.getInferredDefaultDataProperty(), false);
         Preconditions.checkNotNull(partitionDataProperty);
 
         // analyze replication num

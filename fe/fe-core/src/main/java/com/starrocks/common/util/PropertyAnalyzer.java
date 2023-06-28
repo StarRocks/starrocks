@@ -163,8 +163,18 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
 
-    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
+    public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
+
+    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty,
+                                                   boolean isDefault)
             throws AnalysisException {
+        String mediumKey = PROPERTIES_STORAGE_MEDIUM;
+        String coolDownKey = PROPERTIES_STORAGE_COOLDOWN_TIME;
+        if (isDefault) {
+            mediumKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_MEDIUM;
+            coolDownKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_COOLDOWN_TIME;
+        }
+
         if (properties == null) {
             return oldDataProperty;
         }
@@ -177,7 +187,7 @@ public class PropertyAnalyzer {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
-            if (!hasMedium && key.equalsIgnoreCase(PROPERTIES_STORAGE_MEDIUM)) {
+            if (!hasMedium && key.equalsIgnoreCase(mediumKey)) {
                 hasMedium = true;
                 if (value.equalsIgnoreCase(TStorageMedium.SSD.name())) {
                     storageMedium = TStorageMedium.SSD;
@@ -186,7 +196,7 @@ public class PropertyAnalyzer {
                 } else {
                     throw new AnalysisException("Invalid storage medium: " + value);
                 }
-            } else if (!hasCooldown && key.equalsIgnoreCase(PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+            } else if (!hasCooldown && key.equalsIgnoreCase(coolDownKey)) {
                 hasCooldown = true;
                 DateLiteral dateLiteral = new DateLiteral(value, Type.DATETIME);
                 coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
@@ -197,8 +207,8 @@ public class PropertyAnalyzer {
             return oldDataProperty;
         }
 
-        properties.remove(PROPERTIES_STORAGE_MEDIUM);
-        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TIME);
+        properties.remove(mediumKey);
+        properties.remove(coolDownKey);
 
         if (hasCooldown && !hasMedium) {
             throw new AnalysisException("Invalid data property. storage medium property is not found");
@@ -387,7 +397,7 @@ public class PropertyAnalyzer {
 
     public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault)
             throws AnalysisException {
-        String key = "default.";
+        String key = PROPERTIES_DEFAULT_PREFIX;
         if (isDefault) {
             key += PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
         } else {
