@@ -30,6 +30,7 @@
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
 
@@ -51,6 +52,8 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
 
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
+    _global_schedule_counter = ADD_COUNTER(_runtime_profile, "GlobalScheduleCount", TUnit::UNIT);
+    _global_schedule_timer = ADD_TIMER(_runtime_profile, "GlobalScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter =
             ADD_COUNTER_SKIP_MERGE(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
@@ -334,6 +337,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     continue;
                 }
             }
+            if (time_spent >= OVERLOADED_MAX_TIME_SPEND_NS) {
+                StarRocksMetrics::instance()->pipe_driver_overloaded.increment(1);
+            }
             // yield when total chunks moved or time spent on-core for evaluation
             // exceed the designated thresholds.
             if (time_spent >= YIELD_MAX_TIME_SPENT) {
@@ -419,7 +425,11 @@ void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
     }
 }
 
-void PipelineDriver::start_timers() {
+void PipelineDriver::start_schedule(int64_t start_count, int64_t start_time) {
+    _global_schedule_counter->set(start_count);
+    _global_schedule_timer->set(start_time);
+
+    // start timers
     _total_timer_sw->start();
     _pending_timer_sw->start();
     _precondition_block_timer_sw->start();
@@ -452,7 +462,44 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     }
 }
 
+<<<<<<< HEAD
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
+=======
+void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
+                                          const ChunkPtr& chunk) {
+    // a simple spill stragety
+    auto& mem_resource_mgr = op->mem_resource_manager();
+    if (state->enable_spill() && mem_resource_mgr.releaseable() &&
+        op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
+        int64_t request_reserved = 0;
+        if (chunk == nullptr) {
+            request_reserved = op->estimated_memory_reserved();
+        } else {
+            request_reserved = op->estimated_memory_reserved(chunk);
+        }
+        request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
+
+        if (!tls_thread_status.try_mem_reserve(request_reserved, tracker,
+                                               tracker->limit() * state->spill_mem_limit_threshold())) {
+            mem_resource_mgr.to_low_memory_mode();
+        }
+    }
+}
+
+void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
+                              int64_t execution_time) {
+    if (schedule_count > 0) {
+        _global_schedule_counter->set(schedule_count - _global_schedule_counter->value());
+    } else {
+        _global_schedule_counter->set((int64_t)-1);
+    }
+    if (execution_time > 0) {
+        _global_schedule_timer->set(execution_time - _global_schedule_timer->value());
+    } else {
+        _global_schedule_timer->set((int64_t)-1);
+    }
+
+>>>>>>> 7adb8c30a ([Enhancement] add  statistics to pipeline execution  (#26021))
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
     // the information about the driver queue and workgroup.
