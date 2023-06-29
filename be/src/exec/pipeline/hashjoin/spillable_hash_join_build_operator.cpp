@@ -70,7 +70,9 @@ bool SpillableHashJoinBuildOperator::need_input() const {
 Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     auto defer_set_finishing = DeferOp([this]() { _join_builder->spill_channel()->set_finishing(); });
 
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (spill_strategy() == spill::SpillStrategy::NO_SPILL ||
+        (!_join_builder->spiller()->spilled() &&
+         _join_builder->hash_join_builder()->hash_table().get_row_count() == 0)) {
         return HashJoinBuildOperator::set_finishing(state);
     }
 
