@@ -720,11 +720,11 @@ select dayofweek_iso("2023-01-03");
 -- !result
 select dayofweek_iso("");
 -- result:
-NULL
+None
 -- !result
 select dayofweek_iso(NULL);
 -- result:
-NULL
+None
 -- !result
 
 -- name: test_makedate
