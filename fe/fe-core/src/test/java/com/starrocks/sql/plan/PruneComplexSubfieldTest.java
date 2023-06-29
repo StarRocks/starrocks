@@ -220,4 +220,11 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "[/st1/s2, /st1/s1]");
     }
+
+    @Test
+    public void testPruneMapValues() throws Exception {
+        String sql = "select map_keys(map1), map_values(map1) from pc0";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
+    }
 }
