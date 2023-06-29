@@ -35,7 +35,7 @@ class CacheKey;
 
 // TODO: find a better place to put this function
 // Convert absl::Status to starrocks::Status
-Status to_status(absl::Status absl_status);
+Status to_status(const absl::Status& absl_status);
 
 class StarOSWorker : public staros::starlet::Worker {
 public:
