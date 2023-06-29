@@ -1973,7 +1973,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             db.writeLock();
             try {
-                if (!db.registerTableUnlock(table)) {
+                if (!db.registerTableUnlocked(table)) {
                     if (!isSetIfNotExists) {
                         if (table instanceof OlapTable) {
                             OlapTable olapTable = (OlapTable) table;
@@ -2004,7 +2004,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Database db = this.fullNameToDb.get(info.getDbName());
         db.writeLock();
         try {
-            db.registerTableUnlock(table);
+            db.registerTableUnlocked(table);
             table.onReload();
         } finally {
             db.writeUnlock();
@@ -3169,7 +3169,7 @@ public class LocalMetastore implements ConnectorMetadata {
             olapTable.checkAndSetName(newTableName, false);
 
             db.dropTable(oldTableName);
-            db.registerTableUnlock(olapTable);
+            db.registerTableUnlocked(olapTable);
             disableMaterializedViewForRenameTable(db, olapTable);
         } finally {
             db.writeUnlock();
@@ -3214,7 +3214,7 @@ public class LocalMetastore implements ConnectorMetadata {
             String tableName = table.getName();
             db.dropTable(tableName);
             table.setName(newTableName);
-            db.registerTableUnlock(table);
+            db.registerTableUnlocked(table);
             disableMaterializedViewForRenameTable(db, table);
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
@@ -4635,7 +4635,7 @@ public class LocalMetastore implements ConnectorMetadata {
             int tableSize = reader.readInt();
             for (int j = 0; j < tableSize; ++j) {
                 Table table = reader.readJson(Table.class);
-                db.registerTableUnlock(table);
+                db.registerTableUnlocked(table);
             }
 
             idToDb.put(db.getId(), db);
