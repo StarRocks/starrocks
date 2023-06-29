@@ -341,6 +341,10 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
+    if [ "${WITH_CLANG_TIDY}" == "ON" ];then
+        exit 0
+    fi
+
     ${BUILD_SYSTEM} install
 
     # Build JDBC Bridge
