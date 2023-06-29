@@ -136,6 +136,8 @@ struct TAlterTabletReqV2 {
     9: optional i64 txn_id
     10: optional TAlterTabletMaterializedColumnReq materialized_column_req
     11: optional i64 job_id
+    12: optional InternalService.TQueryGlobals query_globals
+    13: optional InternalService.TQueryOptions query_options
 }
 
 struct TAlterMaterializedViewParam {

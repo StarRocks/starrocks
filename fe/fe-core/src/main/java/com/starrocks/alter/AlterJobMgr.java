@@ -51,7 +51,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -226,10 +226,10 @@ public class AlterJobMgr {
             for (Table t : db.getTables()) {
                 if (t instanceof OlapTable) {
                     OlapTable olapTable = (OlapTable) t;
-                    for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
-                        String indexName = olapTable.getIndexNameById(mvIdx.getId());
+                    for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
+                        String indexName = olapTable.getIndexNameById(mvMeta.getIndexId());
                         if (indexName == null) {
-                            LOG.warn("OlapTable {} miss index {}", olapTable.getName(), mvIdx.getId());
+                            LOG.warn("OlapTable {} miss index {}", olapTable.getName(), mvMeta.getIndexId());
                             continue;
                         }
                         if (indexName.equals(stmt.getMvName())) {
@@ -1100,7 +1100,7 @@ public class AlterJobMgr {
         // get value from properties here
         // 1. data property
         DataProperty newDataProperty =
-                PropertyAnalyzer.analyzeDataProperty(properties, null);
+                PropertyAnalyzer.analyzeDataProperty(properties, null, false);
         // 2. replication num
         short newReplicationNum =
                 PropertyAnalyzer.analyzeReplicationNum(properties, (short) -1);

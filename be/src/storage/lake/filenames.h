@@ -128,6 +128,17 @@ inline std::pair<int64_t, int64_t> parse_txn_log_filename(std::string_view file_
     return {tablet_id, txn_id};
 }
 
+// Return value: <tablet id, version number>
+inline std::pair<int64_t, int64_t> parse_txn_vlog_filename(std::string_view file_name) {
+    constexpr static int kBase = 16;
+    StringParser::ParseResult res;
+    auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    auto version = StringParser::string_to_int<int64_t>(file_name.data() + 17, 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    return {tablet_id, version};
+}
+
 // Return value: <tablet id, version, expire time>
 inline std::tuple<int64_t, int64_t, int64_t> parse_tablet_metadata_lock_filename(std::string_view file_name) {
     constexpr static int kBase = 16;

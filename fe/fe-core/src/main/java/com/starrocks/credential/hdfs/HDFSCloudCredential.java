@@ -19,10 +19,8 @@ import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.HDFSFileStoreInfo;
 import com.starrocks.credential.CloudCredential;
-import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.List;
 import java.util.Map;
 
 public class HDFSCloudCredential implements CloudCredential {
@@ -88,7 +86,7 @@ public class HDFSCloudCredential implements CloudCredential {
     }
 
     @Override
-    public void toThrift(List<TCloudProperty> properties) {
+    public void toThrift(Map<String, String> properties) {
         // TODO
     }
 

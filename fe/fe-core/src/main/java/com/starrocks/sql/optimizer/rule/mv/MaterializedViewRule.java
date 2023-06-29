@@ -21,7 +21,9 @@ import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
@@ -186,15 +188,15 @@ public class MaterializedViewRule extends Rule {
 
     private Map<Long, List<Column>> selectValidMVs(LogicalOlapScanOperator scanOperator, int relationId) {
         OlapTable table = (OlapTable) scanOperator.getTable();
-        Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta = table.getVisibleIndexIdToMeta();
+
+        List<MaterializedIndexMeta> candidateIndexIdToMeta = table.getVisibleIndexMetas();
         // column name -> column id
         Map<String, Integer> queryScanNodeColumnNameToIds = queryRelIdToColumnNameIds.get(relationId);
 
-        Iterator<Map.Entry<Long, MaterializedIndexMeta>> iterator = candidateIndexIdToMeta.entrySet().iterator();
+        Iterator<MaterializedIndexMeta> iterator = candidateIndexIdToMeta.iterator();
         while (iterator.hasNext()) {
-            Map.Entry<Long, MaterializedIndexMeta> entry = iterator.next();
-            Long mvIdx = entry.getKey();
-            MaterializedIndexMeta mvMeta = entry.getValue();
+            MaterializedIndexMeta mvMeta = iterator.next();
+            long mvIdx = mvMeta.getIndexId();
 
             // Ignore original query index.
             if (mvIdx == scanOperator.getSelectedIndexId()) {
@@ -205,6 +207,13 @@ public class MaterializedViewRule extends Rule {
             // Ignore indexes which cannot be remapping with query by column names.
             List<Column> mvNonAggregatedColumns = mvMeta.getNonAggregatedColumns();
             if (mvNonAggregatedColumns.stream().anyMatch(x -> !queryScanNodeColumnNameToIds.containsKey(x.getName()))) {
+                iterator.remove();
+                continue;
+            }
+
+            // Check whether contains complex expressions, MV with Complex expressions will be used
+            // to rewrite query by AggregatedMaterializedViewRewriter.
+            if (MVUtils.containComplexExpresses(mvMeta)) {
                 iterator.remove();
                 continue;
             }
@@ -255,14 +264,13 @@ public class MaterializedViewRule extends Rule {
              * So, we need to compensate those kinds of index in following step.
              *
              */
-            compensateCandidateIndex(candidateIndexIdToMeta, table.getVisibleIndexIdToMeta(),
+            compensateCandidateIndex(candidateIndexIdToMeta, table.getVisibleIndexMetas(),
                     table);
 
-            iterator = candidateIndexIdToMeta.entrySet().iterator();
+            iterator = candidateIndexIdToMeta.iterator();
             while (iterator.hasNext()) {
-                Map.Entry<Long, MaterializedIndexMeta> entry = iterator.next();
-                Long mvIdx = entry.getKey();
-                MaterializedIndexMeta mvMeta = entry.getValue();
+                MaterializedIndexMeta mvMeta = iterator.next();
+                Long mvIdx = mvMeta.getIndexId();
 
                 if (!checkOutputColumns(queryRelIdToColumnNameIds.get(relationId),
                         queryRelIdToScanNodeOutputColumnIds.get(relationId), mvIdx, mvMeta)) {
@@ -272,8 +280,8 @@ public class MaterializedViewRule extends Rule {
         }
 
         Map<Long, List<Column>> result = Maps.newHashMap();
-        for (Map.Entry<Long, MaterializedIndexMeta> entry : candidateIndexIdToMeta.entrySet()) {
-            result.put(entry.getKey(), entry.getValue().getSchema());
+        for (MaterializedIndexMeta indexMeta : candidateIndexIdToMeta) {
+            result.put(indexMeta.getIndexId(), indexMeta.getSchema());
         }
         return result;
     }
@@ -516,7 +524,13 @@ public class MaterializedViewRule extends Rule {
         // Assume sync mv's column names are mapping with query scan node's columns by column name.
         // We can find the according query column id by the mv column name.
         // Once mv's column name is not the same with scan node, how can we do it?
-        return columnToIds.get(mvColumn.getName());
+        List<SlotRef> baseColumnRefs = mvColumn.getRefColumns();
+        // To be compatible with old policy, remove this later.
+        if (baseColumnRefs == null) {
+            return columnToIds.get(mvColumn.getName());
+        }
+        Preconditions.checkState(baseColumnRefs.size() == 1);
+        return columnToIds.get(baseColumnRefs.get(0).getColumnName());
     }
 
     private Set<Long> matchBestPrefixIndex(
@@ -684,13 +698,14 @@ public class MaterializedViewRule extends Rule {
         return true;
     }
 
-    private void compensateCandidateIndex(Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta, Map<Long,
-            MaterializedIndexMeta> allVisibleIndexes, OlapTable table) {
+    private void compensateCandidateIndex(List<MaterializedIndexMeta> candidateIndexIdToMetas,
+                                          List<MaterializedIndexMeta> allVisibleIndexes,
+                                          OlapTable table) {
         int keySizeOfBaseIndex = table.getKeyColumnsByIndexId(table.getBaseIndexId()).size();
-        for (Map.Entry<Long, MaterializedIndexMeta> index : allVisibleIndexes.entrySet()) {
-            long mvIndexId = index.getKey();
+        for (MaterializedIndexMeta index : allVisibleIndexes) {
+            long mvIndexId = index.getIndexId();
             if (table.getKeyColumnsByIndexId(mvIndexId).size() == keySizeOfBaseIndex) {
-                candidateIndexIdToMeta.put(mvIndexId, index.getValue());
+                candidateIndexIdToMetas.add(index);
             }
         }
     }
@@ -738,7 +753,6 @@ public class MaterializedViewRule extends Rule {
         for (Column column : candidateIndexMeta.getSchema()) {
             int baseColumnId = getMVColumnToQueryColumnId(columnToIds, column);
             usedBaseColumnIds.add(baseColumnId);
-
             ColumnRefOperator columnRef = factory.getColumnRef(baseColumnId);
             if (!column.isAggregated()) {
                 keyColumns.union(columnRef);
@@ -869,7 +883,11 @@ public class MaterializedViewRule extends Rule {
                 if (mvColumn.getAggregationType() == null) {
                     return false;
                 }
-                String mvColumnName = MVUtils.getMVColumnName(mvColumn, queryFnName, queryColumn.getName());
+                String mvFuncName = mvColumn.getAggregationType().name().toLowerCase();
+                if (queryFnName.equalsIgnoreCase(FunctionSet.COUNT) && mvColumn.getDefineExpr() instanceof CaseExpr) {
+                    mvFuncName = FunctionSet.COUNT;
+                }
+                String mvColumnName = MVUtils.getMVAggColumnName(mvFuncName, queryColumn.getName());
                 if (mvColumnName.equalsIgnoreCase(mvColumn.getName())) {
                     mvIdToRewriteContexts.computeIfAbsent(indexId, k -> Lists.newArrayList())
                             .add(new RewriteContext(queryFn, queryColumnRef, mvColumnRef, mvColumn));

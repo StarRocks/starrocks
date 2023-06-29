@@ -248,9 +248,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.asyncRefreshContext = new AsyncRefreshContext();
             this.lastRefreshTime = 0;
         }
+        public MvRefreshScheme(RefreshType type) {
+            this.type = type;
+            this.moment = RefreshMoment.IMMEDIATE;
+            this.asyncRefreshContext = new AsyncRefreshContext();
+            this.lastRefreshTime = 0;
+        }
 
         public boolean isIncremental() {
             return this.type.equals(RefreshType.INCREMENTAL);
+        }
+
+        public boolean isSync() {
+            return this.type.equals(RefreshType.SYNC);
         }
 
         public RefreshMoment getMoment() {
@@ -405,6 +415,39 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
+    }
+
+    // Used for sync mv
+    public MaterializedView(Database db, String mvName,
+                            MaterializedIndexMeta indexMeta, OlapTable baseTable,
+                            PartitionInfo partitionInfo, DistributionInfo distributionInfo,
+                            MvRefreshScheme refreshScheme) {
+        this(indexMeta.getIndexId(), db.getId(), mvName, indexMeta.getSchema(), indexMeta.getKeysType(),
+                partitionInfo, distributionInfo, refreshScheme);
+        Preconditions.checkState(baseTable.getIndexIdByName(mvName) != null);
+        long indexId = indexMeta.getIndexId();
+        this.state = baseTable.state;
+        this.baseIndexId = indexMeta.getIndexId();
+
+        this.indexNameToId.put(baseTable.getIndexNameById(indexId), indexId);
+        this.indexIdToMeta.put(indexId, indexMeta);
+
+        this.baseTableInfos = Lists.newArrayList();
+        this.baseTableInfos.add(new BaseTableInfo(db.getId(), db.getFullName(), baseTable.getId()));
+
+        Map<Long, Partition> idToPartitions = new HashMap<>(baseTable.idToPartition.size());
+        Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Map.Entry<Long, Partition> kv : baseTable.idToPartition.entrySet()) {
+            // TODO: only copy mv's partition index.
+            Partition copiedPartition = kv.getValue().shallowCopy();
+            idToPartitions.put(kv.getKey(), copiedPartition);
+            nameToPartitions.put(kv.getValue().getName(), copiedPartition);
+        }
+        this.idToPartition = idToPartitions;
+        this.nameToPartition = nameToPartitions;
+        if (baseTable.tableProperty != null) {
+            this.tableProperty = baseTable.tableProperty.copy();
+        }
     }
 
     public MvId getMvId() {
@@ -781,7 +824,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public boolean isForceExternalTableQueryRewrite() {
-        return tableProperty.getForceExternalTableQueryRewrite();
+        return tableProperty != null && tableProperty.getForceExternalTableQueryRewrite();
     }
 
     public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
@@ -1048,8 +1091,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public Set<String> getPartitionNamesToRefreshForMv() {
-        PartitionInfo partitionInfo = getPartitionInfo();
+        if (refreshScheme.isSync()) {
+            return Sets.newHashSet();
+        }
 
+        PartitionInfo partitionInfo = getPartitionInfo();
         boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view

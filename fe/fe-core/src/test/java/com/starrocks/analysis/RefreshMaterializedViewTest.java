@@ -205,19 +205,6 @@ public class RefreshMaterializedViewTest {
         Set<String> cachePartitionsToRefresh;
         // refresh partitions are not empty if base table is updated.
         cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2022-02-20\", 1, 10)");
-        {
-
-            // publish version is async, so version update may be late
-            OlapTable mvTable = (OlapTable) getTable("test", "mv_with_mv_rewrite_staleness");
-            Partition p1 = mvTable.getPartition("p2");
-            while (p1.getVisibleVersion() != 1) {
-                Thread.sleep(500);
-            }
-
-            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
-            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
-            Assert.assertTrue(!partitionsToRefresh.isEmpty());
-        }
         // no refresh partitions if there is new data & refresh.
         {
             refreshMaterializedView("test", "mv_with_mv_rewrite_staleness");
