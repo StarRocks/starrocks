@@ -26,11 +26,10 @@ import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
-import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider;
 
-import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -197,6 +196,7 @@ public class AWSCloudCredential implements CloudCredential {
     }
 
     @Override
+<<<<<<< HEAD
     public void toThrift(List<TCloudProperty> properties) {
         properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
                 String.valueOf(useAWSSDKDefaultBehavior)));
@@ -208,6 +208,20 @@ public class AWSCloudCredential implements CloudCredential {
         properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, externalId));
         properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_REGION, region));
         properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint));
+=======
+    public void toThrift(Map<String, String> properties) {
+        properties.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
+                String.valueOf(useAWSSDKDefaultBehavior));
+        properties.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
+                String.valueOf(useInstanceProfile));
+        properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey);
+        properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
+        properties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
+        properties.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, iamRoleArn);
+        properties.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, externalId);
+        properties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
+        properties.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint);
+>>>>>>> af767eb57 ([Enhancement] use map instead of List<pair> as cloud properties (#26137))
     }
 
     @Override

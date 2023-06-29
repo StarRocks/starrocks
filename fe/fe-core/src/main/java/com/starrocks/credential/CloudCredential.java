@@ -14,10 +14,14 @@
 
 package com.starrocks.credential;
 
+<<<<<<< HEAD
 import com.starrocks.thrift.TCloudProperty;
+=======
+import com.staros.proto.FileStoreInfo;
+>>>>>>> af767eb57 ([Enhancement] use map instead of List<pair> as cloud properties (#26137))
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.List;
+import java.util.Map;
 
 public interface CloudCredential {
 
@@ -36,7 +40,7 @@ public interface CloudCredential {
     /**
      * Write credential into thrift.
      */
-    void toThrift(List<TCloudProperty> properties);
+    void toThrift(Map<String, String> properties);
 
     // Generate unique credential string, used in FileSystem cache
     String getCredentialString();

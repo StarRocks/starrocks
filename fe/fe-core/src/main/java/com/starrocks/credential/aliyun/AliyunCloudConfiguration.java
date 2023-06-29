@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.credential.azure;
+package com.starrocks.credential.aliyun;
 
+import com.google.common.base.Preconditions;
+import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
@@ -23,37 +26,44 @@ import org.apache.hadoop.conf.Configuration;
 import java.util.HashMap;
 import java.util.Map;
 
-public class AzureCloudConfiguration implements CloudConfiguration {
+public class AliyunCloudConfiguration implements CloudConfiguration {
 
-    private final AzureStorageCloudCredential azureStorageCloudCredential;
+    private final AliyunCloudCredential aliyunCloudCredential;
 
-    public AzureCloudConfiguration(AzureStorageCloudCredential azureStorageCloudCredential) {
-        this.azureStorageCloudCredential = azureStorageCloudCredential;
+    public AliyunCloudConfiguration(AliyunCloudCredential aliyunCloudCredential) {
+        Preconditions.checkNotNull(aliyunCloudCredential);
+        this.aliyunCloudCredential = aliyunCloudCredential;
     }
 
+    // reuse aws client logic of BE
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
-        tCloudConfiguration.setCloud_type(TCloudType.AZURE);
+        tCloudConfiguration.setCloud_type(TCloudType.AWS);
 
         Map<String, String> properties = new HashMap<>();
-        azureStorageCloudCredential.toThrift(properties);
+        properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(true));
+        aliyunCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        azureStorageCloudCredential.applyToConfiguration(configuration);
+        aliyunCloudCredential.applyToConfiguration(configuration);
     }
 
     @Override
     public CloudType getCloudType() {
-        return CloudType.AZURE;
+        return CloudType.ALIYUN;
+    }
+
+    @Override
+    public FileStoreInfo toFileStoreInfo() {
+        // TODO: Support oss credential
+        return aliyunCloudCredential.toFileStoreInfo();
     }
 
     @Override
     public String getCredentialString() {
-        return "AzureCloudConfiguration{" +
-                "azureStorageCloudCredential=" + azureStorageCloudCredential +
-                '}';
+        return aliyunCloudCredential.getCredentialString();
     }
 }
