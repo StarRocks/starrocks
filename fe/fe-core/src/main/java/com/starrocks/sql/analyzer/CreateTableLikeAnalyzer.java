@@ -51,12 +51,11 @@ public class CreateTableLikeAnalyzer {
         if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
             parsedCreateTableStmt.setTableName(stmt.getTableName());
-            com.starrocks.sql.analyzer.Analyzer.analyze(parsedCreateTableStmt, context);
-
             if (stmt.isSetIfNotExists()) {
                 parsedCreateTableStmt.setIfNotExists();
             }
 
+            com.starrocks.sql.analyzer.Analyzer.analyze(parsedCreateTableStmt, context);
             stmt.setCreateTableStmt(parsedCreateTableStmt);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);

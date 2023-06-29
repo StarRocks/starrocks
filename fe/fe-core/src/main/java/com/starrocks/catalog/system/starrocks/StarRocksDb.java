@@ -28,9 +28,9 @@ public class StarRocksDb extends Database {
 
     public StarRocksDb() {
         super(SystemId.STARROCKS_DB_ID, DATABASE_NAME);
-        super.registerTableUnlock(RoleEdges.create());
-        super.registerTableUnlock(GrantsTo.createGrantsToRoles());
-        super.registerTableUnlock(GrantsTo.createGrantsToUsers());
+        super.registerTableUnlocked(RoleEdges.create());
+        super.registerTableUnlocked(GrantsTo.createGrantsToRoles());
+        super.registerTableUnlocked(GrantsTo.createGrantsToUsers());
     }
 
     @Override
