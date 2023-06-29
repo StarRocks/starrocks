@@ -80,6 +80,8 @@ public class Pipe implements GsonPostProcessable {
     private TableName targetTable;
     @SerializedName(value = "properties")
     private Map<String, String> properties;
+    @SerializedName(value = "createdTime")
+    private long createdTime = -1;
     @SerializedName(value = "load_status")
     private LoadStatus loadStatus = new LoadStatus();
 
@@ -97,6 +99,7 @@ public class Pipe implements GsonPostProcessable {
         this.state = State.RUNNING;
         this.pipeSource = sourceTable;
         this.originSql = originSql;
+        this.createdTime = System.currentTimeMillis();
     }
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
@@ -468,6 +471,10 @@ public class Pipe implements GsonPostProcessable {
 
     public LoadStatus getLoadStatus() {
         return loadStatus;
+    }
+
+    public long getCreatedTime() {
+        return createdTime;
     }
 
     public long getLastPolledTime() {

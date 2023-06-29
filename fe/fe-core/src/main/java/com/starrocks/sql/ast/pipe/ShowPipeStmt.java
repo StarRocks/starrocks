@@ -19,6 +19,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
@@ -40,6 +41,7 @@ public class ShowPipeStmt extends ShowStmt {
                     .addColumn(new Column("LOADED_FILES", ScalarType.BIGINT))
                     .addColumn(new Column("LOADED_ROWS", ScalarType.BIGINT))
                     .addColumn(new Column("LOADED_BYTES", ScalarType.BIGINT))
+                    .addColumn(new Column("CREATED_TIME", ScalarType.DATETIME))
                     .build();
 
     private String dbName;
@@ -66,6 +68,11 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(String.valueOf(loadStatus.loadFiles));
         row.add(String.valueOf(loadStatus.loadRows));
         row.add(String.valueOf(loadStatus.loadBytes));
+        if (pipe.getCreatedTime() == -1) {
+            row.add(null);
+        } else {
+            row.add(TimeUtils.longToTimeString(pipe.getCreatedTime()));
+        }
     }
 
     public void setDbName(String dbName) {
