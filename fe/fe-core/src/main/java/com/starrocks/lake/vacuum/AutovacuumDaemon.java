@@ -22,7 +22,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.Daemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.VacuumRequest;
@@ -46,7 +46,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
-public class AutovacuumDaemon extends Daemon {
+public class AutovacuumDaemon extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(AutovacuumDaemon.class);
 
     private static final long MILLISECONDS_PER_SECOND = 1000;
@@ -62,7 +62,7 @@ public class AutovacuumDaemon extends Daemon {
     }
 
     @Override
-    protected void runOneCycle() {
+    protected void runAfterCatalogReady() {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
