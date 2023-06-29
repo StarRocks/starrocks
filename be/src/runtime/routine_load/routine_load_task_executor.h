@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <climits>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -64,7 +65,11 @@ public:
             std::lock_guard<std::mutex> l(_lock);
             return _task_map.size();
         });
-        auto st = ThreadPoolBuilder("routine_load").build(&_thread_pool);
+        auto st = ThreadPoolBuilder("routine_load")
+                          .set_min_threads(0)
+                          .set_max_threads(INT_MAX)
+                          .set_max_queue_size(INT_MAX)
+                          .build(&_thread_pool);
         DCHECK(st.ok());
         _data_consumer_pool.start_bg_worker();
     }
