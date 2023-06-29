@@ -900,7 +900,8 @@ public class ExpressionAnalyzer {
 
             for (Expr expr : node.getChildren()) {
                 if (expr.getType().isOnlyMetricType() ||
-                        (expr.getType().isComplexType() && !(node instanceof IsNullPredicate))) {
+                        (expr.getType().isComplexType() && !(node instanceof IsNullPredicate) &&
+                                !(node instanceof InPredicate))) {
                     throw new SemanticException(
                             "HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate", node.getPos());
                 }
