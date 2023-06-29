@@ -19,9 +19,9 @@
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const starrocks::TypeDescriptor& type,
+StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDescriptor& type,
                                                                    const orc::Type* orc_type, bool nullable,
-                                                                   const starrocks::OrcMappingPtr& orc_mapping,
+                                                                   const OrcMappingPtr& orc_mapping,
                                                                    OrcChunkReader* reader) {
     if (type.is_complex_type() && orc_mapping == nullptr) {
         return Status::InternalError("Complex type must having OrcMapping");
@@ -125,16 +125,16 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const starroc
     }
 }
 
-Status BooleanColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size) {
+Status BooleanColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::LongVectorBatch*>(cvb);
         int col_start = col->size();
         col->resize(col->size() + size);
 
-        auto c = ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
+        auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
         auto* nulls = c->null_column()->get_data().data();
         auto* values =
-                starrocks::ColumnHelper::cast_to_raw<starrocks::TYPE_BOOLEAN>(c->data_column())->get_data().data();
+                ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(c->data_column())->get_data().data();
 
         auto* cvbd = data->data.data();
         auto pos = from;
@@ -155,7 +155,7 @@ Status BooleanColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::Col
         int col_start = col->size();
         col->resize(col_start + size);
 
-        auto* values = starrocks::ColumnHelper::cast_to_raw<starrocks::TYPE_BOOLEAN>(col)->get_data().data();
+        auto* values = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->get_data().data();
 
         auto* cvbd = data->data.data();
         for (int i = col_start; i < col_start + size; ++i, ++from) {
@@ -213,9 +213,9 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
     int col_start = col->size();
     col->resize(col->size() + size);
 
-    auto c = starrocks::ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
+    auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
     auto* nulls = c->null_column()->get_data().data();
-    auto* values = starrocks::ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
+    auto* values = ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
 
     auto* cvbd = data->data.data();
     auto pos = from;
@@ -241,8 +241,8 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
             for (int i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (nulls[i] == 0 && (value < numeric_limits<starrocks::RunTimeCppType<Type>>::lowest() ||
-                                      value > numeric_limits<starrocks::RunTimeCppType<Type>>::max())) {
+                if (nulls[i] == 0 && (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
+                                      value > numeric_limits<RunTimeCppType<Type>>::max())) {
                     filter[i] = 0;
                     if (!reported) {
                         reported = true;
@@ -258,8 +258,8 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
             for (int i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (nulls[i] == 0 && (value < numeric_limits<starrocks::RunTimeCppType<Type>>::lowest() ||
-                                      value > numeric_limits<starrocks::RunTimeCppType<Type>>::max())) {
+                if (nulls[i] == 0 && (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
+                                      value > numeric_limits<RunTimeCppType<Type>>::max())) {
                     nulls[i] = 1;
                 }
             }
@@ -272,12 +272,12 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
 
 template <LogicalType Type>
 template <typename OrcColumnVectorBatch>
-Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* data, starrocks::ColumnPtr& col,
+Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
                                                         size_t from, size_t size) {
     int col_start = col->size();
     col->resize(col_start + size);
 
-    auto* values = starrocks::ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
+    auto* values = ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
 
     auto* cvbd = data->data.data();
 
@@ -288,7 +288,7 @@ Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* da
 
     // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
     // otherwise `broker_load_filter` does not work.
-    constexpr bool wild_type = (Type == starrocks::TYPE_BIGINT || Type == starrocks::TYPE_LARGEINT);
+    constexpr bool wild_type = (Type == TYPE_BIGINT || Type == TYPE_LARGEINT);
     // don't do overflow check on BIGINT(int64_t) or LARGEINT(int128_t)
     if constexpr (!wild_type) {
         if (_reader->get_broker_load_mode() && from == 0 && col_start == 0) {
@@ -297,8 +297,8 @@ Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* da
             for (int i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (value < numeric_limits<starrocks::RunTimeCppType<Type>>::lowest() ||
-                    value > numeric_limits<starrocks::RunTimeCppType<Type>>::max()) {
+                if (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
+                    value > numeric_limits<RunTimeCppType<Type>>::max()) {
                     // can not accept null, so we have to discard it.
                     filter[i] = 0;
                     if (!reported) {
@@ -317,16 +317,16 @@ Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* da
 }
 
 template <LogicalType Type>
-Status FloatColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
+Status FloatColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
                                          size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::DoubleVectorBatch*>(cvb);
         int col_start = col->size();
         col->resize(col->size() + size);
 
-        auto c = starrocks::ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
+        auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
         auto* nulls = c->null_column()->get_data().data();
-        auto* values = starrocks::ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
+        auto* values = ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
 
         auto* cvbd = data->data.data();
         auto pos = from;
@@ -347,7 +347,7 @@ Status FloatColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, starrocks:
         int col_start = col->size();
         col->resize(col_start + size);
 
-        auto* values = starrocks::ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
+        auto* values = ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
 
         auto* cvbd = data->data.data();
         for (int i = col_start; i < col_start + size; ++i, ++from) {
@@ -357,7 +357,7 @@ Status FloatColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, starrocks:
     return Status::OK();
 }
 
-Status DecimalColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size) {
+Status DecimalColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         if (dynamic_cast<orc::Decimal64VectorBatch*>(cvb) != nullptr) {
             _fill_decimal_column_with_null_from_orc_decimal64(cvb, col, from, size);
@@ -375,31 +375,31 @@ Status DecimalColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::Col
 }
 
 void DecimalColumnReader::_fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb,
-                                                                  starrocks::ColumnPtr& col, size_t from, size_t size) {
+                                                                  ColumnPtr& col, size_t from, size_t size) {
     auto* data = down_cast<orc::Decimal64VectorBatch*>(cvb);
 
     int col_start = col->size();
     col->resize(col->size() + size);
 
-    static_assert(sizeof(starrocks::DecimalV2Value) == sizeof(starrocks::int128_t));
+    static_assert(sizeof(DecimalV2Value) == sizeof(int128_t));
     auto* values =
-            reinterpret_cast<starrocks::int128_t*>(down_cast<starrocks::DecimalColumn*>(col.get())->get_data().data());
+            reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(col.get())->get_data().data());
 
     auto* cvbd = data->values.data();
 
     for (int i = col_start; i < col_start + size; ++i, ++from) {
-        values[i] = static_cast<starrocks::int128_t>(cvbd[from]);
+        values[i] = static_cast<int128_t>(cvbd[from]);
     }
 
-    if (starrocks::DecimalV2Value::SCALE < data->scale) {
-        starrocks::int128_t d =
-                starrocks::DecimalV2Value::get_scale_base(data->scale - starrocks::DecimalV2Value::SCALE);
+    if (DecimalV2Value::SCALE < data->scale) {
+        int128_t d =
+                DecimalV2Value::get_scale_base(data->scale - DecimalV2Value::SCALE);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] / d;
         }
-    } else if (starrocks::DecimalV2Value::SCALE > data->scale) {
-        starrocks::int128_t m =
-                starrocks::DecimalV2Value::get_scale_base(starrocks::DecimalV2Value::SCALE - data->scale);
+    } else if (DecimalV2Value::SCALE > data->scale) {
+        int128_t m =
+                DecimalV2Value::get_scale_base(DecimalV2Value::SCALE - data->scale);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] * m;
         }
@@ -407,7 +407,7 @@ void DecimalColumnReader::_fill_decimal_column_from_orc_decimal64(orc::ColumnVec
 }
 
 void DecimalColumnReader::_fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb,
-                                                                   starrocks::ColumnPtr& col, size_t from,
+                                                                   ColumnPtr& col, size_t from,
                                                                    size_t size) {
     auto* data = down_cast<orc::Decimal128VectorBatch*>(cvb);
 
@@ -415,22 +415,22 @@ void DecimalColumnReader::_fill_decimal_column_from_orc_decimal128(orc::ColumnVe
     col->resize(col->size() + size);
 
     auto* values =
-            reinterpret_cast<starrocks::int128_t*>(down_cast<starrocks::DecimalColumn*>(col.get())->get_data().data());
+            reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(col.get())->get_data().data());
 
     for (int i = col_start; i < col_start + size; ++i, ++from) {
         uint64_t hi = data->values[from].getHighBits();
         uint64_t lo = data->values[from].getLowBits();
-        values[i] = (((starrocks::int128_t)hi) << 64) | (starrocks::int128_t)lo;
+        values[i] = (((int128_t)hi) << 64) | (int128_t)lo;
     }
-    if (starrocks::DecimalV2Value::SCALE < data->scale) {
-        starrocks::int128_t d =
-                starrocks::DecimalV2Value::get_scale_base(data->scale - starrocks::DecimalV2Value::SCALE);
+    if (DecimalV2Value::SCALE < data->scale) {
+        int128_t d =
+                DecimalV2Value::get_scale_base(data->scale - DecimalV2Value::SCALE);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] / d;
         }
-    } else if (starrocks::DecimalV2Value::SCALE > data->scale) {
-        starrocks::int128_t m =
-                starrocks::DecimalV2Value::get_scale_base(starrocks::DecimalV2Value::SCALE - data->scale);
+    } else if (DecimalV2Value::SCALE > data->scale) {
+        int128_t m =
+                DecimalV2Value::get_scale_base(DecimalV2Value::SCALE - data->scale);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] * m;
         }
@@ -438,10 +438,10 @@ void DecimalColumnReader::_fill_decimal_column_from_orc_decimal128(orc::ColumnVe
 }
 
 void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBatch* cvb,
-                                                                            starrocks::ColumnPtr& col, size_t from,
+                                                                            ColumnPtr& col, size_t from,
                                                                             size_t size) {
     int col_start = col->size();
-    auto c = starrocks::ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
+    auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
     auto& null_column = c->null_column();
     auto& data_column = c->data_column();
 
@@ -461,10 +461,10 @@ void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal64(orc:
 }
 
 void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorBatch* cvb,
-                                                                             starrocks::ColumnPtr& col, size_t from,
+                                                                             ColumnPtr& col, size_t from,
                                                                              size_t size) {
     int col_start = col->size();
-    auto c = starrocks::ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
+    auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
     auto& null_column = c->null_column();
     auto& data_column = c->data_column();
 
@@ -484,7 +484,7 @@ void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal128(orc
 }
 
 template <LogicalType DecimalType>
-Status Decimal32Or64Or128ColumnReader<DecimalType>::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col,
+Status Decimal32Or64Or128ColumnReader<DecimalType>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
                                                              size_t from, size_t size) {
     _fill_decimal_column_from_orc_decimal64_or_decimal128(cvb, col, from, size);
     return Status::OK();
@@ -577,7 +577,7 @@ inline void Decimal32Or64Or128ColumnReader<DecimalType>::_fill_decimal_column_ge
     }
 }
 
-Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size) {
+Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::StringVectorBatch*>(cvb);
 
@@ -734,7 +734,7 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::Colu
     return Status::OK();
 }
 
-Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
+Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
                                        size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::StringVectorBatch*>(cvb);
@@ -803,7 +803,7 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::C
     return Status::OK();
 }
 
-Status DateColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size) {
+Status DateColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::LongVectorBatch*>(cvb);
 
@@ -836,7 +836,7 @@ Status DateColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::Column
 }
 
 template <bool IsInstant>
-Status TimestampColumnReader<IsInstant>::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
+Status TimestampColumnReader<IsInstant>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
                                                   size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::TimestampVectorBatch*>(cvb);
@@ -879,7 +879,7 @@ Status TimestampColumnReader<IsInstant>::get_next(orc::ColumnVectorBatch* cvb, s
     return Status::OK();
 }
 
-Status ArrayColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size) {
+Status ArrayColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* orc_list = down_cast<orc::ListVectorBatch*>(cvb);
         auto* col_nullable = down_cast<NullableColumn*>(col.get());
@@ -924,7 +924,7 @@ Status ArrayColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::Colum
     return Status::OK();
 }
 
-Status ArrayColumnReader::_fill_array_column(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
+Status ArrayColumnReader::_fill_array_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
                                              size_t size) {
     auto* orc_list = down_cast<orc::ListVectorBatch*>(cvb);
     auto* col_array = down_cast<ArrayColumn*>(col.get());
@@ -939,7 +939,7 @@ Status ArrayColumnReader::_fill_array_column(orc::ColumnVectorBatch* cvb, starro
     return _child_readers[0]->get_next(orc_list->elements.get(), elements, elements_from, elements_size);
 }
 
-Status MapColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size) {
+Status MapColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* orc_map = down_cast<orc::MapVectorBatch*>(cvb);
         auto* col_nullable = down_cast<NullableColumn*>(col.get());
@@ -984,7 +984,7 @@ Status MapColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnP
     return Status::OK();
 }
 
-Status MapColumnReader::_fill_map_column(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
+Status MapColumnReader::_fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
                                          size_t size) {
     auto* orc_map = down_cast<orc::MapVectorBatch*>(cvb);
     auto* col_map = down_cast<MapColumn*>(col.get());
@@ -1013,7 +1013,7 @@ Status MapColumnReader::_fill_map_column(orc::ColumnVectorBatch* cvb, starrocks:
     return Status::OK();
 }
 
-Status StructColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from, size_t size) {
+Status StructColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* orc_struct = down_cast<orc::StructVectorBatch*>(cvb);
         auto* col_nullable = down_cast<NullableColumn*>(col.get());
@@ -1056,7 +1056,7 @@ Status StructColumnReader::get_next(orc::ColumnVectorBatch* cvb, starrocks::Colu
     return Status::OK();
 }
 
-Status StructColumnReader::_fill_struct_column(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
+Status StructColumnReader::_fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
                                                size_t size) {
     auto* orc_struct = down_cast<orc::StructVectorBatch*>(cvb);
     auto* col_struct = down_cast<StructColumn*>(col.get());
