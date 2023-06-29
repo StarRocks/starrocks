@@ -104,24 +104,29 @@ Routine Load 导入作业的执行流程描述如下：
 
 StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../loading/BrokerLoad.md)、 [Routine Load](../loading/RoutineLoad.md)、[Spark Load](../loading/SparkLoad.md) 和 [INSERT](../loading/InsertInto.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
 
-| 导入方式           | 协议  | 业务场景                                                     | 数据量（单作业）     | 数据源                                       | 数据格式              | 同步模式 |
-| ------------------ | ----- | ------------------------------------------------------------ | -------------------- | -------------------------------------------- | --------------------- | -------- |
-| Stream Load        | HTTP  | 通过 HTTP 协议导入本地文件、或通过程序导入数据流。           | 10 GB 以内           |<ul><li>本地文件</li><li>流式数据</li></ul>                           |<ul><li>CSV</li><li>JSON</li></ul>          | 同步     |
-| Broker Load        | MySQL | 从 HDFS 或外部云存储系统导入数据。             | 数十到数百 GB        |<ul><li>HDFS</li><li>Amazon S3</li><li>Google GCS</li><li>阿里云 OSS</li><li>腾讯云 COS</li></ul> |<ul><li>CSV</li><li>Parquet</li><li>ORC</li></ul> | 异步     |
-| Routine Load       | MySQL | 从 Apache Kafka® 实时地导入数据流。                          | 微批导入 MB 到 GB 级 | Kafka                                        |<ul><li>CSV</li><li>JSON</li><li>Avro（3.0.1 版本之后支持）</li></ul>          | 异步     |
-| Spark Load         | MySQL | <ul><li>通过 Apache Spark™ 集群初次从 HDFS 或 Hive 迁移导入大量数据。</li><li>需要做全局数据字典来精确去重。</li></ul> | 数十 GB 到 TB级别    | <ul><li>HDFS</li><li>Hive</li></ul>                                |<ul><li>CSV</li><li>ORC（2.0 版本之后支持）</li><li>Parquet（2.0 版本之后支持）</li></ul>       | 异步     |
-| INSERT INTO SELECT | MySQL |<ul><li>外表导入。</li><li>StarRocks 数据表之间的数据导入。</li></ul>              | 跟内存相关           |<ul><li>StarRocks 表</li><li>外部表</li></ul>                      | StarRocks 表          | 同步     |
-| INSERT INTO VALUES | MySQL |<ul><li>单条批量小数据量插入。</li><li>通过 JDBC 等接口导入。</li></ul>            | 简单测试用           |<ul><li>程序</li><li>ETL 工具</li></ul>                            | SQL                   | 同步     |
+| 导入方式            | 数据源                                                                                          | 业务场景                                                                                                     | 数据量（单作业）      | 数据格式                                            | 同步模式    | 协议   |
+| ------------------ | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------- | ---------- | ------ |
+| Stream Load        |<ul><li>本地文件</li><li>流式数据</li></ul>                                                        | 通过 HTTP 协议导入本地文件、或通过程序导入数据流。                                                                 | 10 GB 以内          |<ul><li>CSV</li><li>JSON</li></ul>                 | 同步       | HTTP  |
+| Broker Load        |<ul><li>HDFS</li><li>Amazon S3</li><li>Google GCS</li><li>Microsoft Azure Storage</li><li>阿里云 OSS</li><li>腾讯云 COS</li><li>华为云 OBS</li><li>其他兼容 S3 协议的对象存储（如 MinIO）</li></ul> | 从 HDFS 或外部云存储系统导入数据。                                                                               | 数十到数百 GB        |<ul><li>CSV</li><li>Parquet</li><li>ORC</li></ul> | 异步        | MySQL |
+| Routine Load       | Apache Kafka®                                                                                 | 从 Kafka 实时地导入数据流。                                                                             | 微批导入 MB 到 GB 级 |<ul><li>CSV</li><li>JSON</li><li>Avro（3.0.1 版本之后支持）</li></ul>          | 异步     | MySQL |
+| Spark Load         | <ul><li>HDFS</li><li>Hive</li></ul>                                                            | <ul><li>通过 Apache Spark™ 集群初次从 HDFS 或 Hive 迁移导入大量数据。</li><li>需要做全局数据字典来精确去重。</li></ul> | 数十 GB 到 TB级别    |<ul><li>CSV</li><li>ORC（2.0 版本之后支持）</li><li>Parquet（2.0 版本之后支持）</li></ul>       | 异步     | MySQL |
+| INSERT INTO SELECT |<ul><li>StarRocks 表</li><li>外部表</li></ul>                                                    |<ul><li>外表导入。</li><li>StarRocks 数据表之间的数据导入。</li></ul>                                              | 跟内存相关           | StarRocks 表                                     | 同步        | MySQL |
+| INSERT INTO VALUES |<ul><li>程序</li><li>ETL 工具</li></ul>                                                          |<ul><li>单条批量小数据量插入。</li><li>通过 JDBC 等接口导入。</li></ul>                                             | 简单测试用           | SQL                                              | 同步        | MySQL |
 
 您可以根据业务场景、数据量、数据源、数据格式和导入频次等来选择合适的导入方式。另外，在选择导入方式时，可以注意以下几点：
 
-- 从 Kafka 导入数据时，推荐使用 [Routine Load](../loading/RoutineLoad.md) 实现导入。如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Apache Flink® 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。
+- 从 Kafka 导入数据时，推荐使用 [Routine Load](../loading/RoutineLoad.md) 实现导入。但是，如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Apache Flink® 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。
 
-- 从 Hive 导入数据时，推荐创建 [Hive catalog](../data_source/catalog/hive_catalog.md)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [Broker Load](../loading/BrokerLoad.md) 实现导入。
+- 从 Hive、Iceberg、Hudi、Delta Lake 导入数据时，推荐创建 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md)、[Hudi Catalog](../data_source/catalog/hudi_catalog.md)、[Delta Lake Catalog](../data_source/catalog/deltalake_catalog.md)，然后使用 [INSERT](../loading/InsertInto.md) 实现导入。
 
-- 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../data_source/External_table.md#mysql-外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../loading/Flink_cdc_load.md) 实现导入。
+- 从另外一个 StarRocks 集群或从 Elasticsearch 导入数据时，推荐创建 [StarRocks 外部表](../data_source/External_table.md#starrocks-外部表)或 [Elasticsearch 外部表](../data_source/External_table.md#elasticsearch-外部表)，然后使用 [INSERT](../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。
 
-- 从 Oracle、PostgreSQL 等数据源导入数据时，推荐创建 [JDBC 外部表](../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。
+  > **注意**
+  > StarRocks 外表只支持数据写入，不支持数据读取。
+
+- 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../data_source/External_table.md#mysql-外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../loading/Flink_cdc_load.md) 实现导入。
+
+- 从 Oracle、PostgreSQL 或 SQL Server 等数据源导入数据时，推荐创建 [JDBC 外部表](../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。
 
 下图详细展示了在各种数据源场景下，应该选择哪一种导入方式。
 
