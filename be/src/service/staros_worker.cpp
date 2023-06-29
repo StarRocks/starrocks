@@ -190,21 +190,16 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
         return scheme.status();
     }
 
-    std::string cache_dir = config::starlet_cache_dir;
-    auto cache_info = info.cache_info;
-    bool cache_enabled = cache_info.enable_cache() && !cache_dir.empty();
-    if (cache_enabled) {
+    if (need_enable_cache(info)) {
         // set environ variable to cachefs directory
-        setenv(fslib::kFslibCacheDir.c_str(), cache_dir.c_str(), 0 /*overwrite*/);
+        setenv(fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 0 /*overwrite*/);
     }
     return new_shared_filesystem(*scheme, *localconf);
 }
 
 bool StarOSWorker::need_enable_cache(const ShardInfo& info) {
-    // FIXME: currently the cache root dir is set from be.conf, could be changed in future
-    std::string cache_dir = config::starlet_cache_dir;
     auto cache_info = info.cache_info;
-    return cache_info.enable_cache() && !cache_dir.empty();
+    return cache_info.enable_cache() && !config::starlet_cache_dir.empty();
 }
 
 absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const ShardInfo& info) {
