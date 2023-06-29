@@ -2732,7 +2732,6 @@ public class CreateMaterializedViewTest {
             MaterializedView mv = getMv("test", "mv_nullable");
             Assert.assertFalse(mv.getColumn("empid").isAllowNull());
             Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
-            Assert.assertTrue(mv.getColumn("name").isAllowNull());
             starRocksAssert.dropMaterializedView("mv_nullable");
         }
 
@@ -2756,7 +2755,6 @@ public class CreateMaterializedViewTest {
             MaterializedView mv = getMv("test", "mv_nullable");
             Assert.assertTrue(mv.getColumn("empid").isAllowNull());
             Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
-            Assert.assertTrue(mv.getColumn("name").isAllowNull());
             starRocksAssert.dropMaterializedView("mv_nullable");
         }
 

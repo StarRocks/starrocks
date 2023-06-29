@@ -56,7 +56,7 @@ import java.util.Set;
 // temp partition is used to implement the overwrite load.
 // user can load data into some of the temp partitions,
 // and then replace the formal partitions with these temp partitions
-// to make a overwrite load.
+// to make an overwrite load.
 public class TempPartitions implements Writable, GsonPostProcessable {
     @SerializedName(value = "idToPartition")
     private Map<Long, Partition> idToPartition = Maps.newHashMap();
