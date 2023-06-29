@@ -65,6 +65,10 @@ public final class QueryStatisticsItem {
         return connId;
     }
 
+    public long getQueryStartTime() {
+        return queryStartTime;
+    }
+
     public long getQueryExecTime() {
         long currentTime = System.currentTimeMillis();
         return currentTime - queryStartTime;
