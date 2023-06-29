@@ -71,8 +71,8 @@ public interface StarRocksConstants {
         String COLUMN_DELIMITER = "\\x01";
         byte[] COLUMN_DELIMITER_BYTE = StarRocksDelimiterParser.parse(COLUMN_DELIMITER).getBytes(StandardCharsets.UTF_8);
 
-        String LINE_PATTERN = "%s" + StarRocksDelimiterParser.parse(COLUMN_DELIMITER)
-            + "%d" + StarRocksDelimiterParser.parse(COLUMN_DELIMITER)
+        String LINE_PATTERN = "%d" + StarRocksDelimiterParser.parse(COLUMN_DELIMITER)
+            + "%s" + StarRocksDelimiterParser.parse(COLUMN_DELIMITER)
             + "%s" + StarRocksDelimiterParser.parse(LINE_DELIMITER);
     }
 
