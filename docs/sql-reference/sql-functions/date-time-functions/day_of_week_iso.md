@@ -2,27 +2,27 @@
 
 ## Description
 
-Returns the ISO standard week number for a given date within a year.
+Returns the ISO standard weekday number for a given date.
 
 The date parameter must be of the DATE or DATETIME type.
 
 ## Syntax
 
 ```Haskell
-INT DAY_OF_WEEK(DATETIME date)
+INT DAY_OF_WEEK_ISO(DATETIME date)
 ```
 
 ## Examples
 
 ```Plain Text
-MySQL > select week_iso('2008-02-20 00:00:00');
+MySQL > select dayofweek_iso('2008-02-20 00:00:00');
 +-----------------------------------+
 | week_iso('2008-02-20 00:00:00')   |
 +-----------------------------------+
-|                                 8 |
+|                                 3 |
 +-----------------------------------+
 ```
 
 ## keyword
 
-WEEK_ISO
+DAY_OF_WEEK_ISO
