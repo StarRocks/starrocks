@@ -18,11 +18,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.Config;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
-<<<<<<< HEAD
 import com.starrocks.epack.sql.parser.AstBuilderEPack;
-=======
 import com.starrocks.qe.ConnectContext;
->>>>>>> fcd5868ae4 ([Enhancement] Support relation alias name case insensitive (#26094))
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.ImportColumnsStmt;
