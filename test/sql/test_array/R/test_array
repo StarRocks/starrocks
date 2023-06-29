@@ -30,7 +30,6 @@ select * from array_data_type_1 where c4 = ['a'] or c6 != [['a', 'b']];
 select * from array_data_type_1 where c4 = cast(c4 as array<char(10)>);
 -- result:
 1	["2020-11-11 00:00:00","2021-11-11 00:00:00","2022-01-01 00:00:00"]	[1.23,1.35,2.7894]	["a","b"]	["sss","eee","fff"]	[["a","b"]]
-2	["2020-01-11 00:00:00",null,"2022-11-01 00:00:00"]	[2.23,2.35,3.7894]	["aa",null]	["ssss","eeee",null]	[["a",null],null]
 -- !result
 select * from array_data_type_1 where c5 = c4 or c6 = [['a']];
 -- result:

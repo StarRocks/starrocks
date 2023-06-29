@@ -125,7 +125,7 @@ public:
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
     void compare_column(const Column& rhs, std::vector<int8_t>* output) const;
 
-    bool equals(size_t left, const Column& right_column, size_t right) const override;
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
 
     void crc32_hash_at(uint32_t* seed, uint32_t idx) const override;
     void fnv_hash_at(uint32_t* seed, uint32_t idx) const override;

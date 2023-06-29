@@ -183,7 +183,12 @@ public:
             if (l->is_null(loff) || r->is_null(roff)) {
                 builder.append_null();
             } else {
-                builder.append(data1->equals(loff, *(data2.get()), roff));
+                auto res = data1->equals(loff, *(data2.get()), roff, false);
+                if (res == -1) {
+                    builder.append_null();
+                } else {
+                    builder.append(res);
+                }
             }
 
             loff += lstep;
