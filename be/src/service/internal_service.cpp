@@ -603,9 +603,9 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
     watch.start();
     int wait_ms = 0;
 
-    auto task = [this, controller, request, response, done, timeout_ms, &watch, &wait_ms]() {
-        auto left_ms = timeout_ms - watch.elapsed_time() / 1000 / 1000;
-        this->_get_info_impl(request, response, done, left_ms);
+    auto task = [this, request, response, done, timeout_ms, &watch, &wait_ms]() {
+        wait_ms = watch.elapsed_time() / 1000 / 1000;
+        this->_get_info_impl(request, response, done, timeout_ms - wait_ms);
     };
 
     if (!_exec_env->load_rpc_pool()->try_offer(std::move(task))) {
@@ -698,9 +698,9 @@ void PInternalServiceImplBase<T>::get_pulsar_info(google::protobuf::RpcControlle
     watch.start();
     int wait_ms = 0;
 
-    auto task = [this, controller, request, response, done, timeout_ms, &watch, &wait_ms]() {
-        auto left_ms = timeout_ms - watch.elapsed_time() / 1000 / 1000;
-        this->_get_pulsar_info_impl(request, response, done, left_ms);
+    auto task = [this, request, response, done, timeout_ms, &watch, &wait_ms]() {
+        wait_ms = watch.elapsed_time() / 1000 / 1000;
+        this->_get_pulsar_info_impl(request, response, done, timeout_ms - wait_ms);
     };
 
     if (!_exec_env->load_rpc_pool()->try_offer(std::move(task))) {
