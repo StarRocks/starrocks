@@ -334,7 +334,7 @@ public class PolymorphicFunctionAnalyzer {
         if (!allRealElementType.isEmpty()) {
             Type commonType = allRealElementType.get(0);
             for (Type type : allRealElementType) {
-                commonType = getSuperType(commonType, type);
+                commonType = TypeManager.getCommonSuperType(commonType, type);
                 if (commonType == null) {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
