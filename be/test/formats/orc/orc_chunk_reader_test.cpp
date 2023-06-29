@@ -1999,7 +1999,7 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
 
     EXPECT_EQ("['1', {-2147483648:'0.999999999'}]", result->debug_row(0));
 }
-  
+
 TEST_F(OrcChunkReaderTest, get_file_schema) {
     const std::vector<std::pair<std::string, std::vector<std::pair<std::string, LogicalType>>>> test_cases = {
             {"./be/test/exec/test_data/orc_scanner/all_types.orc",
