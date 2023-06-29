@@ -41,6 +41,7 @@ import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -418,6 +419,10 @@ public class CreateTableAnalyzer {
             throw new SemanticException("Generated Column only support olap table");
         }
 
+        if (hasMaterializedColum && keysDesc.getKeysType() == KeysType.AGG_KEYS) {
+            throw new SemanticException("Generated Column does not support AGG table");
+        }
+
         Map<String, Column> columnsMap = Maps.newHashMap();
         for (Column column : columns) {
             columnsMap.put(column.getName(), column);
@@ -429,6 +434,10 @@ public class CreateTableAnalyzer {
         if (hasMaterializedColum) {
             if (!statement.isOlapEngine()) {
                 throw new SemanticException("Materialized Column only support olap table");
+            }
+
+            if (RunMode.allowCreateLakeTable()) {
+                throw new SemanticException("Table with Generated column can not be lake table");
             }
 
             boolean found = false;
