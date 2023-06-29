@@ -62,5 +62,5 @@ skip_res_cmd = [
 ]
 
 skip_files = set([
-    'test_parquet_dict_null_predicate'
+    # 'test_parquet_dict_null_predicate'
 ])
