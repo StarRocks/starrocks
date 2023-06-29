@@ -22,8 +22,6 @@
 #include "bench.h"
 #include "column/chunk.h"
 #include "common/statusor.h"
-#include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
