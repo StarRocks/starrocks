@@ -48,7 +48,7 @@ StarRocks 支持**滚动升级**，允许您在不停止服务的情况下升级
 
 如需进行大版本或重大版本升级，则必须进行兼容性配置。除了通用的兼容性配置外，还需根据升级前版本进行具体配置。
 
-#### 通用兼容性配置
+- **通用兼容性配置**
 
 升级前，请关闭 Tablet Clone。
 
@@ -68,7 +68,7 @@ ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```
 
-#### 自 v2.0 升级
+- **自 v2.0 升级**
 
 自 v2.0 版本升级至其他大版本时，您需要设置以下 BE 设置项以及系统变量。
 
