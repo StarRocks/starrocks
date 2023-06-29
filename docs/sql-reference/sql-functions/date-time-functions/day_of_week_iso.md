@@ -1,4 +1,4 @@
-# week_iso
+# dayofweek_iso
 
 ## Description
 

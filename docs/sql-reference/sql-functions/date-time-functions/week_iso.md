@@ -9,7 +9,7 @@ The date parameter must be of the DATE or DATETIME type.
 ## Syntax
 
 ```Haskell
-INT DAY_OF_WEEK(DATETIME date)
+INT WEEK_ISO(DATETIME date)
 ```
 
 ## Examples
