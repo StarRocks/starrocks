@@ -1001,6 +1001,28 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select json_array(ta, tb, tc, tg) from tall;";
         assertPlanContains(sql, "json_array(CAST(1: ta AS JSON), CAST(2: tb AS JSON), CAST(3: tc AS JSON), CAST(7: tg AS JSON))");
+
+        sql = "SELECT json_array_get('[\"a\", [3, 9], \"c\"]', 0);";
+        assertPlanContains(sql, "json_query(parse_json('[\"a\", [3, 9], \"c\"]'), '$.[0]')");
+
+        sql = "select json_array_get(json_array(true, 12e-1, 'text'), 2);";
+        assertPlanContains(sql, "json_query(json_array(CAST(TRUE AS JSON), CAST(1.2 AS JSON), CAST('text' AS JSON)), '$.[2]')");
+
+        sql = "SELECT json_array_get(cast('[true, 12e-1, \"text\"]' as json), 1);";
+        assertPlanContains(sql, "json_query(CAST('[true, 12e-1, \"text\"]' AS JSON), '$.[1]')");
+    }
+
+    @Test
+    public void testJsonQuery() throws Exception {
+        String sql = "select json_query('[true, 12e-1, \"text\"]', 'lax $[1]');";
+        assertPlanContains(sql, "json_query(CAST('[true, 12e-1, \"text\"]' AS JSON), '$[1]')");
+
+        sql = "select json_query('[true, 12e-1, \"text\"]', 'strict $[1]');";
+        assertPlanContains(sql, " json_query(CAST('[true, 12e-1, \"text\"]' AS JSON), '$[1]')");
+
+        sql = "select json_query('{\"comment\" : \"nice\", \"children\" : [10, 13, 16]}', 'lax $.children');";
+        assertPlanContains(sql, "json_query(CAST('{\"comment\" : \"nice\", \"children\" : [10, 13, 16]}' AS JSON), " +
+                "'$.children')");
     }
 
     @Test
