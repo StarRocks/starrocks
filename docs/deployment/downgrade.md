@@ -35,15 +35,35 @@ During preparation, you must perform the compatibility configuration if you are 
 
 ### Perform compatibility configuration
 
-If you want to downgrade your StarRocks cluster to an earlier minor or major version, you must perform the compatibility configuration. Compatibility configuration varies from the version of the StarRocks cluster you downgrade from.
+If you want to downgrade your StarRocks cluster to an earlier minor or major version, you must perform the compatibility configuration. In addition to the universal compatibility configuration, detailed configurations vary depending on the version of the StarRocks cluster you downgrade from.
 
-#### From v2.2 and later versions
+- **Universal compatibility configuration**
+
+Before downgrading your StarRocks cluster, you must disable tablet clone.
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
+ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
+```
+
+After the downgrade, you can enable tablet clone again if the status of all BE nodes becomes `Alive`.
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
+ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
+ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
+```
+
+- **If you downgrade from v2.2 and later versions**
 
 Set the FE configuration item `ignore_unknown_log_id` to `true`. Because it is a static parameter, you must modify it in the FE configuration file **fe.conf** and restart the node to allow the modification to take effect. After the downgrade and the first checkpoint are completed, you can reset it to `false` and restart the node.
 
-#### From v2.4 and later versions
+- **If you have enabled FQDN access**
 
-If you have enabled FQDN access, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/enable_fqdn.md#rollback) for detailed instructions.
+If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/enable_fqdn.md#rollback) for detailed instructions.
 
 ### Perform downgrade availability test
 

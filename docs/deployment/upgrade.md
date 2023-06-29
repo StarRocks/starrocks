@@ -46,7 +46,7 @@ During preparation, you must perform the compatibility configuration if you are 
 
 If you want to upgrade your StarRocks cluster to a later minor or major version, you must perform the compatibility configuration. In addition to the universal compatibility configuration, detailed configurations vary depending on the version of the StarRocks cluster you upgrade from.
 
-#### Universal compatibility configuration
+- **Universal compatibility configuration**
 
 Before upgrading your StarRocks cluster, you must disable tablet clone.
 
@@ -66,7 +66,7 @@ ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```
 
-#### From v2.0
+- **If you upgrade from v2.0 to later versions**
 
 Before upgrading your StarRocks v2.0 cluster, you must set the following BE configuration and system variable.
 
