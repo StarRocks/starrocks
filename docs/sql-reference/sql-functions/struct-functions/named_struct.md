@@ -18,7 +18,7 @@ STRUCT named_struct({STRING name1, ANY val1} [, ...] )
 
 - `valN`: An expression of any type that specifies the value for field N. Values are nullable.
 
-The expressions of names and values must be in pairs. Otherwise, the struct cannot be created.
+The expressions of names and values must be in pairs. Otherwise, the struct cannot be created. You must pass at least one pair of field name and value, separated by a comma (`,`).
 
 ## Return value
 

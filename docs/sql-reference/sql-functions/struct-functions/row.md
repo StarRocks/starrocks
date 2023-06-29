@@ -18,7 +18,7 @@ STRUCT row(ANY val, ...)
 
 `val`: an expression of any supported type.
 
-This function is a variable argument function. You must pass at least one argument.
+This function is a variable argument function. You must pass at least one argument. `value` is nullable. Separate multiple values with a comma (`,`).
 
 ## Return value
 
