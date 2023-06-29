@@ -225,6 +225,14 @@ select array_contains(NULL, -10) from array_test order by pk;
 select array_contains([1.0,2.1,3.2,4.3], 1) from array_test order by pk;
 select array_contains(['a', 'b', 'c'], -10) from array_test order by pk;
 select array_contains([[1,2,3], [2,3,4]], 100) from array_test order by pk;
+select array_contains([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 1}'));
+select array_contains([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 3}'));
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                          [parse_json('{"addr": 1}')]);
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                          [parse_json('{"addr": 1}'), parse_json('{"addr": 2}')]);
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                          [parse_json('{"addr": 1}'), parse_json('{"addr": 2}'), parse_json('{"addr": 3}')]);
 select array_remove(s_1, 1) from array_test order by pk;
 select array_remove(i_1, -10) from array_test order by pk;
 select array_remove(f_1, -10) from array_test order by pk;
@@ -241,6 +249,9 @@ select array_remove([1.0,2.1,3.2,4.3], 1) from array_test order by pk;
 select array_remove(['a', 'b', 'c'], 'a') from array_test order by pk;
 select array_remove(['a', 'b', 'c'], -10) from array_test order by pk;
 select array_remove([[1,2,3], [2,3,4]], 1) from array_test order by pk;
+select array_remove([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 1}'));
+select array_remove([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 3}'));
+
 select array_position(s_1, 1) from array_test order by pk;
 select array_position(d_6, -1) from array_test order by pk;
 select array_position(d_6, -10) from array_test order by pk;
@@ -361,6 +372,10 @@ select arrays_overlap(NULL, aad_1) from array_test order by pk;
 select arrays_overlap(NULL, ['a', 'c', 'd']) from array_test order by pk;
 select arrays_overlap(NULL, [4, 5, 2, null, 1]) from array_test order by pk;
 select arrays_overlap(NULL, NULL) from array_test order by pk;
+select arrays_overlap([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                        [parse_json('{"addr": 2}'), parse_json('{"addr": 3}')]);
+select arrays_overlap([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                        [parse_json('{"addr": 3}'), parse_json('{"addr": 4}')]);
 
 select array_slice(s_1, 1) from array_test order by pk;
 select array_slice(s_1, 2) from array_test order by pk;

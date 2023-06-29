@@ -1282,6 +1282,29 @@ select array_contains([[1,2,3], [2,3,4]], 100) from array_test order by pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 45. Detail message: No matching function with signature: array_contains(array<array<tinyint(4)>>, tinyint(4)).')
 -- !result
+select array_contains([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 1}'));
+-- result:
+1
+-- !result
+select array_contains([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 3}'));
+-- result:
+0
+-- !result
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                          [parse_json('{"addr": 1}')]);
+-- result:
+1
+-- !result
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                          [parse_json('{"addr": 1}'), parse_json('{"addr": 2}')]);
+-- result:
+1
+-- !result
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                          [parse_json('{"addr": 1}'), parse_json('{"addr": 2}'), parse_json('{"addr": 3}')]);
+-- result:
+0
+-- !result
 select array_remove(s_1, 1) from array_test order by pk;
 -- result:
 ["a","b","c"]
@@ -1378,6 +1401,14 @@ select array_remove(['a', 'b', 'c'], -10) from array_test order by pk;
 select array_remove([[1,2,3], [2,3,4]], 1) from array_test order by pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 41. Detail message: No matching function with signature: array_remove(array<array<tinyint(4)>>, tinyint(4)).')
+-- !result
+select array_remove([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 1}'));
+-- result:
+['{"addr": 2}']
+-- !result
+select array_remove([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 3}'));
+-- result:
+['{"addr": 1}','{"addr": 2}']
 -- !result
 select array_position(s_1, 1) from array_test order by pk;
 -- result:
@@ -2072,6 +2103,11 @@ None
 None
 None
 None
+-- !result
+select arrays_overlap([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                        [parse_json('{"addr": 2}'), parse_json('{"addr": 3}')]);
+-- result:
+1
 -- !result
 select array_slice(s_1, 1) from array_test order by pk;
 -- result:
