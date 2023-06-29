@@ -14,7 +14,7 @@ Release date: June 13, 2023
 
 Fixed the following issues:
 
-- Schema change for Primary Key tables is hung if data loading occurs simultaneously with schema change. [#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- A schema change sometimes may be hung if data loading occurs simultaneously with the schema change. [#23456](https://github.com/StarRocks/starrocks/pull/23456)
 - Queries encounter an error when the session variable `pipeline_profile_level` is set to `0`. [#23873](https://github.com/StarRocks/starrocks/pull/23873)
 - CREATE TABLE encounters an error when `cloud_native_storage_type` is set to `S3`.
 - LDAP authentication succeeds even when no password is used. [#24862](https://github.com/StarRocks/starrocks/pull/24862)
