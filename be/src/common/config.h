@@ -278,6 +278,8 @@ CONF_Int64(index_stream_cache_capacity, "10737418240");
 CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
 CONF_Bool(disable_storage_page_cache, "false");
+// whether to enable the bitmap index memory cache
+CONF_mBool(enable_bitmap_index_memory_page_cache, "false");
 // whether to disable column pool
 CONF_Bool(disable_column_pool, "false");
 
