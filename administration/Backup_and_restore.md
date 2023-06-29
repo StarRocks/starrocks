@@ -11,6 +11,7 @@ Broker 是 StarRocks 集群中一种可选进程，主要用于读写 StarRocks 
 > * 目前暂不支持备份与恢复使用主键模型的表。
 > * 备份与恢复功能目前只允许拥有 ADMIN 权限的用户执行。
 > * 一个 Database 内，只允许有一个正在执行的备份或恢复作业。
+> * StarRocks 不支持备份恢复表之间的 Colocate Join 关系。
 
 ## 备份数据
 
