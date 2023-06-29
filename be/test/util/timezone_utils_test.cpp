@@ -53,14 +53,12 @@ PARALLEL_TEST(TimezoneUtilTest, utc_to_offset) {
 }
 
 PARALLEL_TEST(TimezoneUtilTest, find_time_zone) {
-    std::vector<std::pair<std::string, bool>> test_cases{{"Asia/Shanghai", true},
-                                                         {"-8:00", true},
-                                                         {"GMT+8:00", true},
-                                                         {"GMT-8:00", true},
-                                                         {"Asia/Shanghaia", false}};
+    std::vector<std::pair<std::string, bool>> test_cases{
+            {"Asia/Shanghai", true},   {"-08:00", true}, {"GMT+08:00", true}, {"GMT-08:00", true},
+            {"Asia/Shanghaia", false}, {"-8:00", false}, {"GMT-8:00", false}};
     cctz::time_zone ctz;
     for (const auto& test_case : test_cases) {
-        EXPECT_EQ(TimezoneUtils::find_cctz_time_zone(test_case.first, ctz), test_case.second);
+        EXPECT_EQ(TimezoneUtils::find_cctz_time_zone(test_case.first, ctz), test_case.second) << test_case.first;
     }
 }
 
