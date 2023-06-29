@@ -177,13 +177,8 @@ public:
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
     void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
     Status prepare(RuntimeState* runtime_state);
-<<<<<<< HEAD
     StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
-    void finalize(RuntimeState* runtime_state, DriverState state);
-=======
-    virtual StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
     void finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count, int64_t execution_time);
->>>>>>> 7adb8c30a ([Enhancement] add  statistics to pipeline execution  (#26021))
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
 
@@ -385,13 +380,9 @@ protected:
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
     // if it runs in the worker thread owned by other workgroup, which has running drivers.
-<<<<<<< HEAD
     static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 5'000'000L;
-=======
-    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT_NS = 5'000'000L;
     // Execution time exceed this is considered overloaded
     static constexpr int64_t OVERLOADED_MAX_TIME_SPEND_NS = 150'000'000L;
->>>>>>> 7adb8c30a ([Enhancement] add  statistics to pipeline execution  (#26021))
 
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
