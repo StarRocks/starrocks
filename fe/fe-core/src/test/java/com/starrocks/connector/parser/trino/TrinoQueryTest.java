@@ -536,6 +536,21 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testAliasCaseInsensitive() throws Exception {
+        String sql = "select T.v1 from (select * from t0) t";
+        assertPlanContains(sql, "t0");
+
+        sql = "select t.v1 from (select * from t0) as T";
+        assertPlanContains(sql, "t0");
+
+        sql = "select t.v1 from t0 T";
+        assertPlanContains(sql, "t0");
+
+        sql = "select T.v1 from (select * from t0 join t1 on v2 = v5) t";
+        assertPlanContains(sql, "INNER JOIN ");
+    }
+
+    @Test
     public void testSelectSetOperation() throws Exception {
         String sql = "select * from t0 union select * from t1 union select * from t0";
         assertPlanContains(sql, "7:AGGREGATE (update serialize)\n" +
