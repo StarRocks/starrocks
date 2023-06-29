@@ -29,9 +29,7 @@
 #include "util/stack_util.h"
 #include "util/time.h"
 
-namespace starrocks {
-
-namespace lake {
+namespace starrocks::lake {
 
 RowsetUpdateState::RowsetUpdateState() = default;
 
@@ -327,11 +325,11 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const Tx
 
         if (new_rows > 0) {
             uint32_t last = idxes.size() - new_rows;
-            for (int i = 0; i < idxes.size(); ++i) {
-                if (idxes[i] != 0) {
-                    --idxes[i];
+            for (unsigned int& idx : idxes) {
+                if (idx != 0) {
+                    --idx;
                 } else {
-                    idxes[i] = last;
+                    idx = last;
                     ++last;
                 }
             }
@@ -364,8 +362,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const Tx
 
         // just check the rows which are not exist in the previous version
         // because the rows exist in the previous version may contain 0 which are specified by the user
-        for (int j = 0; j < _auto_increment_partial_update_states[i].rowids.size(); ++j) {
-            uint32_t row_idx = _auto_increment_partial_update_states[i].rowids[j];
+        for (unsigned int row_idx : _auto_increment_partial_update_states[i].rowids) {
             if (data[row_idx] == 0) {
                 delete_idxes.emplace_back(row_idx);
             }
@@ -480,7 +477,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
     std::vector<bool> need_rename(rowset_meta->segments_size(), true);
     for (int i = 0; i < rowset_meta->segments_size(); i++) {
         auto src_path = rowset_meta->segments(i);
-        auto dest_path = op_write.rewrite_segments(i);
+        const auto& dest_path = op_write.rewrite_segments(i);
 
         int64_t t_rewrite_start = MonotonicMillis();
         if (op_write.txn_meta().has_auto_increment_partial_update_column_id() &&
@@ -491,7 +488,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
                     _partial_update_states.size() != 0 ? &_partial_update_states[i].write_columns : nullptr, op_write,
                     tablet));
         } else if (_partial_update_states.size() != 0) {
-            FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(i);
+            const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(i);
             // if rewrite fail, let segment gc to clean dest segment file
             RETURN_IF_ERROR(SegmentRewriter::rewrite(
                     tablet->segment_location(src_path), tablet->segment_location(dest_path), *tablet_schema,
@@ -668,11 +665,11 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const TxnLogPB_OpWrit
 
         if (new_rows > 0) {
             uint32_t last = idxes.size() - new_rows;
-            for (int i = 0; i < idxes.size(); ++i) {
-                if (idxes[i] != 0) {
-                    --idxes[i];
+            for (unsigned int& idx : idxes) {
+                if (idx != 0) {
+                    --idx;
                 } else {
-                    idxes[i] = last;
+                    idx = last;
                     ++last;
                 }
             }
@@ -702,8 +699,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const TxnLogPB_OpWrit
 
         // just check the rows which are not exist in the previous version
         // because the rows exist in the previous version may contain 0 which are specified by the user
-        for (int j = 0; j < _auto_increment_partial_update_states[segment_id].rowids.size(); ++j) {
-            uint32_t row_idx = _auto_increment_partial_update_states[segment_id].rowids[j];
+        for (unsigned int row_idx : _auto_increment_partial_update_states[segment_id].rowids) {
             if (data[row_idx] == 0) {
                 delete_idxes.emplace_back(row_idx);
             }
@@ -725,6 +721,4 @@ std::string RowsetUpdateState::to_string() const {
     return strings::Substitute("RowsetUpdateState tablet:$0", _tablet_id);
 }
 
-} // namespace lake
-
-} // namespace starrocks
+} // namespace starrocks::lake

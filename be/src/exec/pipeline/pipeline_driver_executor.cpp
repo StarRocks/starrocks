@@ -23,6 +23,7 @@
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
 #include "util/stack_util.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::pipeline {
 
@@ -33,36 +34,19 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                                               : std::make_unique<QuerySharedDriverQueue>()),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
-          _exec_state_reporter(new ExecStateReporter()) {}
+          _exec_state_reporter(new ExecStateReporter()) {
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_schedule_count, [this]() { return _schedule_count.load(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_execution_time, [this]() { return _driver_execution_ns.load(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_queue_len, [this]() { return _driver_queue->size(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_poller_block_queue_len,
+                                    [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
+}
 
 GlobalDriverExecutor::~GlobalDriverExecutor() {
-    {
-        // unregist hook
-        auto metrics = StarRocksMetrics::instance()->metrics();
-        metrics->deregister_hook("driver_queue_len");
-        metrics->deregister_hook("poller_block_queue_len");
-        _driver_queue_len.reset();
-        _driver_poller_block_queue_len.reset();
-    }
     _driver_queue->close();
 }
 
 void GlobalDriverExecutor::initialize(int num_threads) {
-    {
-        // regist pipeline metrics
-        auto metrics = StarRocksMetrics::instance()->metrics();
-        auto regist_metric = [this, metrics](const std::string& metric_name, std::unique_ptr<UIntGauge>& metric,
-                                             const std::function<unsigned long()>& provider) {
-            std::string full_name = _name + "_" + metric_name;
-            metric = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
-            metrics->register_metric(full_name, metric.get());
-            metrics->register_hook(full_name, [&metric, provider]() { metric->set_value(provider()); });
-        };
-        regist_metric("driver_queue_len", _driver_queue_len, [this]() { return _driver_queue->size(); });
-        regist_metric("poller_block_queue_len", _driver_poller_block_queue_len,
-                      [this]() { return _blocked_driver_poller->blocked_driver_queue_len(); });
-    }
-
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
@@ -82,7 +66,7 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
 
 void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
-    driver->finalize(runtime_state, state);
+    driver->finalize(runtime_state, state, _schedule_count, _driver_execution_ns);
 }
 
 void GlobalDriverExecutor::_worker_thread() {
@@ -118,6 +102,7 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* fragment_ctx = driver->fragment_ctx();
 
         driver->increment_schedule_times();
+        _schedule_count++;
 
         SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());
 
@@ -148,6 +133,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 continue;
             }
             StatusOr<DriverState> maybe_state;
+            int64_t start_time = driver->get_active_time();
 #ifdef NDEBUG
             TRY_CATCH_ALL(maybe_state, driver->process(runtime_state, worker_id));
 #else
@@ -158,6 +144,8 @@ void GlobalDriverExecutor::_worker_thread() {
             }
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
+            int64_t end_time = driver->get_active_time();
+            _driver_execution_ns += end_time - start_time;
 
             // Check big query
             if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {
@@ -179,6 +167,9 @@ void GlobalDriverExecutor::_worker_thread() {
                 }
                 continue;
             }
+
+            driver->report_exec_state();
+
             auto driver_state = maybe_state.value();
             switch (driver_state) {
             case READY:
@@ -246,7 +237,7 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
 }
 
 void GlobalDriverExecutor::submit(DriverRawPtr driver) {
-    driver->start_timers();
+    driver->start_schedule(_schedule_count, _driver_execution_ns);
 
     if (driver->is_precondition_block()) {
         driver->set_driver_state(DriverState::PRECONDITION_BLOCK);
@@ -279,9 +270,13 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
 }
 
 void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                                             const Status& status, bool done) {
-    _update_profile_by_level(query_ctx, fragment_ctx, done);
-    auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, status, done);
+                                             const Status& status, bool done, bool attach_profile) {
+    auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+    if (attach_profile) {
+        profile = _build_merged_instance_profile(query_ctx, fragment_ctx);
+    }
+
+    auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
     if (fe_addr.hostname.empty()) {
         // query executed by external connectors, like spark and flink connector,
@@ -354,23 +349,19 @@ void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmuta
     _blocked_driver_poller->iterate_immutable_driver(call);
 }
 
-void GlobalDriverExecutor::_update_profile_by_level(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool done) {
-    if (!done) {
-        return;
-    }
-
-    if (!query_ctx->is_report_profile()) {
-        return;
+RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContext* query_ctx,
+                                                                     FragmentContext* fragment_ctx) {
+    auto* instance_profile = fragment_ctx->runtime_state()->runtime_profile();
+    if (!query_ctx->enable_profile()) {
+        return instance_profile;
     }
 
     if (query_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
-        return;
+        return instance_profile;
     }
 
-    auto* profile = fragment_ctx->runtime_state()->runtime_profile();
-
     std::vector<RuntimeProfile*> pipeline_profiles;
-    profile->get_children(&pipeline_profiles);
+    instance_profile->get_children(&pipeline_profiles);
 
     std::vector<RuntimeProfile*> merged_driver_profiles;
     for (auto* pipeline_profile : pipeline_profiles) {
@@ -383,9 +374,8 @@ void GlobalDriverExecutor::_update_profile_by_level(QueryContext* query_ctx, Fra
 
         _remove_non_core_metrics(query_ctx, driver_profiles);
 
-        RuntimeProfile::merge_isomorphic_profiles(driver_profiles);
-        // all the isomorphic profiles will merged into the first profile
-        auto* merged_driver_profile = driver_profiles[0];
+        auto* merged_driver_profile =
+                RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), driver_profiles);
 
         // use the name of pipeline' profile as pipeline driver's
         merged_driver_profile->set_name(pipeline_profile->name());
@@ -398,12 +388,15 @@ void GlobalDriverExecutor::_update_profile_by_level(QueryContext* query_ctx, Fra
         merged_driver_profiles.push_back(merged_driver_profile);
     }
 
-    // remove pipeline's profile from the hierarchy
-    profile->remove_childs();
+    auto* new_instance_profile = query_ctx->object_pool()->add(new RuntimeProfile(instance_profile->name()));
+    new_instance_profile->copy_all_info_strings_from(instance_profile);
+    new_instance_profile->copy_all_counters_from(instance_profile);
     for (auto* merged_driver_profile : merged_driver_profiles) {
         merged_driver_profile->reset_parent();
-        profile->add_child(merged_driver_profile, true, nullptr);
+        new_instance_profile->add_child(merged_driver_profile, true, nullptr);
     }
+
+    return new_instance_profile;
 }
 
 void GlobalDriverExecutor::_remove_non_core_metrics(QueryContext* query_ctx,

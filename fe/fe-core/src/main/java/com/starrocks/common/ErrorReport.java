@@ -71,6 +71,10 @@ public class ErrorReport {
         reportSemanticException(null, errorCode, objs);
     }
 
+    public static SemanticException buildSemanticException(ErrorCode errorCode, Object... objs) {
+        return new SemanticException(reportCommon(null, errorCode, objs));
+    }
+
     public static void reportSemanticException(String pattern, ErrorCode errorCode, Object... objs) {
         throw new SemanticException(reportCommon(pattern, errorCode, objs));
     }

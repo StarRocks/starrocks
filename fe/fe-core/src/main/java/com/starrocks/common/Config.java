@@ -129,7 +129,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int audit_log_roll_num = 90;
     @ConfField
-    public static String[] audit_log_modules = {"slow_query", "query", "connection"};
+    public static String[] audit_log_modules = {"slow_query", "query"};
     @ConfField(mutable = true)
     public static long qe_slow_log_ms = 5000;
     @ConfField
@@ -2107,12 +2107,6 @@ public class Config extends ConfigBase {
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
 
-    /**
-     * default storage cache ttl of lake table
-     */
-    @ConfField(mutable = true)
-    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
-
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
@@ -2218,6 +2212,25 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static int experimental_lake_publish_version_threads = 16;
+
+    @ConfField(mutable = true)
+    public static int lake_autovacuum_max_previous_versions = 0;
+
+    @ConfField
+    public static int lake_autovacuum_parallel_partitions = 8;
+
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_partition_naptime_seconds = 180;
+
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_grace_period_minutes = 5;
+
+    /**
+     * time threshold in hours, if a partition has not been updated for longer than this
+     * threshold, auto vacuum operations will no longer be triggered for that partition.
+     */
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_stale_partition_threshold = 12;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
@@ -2328,7 +2341,7 @@ public class Config extends ConfigBase {
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)
-    public static boolean enable_auto_tablet_distribution = false;
+    public static boolean enable_auto_tablet_distribution = true;
 
     /**
      * default size of minimum cache size of auto increment id allocation
@@ -2387,4 +2400,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int external_table_commit_timeout_ms = 10000; // 10s
+
+    @ConfField(mutable = false)
+    public static int pipe_listener_interval_millis = 1000;
+    @ConfField(mutable = false)
+    public static int pipe_scheduler_interval_millis = 1000;
 }

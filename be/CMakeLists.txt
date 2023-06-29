@@ -480,6 +480,9 @@ if ("${USE_STAROS}" STREQUAL "ON")
        )
 endif()
 
+# Check Clang-Tidy
+include(cmake_modules/FindClangTidy.cmake)
+
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.
 # You can check funcion here which depends on platform. Don't forget add this
@@ -972,7 +975,7 @@ install(FILES
     ${BASE_DIR}/../conf/be_test.conf
     ${BASE_DIR}/../conf/cn.conf
     ${BASE_DIR}/../conf/hadoop_env.sh
-    ${BASE_DIR}/../conf/log4j.properties
+    ${BASE_DIR}/../conf/log4j2.properties
     DESTINATION ${OUTPUT_DIR}/conf)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")

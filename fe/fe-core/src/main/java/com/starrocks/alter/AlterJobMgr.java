@@ -142,6 +142,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 
@@ -574,7 +575,7 @@ public class AlterJobMgr {
         }
         materializedView.setName(newMvName);
         db.dropTable(oldMvName);
-        db.createTable(materializedView);
+        db.registerTableUnlocked(materializedView);
         final RenameMaterializedViewLog renameMaterializedViewLog =
                 new RenameMaterializedViewLog(materializedView.getId(), db.getId(), newMvName);
         updateTaskDefinition(materializedView);
@@ -590,7 +591,7 @@ public class AlterJobMgr {
         MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
         db.dropTable(oldMaterializedView.getName());
         oldMaterializedView.setName(newMaterializedViewName);
-        db.createTable(oldMaterializedView);
+        db.registerTableUnlocked(oldMaterializedView);
         updateTaskDefinition(oldMaterializedView);
         LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
                 newMaterializedViewName, oldMaterializedView.getId());
@@ -627,6 +628,14 @@ public class AlterJobMgr {
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
             newMvRefreshScheme.setType(refreshType);
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
+
+            long maxChangedTableRefreshTime = log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values().stream()
+                    .map(x -> x.values().stream().map(
+                            MaterializedView.BasePartitionInfo::getLastRefreshTime).max(Long::compareTo))
+                    .map(x -> x.orElse(null)).filter(Objects::nonNull)
+                    .max(Long::compareTo)
+                    .orElse(System.currentTimeMillis());
+            newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
                     "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
@@ -936,11 +945,11 @@ public class AlterJobMgr {
 
         // rename new table name to origin table name and add it to database
         newTbl.checkAndSetName(origTblName, false);
-        db.createTable(newTbl);
+        db.registerTableUnlocked(newTbl);
 
         // rename origin table name to new table name and add it to database
         origTable.checkAndSetName(newTblName, false);
-        db.createTable(origTable);
+        db.registerTableUnlocked(origTable);
 
         // swap dependencies of base table
         if (origTable.isMaterializedView()) {
@@ -990,7 +999,7 @@ public class AlterJobMgr {
             view.setNewFullSchema(newFullSchema);
 
             db.dropTable(viewName);
-            db.createTable(view);
+            db.registerTableUnlocked(view);
 
             AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
             GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
@@ -1020,7 +1029,7 @@ public class AlterJobMgr {
             view.setNewFullSchema(newFullSchema);
 
             db.dropTable(viewName);
-            db.createTable(view);
+            db.registerTableUnlocked(view);
 
             LOG.info("replay modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {
@@ -1100,7 +1109,7 @@ public class AlterJobMgr {
         // get value from properties here
         // 1. data property
         DataProperty newDataProperty =
-                PropertyAnalyzer.analyzeDataProperty(properties, null);
+                PropertyAnalyzer.analyzeDataProperty(properties, null, false);
         // 2. replication num
         short newReplicationNum =
                 PropertyAnalyzer.analyzeReplicationNum(properties, (short) -1);

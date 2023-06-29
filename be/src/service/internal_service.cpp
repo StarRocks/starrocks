@@ -556,8 +556,35 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
                                                          PTriggerProfileReportResult* result,
                                                          google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    auto st = _exec_env->fragment_mgr()->trigger_profile_report(request);
-    st.to_protobuf(result->mutable_status());
+    result->mutable_status()->set_status_code(TStatusCode::OK);
+
+    TUniqueId query_id;
+    DCHECK(request->has_query_id());
+    query_id.__set_hi(request->query_id().hi());
+    query_id.__set_lo(request->query_id().lo());
+
+    auto&& query_ctx = _exec_env->query_context_mgr()->get(query_id);
+    if (query_ctx == nullptr) {
+        LOG(WARNING) << "query context is null, query_id=" << print_id(query_id);
+        result->mutable_status()->set_status_code(TStatusCode::NOT_FOUND);
+        return;
+    }
+
+    for (size_t i = 0; i < request->instance_ids_size(); i++) {
+        TUniqueId instance_id;
+        instance_id.__set_hi(request->instance_ids(i).hi());
+        instance_id.__set_lo(request->instance_ids(i).lo());
+
+        auto&& fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
+        if (fragment_ctx == nullptr) {
+            LOG(WARNING) << "fragment context is null, query_id=" << print_id(query_id)
+                         << ", instance_id=" << print_id(instance_id);
+            result->mutable_status()->set_status_code(TStatusCode::NOT_FOUND);
+            return;
+        }
+        pipeline::DriverExecutor* driver_executor = _exec_env->wg_driver_executor();
+        driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false, true);
+    }
 }
 
 template <typename T>
@@ -790,17 +817,19 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
         ScannerCounter counter{};
         switch (tp) {
         case TFileFormatType::FORMAT_PARQUET:
-            p_scanner.reset(new ParquetScanner(&state, &profile, scan_range, &counter, true));
+            p_scanner = std::make_unique<ParquetScanner>(&state, &profile, scan_range, &counter, true);
             break;
         default:
-            st = Status::InvalidArgument(fmt::format("format: {} not supported", to_string(tp)));
+            auto err_msg = fmt::format("get file schema failed, format: {} not supported", to_string(tp));
+            LOG(WARNING) << err_msg;
+            st = Status::InvalidArgument(err_msg);
             return;
         }
     }
 
     st = p_scanner->open();
     if (!st.ok()) {
-        LOG(WARNING) << "open file scanner: " << st;
+        LOG(WARNING) << "open file scanner failed: " << st;
         return;
     }
 
@@ -808,6 +837,10 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 
     std::vector<SlotDescriptor> schema;
     st = p_scanner->get_schema(&schema);
+    if (!st.ok()) {
+        LOG(WARNING) << "get schema failed: " << st;
+        return;
+    }
 
     for (const auto& slot : schema) {
         slot.to_protobuf(response->add_schema());

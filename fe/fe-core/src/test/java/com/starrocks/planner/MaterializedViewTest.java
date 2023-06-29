@@ -15,6 +15,9 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -362,6 +365,19 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "properties('replication_num' = '1');";
         starRocksAssert
                 .withTable(userTagTable);
+
+        String eventTable = "CREATE TABLE `event1` (\n" +
+                "  `event_id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `event_type` varchar(26) NOT NULL COMMENT \"\",\n" +
+                "  `event_time` datetime NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`event_id`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`event_id`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(eventTable);
     }
 
     @Test
@@ -2695,6 +2711,31 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String query = "select * from customer, lineorder";
             testRewriteOK(mv, query);
         }
+
+        {
+            // test compensation predicates are not in output of query
+            String mv = "SELECT `event_id`, `event_type`, `event_time`\n" +
+                    "FROM `event1`\n" +
+                    "WHERE `event_type` = 'click'; ";
+            String query = "select count(event_id) from event1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("UNION");
+        }
+
+        {
+            String mv = "SELECT count(lo_linenumber)\n" +
+                    "FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
+                    "WHERE `c_name` != 'name'; ";
+
+            String query = "SELECT count(lo_linenumber)\n" +
+                    "FROM lineorder inner join customer on lo_custkey = c_custkey";
+            Table table1 = getTable(MATERIALIZED_DB_NAME, "lineorder");
+            PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
+            Table table2 = getTable(MATERIALIZED_DB_NAME, "customer");
+            PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("UNION");
+        }
     }
 
     // Single Predicates
@@ -3282,6 +3323,184 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 30: c_custkey IS NOT NULL, 26: lo_orderkey IS NOT NULL\n" +
                     "     partitions=1/1");
+        }
+    }
+
+    @Test
+    public void testRightOuterJoin() {
+        {
+            String q = "select empid, depts.deptno from emps\n"
+                    + "right outer join depts using (deptno)";
+            String m = "select empid, depts.deptno from emps\n"
+                    + "right outer join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select empid, depts.deptno from emps\n"
+                    + "right outer join depts using (deptno) where empid = 1";
+            String m = "select empid, depts.deptno from emps\n"
+                    + "right outer join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testFullOuterJoin() {
+        {
+            String q = "select empid, depts.deptno from emps\n"
+                    + "full outer join depts using (deptno)";
+            String m = "select empid, depts.deptno from emps\n"
+                    + "full outer join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select empid, depts.deptno from emps\n"
+                    + "full outer join depts using (deptno) where empid = 1";
+            String m = "select empid, depts.deptno from emps\n"
+                    + "full outer join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testLeftSemiJoinJoin() {
+        {
+            String q = "select empid from emps\n"
+                    + "left semi join depts using (deptno)";
+            String m = "select empid from emps\n"
+                    + "left semi join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select empid from emps\n"
+                    + "left semi join depts using (deptno) where empid = 1";
+            String m = "select empid from emps\n"
+                    + "left semi join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testLeftAntiJoinJoin() {
+        {
+            String q = "select empid from emps\n"
+                    + "left anti join depts using (deptno)";
+            String m = "select empid from emps\n"
+                    + "left anti join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select empid from emps\n"
+                    + "left anti join depts using (deptno) where empid = 1";
+            String m = "select empid from emps\n"
+                    + "left anti join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testRightSemiJoinJoin() {
+        {
+            String q = "select deptno from emps\n"
+                    + "right semi join depts using (deptno)";
+            String m = "select deptno from emps\n"
+                    + "right semi join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select deptno from emps\n"
+                    + "right semi join depts using (deptno) where deptno = 1";
+            String m = "select deptno from emps\n"
+                    + "right semi join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testRightAntiJoinJoin() {
+        {
+            String q = "select deptno from emps\n"
+                    + "left anti join depts using (deptno)";
+            String m = "select deptno from emps\n"
+                    + "left anti join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+
+        {
+            String q = "select deptno from emps\n"
+                    + "right anti join depts using (deptno) where deptno = 1";
+            String m = "select deptno from emps\n"
+                    + "right anti join depts using (deptno)";
+            testRewriteOK(m, q);
+        }
+    }
+
+    @Test
+    public void testMultiJoinTypes() {
+        {
+            testRewriteOK("select depts.deptno, dependents.empid\n"
+                            + "from depts\n"
+                            + "left outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n",
+                    "select dependents.empid\n"
+                            + "from depts\n"
+                            + "left outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n"
+                            + "where depts.deptno > 10");
+        }
+
+        {
+            testRewriteOK("select depts.deptno, dependents.empid\n"
+                            + "from depts\n"
+                            + "left outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n"
+                            + "where depts.deptno > 10",
+                    "select dependents.empid\n"
+                            + "from depts\n"
+                            + "left outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n"
+                            + "where depts.deptno > 10");
+        }
+
+        {
+            testRewriteOK("select depts.deptno, dependents.empid\n"
+                            + "from depts\n"
+                            + "full outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n",
+                    "select dependents.empid\n"
+                            + "from depts\n"
+                            + "full outer join dependents on (depts.name = dependents.name)\n"
+                            + "right outer join emps on (emps.deptno = depts.deptno)\n"
+                            + "where depts.deptno > 10");
+        }
+
+        {
+            testRewriteOK("select depts.deptno\n"
+                            + "from depts\n"
+                            + "left semi join dependents on (depts.name = dependents.name)\n"
+                            + "left anti join emps on (emps.deptno = depts.deptno)\n",
+                    "select depts.deptno\n"
+                            + "from depts\n"
+                            + "left semi join dependents on (depts.name = dependents.name)\n"
+                            + "left anti join emps on (emps.deptno = depts.deptno)\n"
+                            + "where depts.deptno > 10");
+        }
+
+        {
+            testRewriteOK("select emps.empid\n"
+                            + "from depts\n"
+                            + "left semi join dependents on (depts.name = dependents.name)\n"
+                            + "right anti join emps on (emps.deptno = depts.deptno)\n",
+                    "select emps.empid\n"
+                            + "from depts\n"
+                            + "left semi join dependents on (depts.name = dependents.name)\n"
+                            + "right anti join emps on (emps.deptno = depts.deptno)\n"
+                            + "where emps.empid > 10");
         }
     }
 }

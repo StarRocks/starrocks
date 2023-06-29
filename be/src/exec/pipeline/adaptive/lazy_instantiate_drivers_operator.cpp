@@ -111,7 +111,7 @@ void LazyInstantiateDriversOperator::close(RuntimeState* state) {
         for (auto& pipeline : pipeline_group.pipelines) {
             auto sink_factory = pipeline->sink_operator_factory();
             if (typeid(*sink_factory) != typeid(ResultSinkOperatorFactory)) {
-                fragment_ctx->count_down_pipeline(state);
+                fragment_ctx->count_down_pipeline();
             } else {
                 // Closing ResultSinkOperator notifies FE not to wait fetch_data anymore.
                 pipeline->source_operator_factory()->set_degree_of_parallelism(1);
@@ -120,7 +120,7 @@ void LazyInstantiateDriversOperator::close(RuntimeState* state) {
                     driver->prepare(state);
                 }
                 for (auto& driver : pipeline->drivers()) {
-                    driver->finalize(state, DriverState::FINISH);
+                    driver->finalize(state, DriverState::FINISH, 0, 0);
                 }
             }
         }

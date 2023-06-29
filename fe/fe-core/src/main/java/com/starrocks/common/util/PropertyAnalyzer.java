@@ -59,7 +59,7 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -142,8 +142,6 @@ public class PropertyAnalyzer {
     public static final String ABLE_LOW_CARD_DICT = "1";
     public static final String DISABLE_LOW_CARD_DICT = "0";
 
-    public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
-    public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
@@ -160,12 +158,23 @@ public class PropertyAnalyzer {
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
+    public static final String PROPERTIES_DATACACHE_ENABLE = "datacache.enable";
     public static final String PROPERTIES_DATACACHE_PARTITION_DURATION = "datacache.partition_duration";
 
     public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
 
-    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
+    public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
+
+    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty,
+                                                   boolean isDefault)
             throws AnalysisException {
+        String mediumKey = PROPERTIES_STORAGE_MEDIUM;
+        String coolDownKey = PROPERTIES_STORAGE_COOLDOWN_TIME;
+        if (isDefault) {
+            mediumKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_MEDIUM;
+            coolDownKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_COOLDOWN_TIME;
+        }
+
         if (properties == null) {
             return oldDataProperty;
         }
@@ -178,7 +187,7 @@ public class PropertyAnalyzer {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
-            if (!hasMedium && key.equalsIgnoreCase(PROPERTIES_STORAGE_MEDIUM)) {
+            if (!hasMedium && key.equalsIgnoreCase(mediumKey)) {
                 hasMedium = true;
                 if (value.equalsIgnoreCase(TStorageMedium.SSD.name())) {
                     storageMedium = TStorageMedium.SSD;
@@ -187,7 +196,7 @@ public class PropertyAnalyzer {
                 } else {
                     throw new AnalysisException("Invalid storage medium: " + value);
                 }
-            } else if (!hasCooldown && key.equalsIgnoreCase(PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+            } else if (!hasCooldown && key.equalsIgnoreCase(coolDownKey)) {
                 hasCooldown = true;
                 DateLiteral dateLiteral = new DateLiteral(value, Type.DATETIME);
                 coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
@@ -198,8 +207,8 @@ public class PropertyAnalyzer {
             return oldDataProperty;
         }
 
-        properties.remove(PROPERTIES_STORAGE_MEDIUM);
-        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TIME);
+        properties.remove(mediumKey);
+        properties.remove(coolDownKey);
 
         if (hasCooldown && !hasMedium) {
             throw new AnalysisException("Invalid data property. storage medium property is not found");
@@ -388,7 +397,7 @@ public class PropertyAnalyzer {
 
     public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault)
             throws AnalysisException {
-        String key = "default.";
+        String key = PROPERTIES_DEFAULT_PREFIX;
         if (isDefault) {
             key += PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
         } else {
@@ -587,7 +596,7 @@ public class PropertyAnalyzer {
         return bfFpp;
     }
 
-    public static String analyzeColocate(Map<String, String> properties) throws AnalysisException {
+    public static String analyzeColocate(Map<String, String> properties) {
         String colocateGroup = null;
         if (properties != null && properties.containsKey(PROPERTIES_COLOCATE_WITH)) {
             colocateGroup = properties.get(PROPERTIES_COLOCATE_WITH);
@@ -938,35 +947,16 @@ public class PropertyAnalyzer {
         return foreignKeyConstraints;
     }
 
-    // analyze enable storage cache and cache ttl, and whether allow async write back
-    public static StorageCacheInfo analyzeStorageCacheInfo(Map<String, String> properties) throws AnalysisException {
-        boolean enableStorageCache =
-                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
-
-        long storageCacheTtlS = 0;
-        boolean isTtlSet = properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL);
-        if (isTtlSet) {
-            storageCacheTtlS = analyzeLongProp(properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
-            if (storageCacheTtlS < -1) {
-                throw new AnalysisException("Storage cache ttl should not be less than -1");
-            }
-            if (!enableStorageCache && storageCacheTtlS != 0) {
-                throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
-            }
-            if (enableStorageCache && storageCacheTtlS == 0) {
-                throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
-            }
-        } else {
-            storageCacheTtlS = enableStorageCache ? Config.lake_default_storage_cache_ttl_seconds : 0L;
-        }
+    public static DataCacheInfo analyzeDataCacheInfo(Map<String, String> properties) throws AnalysisException {
+        boolean enableDataCache = analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
 
         boolean enableAsyncWriteBack =
                 analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
-        if (!enableStorageCache && enableAsyncWriteBack) {
+        if (!enableDataCache && enableAsyncWriteBack) {
             throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
         }
 
-        return new StorageCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
+        return new DataCacheInfo(enableDataCache, enableAsyncWriteBack);
     }
 
     public static PeriodDuration analyzeDataCachePartitionDuration(Map<String, String> properties) throws AnalysisException {

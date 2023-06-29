@@ -1178,8 +1178,8 @@ DEFINE_TIME_CAST_DATE_CLASS(TYPE_DATETIME, timeToDatetime, false);
  */
 DEFINE_STRING_UNARY_FN_WITH_IMPL(FloatCastToString, v) {
     char buf[16] = {0};
-    int len = f2s_buffered_n(v, buf);
-    return std::string(buf, len);
+    size_t len = f2s_buffered_n(v, buf);
+    return {buf, len};
 }
 
 /**
@@ -1187,8 +1187,8 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(FloatCastToString, v) {
  */
 DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
     char buf[32] = {0};
-    int len = d2s_buffered_n(v, buf);
-    return std::string(buf, len);
+    size_t len = d2s_buffered_n(v, buf);
+    return {buf, len};
 }
 
 // The StringUnaryFunction templace is defined in unary_function.h

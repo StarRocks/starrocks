@@ -48,7 +48,6 @@ public class CreateTableLikeAnalyzer {
 
         StatementBase statementBase =
                 SqlParser.parseOneWithStarRocksDialect(createTableStmt.get(0), context.getSessionVariable());
-        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, context);
         if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
             parsedCreateTableStmt.setTableName(stmt.getTableName());
@@ -56,6 +55,7 @@ public class CreateTableLikeAnalyzer {
                 parsedCreateTableStmt.setIfNotExists();
             }
 
+            com.starrocks.sql.analyzer.Analyzer.analyze(parsedCreateTableStmt, context);
             stmt.setCreateTableStmt(parsedCreateTableStmt);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);

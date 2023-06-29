@@ -185,6 +185,11 @@ StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state)
 
         _prober.reset_probe();
     }
+    // if probe finished after reset probe side. it means probe side is empty
+    if (_prober.probe_finished()) {
+        _set_current_build_probe_finished(true);
+        return nullptr;
+    }
 
     ASSIGN_OR_RETURN(auto res, _prober.probe_chunk(state, _build_chunk));
     RETURN_IF_ERROR(eval_conjuncts(_prober.conjunct_ctxs(), res.get(), nullptr));

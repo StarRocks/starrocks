@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -111,6 +112,9 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.pipe.AlterPipeStmt;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
@@ -362,6 +366,15 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCancelLoadStatement(CancelLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getLoadMgr().cancelLoadJob(stmt);
+            });
+            return null;
+        }
+
+
+        @Override
+        public ShowResultSet visitCancelCompactionStatement(CancelCompactionStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getCompactionMgr().cancelCompaction(stmt.getTxnId());
             });
             return null;
         }
@@ -863,6 +876,8 @@ public class DDLStmtExecutor {
                 } catch (AlreadyExistsException e) {
                     if (stmt.isSetIfNotExists()) {
                         LOG.info("create storage volume[{}] which already exists", stmt.getName());
+                    } else {
+                        throw e;
                     }
                 }
             });
@@ -890,6 +905,31 @@ public class DDLStmtExecutor {
                                                                    ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getStorageVolumeMgr().setDefaultStorageVolume(stmt)
+            );
+            return null;
+        }
+
+        //=========================================== Pipe Statement ==================================================
+        @Override
+        public ShowResultSet visitCreatePipeStatement(CreatePipeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getPipeManager().createPipe(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropPipeStatement(DropPipeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getPipeManager().dropPipe(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterPipeStatement(AlterPipeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getPipeManager().alterPipe(stmt)
             );
             return null;
         }

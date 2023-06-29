@@ -70,6 +70,7 @@ import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -1569,6 +1570,13 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                     "SET DEFAULT STORAGE VOLUME");
         }
+        return null;
+    }
+
+    // --------------------------------- Compaction Statement ---------------------------------
+    @Override
+    public Void visitCancelCompactionStatement(CancelCompactionStmt statement, ConnectContext context) {
+        checkStmtOperatePrivilege(context);
         return null;
     }
 }

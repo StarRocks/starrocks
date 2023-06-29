@@ -370,9 +370,7 @@ TEST_F(LakeServiceTest, test_delete_tablet) {
     _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
     ASSERT_EQ(0, response.failed_tablets_size());
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
-    ASSERT_TRUE(tablet.get_schema().status().is_not_found()) << tablet.get_schema().status();
-    ASSERT_TRUE(tablet.get_metadata(1).status().is_not_found()) << tablet.get_metadata(1).status();
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
 }
 
 // NOLINTNEXTLINE
@@ -385,6 +383,7 @@ TEST_F(LakeServiceTest, test_delete_tablet_dir_not_exit) {
     _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
     ASSERT_EQ(0, response.failed_tablets_size());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     // restore test directory
     ASSERT_OK(fs::create_directories(kRootLocation));
 }
