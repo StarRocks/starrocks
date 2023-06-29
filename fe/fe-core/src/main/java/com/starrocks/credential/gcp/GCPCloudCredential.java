@@ -17,11 +17,9 @@ package com.starrocks.credential.gcp;
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudCredential;
-import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class GCPCloudCredential implements CloudCredential {
@@ -84,10 +82,8 @@ public class GCPCloudCredential implements CloudCredential {
     }
 
     @Override
-    public void toThrift(List<TCloudProperty> properties) {
-        for (Map.Entry<String, String> entry : hadoopConfiguration.entrySet()) {
-            properties.add(new TCloudProperty(entry.getKey(), entry.getValue()));
-        }
+    public void toThrift(Map<String, String> properties) {
+        properties.putAll(hadoopConfiguration);
     }
 
     @Override

@@ -19,12 +19,12 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TCloudProperty;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.LinkedList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+
 public class AWSCloudConfiguration implements CloudConfiguration {
 
     private final AWSCloudCredential awsCloudCredential;
@@ -69,12 +69,12 @@ public class AWSCloudConfiguration implements CloudConfiguration {
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
 
-        List<TCloudProperty> properties = new LinkedList<>();
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
-                String.valueOf(enablePathStyleAccess)));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL)));
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
+                String.valueOf(enablePathStyleAccess));
+        properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL));
         awsCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties(properties);
+        tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
