@@ -208,7 +208,8 @@ private:
 
                 uint8_t found = 0;
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn>) {
+                              std::is_same_v<StructColumn, ElementColumn> ||
+                              std::is_same_v<JsonColumn, ElementColumn>) {
                     found = elements.equals(offset + j, targets, i);
                 } else if constexpr (ConstTarget) {
                     [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
@@ -535,7 +536,8 @@ private:
                     }
                 }
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn>) {
+                              std::is_same_v<StructColumn, ElementColumn> ||
+                              std::is_same_v<JsonColumn, ElementColumn>) {
                     found = elements.equals(offset + j, targets, i);
                 } else if constexpr (ConstTarget) {
                     [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
@@ -736,7 +738,8 @@ private:
                 }
                 //[null, x*, x] - [null, x*, x]
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn>) {
+                              std::is_same_v<StructColumn, ElementColumn> ||
+                              std::is_same_v<JsonColumn, ElementColumn>) {
                     found = (elements.compare_at(j, i, targets, -1) == 0);
                 } else {
                     found = (elements_ptr[j] == targets_ptr[i]);
