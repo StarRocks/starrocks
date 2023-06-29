@@ -222,11 +222,18 @@ public class Optimizer {
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !optimizerConfig.isRuleBased()) {
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
-                MvRewritePreprocessor preprocessor =
+            MvRewritePreprocessor preprocessor =
                         new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
                 preprocessor.prepareMvCandidatesForPlan();
             }
+            if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
+                try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessSyncMvs")) {
+                    preprocessor.prepareSyncMvCandidatesForPlan();
+                }
+            }
+            OptimizerTraceUtil.logMVPrepare(connectContext, "There are %d candidate MVs after prepare phase",
+                    context.getCandidateMvs().size());
         }
     }
 
