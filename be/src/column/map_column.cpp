@@ -410,7 +410,7 @@ int MapColumn::compare_at(size_t left, size_t right, const Column& right_column,
     return -1;
 }
 
-bool MapColumn::equals(size_t left, const starrocks::Column& rhs, size_t right) const {
+int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
     const auto& rhs_map = down_cast<const MapColumn&>(rhs);
 
     size_t lhs_offset = _offsets->get_data()[left];
@@ -422,26 +422,34 @@ bool MapColumn::equals(size_t left, const starrocks::Column& rhs, size_t right) 
         return false;
     }
 
+    bool has_null = false;
     for (uint32_t i = lhs_offset; i < lhs_end; ++i) {
         bool found = false;
         for (uint32_t j = rhs_offset; j < rhs_end; ++j) {
-            if (!_keys->equals(i, *(rhs_map._keys.get()), j)) {
+            int res = _keys->equals(i, *(rhs_map._keys.get()), j, safe_eq);
+            if (res == EQUALS_FALSE) {
                 continue;
             }
 
+            has_null |= (res == EQUALS_NULL);
             // So two keys is the same
-            if (!_values->equals(i, *(rhs_map._values.get()), j)) {
-                return false;
+            res = _values->equals(i, *(rhs_map._values.get()), j, safe_eq);
+            if (res == EQUALS_FALSE) {
+                return EQUALS_FALSE;
             }
+            has_null |= (res == EQUALS_NULL);
             found = true;
             break;
         }
         if (!found) {
-            return false;
+            return EQUALS_FALSE;
         }
     }
 
-    return true;
+    // unsafe eq && has null, should return NULL
+    // unsafe eq && none null, should return TRUE
+    // safe eq, should return TRUE
+    return !safe_eq && has_null ? EQUALS_NULL : EQUALS_TRUE;
 }
 
 void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {

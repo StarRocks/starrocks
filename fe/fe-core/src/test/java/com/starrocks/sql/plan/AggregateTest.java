@@ -886,7 +886,7 @@ public class AggregateTest extends PlanTestBase {
                 + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
                 + "as __col_18 from lineorder_flat_for_mv group by 1,2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
+        assertContains(plan, "window_funnel(42: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -903,7 +903,7 @@ public class AggregateTest extends PlanTestBase {
                 + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
                 + "as __col_18 from lineorder_flat_for_mv";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(41: window_funnel, 900, 0)");
+        assertContains(plan, "window_funnel(40: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -922,7 +922,7 @@ public class AggregateTest extends PlanTestBase {
                 "by date_trunc('year',lo_orderdate)," +
                 "left(c_name,1) ) t;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
+        assertContains(plan, "window_funnel(42: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
     }
 

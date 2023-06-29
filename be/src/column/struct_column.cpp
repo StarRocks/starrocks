@@ -291,29 +291,37 @@ size_t StructColumn::filter_range(const Filter& filter, size_t from, size_t to) 
 
 int StructColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
     const auto& rhs_struct = down_cast<const StructColumn&>(rhs);
-    DCHECK(_fields.size() != rhs_struct._fields.size());
 
-    for (int i = 0; i < _fields.size(); ++i) {
+    auto lsize = _fields.size();
+    auto rsize = rhs_struct._fields.size();
+    auto size = std::min(lsize, rsize);
+
+    for (int i = 0; i < size; ++i) {
         auto cmp = _fields[i]->compare_at(left, right, *rhs_struct._fields[i].get(), nan_direction_hint);
         if (cmp != 0) {
             return cmp;
         }
     }
-
-    return 0;
+    return lsize < rsize ? -1 : (lsize == rsize ? 0 : 1);
 }
 
-bool StructColumn::equals(size_t left, const Column& rhs, size_t right) const {
+int StructColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
     const auto& rhs_struct = down_cast<const StructColumn&>(rhs);
     if (_fields.size() != rhs_struct._fields.size()) {
         return false;
     }
+
+    int ret = EQUALS_TRUE;
     for (int i = 0; i < _fields.size(); ++i) {
-        if (!_fields[i]->equals(left, *rhs_struct._fields[i].get(), right)) {
-            return false;
+        auto tmp = _fields[i]->equals(left, *rhs_struct._fields[i].get(), right, safe_eq);
+        if (tmp == EQUALS_FALSE) {
+            return EQUALS_FALSE;
+        } else if (tmp == EQUALS_NULL) {
+            ret = EQUALS_NULL;
         }
     }
-    return true;
+
+    return safe_eq ? EQUALS_TRUE : ret;
 }
 
 void StructColumn::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {

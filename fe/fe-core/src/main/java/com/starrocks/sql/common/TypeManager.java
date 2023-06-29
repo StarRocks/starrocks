@@ -124,43 +124,9 @@ public class TypeManager {
                 return expr;
             }
 
-            if (expr.getType().isArrayType()) {
-                Type originArrayItemType = ((ArrayType) expr.getType()).getItemType();
-
-                if (!targetType.isArrayType()) {
-                    throw new SemanticException(
-                            "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
-                }
-
-                if (!Type.canCastTo(originArrayItemType, ((ArrayType) targetType).getItemType())) {
-                    throw new SemanticException("Cannot cast '" + expr.toSql()
-                            + "' from " + originArrayItemType + " to " + ((ArrayType) targetType).getItemType());
-                }
-            } else if (expr.getType().isMapType()) {
-                if (!targetType.isMapType()) {
-                    throw new SemanticException(
-                            "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
-                }
-
-                if (!Type.canCastTo(expr.getType(), targetType)) {
-                    throw new SemanticException("Cannot cast '" + expr.toSql()
-                            + "' from " + expr.getType() + " to " + targetType);
-                }
-            } else if (expr.getType().isStructType()) {
-                if (!targetType.isStructType()) {
-                    throw new SemanticException(
-                            "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
-                }
-
-                if (!Type.canCastTo(expr.getType(), targetType)) {
-                    throw new SemanticException("Cannot cast '" + expr.toSql()
-                            + "' from " + expr.getType() + " to " + targetType);
-                }
-            } else {
-                if (!Type.canCastTo(expr.getType(), targetType)) {
-                    throw new SemanticException("Cannot cast '" + expr.toSql()
-                            + "' from " + expr.getType() + " to " + targetType);
-                }
+            if (!Type.canCastTo(expr.getType(), targetType)) {
+                throw new SemanticException(
+                        "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
             }
             return expr.uncheckedCastTo(targetType);
         } catch (AnalysisException e) {
