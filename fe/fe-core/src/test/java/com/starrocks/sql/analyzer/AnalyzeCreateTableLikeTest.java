@@ -48,5 +48,11 @@ public class AnalyzeCreateTableLikeTest {
     @Test
     public void testCreateTableLike() throws Exception {
         analyzeSuccess("CREATE EXTERNAL TABLE hive_test_like LIKE db1.t0");
+
+    }
+
+    @Test
+    public void testCreateIfNotExists() {
+        analyzeSuccess("create table if not exists t2 like t1");
     }
 }

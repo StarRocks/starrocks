@@ -741,7 +741,7 @@ public class RestoreJob extends AbstractJob {
 
             // add restored tables
             for (Table tbl : restoredTbls) {
-                if (!db.registerTableUnlock(tbl)) {
+                if (!db.registerTableUnlocked(tbl)) {
                     status = new Status(ErrCode.COMMON_ERROR, "Table " + tbl.getName()
                             + " already exist in db: " + db.getOriginName());
                     return;
@@ -936,7 +936,7 @@ public class RestoreJob extends AbstractJob {
 
             // restored tables
             for (Table restoreTbl : restoredTbls) {
-                db.registerTableUnlock(restoreTbl);
+                db.registerTableUnlocked(restoreTbl);
                 // modify tablet inverted index
                 for (Partition restorePart : restoreTbl.getPartitions()) {
                     modifyInvertedIndex((OlapTable) restoreTbl, restorePart);
