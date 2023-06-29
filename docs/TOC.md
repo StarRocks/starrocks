@@ -676,7 +676,6 @@
       + [Insert Into](./faq/loading/Insert_into_faq.md)
       + [Synchronize data from MySQL in real time](/faq/loading/synchronize_mysql_into_sr.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
-      + [DataX](./faq/loading/DataX_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
   + [SQL](./faq/Sql_faq.md)
   + [query_dump](./faq/Dump_query.md)
