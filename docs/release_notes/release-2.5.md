@@ -29,7 +29,7 @@ Fixed the following issues:
 - Using unsupported properties in the CREATE TABLE statement causes null pointer exceptions (NPEs). [#23859](https://github.com/StarRocks/starrocks/pull/23859)
 - Table permission filtering in `information_schema` becomes ineffective. As a result, users can view tables they do not have permission to. [#23804](https://github.com/StarRocks/starrocks/pull/23804)
 - Information returned by SHOW TABLE STATUS is incomplete. [#24279](https://github.com/StarRocks/starrocks/issues/24279)
-- Schema change for Primary Key tables is hung if data loading occurs simultaneously with schema change. [#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- A schema change sometimes may be hung if data loading occurs simultaneously with the schema change. [#23456](https://github.com/StarRocks/starrocks/pull/23456)
 - RocksDB WAL flush blocks the brpc worker from processing bthreads, which interrupts high-frequency data loading into Primary Key tables. [#22489](https://github.com/StarRocks/starrocks/pull/22489)
 - TIME-type columns that are not supported in StarRocks can be successfully created. [#23474](https://github.com/StarRocks/starrocks/pull/23474)
 - Materialized view Union rewrite fails. [#22922](https://github.com/StarRocks/starrocks/pull/22922)
