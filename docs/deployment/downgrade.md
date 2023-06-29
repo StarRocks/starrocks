@@ -57,13 +57,13 @@ ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```
 
-- **If you downgrade from v2.2 and later to versions earlier than v2.2**
+- **If you downgrade from v2.2 and later versions**
 
 Set the FE configuration item `ignore_unknown_log_id` to `true`. Because it is a static parameter, you must modify it in the FE configuration file **fe.conf** and restart the node to allow the modification to take effect. After the downgrade and the first checkpoint are completed, you can reset it to `false` and restart the node.
 
-- **If you downgrade from v2.4 and later to versions earlier than v2.4**
+- **If you have enabled FQDN access**
 
-If you have enabled FQDN access, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/enable_fqdn.md#rollback) for detailed instructions.
+If you have enabled FQDN access (suppoted from v2.4 onwards) and need to downgrade to versions ealrier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/enable_fqdn.md#rollback) for detailed instructions.
 
 ### Perform downgrade availability test
 
