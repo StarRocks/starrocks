@@ -462,30 +462,6 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     }
 }
 
-<<<<<<< HEAD
-void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
-=======
-void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
-                                          const ChunkPtr& chunk) {
-    // a simple spill stragety
-    auto& mem_resource_mgr = op->mem_resource_manager();
-    if (state->enable_spill() && mem_resource_mgr.releaseable() &&
-        op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
-        int64_t request_reserved = 0;
-        if (chunk == nullptr) {
-            request_reserved = op->estimated_memory_reserved();
-        } else {
-            request_reserved = op->estimated_memory_reserved(chunk);
-        }
-        request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
-
-        if (!tls_thread_status.try_mem_reserve(request_reserved, tracker,
-                                               tracker->limit() * state->spill_mem_limit_threshold())) {
-            mem_resource_mgr.to_low_memory_mode();
-        }
-    }
-}
-
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
                               int64_t execution_time) {
     if (schedule_count > 0) {
@@ -499,7 +475,6 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, in
         _global_schedule_timer->set((int64_t)-1);
     }
 
->>>>>>> 7adb8c30a ([Enhancement] add  statistics to pipeline execution  (#26021))
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
     // the information about the driver queue and workgroup.
