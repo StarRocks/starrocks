@@ -393,4 +393,11 @@ public class AnalyzeCreateTableTest {
                     "\"table\" = \"hive_hdfs_orc_nocompress\"," +
                     "\"database\" = \"hive_extbl_test\");");
     }
+
+    @Test
+    public void testGeneratedColumnOnAGGTable() throws Exception {
+        analyzeFail("CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, v1 BIGINT SUM as id)" +
+                    "AGGREGATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 " +
+                    "PROPERTIES(\"replication_num\" = \"1\", \"replicated_storage\"=\"true\");");
+    }
 }
