@@ -102,9 +102,9 @@ public class TablesProcDirTest {
             }
         };
 
-        db.registerTableUnlock(tb1);
-        db.registerTableUnlock(tb2);
-        db.registerTableUnlock(tb3);
+        db.registerTableUnlocked(tb1);
+        db.registerTableUnlocked(tb2);
+        db.registerTableUnlocked(tb3);
     }
 
     @Test

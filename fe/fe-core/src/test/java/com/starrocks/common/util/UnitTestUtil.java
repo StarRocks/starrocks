@@ -131,7 +131,7 @@ public class UnitTestUtil {
 
         // db
         Database db = new Database(dbId, DB_NAME);
-        db.registerTableUnlock(table);
+        db.registerTableUnlocked(table);
         return db;
     }
 

@@ -564,7 +564,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             }
 
             Table table = tableInfo.getTable();
-            db.registerTableUnlock(table);
+            db.registerTableUnlocked(table);
             LOG.info("recover db[{}] with table[{}]: {}", dbId, table.getId(), table.getName());
             iterator.remove();
             nameToTableInfo.remove(dbId, table.getName());
@@ -587,7 +587,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
 
         Table table = recycleTableInfo.getTable();
-        db.registerTableUnlock(table);
+        db.registerTableUnlocked(table);
         nameToTableInfoDbLevel.remove(tableName);
         idToTableInfo.row(dbId).remove(table.getId());
         removeRecycleMarkers(table.getId());
@@ -606,7 +606,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         RecycleTableInfo tableInfo = idToTableInfoDbLevel.get(tableId);
         Preconditions.checkState(tableInfo.getDbId() == db.getId());
         Table table = tableInfo.getTable();
-        db.registerTableUnlock(table);
+        db.registerTableUnlocked(table);
         nameToTableInfo.row(dbId).remove(table.getName());
         idToTableInfoDbLevel.remove(tableId);
         idToRecycleTime.remove(tableInfo.getTable().getId());

@@ -460,7 +460,7 @@ public class Database extends MetaObject implements Writable {
         checkReplicaQuota();
     }
 
-    public boolean registerTableUnlock(Table table) {
+    public boolean registerTableUnlocked(Table table) {
         if (table == null) {
             return false;
         }

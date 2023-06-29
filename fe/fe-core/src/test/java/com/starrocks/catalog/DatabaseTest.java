@@ -124,9 +124,9 @@ public class DatabaseTest {
         table.addPartition(partition);
 
         // create
-        Assert.assertTrue(db.registerTableUnlock(table));
+        Assert.assertTrue(db.registerTableUnlocked(table));
         // duplicate
-        Assert.assertFalse(db.registerTableUnlock(table));
+        Assert.assertFalse(db.registerTableUnlocked(table));
 
         Assert.assertEquals(table, db.getTable(table.getId()));
         Assert.assertEquals(table, db.getTable(table.getName()));
@@ -150,7 +150,7 @@ public class DatabaseTest {
         db.dropTableWithLock(table.getName());
         Assert.assertEquals(0, db.getTables().size());
 
-        db.registerTableUnlock(table);
+        db.registerTableUnlocked(table);
         db.dropTable(table.getName());
         Assert.assertEquals(0, db.getTables().size());
     }
@@ -202,7 +202,7 @@ public class DatabaseTest {
                 KeysType.AGG_KEYS);
         Deencapsulation.setField(table, "baseIndexId", 1);
         table.addPartition(partition);
-        db2.registerTableUnlock(table);
+        db2.registerTableUnlocked(table);
         db2.write(dos);
 
         dos.flush();

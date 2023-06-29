@@ -575,7 +575,7 @@ public class AlterJobMgr {
         }
         materializedView.setName(newMvName);
         db.dropTable(oldMvName);
-        db.registerTableUnlock(materializedView);
+        db.registerTableUnlocked(materializedView);
         final RenameMaterializedViewLog renameMaterializedViewLog =
                 new RenameMaterializedViewLog(materializedView.getId(), db.getId(), newMvName);
         updateTaskDefinition(materializedView);
@@ -591,7 +591,7 @@ public class AlterJobMgr {
         MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
         db.dropTable(oldMaterializedView.getName());
         oldMaterializedView.setName(newMaterializedViewName);
-        db.registerTableUnlock(oldMaterializedView);
+        db.registerTableUnlocked(oldMaterializedView);
         updateTaskDefinition(oldMaterializedView);
         LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
                 newMaterializedViewName, oldMaterializedView.getId());
@@ -945,11 +945,11 @@ public class AlterJobMgr {
 
         // rename new table name to origin table name and add it to database
         newTbl.checkAndSetName(origTblName, false);
-        db.registerTableUnlock(newTbl);
+        db.registerTableUnlocked(newTbl);
 
         // rename origin table name to new table name and add it to database
         origTable.checkAndSetName(newTblName, false);
-        db.registerTableUnlock(origTable);
+        db.registerTableUnlocked(origTable);
 
         // swap dependencies of base table
         if (origTable.isMaterializedView()) {
@@ -999,7 +999,7 @@ public class AlterJobMgr {
             view.setNewFullSchema(newFullSchema);
 
             db.dropTable(viewName);
-            db.registerTableUnlock(view);
+            db.registerTableUnlocked(view);
 
             AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
             GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
@@ -1029,7 +1029,7 @@ public class AlterJobMgr {
             view.setNewFullSchema(newFullSchema);
 
             db.dropTable(viewName);
-            db.registerTableUnlock(view);
+            db.registerTableUnlocked(view);
 
             LOG.info("replay modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {
