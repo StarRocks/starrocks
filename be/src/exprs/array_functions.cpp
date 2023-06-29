@@ -733,13 +733,7 @@ private:
                     continue;
                 }
                 //[null, x*, x] - [null, x*, x]
-<<<<<<< HEAD
-                if constexpr (std::is_same_v<ArrayColumn, ElementColumn>) {
-=======
-                if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn> ||
-                              std::is_same_v<JsonColumn, ElementColumn>) {
->>>>>>> 3f83bde74 ([BugFix] support several array function for json types (#25967))
+                if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<JsonColumn, ElementColumn>) {
                     found = (elements.compare_at(j, i, targets, -1) == 0);
                 } else {
                     found = (elements_ptr[j] == targets_ptr[i]);
@@ -843,12 +837,7 @@ private:
         HANDLE_HAS_TYPE(DateColumn);
         HANDLE_HAS_TYPE(TimestampColumn);
         HANDLE_HAS_TYPE(ArrayColumn);
-<<<<<<< HEAD
-=======
         HANDLE_HAS_TYPE(JsonColumn);
-        HANDLE_HAS_TYPE(MapColumn);
-        HANDLE_HAS_TYPE(StructColumn);
->>>>>>> 3f83bde74 ([BugFix] support several array function for json types (#25967))
 
         return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
