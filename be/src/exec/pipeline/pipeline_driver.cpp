@@ -175,6 +175,14 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     COUNTER_UPDATE(curr_op->_pull_chunk_num_counter, 1);
                     if (maybe_chunk.value() && maybe_chunk.value()->num_rows() > 0) {
                         size_t row_num = maybe_chunk.value()->num_rows();
+                        if (UNLIKELY(row_num > runtime_state->chunk_size())) {
+                            return Status::InternalError(
+                                    fmt::format("Intermediate chunk size must not be greater than {}, actually {} "
+                                                "after {}-th operator {} in {}",
+                                                runtime_state->chunk_size(), row_num, i, curr_op->get_name(),
+                                                to_readable_string()));
+                        }
+
                         total_rows_moved += row_num;
                         {
                             SCOPED_TIMER(next_op->_push_timer);
