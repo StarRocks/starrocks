@@ -20,6 +20,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QualifiedName;
 
 import java.util.LinkedList;
@@ -218,7 +219,11 @@ public class Field {
             return false;
         }
 
-        return tableName.getTbl().equals(relationAlias.getTbl());
+        if (ConnectContext.get() != null && ConnectContext.get().isRelationAliasCaseInsensitive()) {
+            return tableName.getTbl().equalsIgnoreCase(relationAlias.getTbl());
+        } else {
+            return tableName.getTbl().equals(relationAlias.getTbl());
+        }
     }
 
     @Override
