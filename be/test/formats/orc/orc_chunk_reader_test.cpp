@@ -1107,20 +1107,19 @@ TEST_F(OrcChunkReaderTest, TestReadBinaryColumn) {
  * {a: 2, b: "12345678901", c: "12345"}
  */
 TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
-    SlotDesc slot_descs[] = {
-            {"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
-            {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-            {"c", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-            {""},
-    };
-    slot_descs[1].type.len = 6;
-    slot_descs[2].type.len = 6;
-    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/10380.orc";
-    std::vector<SlotDescriptor*> src_slot_descriptors;
-    ObjectPool pool;
-    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
-
     {
+        SlotDesc slot_descs[] = {
+                {"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                {"c", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                {""},
+        };
+        slot_descs[1].type.len = 6;
+        slot_descs[2].type.len = 6;
+        static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/10380.orc";
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_broker_load_mode(false);
         auto input_stream = orc::readLocalFile(input_orc_file);
@@ -1141,6 +1140,41 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
 
         EXPECT_EQ("[1, NULL, '123456']", result->debug_row(0));
         EXPECT_EQ("[2, NULL, '12345']", result->debug_row(1));
+    }
+
+    {
+        SlotDesc slot_descs[] = {
+                {"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                {"c", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                {""},
+        };
+        slot_descs[1].type.len = 6;
+        slot_descs[2].type.len = 6;
+        static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/10380.orc";
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_broker_load_mode(true);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 2);
+        EXPECT_EQ(result->num_columns(), 3);
+
+        EXPECT_EQ("[1, '123456789012', '123456']", result->debug_row(0));
+        EXPECT_EQ("[2, '12345678901', '12345']", result->debug_row(1));
     }
 }
 
