@@ -36,7 +36,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeAlterTableStatementTest {
     private static ConnectContext connectContext;
-    private static AlterTableStatementAnalyzer.AlterTableClauseAnalyzerVisitor clauseAnalyzerVisitor;
+    private static AlterTableClauseVisitor clauseAnalyzerVisitor;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -45,7 +45,7 @@ public class AnalyzeAlterTableStatementTest {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         connectContext = AnalyzeTestUtil.getConnectContext();
-        clauseAnalyzerVisitor = new AlterTableStatementAnalyzer.AlterTableClauseAnalyzerVisitor();
+        clauseAnalyzerVisitor = new AlterTableClauseVisitor();
     }
 
     @Test
