@@ -226,5 +226,9 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select map_keys(map1), map_values(map1) from pc0";
         String plan = getVerboseExplain(sql);
         assertNotContains(plan, "ColumnAccessPath");
+
+        sql = "select map_keys(map1), map_size(map1) from pc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "[/map1/KEY, /map1/OFFSET]");
     }
 }
