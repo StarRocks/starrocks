@@ -48,7 +48,7 @@ ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 ```
 
-After the downgrade, and the status of all BE nodes is `Alive`, you can re-enable tablet clone.
+After the downgrade, you can enable tablet clone again if the status of all BE nodes becomes `Alive`.
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
