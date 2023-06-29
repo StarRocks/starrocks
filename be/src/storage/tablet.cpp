@@ -141,7 +141,8 @@ Status Tablet::_init_once_action() {
         Version version = inc_rs_meta->version();
         RowsetSharedPtr rowset = get_rowset_by_version(version);
         if (rowset == nullptr) {
-            auto st = RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, inc_rs_meta, &rowset);
+            auto st =
+                    RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, inc_rs_meta, &rowset);
             if (!st.ok()) {
                 LOG(WARNING) << "fail to init incremental rowset. tablet_id:" << tablet_id()
                              << ", schema_hash:" << schema_hash() << ", version=" << version << ", res=" << st;
@@ -1653,8 +1654,7 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
 void Tablet::update_max_version_schema(const TabletSchemaSPtr& tablet_schema) {
     std::lock_guard wrlock(_meta_lock);
     // Double Check for concurrent update
-    if (!_max_version_schema ||
-        tablet_schema->schema_version() > _max_version_schema->schema_version()) {
+    if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
         _max_version_schema = tablet_schema;
     }
 }

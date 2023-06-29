@@ -208,8 +208,7 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
     return Status::InternalError("Unreachable path");
 }
 
-Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb,
-                             size_t depth) {
+Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb, size_t depth) {
     const int32_t kFakeUniqueId = -1;
 
     const std::vector<TTypeNode>& types = t_column.type_desc.types;
@@ -238,39 +237,39 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
 
     const TTypeNode& curr_type_node = types[depth];
     switch (curr_type_node.type) {
-        case TTypeNodeType::SCALAR: {
-            if (depth + 1 != types.size()) {
-                return Status::InvalidArgument("scalar type cannot have child node");
-            }
-            TScalarType scalar = curr_type_node.scalar_type;
-
-            LogicalType field_type = t_primitive_type_to_field_type(scalar.type);
-            column_pb->set_type(logical_type_to_string(field_type));
-            column_pb->set_length(TabletColumn::get_field_length_by_type(field_type, scalar.len));
-            column_pb->set_index_length(column_pb->length());
-            column_pb->set_frac(curr_type_node.scalar_type.scale);
-            column_pb->set_precision(curr_type_node.scalar_type.precision);
-            if (field_type == TYPE_VARCHAR) {
-                int32_t index_len = depth == 0 && t_column.__isset.index_len ? t_column.index_len : 10;
-                column_pb->set_index_length(index_len);
-            }
-            if (depth == 0 && t_column.__isset.default_value) {
-                column_pb->set_default_value(t_column.default_value);
-            }
-            if (depth == 0 && t_column.__isset.is_bloom_filter_column) {
-                column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
-            }
-            return Status::OK();
+    case TTypeNodeType::SCALAR: {
+        if (depth + 1 != types.size()) {
+            return Status::InvalidArgument("scalar type cannot have child node");
         }
-        case TTypeNodeType::ARRAY:
-            column_pb->set_type(logical_type_to_string(TYPE_ARRAY));
-            column_pb->set_length(TabletColumn::get_field_length_by_type(TYPE_ARRAY, sizeof(Collection)));
-            column_pb->set_index_length(column_pb->length());
-            return t_column_to_pb_column(kFakeUniqueId, t_column, column_pb->add_children_columns(), depth + 1);
-        case TTypeNodeType::STRUCT:
-            return Status::NotSupported("struct not supported yet");
-        case TTypeNodeType::MAP:
-            return Status::NotSupported("map not supported yet");
+        TScalarType scalar = curr_type_node.scalar_type;
+
+        LogicalType field_type = t_primitive_type_to_field_type(scalar.type);
+        column_pb->set_type(logical_type_to_string(field_type));
+        column_pb->set_length(TabletColumn::get_field_length_by_type(field_type, scalar.len));
+        column_pb->set_index_length(column_pb->length());
+        column_pb->set_frac(curr_type_node.scalar_type.scale);
+        column_pb->set_precision(curr_type_node.scalar_type.precision);
+        if (field_type == TYPE_VARCHAR) {
+            int32_t index_len = depth == 0 && t_column.__isset.index_len ? t_column.index_len : 10;
+            column_pb->set_index_length(index_len);
+        }
+        if (depth == 0 && t_column.__isset.default_value) {
+            column_pb->set_default_value(t_column.default_value);
+        }
+        if (depth == 0 && t_column.__isset.is_bloom_filter_column) {
+            column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
+        }
+        return Status::OK();
+    }
+    case TTypeNodeType::ARRAY:
+        column_pb->set_type(logical_type_to_string(TYPE_ARRAY));
+        column_pb->set_length(TabletColumn::get_field_length_by_type(TYPE_ARRAY, sizeof(Collection)));
+        column_pb->set_index_length(column_pb->length());
+        return t_column_to_pb_column(kFakeUniqueId, t_column, column_pb->add_children_columns(), depth + 1);
+    case TTypeNodeType::STRUCT:
+        return Status::NotSupported("struct not supported yet");
+    case TTypeNodeType::MAP:
+        return Status::NotSupported("map not supported yet");
     }
     return Status::InternalError("Unreachable path");
 }

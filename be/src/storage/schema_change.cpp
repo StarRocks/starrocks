@@ -364,8 +364,8 @@ SchemaChangeWithSorting::SchemaChangeWithSorting(ChunkChanger* chunk_changer, si
         : SchemaChange(), _chunk_changer(chunk_changer), _memory_limitation(memory_limitation) {}
 
 Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_rowset_writer,
-                                        TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
-                                        RowsetSharedPtr rowset, TabletSchemaCSPtr base_tablet_schema) {
+                                        TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
+                                        TabletSchemaCSPtr base_tablet_schema) {
     auto cur_base_tablet_schema = !base_tablet_schema ? base_tablet->tablet_schema() : base_tablet_schema;
     MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
     Schema base_schema =

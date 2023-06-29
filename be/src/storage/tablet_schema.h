@@ -56,7 +56,6 @@ class SegmentReaderWriterTest;
 class POlapTableIndexSchema;
 class TColumn;
 
-
 class TabletColumn {
     struct ExtraFields {
         std::string default_value;
@@ -238,7 +237,6 @@ public:
                                                          const std::vector<uint32_t>& unique_column_ids);
     static std::unique_ptr<TabletSchema> copy(const std::shared_ptr<const TabletSchema>& tablet_schema);
 
-
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
     constexpr static SchemaId invalid_id() { return 0; }
@@ -293,10 +291,8 @@ public:
 
     Schema* schema() const;
 
-    void build_current_tablet_schema(int64_t index_id, int32_t version,
-                                     const POlapTableIndexSchema& index,
+    void build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
                                      const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
-
 
 private:
     friend class SegmentReaderWriterTest;
@@ -334,7 +330,6 @@ private:
     mutable std::unique_ptr<starrocks::Schema> _schema;
     mutable std::once_flag _init_schema_once_flag;
     int32_t _schema_version = -1;
-
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);
@@ -342,6 +337,5 @@ bool operator!=(const TabletSchema& a, const TabletSchema& b);
 
 using TabletSchemaSPtr = std::shared_ptr<TabletSchema>;
 using TabletSchemaCSPtr = std::shared_ptr<const TabletSchema>;
-
 
 } // namespace starrocks

@@ -188,8 +188,7 @@ Status DeltaWriter::_init() {
 
     // build tablet schema in request level
     auto tablet_schema_ptr = _tablet->tablet_schema();
-    _build_current_tablet_schema(_opt.index_id,
-                                 _opt.ptable_schema_param, _tablet->tablet_schema());
+    _build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema());
 
     // maybe partial update, change to partial tablet schema
     if (tablet_schema_ptr->keys_type() == KeysType::PRIMARY_KEYS &&
@@ -448,9 +447,7 @@ Status DeltaWriter::_flush_memtable() {
     return _flush_token->wait();
 }
 
-
-void DeltaWriter::_build_current_tablet_schema(int64_t index_id,
-                                               const POlapTableSchemaParam& ptable_schema_param,
+void DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& ptable_schema_param,
                                                const TabletSchemaCSPtr& ori_tablet_schema) {
     _tablet_schema->copy_from(ori_tablet_schema);
     // new tablet schema if new table
@@ -460,18 +457,15 @@ void DeltaWriter::_build_current_tablet_schema(int64_t index_id,
     for (; i < ptable_schema_param.indexes_size(); i++) {
         if (ptable_schema_param.indexes(i).id() == index_id) break;
     }
-    if (ptable_schema_param.indexes_size() > 0 &&
-        ptable_schema_param.indexes(0).columns_desc_size() != 0 &&
+    if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(0).columns_desc_size() != 0 &&
         ptable_schema_param.indexes(0).columns_desc(0).unique_id() >= 0) {
         _tablet_schema->build_current_tablet_schema(index_id, ptable_schema_param.version(),
-                                                    ptable_schema_param.indexes(i),
-                                                    ori_tablet_schema);
+                                                    ptable_schema_param.indexes(i), ori_tablet_schema);
     }
     if (_tablet_schema->schema_version() > ori_tablet_schema->schema_version()) {
         _tablet->update_max_version_schema(_tablet_schema);
     }
 }
-
 
 void DeltaWriter::_reset_mem_table() {
     if (!_schema_initialized) {

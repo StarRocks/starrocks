@@ -398,9 +398,8 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
         schema = TabletSchema::create(tablet->tablet_schema(), update_column_ids);
     }
 
-    _auto_increment_partial_update_states[idx].init(
-            rowset, schema != nullptr ? schema : tablet->tablet_schema(),
-            column_id[0], idx);
+    _auto_increment_partial_update_states[idx].init(rowset, schema != nullptr ? schema : tablet->tablet_schema(),
+                                                    column_id[0], idx);
     _auto_increment_partial_update_states[idx].src_rss_rowids.resize(_upserts[idx]->size());
 
     auto column = ChunkHelper::column_from_field(*read_column_schema.field(0).get());

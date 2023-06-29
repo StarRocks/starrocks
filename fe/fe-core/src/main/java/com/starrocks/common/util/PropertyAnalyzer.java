@@ -166,8 +166,6 @@ public class PropertyAnalyzer {
     // light schema change
     public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
 
-    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
-
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty,

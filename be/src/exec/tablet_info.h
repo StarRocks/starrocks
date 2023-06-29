@@ -25,8 +25,8 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
-#include "util/random.h"
 #include "storage/tablet_schema.h"
+#include "util/random.h"
 
 namespace starrocks {
 

@@ -56,11 +56,9 @@ Status Compaction::do_compaction() {
 }
 
 RowsetSharedPtr& tablet_meta_with_max_rowset_version(std::vector<RowsetSharedPtr> rowsets) {
-    return *std::max_element(
-            rowsets.begin(), rowsets.end(),
-            [](const RowsetSharedPtr& a, const RowsetSharedPtr& b) {
-                return a->version() < b->version();
-            });
+    return *std::max_element(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& a, const RowsetSharedPtr& b) {
+        return a->version() < b->version();
+    });
 }
 
 Status Compaction::do_compaction_impl() {
@@ -87,8 +85,7 @@ Status Compaction::do_compaction_impl() {
         return iterator_num_res.status();
     }
 
-    const TabletSchemaCSPtr& cur_tablet_schema =
-            tablet_meta_with_max_rowset_version(_input_rowsets)->schema();
+    const TabletSchemaCSPtr& cur_tablet_schema = tablet_meta_with_max_rowset_version(_input_rowsets)->schema();
 
     size_t segment_iterator_num = iterator_num_res.value();
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
@@ -108,9 +105,8 @@ Status Compaction::do_compaction_impl() {
               << ", column group size=" << _column_groups.size()
               << ", columns per group=" << config::vertical_compaction_max_columns_per_group;
 
-    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment, algorithm,
-                                                                    _output_version, &_output_rs_writer,
-                                                                    &cur_tablet_schema));
+    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
+            _tablet.get(), max_rows_per_segment, algorithm, _output_version, &_output_rs_writer, &cur_tablet_schema));
     TRACE("prepare finished");
 
     Statistics stats;
@@ -169,7 +165,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
                                                const TabletSchemaCSPtr& tablet_schema) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema(tablet_schema);
-      auto merge_tablet_schema = std::shared_ptr<TabletSchema>(TabletSchema::copy(tablet_schema));
+    auto merge_tablet_schema = std::shared_ptr<TabletSchema>(TabletSchema::copy(tablet_schema));
     TabletReader reader(_tablet, _output_rs_writer->version(), merge_tablet_schema, schema);
     TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();

@@ -1722,7 +1722,7 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
         ASSERT_TRUE(rowset->get_segment_sk_index(&sk_index_values).ok());
     }
     ASSERT_EQ(sk_index_values.size(), loop);
-    size_t keys = _tablet->tablet_schema().num_short_key_columns();
+    size_t keys = _tablet->tablet_schema()->num_short_key_columns();
     for (size_t i = 0; i < loop; i++) {
         SeekTuple tuple(schema, sk_chunk->get(i).datums());
         std::string encoded_key = tuple.short_key_encode(keys, {1, 2}, 0);
@@ -1939,7 +1939,7 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
         ASSERT_TRUE(rowset->get_segment_sk_index(&sk_index_values).ok());
     }
     ASSERT_EQ(sk_index_values.size(), loop);
-    size_t keys = _tablet->tablet_schema().num_short_key_columns();
+    size_t keys = _tablet->tablet_schema()->num_short_key_columns();
     for (size_t i = 0; i < loop; i++) {
         SeekTuple tuple(schema, sk_chunk->get(i).datums());
         std::string encoded_key = tuple.short_key_encode(keys, {1, 2}, 0);

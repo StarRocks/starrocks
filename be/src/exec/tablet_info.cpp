@@ -19,9 +19,9 @@
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
+#include "storage/tablet_schema.h"
 #include "types/constexpr.h"
 #include "util/string_parser.hpp"
-#include "storage/tablet_schema.h"
 
 namespace starrocks {
 

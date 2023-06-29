@@ -391,5 +391,4 @@ private:
 };
 using TabletSchemaSPtr = std::shared_ptr<TabletSchema>;
 
-
 } // namespace starrocks

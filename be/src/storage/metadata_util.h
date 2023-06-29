@@ -14,9 +14,10 @@
 
 #pragma once
 
-#include <unordered_map>
 #include <gen_cpp/Descriptors_types.h>
 #include <gen_cpp/tablet_schema.pb.h>
+
+#include <unordered_map>
 
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
@@ -42,7 +43,6 @@ LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive_type, 
 
 void convert_to_new_version(TColumn* tcolumn);
 
-Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb,
-                             size_t depth = 0);
+Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb, size_t depth = 0);
 
 } // namespace starrocks

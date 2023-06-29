@@ -87,8 +87,7 @@ class Segment : public std::enable_shared_from_this<Segment> {
 public:
     // Like above but share the ownership of |unsafe_tablet_schema_ref|.
     static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, const std::string& path,
-                                                   uint32_t segment_id,
-                                                   TabletSchemaCSPtr tablet_schema,
+                                                   uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
                                                    const FooterPointerPB* partial_rowset_footer = nullptr,
                                                    bool skip_fill_local_cache = true);
@@ -112,7 +111,8 @@ public:
     StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t id, ColumnAccessPath* path = nullptr,
                                                                   const TabletSchemaCSPtr& tablet_schema = nullptr);
 
-    Status new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options, BitmapIndexIterator** iter, const TabletSchemaCSPtr& tablet_schema);
+    Status new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options, BitmapIndexIterator** iter,
+                                     const TabletSchemaCSPtr& tablet_schema);
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
@@ -142,7 +142,9 @@ public:
 
     size_t num_columns() const { return _column_readers.size(); }
 
-    const ColumnReader* column(size_t i) const { return _column_readers.at(_tablet_schema->column(i).unique_id()).get(); }
+    const ColumnReader* column(size_t i) const {
+        return _column_readers.at(_tablet_schema->column(i).unique_id()).get();
+    }
 
     FileSystem* file_system() const { return _fs.get(); }
 
@@ -189,7 +191,7 @@ private:
 
         const TabletSchema& operator*() const { return *_schema; }
 
-        const TabletSchemaCSPtr& schema(){ return _schema; };
+        const TabletSchemaCSPtr& schema() { return _schema; };
 
     private:
         TabletSchemaCSPtr _schema;

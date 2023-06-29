@@ -63,9 +63,7 @@
 namespace starrocks {
 
 Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta)
-        : _rowset_path(std::move(rowset_path)),
-          _rowset_meta(std::move(rowset_meta)),
-          _refs_by_reader(0) {
+        : _rowset_path(std::move(rowset_path)), _rowset_meta(std::move(rowset_meta)), _refs_by_reader(0) {
     MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
     _schema = _rowset_meta->tablet_schema() ? _rowset_meta->tablet_schema() : schema;
     DCHECK(_schema);
@@ -723,7 +721,7 @@ Status Rowset::verify() {
         order_columns = key_columns;
         is_pk_ordered = _schema->keys_type() == PRIMARY_KEYS;
     }
-    Schema order_schema = ChunkHelper::convert_schema(*_schema, order_columns);
+    Schema order_schema = ChunkHelper::convert_schema(_schema, order_columns);
     RowsetReadOptions rs_opts;
     OlapReaderStatistics stats;
     rs_opts.sorted = false;

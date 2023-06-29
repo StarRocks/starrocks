@@ -26,8 +26,7 @@ static void get_stats(std::ostream& os, void*) {
 // NOLINTNEXTLINE
 bvar::PassiveStatus<std::string> g_schema_map_stats("tablet_schema_map", get_stats, NULL);
 
-bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb,
-                                             const TabletSchemaCSPtr& schema_ptr) {
+bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb, const TabletSchemaCSPtr& schema_ptr) {
     if (schema_pb.next_column_unique_id() != schema_ptr->next_column_unique_id() ||
         schema_pb.column_size() != schema_ptr->num_columns()) {
         return false;

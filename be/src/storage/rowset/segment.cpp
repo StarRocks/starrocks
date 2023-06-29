@@ -219,12 +219,10 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
     // trying to prune the current segment by segment-level zone map
     for (const auto& pair : read_options.predicates_for_zone_map) {
         ColumnId column_id = pair.first;
-        const auto& tablet_column = read_options.tablet_schema
-                ? read_options.tablet_schema->column(column_id)
-                : _tablet_schema->column(column_id);
+        const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
+                                                               : _tablet_schema->column(column_id);
         auto column_unique_id = tablet_column.unique_id();
-        if (_column_readers.count(column_unique_id) < 1
-            || !_column_readers.at(column_unique_id)->has_zone_map()) {
+        if (_column_readers.count(column_unique_id) < 1 || !_column_readers.at(column_unique_id)->has_zone_map()) {
             continue;
         }
         if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
@@ -248,7 +246,7 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
     // If input schema is not match the actual meta, must convert the read_options according
     // to the actual format. And create an AdaptSegmentIterator to wrap
     if (_needs_chunk_adapter) {
-        auto& ref_tablet_schema = read_options.tablet_schema ? read_options.tablet_schema: _tablet_schema.schema();
+        auto& ref_tablet_schema = read_options.tablet_schema ? read_options.tablet_schema : _tablet_schema.schema();
         std::unique_ptr<SegmentChunkIteratorAdapter> adapter(new SegmentChunkIteratorAdapter(
                 ref_tablet_schema, *_column_storage_types, schema, read_options.chunk_size));
         RETURN_IF_ERROR(adapter->prepare(read_options));
@@ -366,9 +364,7 @@ void Segment::_prepare_adapter_info() {
 
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t cid, ColumnAccessPath* path,
                                                                        const TabletSchemaCSPtr& read_tablet_schema) {
-    auto const& current_tablet_schema = !read_tablet_schema
-            ? _tablet_schema.schema()
-            : read_tablet_schema;
+    auto const& current_tablet_schema = !read_tablet_schema ? _tablet_schema.schema() : read_tablet_schema;
     const TabletColumn& tablet_column = current_tablet_schema->column(cid);
     auto column_unique_id = tablet_column.unique_id();
     if ((_column_readers.count(column_unique_id) < 1)) {

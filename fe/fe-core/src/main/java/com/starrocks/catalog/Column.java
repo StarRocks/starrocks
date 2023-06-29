@@ -115,9 +115,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @SerializedName(value = "uniqueId")
     private int uniqueId;
 
-
-=======
->>>>>>> main
     @SerializedName(value = "materializedColumnExpr")
     private GsonUtils.ExpressionSerializedObject generatedColumnExprSerialized;
     private Expr materializedColumnExpr;

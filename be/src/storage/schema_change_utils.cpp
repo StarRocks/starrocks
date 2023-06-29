@@ -299,8 +299,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                         return false;
                     }
 
-                    Field ref_field = ChunkHelper::convert_field(ref_column,
-                                                                 base_tablet_meta->tablet_schema_ptr()->column(ref_column));
+                    Field ref_field = ChunkHelper::convert_field(
+                            ref_column, base_tablet_meta->tablet_schema_ptr()->column(ref_column));
                     Field new_field = ChunkHelper::convert_field(i, new_tablet_meta->tablet_schema_ptr()->column(i));
 
                     Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
@@ -670,7 +670,8 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
     // followings need resort:
     //      old keys:    A   B   C   D
     //      new keys:    A   B
-    if (new_schema->keys_type() != KeysType::DUP_KEYS && new_schema->num_key_columns() < base_schema->num_key_columns()) {
+    if (new_schema->keys_type() != KeysType::DUP_KEYS &&
+        new_schema->num_key_columns() < base_schema->num_key_columns()) {
         // this is a table with aggregate key type, and num of key columns in new schema
         // is less, which means the data in new tablet should be more aggregated.
         // so we use sorting schema change to sort and merge the data.

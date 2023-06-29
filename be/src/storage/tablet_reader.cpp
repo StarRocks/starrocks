@@ -47,15 +47,12 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
 }
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
-                           std::vector<RowsetSharedPtr> captured_rowsets,
-                           const TabletSchemaSPtr* tablet_schema)
+                           std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaSPtr* tablet_schema)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
           _version(version),
           _rowsets(std::move(captured_rowsets)) {
-    _tablet_schema = tablet_schema
-                     ? *tablet_schema
-                     : _tablet->tablet_schema();
+    _tablet_schema = tablet_schema ? *tablet_schema : _tablet->tablet_schema();
 }
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
@@ -70,11 +67,9 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
     _tablet_schema = _tablet->tablet_schema();
 }
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version,
-                           const TabletSchemaSPtr& tablet_schema, Schema schema)
-        : ChunkIterator(std::move(schema)),
-          _tablet(std::move(tablet)),
-          _version(version) {
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaSPtr& tablet_schema,
+                           Schema schema)
+        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version) {
     _tablet_schema = tablet_schema;
 }
 
@@ -134,7 +129,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     // get pk eq predicates, and convert these predicates to encoded pk column
     const auto& tablet_schema = _tablet->tablet_schema();
     vector<ColumnId> pk_column_ids;
-    for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_column_ids.emplace_back(i);
     }
     auto pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_column_ids);
@@ -143,7 +138,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     size_t num_pk_eq_predicates = 0;
     for (const ColumnPredicate* pred : _reader_params->predicates) {
         auto column_id = pred->column_id();
-        if (column_id < tablet_schema.num_key_columns() && pred->type() == PredicateType::kEQ) {
+        if (column_id < tablet_schema->num_key_columns() && pred->type() == PredicateType::kEQ) {
             auto& column = keys->get_column_by_id(column_id);
             if (column->size() != 0) {
                 return Status::NotSupported(
@@ -155,15 +150,15 @@ Status TabletReader::_init_collector_for_pk_index_read() {
             pushdown_predicates[pred->column_id()].emplace_back(pred);
         }
     }
-    if (num_pk_eq_predicates != tablet_schema.num_key_columns()) {
+    if (num_pk_eq_predicates != tablet_schema->num_key_columns()) {
         return Status::NotSupported(strings::Substitute("should have eq predicates on all pk columns current: $0 < $1",
-                                                        num_pk_eq_predicates, tablet_schema.num_key_columns()));
+                                                        num_pk_eq_predicates, tablet_schema->num_key_columns()));
     }
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(*tablet_schema.schema(), &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed tablet_id:" << _tablet->tablet_id();
     }
-    PrimaryKeyEncoder::encode(*tablet_schema.schema(), *keys, 0, keys->num_rows(), pk_column.get());
+    PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get());
 
     // get rowid using pk index
     std::vector<uint64_t> rowids(1);
@@ -199,7 +194,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.runtime_state = _reader_params->runtime_state;
     rs_opts.profile = _reader_params->profile;
     rs_opts.use_page_cache = _reader_params->use_page_cache;
-    rs_opts.tablet_schema = &_tablet->tablet_schema();
+    rs_opts.tablet_schema = _tablet->tablet_schema();
     rs_opts.global_dictmaps = _reader_params->global_dictmaps;
     rs_opts.unused_output_column_ids = _reader_params->unused_output_column_ids;
     rs_opts.runtime_range_pruner = _reader_params->runtime_range_pruner;
@@ -486,7 +481,7 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
                 return Status::InternalError("invalid delete condition string");
             }
             if (_tablet_schema->field_index(cond.column_name) >= _tablet_schema->num_key_columns() &&
-                    _tablet_schema->keys_type() != DUP_KEYS) {
+                _tablet_schema->keys_type() != DUP_KEYS) {
                 LOG(WARNING) << "ignore delete condition of non-key column: " << pred_pb.sub_predicates(i);
                 continue;
             }

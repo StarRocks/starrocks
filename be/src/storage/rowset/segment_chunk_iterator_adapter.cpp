@@ -20,7 +20,7 @@
 
 namespace starrocks {
 
-SegmentChunkIteratorAdapter::SegmentChunkIteratorAdapter(const TabletSchemaCSPtr tablet_schema,
+SegmentChunkIteratorAdapter::SegmentChunkIteratorAdapter(const TabletSchemaCSPtr& tablet_schema,
                                                          const std::vector<LogicalType>& new_types,
                                                          const Schema& out_schema, int chunk_size)
         : ChunkIterator(out_schema, chunk_size),

@@ -307,13 +307,11 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
 
-
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
     RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
-                                             std::move(child_schema), _morsel->rowsets(),
-                                             &_tablet_schema);
+                                             std::move(child_schema), _morsel->rowsets(), &_tablet_schema);
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {

@@ -3187,8 +3187,9 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     LOG(INFO) << err_msg_header << "convert_from finish tablet:" << _tablet.tablet_id()
               << " version:" << this->max_version() << " base tablet:" << base_tablet->tablet_id()
               << " #pending:" << _pending_commits.size() << " time:" << watch.get_elapse_second() << "s"
-              << " #column:" << _tablet.thread_safe_get_tablet_schema()->num_columns() << " #rowset:" << src_rowsets.size()
-              << " #file:" << total_files << " #row:" << total_rows << " bytes:" << total_bytes;
+              << " #column:" << _tablet.thread_safe_get_tablet_schema()->num_columns()
+              << " #rowset:" << src_rowsets.size() << " #file:" << total_files << " #row:" << total_rows
+              << " bytes:" << total_bytes;
     ;
     return Status::OK();
 }
@@ -3771,8 +3772,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
                     std::max<uint32_t>(new_next_rowset_id, new_id + std::max(1L, rowset_meta_pb.num_segments()));
             rowset_meta->set_rowset_seg_id(new_id);
             RowsetSharedPtr* rowset = &new_rowsets[new_id];
-            RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet.thread_safe_get_tablet_schema(), _tablet.schema_hash_path(),
-                                                         rowset_meta, rowset));
+            RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet.thread_safe_get_tablet_schema(),
+                                                         _tablet.schema_hash_path(), rowset_meta, rowset));
             VLOG(2) << "add a new rowset " << tablet_id << "@" << new_id << "@" << rowset_meta->rowset_id();
         }
 

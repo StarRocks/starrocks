@@ -182,8 +182,9 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const s
 }
 
 Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMetadata& metadata,
-                                                const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
-                                                uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column,
+                                                const TxnLogPB_OpWrite& op_write,
+                                                const TabletSchemaCSPtr& tablet_schema, uint32_t rowset_id,
+                                                int32_t upsert_idx, int32_t condition_column,
                                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
                                                 int64_t tablet_id, DeletesMap* new_deletes) {
     CHECK(condition_column >= 0);
@@ -342,7 +343,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
 
     std::shared_ptr<FileSystem> fs;
     auto fetch_values_from_segment = [&](const std::string& segment_name, uint32_t segment_id,
-                                         const TabletSchemaCSPtr tablet_schema,
+                                         const TabletSchemaCSPtr& tablet_schema,
                                          const std::vector<uint32_t>& rowids) -> Status {
         std::string path = tablet->segment_location(segment_name);
         auto segment = Segment::open(fs, path, segment_id, tablet_schema);

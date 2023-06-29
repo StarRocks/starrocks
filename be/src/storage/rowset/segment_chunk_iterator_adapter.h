@@ -31,8 +31,9 @@ namespace starrocks {
 class SegmentChunkIteratorAdapter final : public ChunkIterator {
 public:
     // |schema| is the output fields.
-    explicit SegmentChunkIteratorAdapter(const TabletSchemaCSPtr tablet_schema, const std::vector<LogicalType>& new_types,
-                                         const Schema& out_schema, int chunk_size);
+    explicit SegmentChunkIteratorAdapter(const TabletSchemaCSPtr& tablet_schema,
+                                         const std::vector<LogicalType>& new_types, const Schema& out_schema,
+                                         int chunk_size);
 
     ~SegmentChunkIteratorAdapter() override = default;
 

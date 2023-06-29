@@ -125,7 +125,8 @@ public:
     }
 
     static void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context,
-                                             const std::string& schema_hash_path, const TabletSchemaCSPtr& tablet_schema) {
+                                             const std::string& schema_hash_path,
+                                             const TabletSchemaCSPtr& tablet_schema) {
         RowsetId rowset_id;
         rowset_id.init(10000);
         rowset_writer_context->rowset_id = rowset_id;

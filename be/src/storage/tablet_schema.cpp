@@ -34,9 +34,10 @@
 
 #include "storage/tablet_schema.h"
 
+#include <gen_cpp/descriptors.pb.h>
+
 #include <algorithm>
 #include <vector>
-#include <gen_cpp/descriptors.pb.h>
 
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -290,7 +291,6 @@ void TabletSchema::append_column(TabletColumn column) {
 }
 
 void TabletSchema::clear_columns() {
-
     _field_id_to_index.clear();
     _num_columns = 0;
     _num_key_columns = 0;
@@ -434,9 +434,7 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _schema_version = schema.schema_version();
 }
 
-
-void TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version,
-                                               const POlapTableIndexSchema& index,
+void TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
                                                const TabletSchemaCSPtr& ori_tablet_schema) {
     // copy from ori_tablet_schema
     _keys_type = ori_tablet_schema->keys_type();
@@ -519,7 +517,6 @@ int32_t TabletSchema::field_index(int32_t col_unique_id) const {
     const auto& found = _field_id_to_index.find(col_unique_id);
     return (found == _field_id_to_index.end()) ? -1 : found->second;
 }
-
 
 const std::vector<TabletColumn>& TabletSchema::columns() const {
     return _cols;

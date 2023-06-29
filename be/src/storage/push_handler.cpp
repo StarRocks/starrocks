@@ -109,8 +109,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                     tablet_schema->append_column(TabletColumn(column_desc));
                 }
             }
-            res = del_cond_handler.generate_delete_predicate(*tablet_schema,
-                                                             request.delete_conditions, &del_pred);
+            res = del_cond_handler.generate_delete_predicate(*tablet_schema, request.delete_conditions, &del_pred);
             del_preds.push(del_pred);
             tablet_var.tablet->release_header_lock();
             if (!res.ok()) {
@@ -121,15 +120,13 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
         }
     }
 
-    auto tablet_schema = std::shared_ptr<TabletSchema>(
-            TabletSchema::copy(tablet_vars->at(0).tablet->tablet_schema()));
+    auto tablet_schema = std::shared_ptr<TabletSchema>(TabletSchema::copy(tablet_vars->at(0).tablet->tablet_schema()));
     if (!request.columns_desc.empty() && request.columns_desc[0].col_unique_id >= 0) {
         tablet_schema->clear_columns();
         for (const auto& column_desc : request.columns_desc) {
             tablet_schema->append_column(TabletColumn(column_desc));
         }
     }
-
 
     Status st = Status::OK();
     if (push_type == PUSH_NORMAL_V2) {

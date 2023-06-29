@@ -155,8 +155,7 @@ private:
     Status _init();
     Status _flush_memtable_async(bool eos = false);
     Status _flush_memtable();
-    void _build_current_tablet_schema(int64_t index_id,
-                                      const POlapTableSchemaParam& table_schema_param,
+    void _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& table_schema_param,
                                       const TabletSchemaCSPtr& ori_tablet_schema);
 
     const char* _state_name(State state) const;

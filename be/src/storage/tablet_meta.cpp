@@ -44,10 +44,9 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/tablet_updates.h"
+#include "storage/utils.h"
 #include "util/uid_util.h"
 #include "util/url_coding.h"
-#include "storage/utils.h"
-#include "storage/metadata_util.h"
 
 namespace starrocks {
 
@@ -75,13 +74,11 @@ TabletMetaSharedPtr TabletMeta::create() {
     return std::make_shared<TabletMeta>();
 }
 
-RowsetMetaSharedPtr & TabletMeta::rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets) {
+RowsetMetaSharedPtr& TabletMeta::rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets) {
     return *std::max_element(
-            rowsets.begin(), rowsets.end(),
-            [](const RowsetMetaSharedPtr &a, const RowsetMetaSharedPtr &b) {
-                return !a->tablet_schema()
-                       || (b->tablet_schema()
-                           && a->tablet_schema()->schema_version() < b->tablet_schema()->schema_version());
+            rowsets.begin(), rowsets.end(), [](const RowsetMetaSharedPtr& a, const RowsetMetaSharedPtr& b) {
+                return !a->tablet_schema() || (b->tablet_schema() && a->tablet_schema()->schema_version() <
+                                                                             b->tablet_schema()->schema_version());
             });
 }
 

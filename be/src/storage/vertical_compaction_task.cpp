@@ -169,8 +169,7 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
         total_num_rows += rowset->num_rows();
         for (auto& segment : rowset->segments()) {
             for (uint32_t column_index : column_group) {
-                if (!segment->is_valid_column(
-                        _tablet->tablet_schema()->column(column_index).unique_id())) {
+                if (!segment->is_valid_column(_tablet->tablet_schema()->column(column_index).unique_id())) {
                     continue;
                 }
 

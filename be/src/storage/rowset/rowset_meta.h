@@ -251,7 +251,6 @@ private:
     RowsetId _rowset_id;
     bool _is_removed_from_rowset_meta = false;
     TabletSchemaCSPtr _schema = nullptr;
-
 };
 
 } // namespace starrocks

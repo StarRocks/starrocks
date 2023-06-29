@@ -78,8 +78,8 @@ public:
 private:
     Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
 
-    Status _do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema, Tablet* tablet,
-                                    Rowset* rowset_ptr);
+    Status _do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
+                                    Tablet* tablet, Rowset* rowset_ptr);
 
     Status _prepare_partial_update_states(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                           Tablet* tablet, const TabletSchemaCSPtr& tablet_schema);
@@ -94,7 +94,8 @@ private:
 
     Status _resolve_conflict_auto_increment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                             Tablet* tablet, const std::vector<uint64_t>& new_rss_rowids,
-                                            uint32_t segment_id, size_t& total_conflicts, const TabletSchemaCSPtr& tablet_schema);
+                                            uint32_t segment_id, size_t& total_conflicts,
+                                            const TabletSchemaCSPtr& tablet_schema);
 
     Status _prepare_auto_increment_partial_update_states(const TxnLogPB_OpWrite& op_write,
                                                          const TabletMetadata& metadata, Tablet* tablet,

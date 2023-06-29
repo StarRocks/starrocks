@@ -533,9 +533,8 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
                                 RowsetWriter* writer, const MergeConfig& cfg,
                                 const starrocks::TabletSchemaCSPtr& cur_tablet_schema) {
     Schema schema = [&cur_tablet_schema, &tablet]() {
-        const starrocks::TabletSchemaCSPtr final_tablet_schema = cur_tablet_schema == nullptr
-                ? tablet.tablet_schema()
-                : cur_tablet_schema;
+        const starrocks::TabletSchemaCSPtr final_tablet_schema =
+                cur_tablet_schema == nullptr ? tablet.tablet_schema() : cur_tablet_schema;
         if (final_tablet_schema->sort_key_idxes().empty()) {
             return ChunkHelper::get_sort_key_schema_by_primary_key(final_tablet_schema);
         } else {

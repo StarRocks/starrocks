@@ -157,8 +157,9 @@ void RowsetUpdateState::plan_read_by_rssid(const std::vector<uint64_t>& rowids, 
     }
 }
 
-Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
-                                                   Tablet* tablet, Rowset* rowset_ptr) {
+Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write,
+                                                   const TabletSchemaCSPtr& tablet_schema, Tablet* tablet,
+                                                   Rowset* rowset_ptr) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
@@ -239,7 +240,8 @@ Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_wr
     return Status::OK();
 }
 
-static std::vector<uint32_t> get_read_columns_ids(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema) {
+static std::vector<uint32_t> get_read_columns_ids(const TxnLogPB_OpWrite& op_write,
+                                                  const TabletSchemaCSPtr& tablet_schema) {
     const auto& txn_meta = op_write.txn_meta();
 
     std::vector<uint32_t> update_column_ids(txn_meta.partial_update_column_ids().begin(),
@@ -577,7 +579,8 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const TxnLogPB_OpWrit
                                                            const TabletMetadata& metadata, Tablet* tablet,
                                                            const std::vector<uint64_t>& new_rss_rowids,
                                                            std::vector<uint32_t>& read_column_ids, uint32_t segment_id,
-                                                           size_t& total_conflicts, const TabletSchemaCSPtr& tablet_schema) {
+                                                           size_t& total_conflicts,
+                                                           const TabletSchemaCSPtr& tablet_schema) {
     uint32_t num_rows = new_rss_rowids.size();
     std::vector<uint32_t> conflict_idxes;
     std::vector<uint64_t> conflict_rowids;
