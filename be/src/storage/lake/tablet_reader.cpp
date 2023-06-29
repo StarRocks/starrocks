@@ -25,6 +25,7 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/empty_iterator.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/utils.h"
 #include "storage/merge_iterator.h"
 #include "storage/predicate_parser.h"
 #include "storage/row_source_mask.h"
@@ -72,7 +73,7 @@ TabletReader::~TabletReader() {
 Status TabletReader::prepare() {
     ASSIGN_OR_RETURN(_tablet_schema, _tablet.get_schema());
     if (!_rowsets_inited) {
-        ASSIGN_OR_RETURN(_rowsets, _tablet.get_rowsets(_version));
+        ASSIGN_OR_RETURN(_rowsets, enhance_error_prompt(_tablet.get_rowsets(_version)));
         _rowsets_inited = true;
     }
     _stats.rowsets_read_count += _rowsets.size();
@@ -143,7 +144,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
-        ASSIGN_OR_RETURN(auto seg_iters, rowset->read(schema(), rs_opts));
+        ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
         iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
     }
     return Status::OK();
@@ -158,7 +159,7 @@ Status TabletReader::init_predicates(const TabletReaderParams& params) {
 
 Status TabletReader::init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
     PredicateParser pred_parser(*_tablet_schema);
-    ASSIGN_OR_RETURN(auto tablet_metadata, _tablet.get_metadata(_version));
+    ASSIGN_OR_RETURN(auto tablet_metadata, enhance_error_prompt(_tablet.get_metadata(_version)));
 
     for (int index = 0, size = tablet_metadata->rowsets_size(); index < size; ++index) {
         const auto& rowset_metadata = tablet_metadata->rowsets(index);
