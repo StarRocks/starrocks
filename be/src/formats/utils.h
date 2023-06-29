@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include <string>
 #include <boost/algorithm/string.hpp>
+#include <string>
 
 namespace starrocks {
 class Utils {

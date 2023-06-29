@@ -30,7 +30,8 @@ void OrcMapping::clear() {
     _mapping.clear();
 }
 
-void OrcMapping::add_mapping(size_t original_pos_in_table_definition, const OrcMappingPtr& child_mapping, const orc::Type* orc_type) {
+void OrcMapping::add_mapping(size_t original_pos_in_table_definition, const OrcMappingPtr& child_mapping,
+                             const orc::Type* orc_type) {
     _mapping.emplace(original_pos_in_table_definition, OrcMappingOrcType{child_mapping, orc_type});
 }
 
@@ -43,8 +44,8 @@ Status OrcMapping::set_include_column_id(const uint64_t slot_pos, const TypeDesc
                                          std::list<uint64_t>* column_id_list) {
     if (desc.is_complex_type()) {
         // For complex types, we only select leaf column id
-        RETURN_IF_ERROR(set_include_column_id_by_type(get_orc_type_child_mapping(slot_pos).orc_mapping, desc,
-                                                      column_id_list));
+        RETURN_IF_ERROR(
+                set_include_column_id_by_type(get_orc_type_child_mapping(slot_pos).orc_mapping, desc, column_id_list));
     } else {
         column_id_list->push_back(get_orc_type_child_mapping(slot_pos).orc_type->getColumnId());
     }
@@ -95,8 +96,8 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
 }
 
 StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
-        const std::vector<SlotDescriptor*>& slot_descs, const orc::Type& root_orc_type,
-        const bool use_orc_column_names, const std::vector<std::string>* hive_column_names, const OrcMappingOptions& options) {
+        const std::vector<SlotDescriptor*>& slot_descs, const orc::Type& root_orc_type, const bool use_orc_column_names,
+        const std::vector<std::string>* hive_column_names, const OrcMappingOptions& options) {
     std::unique_ptr<OrcMapping> orc_mapping = std::make_unique<OrcMapping>();
     Status res;
     // All mapping relation will only affect the first level,
@@ -111,8 +112,8 @@ StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
         // the first column name in hive_column_names is mapped to the first column in orc, and so on.
         // NOTICE: The column order in SlotDescriptor[] is different from hive_column_names, so we need to build
         // two mapping in below function.
-        res = _init_orc_mapping_with_hive_column_names(orc_mapping, slot_descs, &root_orc_type,
-                                                       hive_column_names, options);
+        res = _init_orc_mapping_with_hive_column_names(orc_mapping, slot_descs, &root_orc_type, hive_column_names,
+                                                       options);
     }
     if (!res.ok()) {
         return res;
@@ -121,7 +122,7 @@ StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
 }
 
 Status OrcMappingFactory::_check_orc_type_can_convert_2_logical_type(const orc::Type* orc_source_type,
-                                                                      const TypeDescriptor& slot_target_type,
+                                                                     const TypeDescriptor& slot_target_type,
                                                                      const OrcMappingOptions& options) {
     bool can_convert = true;
     if (orc_source_type->getKind() == orc::TypeKind::LIST) {
@@ -135,7 +136,9 @@ Status OrcMappingFactory::_check_orc_type_can_convert_2_logical_type(const orc::
     //TODO Other logical type not check now!
 
     if (!can_convert) {
-        return Status::NotSupported(strings::Substitute("Not support to convert orc's type from $0 to $1, filename = $2", orc_source_type->toString(), slot_target_type.debug_string(), options.filename));
+        return Status::NotSupported(
+                strings::Substitute("Not support to convert orc's type from $0 to $1, filename = $2",
+                                    orc_source_type->toString(), slot_target_type.debug_string(), options.filename));
     }
     return Status::OK();
 }
@@ -158,7 +161,8 @@ Status OrcMappingFactory::_init_orc_mapping_with_orc_column_names(std::unique_pt
         std::string col_name = Utils::format_name(slot_desc->col_name(), options.case_sensitive);
         auto it = orc_fieldname_2_pos.find(col_name);
         if (it == orc_fieldname_2_pos.end()) {
-            auto s = strings::Substitute("OrcMappingFactory::_init_orc_mapping not found column name $0, file = $1", col_name, options.filename);
+            auto s = strings::Substitute("OrcMappingFactory::_init_orc_mapping not found column name $0, file = $1",
+                                         col_name, options.filename);
             return Status::NotFound(s);
         }
 
@@ -216,8 +220,8 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
 
         size_t pos_in_slot_descriptor = it->second;
 
-        RETURN_IF_ERROR(
-                _check_orc_type_can_convert_2_logical_type(orc_sub_type, slot_descs[pos_in_slot_descriptor]->type(), options));
+        RETURN_IF_ERROR(_check_orc_type_can_convert_2_logical_type(
+                orc_sub_type, slot_descs[pos_in_slot_descriptor]->type(), options));
 
         OrcMappingPtr need_add_child_mapping = nullptr;
         // handle nested mapping for complex type mapping
@@ -268,8 +272,7 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
 
             if (origin_child_type.is_complex_type()) {
                 need_add_child_mapping = std::make_shared<OrcMapping>();
-                RETURN_IF_ERROR(
-                        _set_child_mapping(need_add_child_mapping, origin_child_type, orc_child_type, options));
+                RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_child_type, orc_child_type, options));
             }
             mapping->add_mapping(index, need_add_child_mapping, orc_child_type);
         }
@@ -288,8 +291,7 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
 
         if (origin_child_type.is_complex_type()) {
             need_add_child_mapping = std::make_shared<OrcMapping>();
-            RETURN_IF_ERROR(
-                    _set_child_mapping(need_add_child_mapping, origin_child_type, orc_child_type, options));
+            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_child_type, orc_child_type, options));
         }
 
         mapping->add_mapping(0, need_add_child_mapping, orc_child_type);
@@ -302,13 +304,13 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
 
         // Check Map's key can be converted
         if (!origin_type.children[0].is_unknown_type()) {
-            RETURN_IF_ERROR(
-                    _check_orc_type_can_convert_2_logical_type(orc_type->getSubtype(0), origin_type.children[0], options));
+            RETURN_IF_ERROR(_check_orc_type_can_convert_2_logical_type(orc_type->getSubtype(0), origin_type.children[0],
+                                                                       options));
         }
         // Check Map's value can be converted
         if (!origin_type.children[1].is_unknown_type()) {
-            RETURN_IF_ERROR(
-                    _check_orc_type_can_convert_2_logical_type(orc_type->getSubtype(1), origin_type.children[1], options));
+            RETURN_IF_ERROR(_check_orc_type_can_convert_2_logical_type(orc_type->getSubtype(1), origin_type.children[1],
+                                                                       options));
         }
 
         // Map's key must be primitive type
@@ -323,7 +325,8 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
         if (origin_child_type.is_complex_type()) {
             need_add_value_child_mapping = std::make_shared<OrcMapping>();
             const orc::Type* orc_child_type = orc_type->getSubtype(1);
-            RETURN_IF_ERROR(_set_child_mapping(need_add_value_child_mapping, origin_child_type, orc_child_type, options));
+            RETURN_IF_ERROR(
+                    _set_child_mapping(need_add_value_child_mapping, origin_child_type, orc_child_type, options));
         }
         mapping->add_mapping(1, need_add_value_child_mapping, orc_type->getSubtype(1));
     } else {

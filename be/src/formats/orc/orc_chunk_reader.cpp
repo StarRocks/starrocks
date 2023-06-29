@@ -497,7 +497,6 @@ Status OrcChunkReader::_init_fill_functions() {
 }
 
 OrcChunkReader::~OrcChunkReader() {
-    _column_readers.clear();
     _batch.reset(nullptr);
     _reader.reset(nullptr);
     _row_reader.reset(nullptr);
@@ -505,6 +504,7 @@ OrcChunkReader::~OrcChunkReader() {
     _slot_id_to_desc.clear();
     _slot_id_to_position.clear();
     _cast_exprs.clear();
+    _column_readers.clear();
     //    _fill_functions.clear();
 }
 

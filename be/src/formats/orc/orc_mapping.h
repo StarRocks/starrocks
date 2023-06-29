@@ -19,13 +19,13 @@
 #include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 #include <unordered_map>
+#include <variant>
 
 #include "common/status.h"
+#include "formats/utils.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
-#include <variant>
-#include "formats/utils.h"
 
 namespace starrocks {
 
@@ -36,13 +36,14 @@ struct OrcMappingOptions {
     std::string filename;
     bool case_sensitive;
     // Only used by hive
+    // TODO(SmithCruise) Not develop now
     bool invalid_as_null;
 };
 
+// For a primitive type, it only contain orc_type
+// For a complex type, it contains orc_mapping and orc_type both
 struct OrcMappingOrcType {
-    // may both contain values
     const OrcMappingPtr orc_mapping = nullptr;
-    // Large invalid number
     const orc::Type* orc_type = nullptr;
 };
 
@@ -130,12 +131,13 @@ public:
 
 private:
     static Status _check_orc_type_can_convert_2_logical_type(const orc::Type* orc_source_type,
-                                                              const TypeDescriptor& slot_target_type,
+                                                             const TypeDescriptor& slot_target_type,
                                                              const OrcMappingOptions& options);
 
     static Status _init_orc_mapping_with_orc_column_names(std::unique_ptr<OrcMapping>& mapping,
                                                           const std::vector<SlotDescriptor*>& slot_descs,
-                                                          const orc::Type* orc_root_type, const OrcMappingOptions& options);
+                                                          const orc::Type* orc_root_type,
+                                                          const OrcMappingOptions& options);
 
     static Status _init_orc_mapping_with_hive_column_names(std::unique_ptr<OrcMapping>& mapping,
                                                            const std::vector<SlotDescriptor*>& slot_descs,
