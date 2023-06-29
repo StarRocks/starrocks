@@ -35,15 +35,35 @@ StarRocks 的降级流程与 [升级流程](../deployment/upgrade.md#升级流�
 
 ### 兼容性配置
 
-如需进行大版本或重大版本降级，则必须进行兼容性配置。降级前版本不同，兼容性配置也不同。
+如需进行大版本或重大版本降级，则必须进行兼容性配置。除了通用的兼容性配置外，还需根据降级前版本进行具体配置。
 
-#### 自 v2.2 及以后版本降级
+- **通用兼容性配置**
+
+降级前，请关闭 Tablet Clone。
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
+ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
+```
+
+完成降级，并且所有 BE 节点状态变为 `Alive` 后，您可以重新开启 Tablet Clone。
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
+ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
+ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
+```
+
+- **如果您自 v2.2 及以后版本降级**
 
 设置 FE 配置项 `ignore_unknown_log_id` 为 `true`。由于该配置项为静态参数，所以必须在 FE 配置文件 **fe.conf** 中修改，并且在修改完成后重启节点使修改生效。降级结束且第一次 Checkpoint 完成后，您可以将其重置为 `false` 并重新启动节点。
 
-#### 自 v2.4 及以后版本降级
+- **如果您启用了 FQDN 访问**
 
-如果您启用了 FQDN 访问，则必须在降级之前切换到 IP 地址访问。有关详细说明，请参考 [回滚 FQDN](../administration/enable_fqdn.md#回滚)。
+如果您启用了 FQDN 访问（自 v2.4 起支持），需要降级至 v2.4 之前版本，则必须在降级之前切换到 IP 地址访问。有关详细说明，请参考 [回滚 FQDN](../administration/enable_fqdn.md#回滚)。
 
 ### 降级正确性测试
 
