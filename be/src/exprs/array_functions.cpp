@@ -207,7 +207,8 @@ private:
 
                 uint8_t found = 0;
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn>) {
+                              std::is_same_v<StructColumn, ElementColumn> ||
+                              std::is_same_v<JsonColumn, ElementColumn>) {
                     found = elements.equals(offset + j, targets, i);
                 } else if constexpr (ConstTarget) {
                     [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
@@ -280,12 +281,11 @@ private:
         HANDLE_ELEMENT_TYPE(DateColumn);
         HANDLE_ELEMENT_TYPE(TimestampColumn);
         HANDLE_ELEMENT_TYPE(ArrayColumn);
+        HANDLE_ELEMENT_TYPE(JsonColumn);
         HANDLE_ELEMENT_TYPE(MapColumn);
         HANDLE_ELEMENT_TYPE(StructColumn);
 
-        LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
-        DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
-        return ColumnHelper::create_const_null_column(array_elements.size());
+        return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
 
     // array is non-nullable.
@@ -535,7 +535,8 @@ private:
                     }
                 }
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn>) {
+                              std::is_same_v<StructColumn, ElementColumn> ||
+                              std::is_same_v<JsonColumn, ElementColumn>) {
                     found = elements.equals(offset + j, targets, i);
                 } else if constexpr (ConstTarget) {
                     [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
@@ -604,13 +605,11 @@ private:
         HANDLE_ELEMENT_TYPE(DateColumn);
         HANDLE_ELEMENT_TYPE(TimestampColumn);
         HANDLE_ELEMENT_TYPE(ArrayColumn);
+        HANDLE_ELEMENT_TYPE(JsonColumn);
         HANDLE_ELEMENT_TYPE(MapColumn);
         HANDLE_ELEMENT_TYPE(StructColumn);
 
-        // TODO(zhuming): demangle class name
-        LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
-        DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
-        return ColumnHelper::create_const_null_column(array_elements.size());
+        return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
 
     // array is non-nullable.
@@ -734,7 +733,13 @@ private:
                     continue;
                 }
                 //[null, x*, x] - [null, x*, x]
+<<<<<<< HEAD
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn>) {
+=======
+                if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
+                              std::is_same_v<StructColumn, ElementColumn> ||
+                              std::is_same_v<JsonColumn, ElementColumn>) {
+>>>>>>> 3f83bde74 ([BugFix] support several array function for json types (#25967))
                     found = (elements.compare_at(j, i, targets, -1) == 0);
                 } else {
                     found = (elements_ptr[j] == targets_ptr[i]);
@@ -838,10 +843,14 @@ private:
         HANDLE_HAS_TYPE(DateColumn);
         HANDLE_HAS_TYPE(TimestampColumn);
         HANDLE_HAS_TYPE(ArrayColumn);
+<<<<<<< HEAD
+=======
+        HANDLE_HAS_TYPE(JsonColumn);
+        HANDLE_HAS_TYPE(MapColumn);
+        HANDLE_HAS_TYPE(StructColumn);
+>>>>>>> 3f83bde74 ([BugFix] support several array function for json types (#25967))
 
-        LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
-        DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
-        return ColumnHelper::create_const_null_column(array_elements.size());
+        return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
 
     // array is non-nullable.
