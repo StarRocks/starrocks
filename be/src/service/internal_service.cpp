@@ -795,7 +795,7 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
             break;
 
         case TFileFormatType::FORMAT_ORC:
-            p_scanner.reset(new ORCScanner(&state, &profile, scan_range, &counter, true));
+            p_scanner = std::make_unique<ORCScanner>(&state, &profile, scan_range, &counter, true);
             break;
 
         default:
