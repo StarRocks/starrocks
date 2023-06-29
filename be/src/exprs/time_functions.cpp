@@ -475,7 +475,7 @@ DEFINE_TIME_UNARY_FN(day_of_week, TYPE_DATETIME, TYPE_INT);
 // day_of_week_iso
 DEFINE_UNARY_FN_WITH_IMPL(day_of_week_isoImpl, v) {
     int day = ((DateValue)v).weekday();
-    return day;
+    return (day + 6) % 7 + 1;
 }
 DEFINE_TIME_UNARY_FN(day_of_week_iso, TYPE_DATETIME, TYPE_INT);
 
