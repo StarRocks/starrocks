@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
@@ -41,6 +42,7 @@ import org.junit.Test;
 
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -204,7 +206,45 @@ public class SyncPartitionUtilsTest {
     }
 
     @Test
-    public void testCalcSyncSamePartition() throws AnalysisException {
+    public void testDiffList() {
+        // same
+        Map<String, List<List<String>>> baseListMap = Maps.newHashMap();
+        baseListMap.put("p20230619", Collections.singletonList(Lists.newArrayList("2023-06-19")));
+        baseListMap.put("p20230620", Collections.singletonList(Lists.newArrayList("2023-06-20")));
+        baseListMap.put("p20230621", Collections.singletonList(Lists.newArrayList("2023-06-21")));
+
+        Map<String, List<List<String>>> mvListMap = Maps.newHashMap();
+        mvListMap.put("p20230619", Collections.singletonList(Lists.newArrayList("2023-06-19")));
+        mvListMap.put("p20230621", Collections.singletonList(Lists.newArrayList("2023-06-21")));
+        mvListMap.put("p20230620", Collections.singletonList(Lists.newArrayList("2023-06-20")));
+
+        Map<String, List<List<String>>> diff = SyncPartitionUtils.diffList(baseListMap, mvListMap);
+        Assert.assertEquals(0, diff.size());
+
+        baseListMap = Maps.newHashMap();
+        baseListMap.put("p20230619", Collections.singletonList(Lists.newArrayList("2023-06-19")));
+        baseListMap.put("p20230620", Collections.singletonList(Lists.newArrayList("2023-06-20")));
+
+        mvListMap = Maps.newHashMap();
+        mvListMap.put("p20230619", Collections.singletonList(Lists.newArrayList("2023-06-19")));
+
+        diff = SyncPartitionUtils.diffList(baseListMap, mvListMap);
+        Assert.assertEquals(1, diff.size());
+        Assert.assertEquals("2023-06-20", diff.get("p20230620").get(0).get(0));
+
+        baseListMap = Maps.newHashMap();
+        baseListMap.put("p20230619", Collections.singletonList(Lists.newArrayList("2023-06-19")));
+
+        mvListMap = Maps.newHashMap();
+        mvListMap.put("p20230619", Collections.singletonList(Lists.newArrayList("2023-06-19")));
+        mvListMap.put("p20230620", Collections.singletonList(Lists.newArrayList("2023-06-20")));
+
+        diff = SyncPartitionUtils.diffList(baseListMap, mvListMap);
+        Assert.assertEquals(0, diff.size());
+    }
+
+    @Test
+    public void testCalcSyncSameRangePartition() throws AnalysisException {
 
         Map<String, Range<PartitionKey>> baseRange = Maps.newHashMap();
         baseRange.put("p20200101", createRange("2020-01-01", "2020-01-02"));
@@ -214,7 +254,7 @@ public class SyncPartitionUtilsTest {
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
         mvRange.put("p202001", createRange("2020-01-01", "2020-02-01"));
 
-        PartitionDiff diff = SyncPartitionUtils.calcSyncSamePartition(baseRange, mvRange);
+        RangePartitionDiff diff = SyncPartitionUtils.calcSyncSameRangePartition(baseRange, mvRange);
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Assert.assertEquals(3, adds.size());
@@ -249,7 +289,7 @@ public class SyncPartitionUtilsTest {
         mvRange.put("p20200102", createRange("2020-01-02", "2020-01-03"));
         mvRange.put("p20200103", createRange("2020-01-03", "2020-01-04"));
 
-        diff = SyncPartitionUtils.calcSyncSamePartition(baseRange, mvRange);
+        diff = SyncPartitionUtils.calcSyncSameRangePartition(baseRange, mvRange);
 
         adds = diff.getAdds();
         deletes = diff.getDeletes();
@@ -437,7 +477,7 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-05-04", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        RangePartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
                 "month", PrimitiveType.DATETIME);
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
@@ -483,7 +523,7 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-10-12", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        RangePartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
                 granularity, PrimitiveType.DATETIME);
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();

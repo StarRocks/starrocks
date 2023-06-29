@@ -686,6 +686,15 @@ public class MvUtils {
         return rangeParts;
     }
 
+    public static List<Expr> convertList(Expr slotRef, List<LiteralExpr> values) {
+        List<Expr> listPart = Lists.newArrayList();
+        for (LiteralExpr value : values) {
+            BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, slotRef, value);
+            listPart.add(predicate);
+        }
+        return listPart;
+    }
+
     public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
         ranges.sort(RangeUtils.RANGE_COMPARATOR);
         List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
