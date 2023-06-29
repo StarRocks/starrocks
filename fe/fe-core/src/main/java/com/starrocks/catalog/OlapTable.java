@@ -861,6 +861,31 @@ public class OlapTable extends Table {
         return rangePartitionMap;
     }
 
+    public Map<String, List<List<String>>> getListPartitionMap() {
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        Map<String, List<List<String>>> listPartitionMap = Maps.newHashMap();
+        for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
+            Long partitionId = partitionEntry.getKey();
+            String partitionName = partitionEntry.getValue().getName();
+            // FE and BE at the same time ignore the hidden partition at the same time
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
+            List<String> values = listPartitionInfo.getIdToValues().get(partitionId);
+            if (values != null) {
+                List<List<String>> valueList = Lists.newArrayList();
+                valueList.add(values);
+                listPartitionMap.put(partitionName, valueList);
+            }
+            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
+            if (multiValues != null) {
+                listPartitionMap.put(partitionName, listPartitionInfo.getIdToMultiValues().get(partitionId));
+            }
+
+        }
+        return listPartitionMap;
+    }
+
     public List<String> getPartitionColumnNames() {
         List<String> partitionColumnNames = Lists.newArrayList();
         if (partitionInfo instanceof SinglePartitionInfo) {
@@ -1097,7 +1122,7 @@ public class OlapTable extends Table {
         return Sets.newHashSet(nameToPartition.keySet());
     }
 
-    public Map<String, Range<PartitionKey>> getValidPartitionMap(int lastPartitionNum) throws AnalysisException {
+    public Map<String, Range<PartitionKey>> getValidRangePartitionMap(int lastPartitionNum) throws AnalysisException {
         Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
         // less than 0 means not set
         if (lastPartitionNum < 0) {
@@ -1159,6 +1184,25 @@ public class OlapTable extends Table {
             }
         }
         return result;
+    }
+
+    // partitionName -> formatValue 1:1/1:N
+    public Map<String, List<List<String>>> getValidListPartitionMap(int lastPartitionNum) {
+        Map<String, List<List<String>>> listPartitionMap = getListPartitionMap();
+        // less than 0 means not set
+        if (lastPartitionNum < 0) {
+            return listPartitionMap;
+        }
+
+        int partitionNum = listPartitionMap.size();
+        if (lastPartitionNum > partitionNum) {
+            return listPartitionMap;
+        }
+
+        return listPartitionMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(ListPartitionInfo::compareByValue))
+                .skip(Math.max(0, partitionNum - lastPartitionNum))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public Set<String> getBfColumns() {

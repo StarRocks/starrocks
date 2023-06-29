@@ -111,6 +111,10 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToLiteralExprValues.put(partitionId, partitionValues);
     }
 
+    public void setDirectLiteralExprValues(long partitionId, List<LiteralExpr> values) {
+        this.idToLiteralExprValues.put(partitionId, values);
+    }
+
     public List<Long> getPartitionIds(boolean isTemp) {
         List<Long> partitionIds = Lists.newArrayList();
         idToIsTempPartition.forEach((k, v) -> {
@@ -159,6 +163,10 @@ public class ListPartitionInfo extends PartitionInfo {
             multiPartitionValues.add(partitionValues);
         }
         this.idToMultiLiteralExprValues.put(partitionId, multiPartitionValues);
+    }
+
+    public void setDirectMultiLiteralExprValues(long partitionId, List<List<LiteralExpr>> multiValues) {
+        this.idToMultiLiteralExprValues.put(partitionId, multiValues);
     }
 
     public void setBatchMultiLiteralExprValues(Map<Long, List<List<String>>> batchMultiValues)
@@ -432,5 +440,19 @@ public class ListPartitionInfo extends PartitionInfo {
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
         idToInMemory.put(partitionId, false);
         idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true, false));
+    }
+
+    public static int compareByValue(List<List<String>> left, List<List<String>> right) {
+        int valueSize = left.size();
+        for (int i = 0; i < valueSize; i++) {
+            int partitionSize = left.get(i).size();
+            for (int j = 0; j < partitionSize; j++) {
+                int compareResult = left.get(i).get(j).compareTo(right.get(i).get(j));
+                if (compareResult != 0) {
+                    return compareResult;
+                }
+            }
+        }
+        return 0;
     }
 }
