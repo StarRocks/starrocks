@@ -343,13 +343,13 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
 
     int64_t t_read_index = MonotonicMillis();
     if (need_lock) {
-        RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states(
-                tablet, _upserts[idx], &(_partial_update_states[idx].read_version),
-                &(_partial_update_states[idx].src_rss_rowids)));
+        RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk(tablet, *_upserts[idx],
+                                                                &(_partial_update_states[idx].read_version),
+                                                                &(_partial_update_states[idx].src_rss_rowids)));
     } else {
-        RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states_unlock(
-                tablet, _upserts[idx], &(_partial_update_states[idx].read_version),
-                &(_partial_update_states[idx].src_rss_rowids)));
+        RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk_unlock(tablet, *_upserts[idx],
+                                                                       &(_partial_update_states[idx].read_version),
+                                                                       &(_partial_update_states[idx].src_rss_rowids)));
     }
 
     int64_t t_read_values = MonotonicMillis();
@@ -407,8 +407,8 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
     read_column[0] = column->clone_empty();
     _auto_increment_partial_update_states[idx].write_column = column->clone_empty();
 
-    tablet->updates()->prepare_partial_update_states_unlock(tablet, _upserts[idx], nullptr,
-                                                            &_auto_increment_partial_update_states[idx].src_rss_rowids);
+    tablet->updates()->get_rss_rowids_by_pk_unlock(tablet, *_upserts[idx], nullptr,
+                                                   &_auto_increment_partial_update_states[idx].src_rss_rowids);
 
     std::vector<uint32_t> rowids;
     uint32_t n = _auto_increment_partial_update_states[idx].src_rss_rowids.size();
@@ -432,11 +432,11 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
 
     if (new_rows > 0) {
         uint32_t last = idxes.size() - new_rows;
-        for (int i = 0; i < idxes.size(); ++i) {
-            if (idxes[i] != 0) {
-                --idxes[i];
+        for (uint32_t& idx : idxes) {
+            if (idx != 0) {
+                --idx;
             } else {
-                idxes[i] = last;
+                idx = last;
                 ++last;
             }
         }
@@ -463,13 +463,12 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
     */
     _auto_increment_partial_update_states[idx].delete_pks = _upserts[idx]->clone_empty();
     std::vector<uint32_t> delete_idxes;
-    const int64* data =
+    const auto* data =
             reinterpret_cast<const int64*>(_auto_increment_partial_update_states[idx].write_column->raw_data());
 
     // just check the rows which are not exist in the previous version
     // because the rows exist in the previous version may contain 0 which are specified by the user
-    for (int i = 0; i < _auto_increment_partial_update_states[idx].rowids.size(); ++i) {
-        uint32_t row_idx = _auto_increment_partial_update_states[idx].rowids[i];
+    for (const auto& row_idx : _auto_increment_partial_update_states[idx].rowids) {
         if (data[row_idx] == 0) {
             delete_idxes.emplace_back(row_idx);
         }
@@ -643,9 +642,9 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     RETURN_IF_ERROR(rowset->reload_segment(segment_id));
 
     if (!txn_meta.partial_update_column_ids().empty()) {
-        for (size_t col_idx = 0; col_idx < _partial_update_states[segment_id].write_columns.size(); col_idx++) {
-            if (_partial_update_states[segment_id].write_columns[col_idx] != nullptr) {
-                _memory_usage -= _partial_update_states[segment_id].write_columns[col_idx]->memory_usage();
+        for (auto& write_column : _partial_update_states[segment_id].write_columns) {
+            if (write_column != nullptr) {
+                _memory_usage -= write_column->memory_usage();
             }
         }
         _partial_update_states[segment_id].release();

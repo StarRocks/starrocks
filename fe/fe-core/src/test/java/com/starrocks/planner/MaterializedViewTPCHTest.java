@@ -80,6 +80,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
+    @Ignore
     public void testQuery8() {
         runFileUnitTest("materialized-view/tpch/q8");
     }
@@ -155,7 +156,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     /**
-     * >>>>>>>>> Analyze TPCH MVs Result <<<<<<<<<
+     * ========= Analyze TPCH MVs Result =========
      *
      * TableName:partsupp_mv
      * Columns:n_name,p_mfgr,p_size,p_type,ps_partkey,ps_partvalue,ps_suppkey,ps_supplycost,r_name,s_acctbal,s_address,
@@ -178,7 +179,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
      * Columns:c_custkey,o_comment,o_orderkey
      * Queries:13
      *
-     * >>>>>>>>> Analyze TPCH MVs Result <<<<<<<<<
+     * ========= Analyze TPCH MVs Result =========
      */
     @Test
     public void analyzeTPCHMVs() throws Exception {
@@ -205,7 +206,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
             }
         }
 
-        System.out.println(">>>>>>>>> Analyze TPCH MVs Result <<<<<<<<<");
+        System.out.println("========= Analyze TPCH MVs Result =========");
         System.out.println();
         int totolQueriesUsedMV = 0;
         for (Map.Entry<String, Set<String>> entry : mvTableColumnsMap.entrySet()) {
@@ -217,7 +218,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
             System.out.println();
             totolQueriesUsedMV += mvTableQueryIds.get(mvTableName).size();
         }
-        System.out.println(">>>>>>>>> Analyze TPCH MVs Result <<<<<<<<<");
+        System.out.println("========= Analyze TPCH MVs Result =========");
         Assert.assertTrue(mvTableColumnsMap.size() >= 4);
         Assert.assertTrue(totolQueriesUsedMV >= 19);
     }

@@ -218,7 +218,7 @@ public class GlobalStateMgrTestUtil {
         table.setBaseIndexId(indexId);
         // db
         Database db = new Database(dbId, testDb1);
-        db.createTable(table);
+        db.registerTableUnlocked(table);
 
         // add a es table to globalStateMgr
         try {
@@ -257,7 +257,7 @@ public class GlobalStateMgrTestUtil {
         properties.put(EsTable.KEY_KEYWORD_SNIFF, "true");
         EsTable esTable = new EsTable(testEsTableId1, testEsTable1,
                 columns, properties, partitionInfo);
-        db.createTable(esTable);
+        db.registerTableUnlocked(esTable);
     }
 
     public static Backend createBackend(long id, String host, int heartPort, int bePort, int httpPort) {

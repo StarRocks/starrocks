@@ -183,8 +183,8 @@ public class MvUtils {
                         Table table = scanOperator.getTable();
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
                         LogicalJoinOperator joinOperator = optExpression.getOp().cast();
-                        TableScanDesc tableScanDesc =
-                                new TableScanDesc(table, id, scanOperator, joinOperator.getJoinType(), i == 0);
+                        TableScanDesc tableScanDesc = new TableScanDesc(
+                                table, id, scanOperator, joinOperator.getJoinType(), i == 0);
                         context.getTableScanDescs().add(tableScanDesc);
                         scanContext.getTableIdMap().put(table, ++id);
                     } else {
@@ -686,6 +686,15 @@ public class MvUtils {
         return rangeParts;
     }
 
+    public static List<Expr> convertList(Expr slotRef, List<LiteralExpr> values) {
+        List<Expr> listPart = Lists.newArrayList();
+        for (LiteralExpr value : values) {
+            BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, slotRef, value);
+            listPart.add(predicate);
+        }
+        return listPart;
+    }
+
     public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
         ranges.sort(RangeUtils.RANGE_COMPARATOR);
         List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
@@ -878,5 +887,12 @@ public class MvUtils {
             return partitionMap.entrySet().stream().filter(entry -> !modifiedPartitionNames.contains(entry.getKey())).
                     map(Map.Entry::getValue).collect(Collectors.toList());
         }
+    }
+
+    public static String toString(Object o) {
+        if (o == null) {
+            return "";
+        }
+        return o.toString();
     }
 }

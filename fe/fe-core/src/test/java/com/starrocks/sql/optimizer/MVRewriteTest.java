@@ -185,9 +185,16 @@ public class MVRewriteTest {
     public void testProjectionMV1() throws Exception {
         String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from "
                 + EMPS_TABLE_NAME + " order by deptno;";
-        String query = "select empid, deptno from " + EMPS_TABLE_NAME + ";";
         starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select empid, deptno from " + EMPS_TABLE_NAME + ";";
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+
+        query = "select empid * 2, deptno from " + EMPS_TABLE_NAME + ";";
+        starRocksAssert.query(query)
+                .explainContains(QUERY_USE_EMPS_MV, "1:Project\n" +
+                        "  |  <slot 4> : 4: deptno\n" +
+                        "  |  <slot 7> : CAST(2: empid AS BIGINT) * 2");
     }
 
     @Test
@@ -205,9 +212,11 @@ public class MVRewriteTest {
     public void testProjectionMV3() throws Exception {
         String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid, name from "
                 + EMPS_TABLE_NAME + " order by deptno;";
-        String query1 = "select empid +1, name from " + EMPS_TABLE_NAME + " where deptno = 10;";
         starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query1 = "select empid +1, name from " + EMPS_TABLE_NAME + " where deptno = 10;";
         starRocksAssert.query(query1).explainContains(QUERY_USE_EMPS_MV);
+
         String query2 = "select name from " + EMPS_TABLE_NAME + " where deptno - 10 = 0;";
         starRocksAssert.query(query2).explainContains(QUERY_USE_EMPS_MV);
     }
@@ -465,8 +474,11 @@ public class MVRewriteTest {
     public void testAggregateMVAggregateFuncs6() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid, count(salary) "
                 + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
+        starRocksAssert.withMaterializedView(createEmpsMVSQL);
+
+        // TODO: support this later.
         String query = "select deptno, sum(if(empid=0,0,1)) from " + EMPS_TABLE_NAME + " group by deptno";
-        System.out.println(starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainQuery());
+        starRocksAssert.query(query).explainWithout(EMPS_MV_NAME);
     }
 
     @Test
@@ -925,7 +937,7 @@ public class MVRewriteTest {
 
     // Aggregation query with groupSets at coarser level of aggregation than
     // aggregation materialized view.
-    // TODO(kks): enable this later if we support rollup
+    @Test
     public void testGroupingSetQueryOnAggMV() throws Exception {
         String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select empid, deptno, sum(salary) " +
                 "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
@@ -1025,16 +1037,15 @@ public class MVRewriteTest {
         String plan = starRocksAssert.withMaterializedView(createMVSQL).query(union).explainQuery();
         Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
                 "     TABLE: emps\n" +
-                "     PREAGGREGATION: OFF. Reason: Group columns isn't bound table emps\n" +
-                "     PREDICATES: 18: deptno > 300\n" +
+                "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
+                "     PREDICATES: 4: deptno > 300\n" +
                 "     partitions=1/1\n" +
                 "     rollup: emps_mv"));
-        Assert.assertTrue(plan.contains("4:OlapScanNode\n" +
+        Assert.assertTrue(plan.contains("7:OlapScanNode\n" +
                 "     TABLE: emps\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 11: deptno < 200\n" +
-                "     partitions=1/1\n" +
-                "     rollup: emps"));
+                "     partitions=1/1"));
         starRocksAssert.assertMVWithoutComplexExpression(HR_DB_NAME, EMPS_TABLE_NAME);
     }
 
@@ -1148,9 +1159,12 @@ public class MVRewriteTest {
         query = "select count(distinct emps.deptno) from emps left outer join depts on emps.time = depts.time";
         starRocksAssert.query(query).explainContains("emps_mv");
 
-        query =
-                "select emps.time, count(distinct emps.deptno) from emps, depts where emps.time = depts.time group by emps.time";
+        query = "select emps.time, count(distinct emps.deptno) from emps, depts where emps.time = depts.time " +
+                "group by emps.time";
         starRocksAssert.query(query).explainContains("emps_mv");
+
+        query = "select count(distinct emps.deptno * 2) from emps left outer join depts on emps.time = depts.time";
+        starRocksAssert.query(query).explainWithout("emps_mv");
 
         query = "select unnest, count(distinct deptno) from " +
                 "(select deptno, unnest from emps,unnest(split(name, \",\"))) t" +
@@ -1177,10 +1191,11 @@ public class MVRewriteTest {
     public void testCaseWhenAggregate() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select empid, deptno, sum(salary) "
                 + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
+        starRocksAssert.withMaterializedView(createEmpsMVSQL);
         String query =
                 "select deptno, sum(case salary when 1 then 2 when 2 then 3 end) as ssalary from " + EMPS_TABLE_NAME +
                         " group by deptno";
-        starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainWithout(QUERY_USE_EMPS_MV);
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
 
         query = "select deptno, sum(case deptno when 1 then 2 when 2 then 3 end) as ssalary from " + EMPS_TABLE_NAME +
                 " group by deptno";
@@ -1216,6 +1231,7 @@ public class MVRewriteTest {
         createMaterializedViewStmt.getMVColumnItemList().forEach(k -> Assert.assertTrue(k.isKey()));
 
         starRocksAssert.withMaterializedView(createMVSQL).query(query).explainContains("rollup: partial_order_by_mv");
+        starRocksAssert.dropMaterializedView("partial_order_by_mv");
 
         String createMVSQL2 = "CREATE MATERIALIZED VIEW order_by_mv AS " +
                 "SELECT k6, k7 FROM all_type_table GROUP BY k6, k7 ORDER BY k6, k7";
@@ -1276,5 +1292,192 @@ public class MVRewriteTest {
                 + "from " + EMPS_TABLE_NAME + ";";
         String query = "select count(*) from " + EMPS_TABLE_NAME + " where bitmap_contains(to_bitmap(1),2)";
         starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
+    }
+
+    @Test
+    public void testProjectionWithComplexExpressMV1() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME +
+                " as select deptno * 2 as col1, empid + 1 as col2 from " + EMPS_TABLE_NAME + ";";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select empid, deptno from " + EMPS_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+
+        query = "select empid * 2, deptno from " + EMPS_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        query = "select empid + 1, deptno * 2 from " + EMPS_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(true);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testProjectionWithComplexExpressMV2() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME +
+                " as select deptno * 2 as col1, empid + 1 as col2 from " + EMPS_TABLE_NAME
+                + " order by deptno;";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        // TODO: new mv rewrite framework doesn't support order by in mv for rewrite.
+        String query = "select deptno * 2 as col1, empid + 1 as col2 from " + EMPS_TABLE_NAME
+                + " order by deptno;";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+
+        query = "select empid + 1, deptno * 2 from " + EMPS_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testProjectionWithComplexExpressMV3() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as " +
+                "select name, deptno * 2 as col1, salary % 100 as col2 " +
+                "from " + EMPS_TABLE_NAME + ";";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select name from " + EMPS_TABLE_NAME + " where (deptno*2) > 30 and (salary % 100) > 30;";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+
+        query = "select empid from " + EMPS_TABLE_NAME + " where (deptno*2) > 30 and (salary % 100) > 30;";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testAggQueryWithComplexExpressionMV1() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as " +
+                "select deptno, sum(salary * 2) as sum1, max(commission) " +
+                "from " + EMPS_TABLE_NAME + " group by deptno;";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select sum(salary), deptno from " + EMPS_TABLE_NAME + " group by deptno;";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+
+        query = "select sum(salary), max(commission) from " + EMPS_TABLE_NAME;
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+
+        query = "select sum(salary * 2), max(commission) from emps group by deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+
+        query = "select sum(salary * 2), max(commission) from emps";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testAggQueryWithComplexExpressionMV2() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as " +
+                "select deptno, sum(cast((salary * 2) as bigint)) as sum1, max(commission) " +
+                "from " + EMPS_TABLE_NAME + " group by deptno;";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        String query = "select sum(salary), deptno from " + EMPS_TABLE_NAME + " group by deptno;";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+
+        query = "select sum(salary), max(commission) from " + EMPS_TABLE_NAME;
+        starRocksAssert.query(query).explainWithout(QUERY_USE_EMPS_MV);
+
+        query = "select sum(salary * 2), max(commission) from emps group by deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+
+        query = "select sum(salary * 2), max(commission) from emps";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testAggQueryWithComplexExpressionMV3() throws Exception {
+        String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, " +
+                "bitmap_union(to_bitmap(tag_id % 10)) as uv1 from " + USER_TAG_TABLE_NAME + " group by user_id;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+        String query = "select user_id, count(distinct tag_id % 10) from " + USER_TAG_TABLE_NAME + " group by user_id;";
+        starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME, FunctionSet.COUNT);
+
+        query = "select user_id, count(distinct tag_id) from " + USER_TAG_TABLE_NAME + " group by user_id;";
+        starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+    }
+
+    @Test
+    public void testAggQueryWithComplexExpressionMV4() throws Exception {
+        String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, " +
+                "`" + FunctionSet.HLL_UNION + "`(" + FunctionSet.HLL_HASH + "(tag_id % 100)) as agg1 from " +
+                USER_TAG_TABLE_NAME + " group by user_id;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+        String query = "select ndv(tag_id % 100) from " + USER_TAG_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME, "hll_union");
+
+        query = "select ndv(tag_id) from " + USER_TAG_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+    }
+
+    @Test
+    public void testAggQueryWithComplexExpressionMV5() throws Exception {
+        String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, " +
+                "`" + FunctionSet.HLL_UNION + "`(" + FunctionSet.HLL_HASH + "(tag_id * 10)) as agg1 " +
+                "from " + USER_TAG_TABLE_NAME +
+                " group by user_id;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+
+        String query = "select approx_count_distinct(tag_id * 10) from " + USER_TAG_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME, "hll_union");
+
+        query = "select approx_count_distinct(tag_id) from " + USER_TAG_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
+    }
+
+    @Test
+    public void testAggQueryWithComplexExpressionMV7() throws Exception {
+        String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, " +
+                "percentile_union(percentile_hash(tag_id % 100)) as agg1 from " + USER_TAG_TABLE_NAME + " group by user_id;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+        String query = "select user_id, percentile_approx(tag_id % 100, 1) from user_tags group by user_id";
+        starRocksAssert.query(query).explainContains(QUERY_USE_USER_TAG_MV,
+                "percentile_union(9: mv_agg1)", FunctionSet.PERCENTILE_APPROX_RAW);
+
+        query = "select user_id, round(percentile_approx(tag_id % 100, 1),0) from user_tags group by user_id";
+        starRocksAssert.query(query).explainContains(QUERY_USE_USER_TAG_MV);
+
+        query = "select user_id, percentile_approx(tag_id, 1) from user_tags group by user_id";
+        starRocksAssert.query(query).explainWithout(QUERY_USE_USER_TAG_MV);
+    }
+
+    @Test
+    public void testAggQueryWithComplexExpressionMV8() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
+        String t1 = "CREATE TABLE `test3` (\n" +
+                "  `k1` tinyint(4) NULL DEFAULT \"0\",\n" +
+                "  `k2` varchar(64) NULL DEFAULT \"\",\n" +
+                "  `k3` bigint NULL DEFAULT \"0\",\n" +
+                "  `k4` varchar(64) NULL DEFAULT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n";
+        starRocksAssert.withTable(t1);
+        String mv1 = "CREATE MATERIALIZED VIEW test_mv3\n" +
+                "        as\n" +
+                "        select k1, k1 * 2 as k11, length(k2) as k2, sum(k3), hll_union(hll_hash(k4)) as k5 " +
+                "from test3 group by k1, k2;";
+        starRocksAssert.withMaterializedView(mv1);
+
+        String query = "select k1 * 2, length(k2), sum(k3), hll_union(hll_hash(k4)) as k5 from test3 group by k1, k2;";
+        starRocksAssert.query(query).explainContains("test_mv3");
+    }
+
+    @Test
+    public void testAggQueryWithComplexExpressionMV9() throws Exception {
+        String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, " +
+                "`" + FunctionSet.HLL_UNION + "`(" + FunctionSet.HLL_HASH + "(tag_id)) as agg1 from " +
+                USER_TAG_TABLE_NAME + " group by user_id;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+        String query = "select ndv(tag_id) from " + USER_TAG_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME, "hll_union");
+
+        query = "select ndv(tag_id) from " + USER_TAG_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME);
+
+        query = "select ndv(tag_id % 10) from " + USER_TAG_TABLE_NAME + ";";
+        starRocksAssert.query(query).explainWithout(USER_TAG_MV_NAME);
     }
 }

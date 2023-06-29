@@ -36,7 +36,7 @@ class LocationProvider;
 class Tablet;
 class MetaFileBuilder;
 class UpdateManager;
-class AutoIncrementPartialUpdateState;
+struct AutoIncrementPartialUpdateState;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:
@@ -111,6 +111,8 @@ public:
     // check if pk index's cache ref == ref_cnt
     bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);
 
+    bool TEST_check_update_state_cache_noexist(uint32_t tablet_id, int64_t txn_id);
+
     Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
         int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
         int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
@@ -132,7 +134,7 @@ private:
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
     Status _handle_index_op(Tablet* tablet, const TabletMetadata& metadata, const int64_t base_version,
-                            const MetaFileBuilder* builder, std::function<void(LakePrimaryIndex&)> op);
+                            const MetaFileBuilder* builder, const std::function<void(LakePrimaryIndex&)>& op);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

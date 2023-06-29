@@ -107,7 +107,7 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
     case TYPE_ARRAY:
     case TYPE_MAP: {
         out.type = type.type;
-        for (auto child : type.children) {
+        for (const auto& child : type.children) {
             if (child.is_unknown_type()) {
                 // TODO(SmithCruise)
                 // For Map type, if map's key or value is pruned, that column's type will be set to unknown for
@@ -124,10 +124,10 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
     }
     case TYPE_STRUCT: {
         out.type = type.type;
-        for (auto name : type.field_names) {
+        for (const auto& name : type.field_names) {
             out.field_names.emplace_back(name);
         }
-        for (auto child : type.children) {
+        for (const auto& child : type.children) {
             out.children.emplace_back(column_type_to_type_desc(child));
         }
         break;

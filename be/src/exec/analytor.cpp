@@ -110,12 +110,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_intput_columns.resize(agg_size);
     _agg_fn_types.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
-    _cume_function_index.resize(0);
+    _partition_size_required_function_index.resize(0);
 
     bool has_outer_join_child = analytic_node.__isset.has_outer_join_child && analytic_node.has_outer_join_child;
 
     _has_lead_lag_function = false;
-    _has_cume_function = false;
+    _should_set_partition_size = false;
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = analytic_node.analytic_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
@@ -140,12 +140,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _need_partition_materializing = true;
         }
 
-        if (fn.name.function_name == "cume_dist") {
+        if (require_partition_size(fn.name.function_name)) {
             if (!state->enable_pipeline_engine()) {
-                return Status::NotSupported("The CUME_DIST window function is only supported by the pipeline engine.");
+                return Status::NotSupported(strings::Substitute(
+                        "The $0 window function is only supported by the pipeline engine.", fn.name.function_name));
             }
-            _has_cume_function = true;
-            _cume_function_index.emplace_back(i);
+            _should_set_partition_size = true;
+            _partition_size_required_function_index.emplace_back(i);
             _need_partition_materializing = true;
         }
 
@@ -158,9 +159,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         bool is_input_nullable = false;
         if (fn.name.function_name == "count" || fn.name.function_name == "row_number" ||
             fn.name.function_name == "rank" || fn.name.function_name == "dense_rank" ||
-            fn.name.function_name == "ntile" || fn.name.function_name == "cume_dist") {
+            fn.name.function_name == "cume_dist" || fn.name.function_name == "percent_rank" ||
+            fn.name.function_name == "ntile") {
             auto return_type = TYPE_BIGINT;
-            if (fn.name.function_name == "cume_dist") {
+            if (fn.name.function_name == "cume_dist" || fn.name.function_name == "percent_rank") {
                 return_type = TYPE_DOUBLE;
             }
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
@@ -475,6 +477,13 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
+        auto check_if_overflow = [](Column* column) {
+            std::string msg;
+            if (column->capacity_limit_reached(&msg)) {
+                return Status::InternalError(msg);
+            }
+            return Status::OK();
+        };
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
@@ -487,17 +496,20 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
                 } else {
                     TRY_CATCH_BAD_ALLOC(_agg_intput_columns[i][j]->append(*column, 0, column->size()));
                 }
+                RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
             }
         }
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+            RETURN_IF_ERROR(check_if_overflow(_partition_columns[i].get()));
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+            RETURN_IF_ERROR(check_if_overflow(_order_columns[i].get()));
         }
     }
 
@@ -654,8 +666,8 @@ void Analytor::reset_state_for_next_partition() {
     DCHECK_GE(_current_row_position, 0);
 }
 
-void Analytor::set_partition_size_for_cume_function() {
-    for (auto i : _cume_function_index) {
+void Analytor::set_partition_size_for_function() {
+    for (auto i : _partition_size_required_function_index) {
         auto& state = *reinterpret_cast<CumeDistState*>(_managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
         state.count = _partition_end - _partition_start;
     }

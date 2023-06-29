@@ -32,7 +32,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.UserPrivilegeCollection;
+import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -263,7 +263,6 @@ public class AuthenticationMgr {
                         authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
                         ConnectContext currentContext = ConnectContext.get();
                         if (currentContext != null) {
-                            // TODO(yiming): set role ids for ephemeral user in connection context
                             currentContext.setCurrentRoleIds(new HashSet<>(
                                     Collections.singletonList(PrivilegeBuiltinConstants.ROOT_ROLE_ID)));
                         }
@@ -314,7 +313,7 @@ public class AuthenticationMgr {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             AuthorizationMgr authorizationManager = globalStateMgr.getAuthorizationMgr();
             // init user privilege
-            UserPrivilegeCollection collection = authorizationManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
+            UserPrivilegeCollectionV2 collection = authorizationManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
 
             short pluginId = authorizationManager.getProviderPluginId();
             short pluginVersion = authorizationManager.getProviderPluginVersion();
@@ -458,7 +457,7 @@ public class AuthenticationMgr {
             UserIdentity userIdentity,
             UserAuthenticationInfo info,
             UserProperty userProperty,
-            UserPrivilegeCollection privilegeCollection,
+            UserPrivilegeCollectionV2 privilegeCollection,
             short pluginId,
             short pluginVersion)
             throws AuthenticationException, PrivilegeException {

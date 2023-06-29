@@ -116,6 +116,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private int uniqueId;
 
 
+=======
+>>>>>>> main
     @SerializedName(value = "materializedColumnExpr")
     private GsonUtils.ExpressionSerializedObject generatedColumnExprSerialized;
     private Expr materializedColumnExpr;
@@ -221,6 +223,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public String getDisplayName() {
         if (defineExpr == null) {
+            return name;
+        } else if ((defineExpr instanceof SlotRef) && name != null) {
             return name;
         } else {
             return defineExpr.toSql();
@@ -486,14 +490,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         materializedColumnExpr = expr;
     }
 
-    public SlotRef getRefColumn() {
-        List<Expr> slots = new ArrayList<>();
+    public List<SlotRef> getRefColumns() {
+        List<SlotRef> slots = new ArrayList<>();
         if (defineExpr == null) {
             return null;
         } else {
             defineExpr.collect(SlotRef.class, slots);
-            Preconditions.checkArgument(slots.size() == 1);
-            return (SlotRef) slots.get(0);
+            return slots;
         }
     }
 

@@ -20,10 +20,9 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
@@ -112,6 +111,10 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToLiteralExprValues.put(partitionId, partitionValues);
     }
 
+    public void setDirectLiteralExprValues(long partitionId, List<LiteralExpr> values) {
+        this.idToLiteralExprValues.put(partitionId, values);
+    }
+
     public List<Long> getPartitionIds(boolean isTemp) {
         List<Long> partitionIds = Lists.newArrayList();
         idToIsTempPartition.forEach((k, v) -> {
@@ -160,6 +163,10 @@ public class ListPartitionInfo extends PartitionInfo {
             multiPartitionValues.add(partitionValues);
         }
         this.idToMultiLiteralExprValues.put(partitionId, multiPartitionValues);
+    }
+
+    public void setDirectMultiLiteralExprValues(long partitionId, List<List<LiteralExpr>> multiValues) {
+        this.idToMultiLiteralExprValues.put(partitionId, multiValues);
     }
 
     public void setBatchMultiLiteralExprValues(Map<Long, List<List<String>>> batchMultiValues)
@@ -323,11 +330,17 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     public String getValuesFormat(long partitionId) {
-        if (!this.idToLiteralExprValues.isEmpty()) {
-            return this.valuesToString(this.idToLiteralExprValues.get(partitionId));
+        if (!idToLiteralExprValues.isEmpty()) {
+            List<LiteralExpr> literalExprs = idToLiteralExprValues.get(partitionId);
+            if (literalExprs != null) {
+                return this.valuesToString(literalExprs);
+            }
         }
-        if (!this.idToMultiLiteralExprValues.isEmpty()) {
-            return this.multiValuesToString(this.idToMultiLiteralExprValues.get(partitionId));
+        if (!idToMultiLiteralExprValues.isEmpty()) {
+            List<List<LiteralExpr>> lists = idToMultiLiteralExprValues.get(partitionId);
+            if (lists != null) {
+                return this.multiValuesToString(lists);
+            }
         }
         return "";
     }
@@ -407,9 +420,9 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, DataProperty dataProperty, short replicationNum, boolean isInMemory,
-                             StorageCacheInfo storageCacheInfo, List<String> values,
+                             DataCacheInfo dataCacheInfo, List<String> values,
                              List<List<String>> multiValues) throws AnalysisException {
-        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageCacheInfo);
+        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory, dataCacheInfo);
         if (multiValues != null && multiValues.size() > 0) {
             this.idToMultiValues.put(partitionId, multiValues);
             this.setMultiLiteralExprValues(partitionId, multiValues);
@@ -426,7 +439,20 @@ public class ListPartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
         idToInMemory.put(partitionId, false);
-        idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
-                Config.lake_default_storage_cache_ttl_seconds, false));
+        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true, false));
+    }
+
+    public static int compareByValue(List<List<String>> left, List<List<String>> right) {
+        int valueSize = left.size();
+        for (int i = 0; i < valueSize; i++) {
+            int partitionSize = left.get(i).size();
+            for (int j = 0; j < partitionSize; j++) {
+                int compareResult = left.get(i).get(j).compareTo(right.get(i).get(j));
+                if (compareResult != 0) {
+                    return compareResult;
+                }
+            }
+        }
+        return 0;
     }
 }

@@ -28,7 +28,7 @@ public:
     bool is_full() override { return (_spiller != nullptr && _spiller->is_full()) || _spill_channel->has_task(); }
 
     bool has_pending_data() override { return _spiller != nullptr && _spiller->has_pending_data(); }
-    void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
+    void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
 
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status do_done(RuntimeState* state) override;

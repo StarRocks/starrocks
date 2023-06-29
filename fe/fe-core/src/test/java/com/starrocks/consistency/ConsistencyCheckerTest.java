@@ -65,7 +65,7 @@ public class ConsistencyCheckerTest {
                 distributionInfo);
         table.addPartition(partition);
         Database database = new Database(dbId, "database");
-        database.createTable(table);
+        database.registerTableUnlocked(table);
 
         new Expectations() {
             {

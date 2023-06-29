@@ -120,7 +120,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("TABLE_FUNCTION")
         TABLE_FUNCTION,
         @SerializedName("PAIMON")
-        PAIMON;
+        PAIMON,
+        @SerializedName("HIVE_VIEW")
+        HIVE_VIEW;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -222,7 +224,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             }
         } else {
             // Only view in with-clause have null base
-            Preconditions.checkArgument(type == TableType.VIEW, "Table has no columns");
+            Preconditions.checkArgument(type == TableType.VIEW || type == TableType.HIVE_VIEW,
+                    "Table has no columns");
         }
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
@@ -749,8 +752,12 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     /**
      * onCreate is called when this table is created
      */
-    public void onCreate() {
+    public void onReload() {
         // Do nothing by default.
+    }
+
+    public void onCreate(Database database) {
+        onReload();
     }
 
     /**

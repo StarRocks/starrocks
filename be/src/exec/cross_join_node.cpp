@@ -663,7 +663,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
     std::copy(conjunct_ctxs().begin(), conjunct_ctxs().end(), std::back_inserter(context_params.filters));
 
     size_t num_right_partitions = context->source_operator(right_ops)->degree_of_parallelism();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
+    auto workgroup = context->fragment_context()->workgroup();
+    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto spill_process_factory_ptr =
             std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
     context_params.spill_process_factory_ptr = spill_process_factory_ptr;
@@ -692,12 +693,12 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
                                                                               context->degree_of_parallelism());
     left_ops.emplace_back(std::move(left_factory));
 
-    if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {
-        may_add_chunk_accumulate_operator(left_ops, context, id());
-    }
-
     if (limit() != -1) {
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
+    if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {
+        may_add_chunk_accumulate_operator(left_ops, context, id());
     }
 
     // return as the following pipeline

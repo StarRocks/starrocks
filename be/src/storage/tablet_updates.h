@@ -39,7 +39,7 @@ class MemTracker;
 class RowsetReadOptions;
 class SnapshotMeta;
 class Tablet;
-class TabletBasicInfo;
+struct TabletBasicInfo;
 class TTabletInfo;
 
 class ChunkIterator;
@@ -216,13 +216,13 @@ public:
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
-    Status link_from(Tablet* base_tablet, int64_t request_version, std::string err_msg_header = "");
+    Status link_from(Tablet* base_tablet, int64_t request_version, const std::string& err_msg_header = "");
 
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                        ChunkChanger* chunk_changer, std::string err_msg_header = "");
+                        ChunkChanger* chunk_changer, const std::string& err_msg_header = "");
 
     Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                        ChunkChanger* chunk_changer, std::string err_msg_header = "");
+                        ChunkChanger* chunk_changer, const std::string& err_msg_header = "");
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
@@ -283,11 +283,11 @@ public:
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns, void* state);
 
-    Status prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upserts, EditVersion* read_version,
-                                         std::vector<uint64_t>* rss_rowids);
+    Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                std::vector<uint64_t>* rss_rowids, int64_t timeout_ms = 0);
 
-    Status prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upserts,
-                                                EditVersion* read_version, std::vector<uint64_t>* rss_rowids);
+    Status get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                       std::vector<uint64_t>* rss_rowids);
 
     Status get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges);
 
@@ -312,6 +312,8 @@ public:
                                          std::vector<uint32_t>* rowset_ids);
 
     bool check_delta_column_generate_from_version(EditVersion begin_version);
+
+    Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
 private:
     friend class Tablet;
@@ -349,9 +351,9 @@ private:
     void _apply_rowset_commit(const EditVersionInfo& version_info);
 
     // used for normal update or row-mode partial update
-    void _apply_normal_rowset_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset);
+    void _apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
     // used for column-mode partial update
-    void _apply_column_partial_update_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset);
+    void _apply_column_partial_update_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset);
 
     void _apply_compaction_commit(const EditVersionInfo& version_info);
 
@@ -435,7 +437,7 @@ private:
     // used for async apply, make sure at most 1 thread is doing applying
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
-    mutable std::mutex _index_lock;
+    mutable std::timed_mutex _index_lock;
     // apply process is running currently
     bool _apply_running = false;
 

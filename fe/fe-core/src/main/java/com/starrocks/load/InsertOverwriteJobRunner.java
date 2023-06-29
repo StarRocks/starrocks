@@ -24,6 +24,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
@@ -62,14 +65,14 @@ import static com.starrocks.load.InsertOverwriteJobState.OVERWRITE_FAILED;
 public class InsertOverwriteJobRunner {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobRunner.class);
 
-    private InsertOverwriteJob job;
+    private final InsertOverwriteJob job;
 
     private InsertStmt insertStmt;
     private StmtExecutor stmtExecutor;
     private ConnectContext context;
-    private long dbId;
-    private long tableId;
-    private String postfix;
+    private final long dbId;
+    private final long tableId;
+    private final String postfix;
 
     private long createPartitionElapse;
     private long insertElapse;
@@ -104,7 +107,8 @@ public class InsertOverwriteJobRunner {
     // there is no concurrent problem here
     public void cancel() {
         if (isFinished()) {
-            LOG.warn("cancel failed. insert overwrite job:{} already finished. state:{}", job.getJobState());
+            LOG.warn("cancel failed. insert overwrite job:{} already finished. state:{}", job.getJobId(),
+                    job.getJobState());
             return;
         }
         try {
@@ -259,7 +263,16 @@ public class InsertOverwriteJobRunner {
     private void executeInsert() throws Exception {
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
-        ExecPlan newPlan = new StatementPlanner().plan(insertStmt, context);
+        ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
+        // Use `handleDMLStmt` instead of `handleDMLStmtWithProfile` because cannot call `writeProfile` in
+        // InsertOverwriteJobRunner.
+        // InsertOverWriteJob is executed as below:
+        // - StmtExecutor#handleDMLStmtWithProfile
+        //    - StmtExecutor#executeInsert
+        //  - StmtExecutor#handleInsertOverwrite#InsertOverwriteJobMgr#run
+        //  - InsertOverwriteJobRunner#executeInsert
+        //  - StmtExecutor#handleDMLStmt <- no call `handleDMLStmt` again.
+        // `writeProfile` is called in `handleDMLStmt`, and no need call it again later.
         stmtExecutor.handleDMLStmt(newPlan, insertStmt);
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
@@ -271,7 +284,7 @@ public class InsertOverwriteJobRunner {
     private void createTempPartitions() throws DdlException {
         long createPartitionStartTimestamp = System.currentTimeMillis();
         Database db = getAndReadLockDatabase(dbId);
-        OlapTable targetTable = null;
+        OlapTable targetTable;
         try {
             targetTable = checkAndGetTable(db, tableId);
         } finally {
@@ -343,10 +356,13 @@ public class InsertOverwriteJobRunner {
                 }
             });
 
-            if (targetTable.getPartitionInfo().isRangePartition()) {
+            PartitionInfo partitionInfo = targetTable.getPartitionInfo();
+            if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
-            } else {
+            } else if (partitionInfo instanceof SinglePartitionInfo) {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+            } else {
+                throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,

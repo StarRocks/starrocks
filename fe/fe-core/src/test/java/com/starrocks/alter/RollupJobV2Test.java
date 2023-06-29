@@ -59,7 +59,7 @@ import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.task.AgentTaskQueue;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -253,7 +253,7 @@ public class RollupJobV2Test extends DDLTestBase {
 
         short keysCount = 1;
         List<Column> columns = Lists.newArrayList();
-        String mvColumnName = CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX + "bitmap_union_" + "c1";
+        String mvColumnName = MVUtils.MATERIALIZED_VIEW_NAME_PREFIX + "bitmap_union_" + "c1";
         Column column = new Column(mvColumnName, Type.BITMAP, false, AggregateType.BITMAP_UNION, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "");
         columns.add(column);

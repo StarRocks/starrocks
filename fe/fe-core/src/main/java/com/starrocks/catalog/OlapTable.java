@@ -59,6 +59,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
@@ -70,11 +71,12 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -207,9 +209,6 @@ public class OlapTable extends Table {
 
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
-
-    @SerializedName(value = "storageVolumeId")
-    protected String storageVolumeId = "";
 
     @SerializedName(value = "maxColUniqueId")
     protected int maxColUniqueId = -1;
@@ -403,14 +402,6 @@ public class OlapTable extends Table {
 
     public OlapTableState getState() {
         return state;
-    }
-
-    public void setStorageVolumeId(String storageVolumeId) {
-        this.storageVolumeId = storageVolumeId;
-    }
-
-    public String getStorageVolumeId() {
-        return storageVolumeId;
     }
 
     public List<Index> getIndexes() {
@@ -887,6 +878,31 @@ public class OlapTable extends Table {
         return rangePartitionMap;
     }
 
+    public Map<String, List<List<String>>> getListPartitionMap() {
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        Map<String, List<List<String>>> listPartitionMap = Maps.newHashMap();
+        for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
+            Long partitionId = partitionEntry.getKey();
+            String partitionName = partitionEntry.getValue().getName();
+            // FE and BE at the same time ignore the hidden partition at the same time
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
+            List<String> values = listPartitionInfo.getIdToValues().get(partitionId);
+            if (values != null) {
+                List<List<String>> valueList = Lists.newArrayList();
+                valueList.add(values);
+                listPartitionMap.put(partitionName, valueList);
+            }
+            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
+            if (multiValues != null) {
+                listPartitionMap.put(partitionName, listPartitionInfo.getIdToMultiValues().get(partitionId));
+            }
+
+        }
+        return listPartitionMap;
+    }
+
     public List<String> getPartitionColumnNames() {
         List<String> partitionColumnNames = Lists.newArrayList();
         if (partitionInfo instanceof SinglePartitionInfo) {
@@ -976,7 +992,7 @@ public class OlapTable extends Table {
                             rangePartitionInfo.getDataProperty(partition.getId()),
                             rangePartitionInfo.getReplicationNum(partition.getId()),
                             rangePartitionInfo.getIsInMemory(partition.getId()),
-                            rangePartitionInfo.getStorageCacheInfo(partition.getId()));
+                            rangePartitionInfo.getDataCacheInfo(partition.getId()));
                 } else if (!reserveTablets) {
                     GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 }
@@ -1123,7 +1139,7 @@ public class OlapTable extends Table {
         return Sets.newHashSet(nameToPartition.keySet());
     }
 
-    public Map<String, Range<PartitionKey>> getValidPartitionMap(int lastPartitionNum) throws AnalysisException {
+    public Map<String, Range<PartitionKey>> getValidRangePartitionMap(int lastPartitionNum) throws AnalysisException {
         Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
         // less than 0 means not set
         if (lastPartitionNum < 0) {
@@ -1185,6 +1201,25 @@ public class OlapTable extends Table {
             }
         }
         return result;
+    }
+
+    // partitionName -> formatValue 1:1/1:N
+    public Map<String, List<List<String>>> getValidListPartitionMap(int lastPartitionNum) {
+        Map<String, List<List<String>>> listPartitionMap = getListPartitionMap();
+        // less than 0 means not set
+        if (lastPartitionNum < 0) {
+            return listPartitionMap;
+        }
+
+        int partitionNum = listPartitionMap.size();
+        if (lastPartitionNum > partitionNum) {
+            return listPartitionMap;
+        }
+
+        return listPartitionMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(ListPartitionInfo::compareByValue))
+                .skip(Math.max(0, partitionNum - lastPartitionNum))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public Set<String> getBfColumns() {
@@ -1692,14 +1727,14 @@ public class OlapTable extends Table {
         DataProperty dataProperty = partitionInfo.getDataProperty(oldPartition.getId());
         short replicationNum = partitionInfo.getReplicationNum(oldPartition.getId());
         boolean isInMemory = partitionInfo.getIsInMemory(oldPartition.getId());
-        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(oldPartition.getId());
+        DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(oldPartition.getId());
 
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                    replicationNum, isInMemory, storageCacheInfo);
+                    replicationNum, isInMemory, dataCacheInfo);
         } else if (partitionInfo.getType() == PartitionType.LIST) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             List<String> values = listPartitionInfo.getIdToValues().get(oldPartition.getId());
@@ -1707,14 +1742,14 @@ public class OlapTable extends Table {
             listPartitionInfo.dropPartition(oldPartition.getId());
             try {
                 listPartitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory,
-                        storageCacheInfo, values, multiValues);
+                        dataCacheInfo, values, multiValues);
             } catch (AnalysisException ex) {
                 LOG.warn("failed to add list partition", ex);
                 throw new SemanticException(ex.getMessage());
             }
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
-            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageCacheInfo);
+            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, dataCacheInfo);
         }
 
         return oldPartition;
@@ -1828,7 +1863,7 @@ public class OlapTable extends Table {
         }
 
         List<Column> schema = Lists.newArrayList(getBaseSchema());
-        
+
         while (schema.size() > 0) {
             // check last column is whether materiazlied column or not
             if (schema.get(schema.size() - 1).isMaterializedColumn()) {
@@ -2318,8 +2353,40 @@ public class OlapTable extends Table {
 
 
     @Override
-    public void onCreate() {
+    public void onReload() {
         analyzePartitionInfo();
+    }
+
+    @Override
+    public void onCreate(Database db) {
+        super.onCreate(db);
+
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        if (colocateTableIndex.isColocateTable(getId())) {
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            ColocatePersistInfo colocatePersistInfo =
+                    ColocatePersistInfo.createForAddTable(groupId, getId(), backendsPerBucketSeq);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
+        }
+
+        // register or remove table from DynamicPartition after table created
+        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), this);
+        DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), this);
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
+                getName(), DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
+
+        if (Config.dynamic_partition_enable && getTableProperty().getDynamicPartitionProperty().getEnable()) {
+            new Thread(() -> {
+                try {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
+                            .executeDynamicPartitionForTable(db.getId(), getId());
+                } catch (Exception ex) {
+                    LOG.warn("Some problems were encountered in the process of triggering " +
+                            "the execution of dynamic partitioning", ex);
+                }
+            }, "BackgroundDynamicPartitionThread").start();
+        }
     }
 
     private void analyzePartitionInfo() {
@@ -2362,9 +2429,23 @@ public class OlapTable extends Table {
         }
     }
 
+    public void onErase(boolean isReplay) {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        Collection<Partition> allPartitions = getAllPartitions();
+        for (Partition partition : allPartitions) {
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
+            }
+        }
+
+        GlobalStateMgr.getCurrentState().getColocateTableIndex().removeTable(getId(), this, isReplay);
+    }
+
     @Override
     public Runnable delete(boolean replay) {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this, replay);
+        onErase(replay);
         return replay ? null : new DeleteOlapTableTask(this);
     }
 
@@ -2482,7 +2563,7 @@ public class OlapTable extends Table {
         throw new SemanticException("getPartitionFileCacheInfo is not supported");
     }
 
-    public void setStorageInfo(FilePathInfo pathInfo, StorageCacheInfo storageCacheInfo) {
+    public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
         throw new SemanticException("setStorageInfo is not supported");
     }
     // ------ for lake table and lake materialized view end ------

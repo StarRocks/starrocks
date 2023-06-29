@@ -53,6 +53,12 @@ public class TypeManager {
         if (t1.isStructType() && t2.isStructType()) {
             return getCommonStructType((StructType) t1, (StructType) t2);
         }
+        if (t1.isBoolean() && t2.isComplexType()) {
+            return t2;
+        }
+        if (t1.isComplexType() && t2.isBoolean()) {
+            return t1;
+        }
         if (t1.isNull() || t2.isNull()) {
             return t1.isNull() ? t2 : t1;
         }
@@ -118,43 +124,9 @@ public class TypeManager {
                 return expr;
             }
 
-            if (expr.getType().isArrayType()) {
-                Type originArrayItemType = ((ArrayType) expr.getType()).getItemType();
-
-                if (!targetType.isArrayType()) {
-                    throw new SemanticException(
-                            "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
-                }
-
-                if (!Type.canCastTo(originArrayItemType, ((ArrayType) targetType).getItemType())) {
-                    throw new SemanticException("Cannot cast '" + expr.toSql()
-                            + "' from " + originArrayItemType + " to " + ((ArrayType) targetType).getItemType());
-                }
-            } else if (expr.getType().isMapType()) {
-                if (!targetType.isMapType()) {
-                    throw new SemanticException(
-                            "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
-                }
-
-                if (!Type.canCastTo(expr.getType(), targetType)) {
-                    throw new SemanticException("Cannot cast '" + expr.toSql()
-                            + "' from " + expr.getType() + " to " + ((ArrayType) targetType).getItemType());
-                }
-            } else if (expr.getType().isStructType()) {
-                if (!targetType.isStructType()) {
-                    throw new SemanticException(
-                            "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
-                }
-
-                if (!Type.canCastTo(expr.getType(), targetType)) {
-                    throw new SemanticException("Cannot cast '" + expr.toSql()
-                            + "' from " + expr.getType() + " to " + ((ArrayType) targetType).getItemType());
-                }
-            } else {
-                if (!Type.canCastTo(expr.getType(), targetType)) {
-                    throw new SemanticException("Cannot cast '" + expr.toSql()
-                            + "' from " + expr.getType() + " to " + targetType);
-                }
+            if (!Type.canCastTo(expr.getType(), targetType)) {
+                throw new SemanticException(
+                        "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
             }
             return expr.uncheckedCastTo(targetType);
         } catch (AnalysisException e) {
@@ -188,6 +160,8 @@ public class TypeManager {
             if ((type1.isStringType() && type2.isExactNumericType()) ||
                     (type1.isExactNumericType() && type2.isStringType())) {
                 return Type.STRING;
+            } else if (type1.isComplexType() || type2.isComplexType()) {
+                return TypeManager.getCommonSuperType(type1, type2);
             }
         }
 

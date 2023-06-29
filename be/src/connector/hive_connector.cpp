@@ -55,7 +55,9 @@ Status HiveDataSource::_check_all_slots_nullable() {
     for (const auto* slot : _tuple_desc->slots()) {
         if (!slot->is_nullable()) {
             return Status::RuntimeError(fmt::format(
-                    "All columns must be nullable for external table. Column '{}' is not nullable", slot->col_name()));
+                    "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild the"
+                    "external table and We strongly recommend that you use catalog to access external data.",
+                    slot->col_name()));
         }
     }
     return Status::OK();
@@ -106,9 +108,6 @@ Status HiveDataSource::open(RuntimeState* state) {
 
 void HiveDataSource::_update_has_any_predicate() {
     auto f = [&]() {
-        if (_conjunct_ctxs.size() > 0) return true;
-        if (_min_max_conjunct_ctxs.size() > 0) return true;
-        if (_partition_conjunct_ctxs.size() > 0) return true;
         if (_runtime_filters != nullptr && _runtime_filters->size() > 0) return true;
         return false;
     };
@@ -397,11 +396,6 @@ HdfsScanner* HiveDataSource::_create_hudi_jni_scanner() {
     jni_scanner_params["serde"] = hudi_table->get_serde_lib();
     jni_scanner_params["input_format"] = hudi_table->get_input_format();
 
-#ifndef NDEBUG
-    for (const auto& it : jni_scanner_params) {
-        VLOG_FILE << "jni scanner params. key = " << it.first << ", value = " << it.second;
-    }
-#endif
     std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
     return scanner;
@@ -425,12 +419,8 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner() {
     jni_scanner_params["table_name"] = paimon_table->get_table_name();
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
+    jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
 
-#ifndef NDEBUG
-    for (const auto& it : jni_scanner_params) {
-        VLOG_FILE << "jni scanner params. key = " << it.first << ", value = " << it.second;
-    }
-#endif
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
     return scanner;
@@ -455,7 +445,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
-    FSOptions fsOptions =
+    auto fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));

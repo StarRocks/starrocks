@@ -129,10 +129,13 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     _query_ctx->extend_query_lifetime();
 
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
-        _query_ctx->set_report_profile();
+        _query_ctx->set_enable_profile();
     }
     if (query_options.__isset.pipeline_profile_level) {
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
+    }
+    if (query_options.__isset.runtime_profile_report_interval) {
+        _query_ctx->set_runtime_profile_report_interval(query_options.runtime_profile_report_interval);
     }
 
     bool enable_query_trace = false;
@@ -172,12 +175,6 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 }
 
 Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
-    bool enable_resource_group =
-            request.common().__isset.enable_resource_group && request.common().enable_resource_group;
-    if (!enable_resource_group) {
-        return Status::OK();
-    }
-
     WorkGroupPtr wg = nullptr;
     if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
         wg = WorkGroupManager::instance()->get_default_workgroup();
@@ -699,7 +696,6 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = exec_env->wg_driver_executor();
     _fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
-        DCHECK(!fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);
         executor->submit(driver.get());
         return Status::OK();
     });

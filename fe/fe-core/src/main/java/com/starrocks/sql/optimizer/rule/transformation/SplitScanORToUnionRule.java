@@ -215,7 +215,6 @@ public class SplitScanORToUnionRule extends TransformationRule {
     private boolean canBenefitFromSplit(double existSelectRatio, double splitMaxSelectRatio) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         int childrenNumOfUnion = sessionVariable.getScanOrToUnionLimit();
-        existSelectRatio = Math.min(1, existSelectRatio);
         existSelectRatio = Math.min(existSelectRatio, sessionVariable.getSelectRatioThreshold());
         return splitMaxSelectRatio < existSelectRatio / childrenNumOfUnion;
     }

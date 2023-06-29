@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
+#include "fslib/star_cache_configuration.h"
 #include "gflags/gflags.h"
 #include "gutil/strings/fastmem.h"
 #include "util/debug_util.h"
@@ -189,14 +190,14 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
                     localconf[fslib::kS3CredentialType] = "default";
                 } else if (credential.has_simple_credential()) {
                     localconf[fslib::kS3CredentialType] = "simple";
-                    auto simple_credential = credential.simple_credential();
+                    auto& simple_credential = credential.simple_credential();
                     localconf[fslib::kS3CredentialSimpleAccessKeyId] = simple_credential.access_key();
                     localconf[fslib::kS3CredentialSimpleAccessKeySecret] = simple_credential.access_key_secret();
                 } else if (credential.has_profile_credential()) {
                     localconf[fslib::kS3CredentialType] = "instance_profile";
                 } else if (credential.has_assume_role_credential()) {
                     localconf[fslib::kS3CredentialType] = "assume_role";
-                    auto role_credential = credential.assume_role_credential();
+                    auto& role_credential = credential.assume_role_credential();
                     localconf[fslib::kS3CredentialAssumeRoleArn] = role_credential.iam_role_arn();
                     localconf[fslib::kS3CredentialAssumeRoleExternalId] = role_credential.external_id();
                 } else {
@@ -300,7 +301,7 @@ absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shar
     return std::move(fs);
 }
 
-Status to_status(absl::Status absl_status) {
+Status to_status(const absl::Status& absl_status) {
     switch (absl_status.code()) {
     case absl::StatusCode::kOk:
         return Status::OK();
@@ -331,6 +332,11 @@ void init_staros_worker() {
     FLAGS_cachemgr_evict_high_water = config::starlet_cache_evict_high_water;
     FLAGS_cachemgr_dir_allocate_policy = config::starlet_cache_dir_allocate_policy;
     FLAGS_fs_stream_buffer_size_bytes = config::starlet_fs_stream_buffer_size_bytes;
+
+    fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
+    fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
+    fslib::FLAGS_star_cache_disk_size_percent = config::starlet_star_cache_disk_size_percent;
+    fslib::FLAGS_star_cache_block_size_bytes = config::starlet_star_cache_block_size_bytes;
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;

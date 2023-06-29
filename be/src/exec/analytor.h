@@ -15,6 +15,7 @@
 #pragma once
 
 #include <queue>
+#include <string>
 
 #include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -157,8 +158,13 @@ public:
     void reset_state_for_cur_partition();
     void reset_state_for_next_partition();
 
-    bool has_cume_function() const { return _has_cume_function; }
-    void set_partition_size_for_cume_function();
+    // When calculating window functions such as CUME_DIST and PERCENT_RANK,
+    // it's necessary to specify the size of the partition.
+    bool should_set_partition_size() const { return _should_set_partition_size; }
+    void set_partition_size_for_function();
+    bool require_partition_size(const std::string& function_name) {
+        return function_name == "cume_dist" || function_name == "percent_rank";
+    }
 
     void remove_unused_buffer_values(RuntimeState* state);
 
@@ -206,9 +212,10 @@ private:
     int64_t _limit; // -1: no limit
     bool _has_lead_lag_function = false;
 
-    // For cumulative distribution ranking function.
-    bool _has_cume_function = false;
-    std::vector<int64_t> _cume_function_index;
+    // When calculating window functions such as CUME_DIST and PERCENT_RANK,
+    // it's necessary to specify the size of the partition.
+    bool _should_set_partition_size = false;
+    std::vector<int64_t> _partition_size_required_function_index;
 
     Columns _result_window_columns;
     std::vector<ChunkPtr> _input_chunks;

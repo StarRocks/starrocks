@@ -82,7 +82,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
         auto& info = _result.loads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
             if (slot_id < 1 || slot_id > 23) {
-                return Status::InternalError(fmt::format("invalid slot id:$0", slot_id));
+                return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
             switch (slot_id) {

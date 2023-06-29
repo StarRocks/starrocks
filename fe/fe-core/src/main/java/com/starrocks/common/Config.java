@@ -129,7 +129,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int audit_log_roll_num = 90;
     @ConfField
-    public static String[] audit_log_modules = {"slow_query", "query", "connection"};
+    public static String[] audit_log_modules = {"slow_query", "query"};
     @ConfField(mutable = true)
     public static long qe_slow_log_ms = 5000;
     @ConfField
@@ -784,13 +784,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long min_bytes_per_broker_scanner = 67108864L; // 64MB
-
-    /**
-     * Maximal concurrency of broker scanners.
-     * Do not set this if you know what you are doing.
-     */
-    @ConfField(mutable = true)
-    public static int max_broker_concurrency = 100;
 
     /**
      * Default insert load timeout
@@ -1617,6 +1610,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static long statistic_cache_columns = 100000;
 
+    /**
+     * The size of the thread-pool which will be used to refresh statistic caches
+     */
+    @ConfField
+    public static int statistic_cache_thread_pool_size = 10;
+
     @ConfField
     public static long statistic_dict_columns = 100000;
 
@@ -2043,10 +2042,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int cloud_native_meta_port = 6090;
     // remote storage related configuration
-    /**
-     * storage type for cloud native table. Available options: "S3", "HDFS", "AZBLOB". case-insensitive
-     */
-    @ConfField
+    @ConfField(comment = "storage type for cloud native table. Available options: \"S3\", \"HDFS\", \"AZBLOB\". case-insensitive")
     public static String cloud_native_storage_type = "S3";
 
     // HDFS storage configuration
@@ -2110,12 +2106,6 @@ public class Config extends ConfigBase {
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
-
-    /**
-     * default storage cache ttl of lake table
-     */
-    @ConfField(mutable = true)
-    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
@@ -2207,11 +2197,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double lake_compaction_score_selector_min_score = 10.0;
 
-    /**
-     * -1 means calculate the value in an adaptive way.
-     * 0 will disable compaction.
-     */
-    @ConfField
+    @ConfField(comment = "-1 means calculate the value in an adaptive way. set this value to 0 will disable compaction.")
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
@@ -2222,6 +2208,25 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static int experimental_lake_publish_version_threads = 16;
+
+    @ConfField(mutable = true)
+    public static int lake_autovacuum_max_previous_versions = 0;
+
+    @ConfField
+    public static int lake_autovacuum_parallel_partitions = 8;
+
+    @ConfField(mutable = true)
+    public static long lake_autovacuum_partition_naptime_seconds = 180;
+
+    @ConfField(mutable = true, comment = "History versions within this time range will not be deleted by auto vacuum.\n" +
+            "REMINDER: Set this to a value longer than the maximum possible execution time of queries, to avoid deletion of " +
+            "versions still being accessed.\n" +
+            "NOTE: Increasing this value may increase the space usage of the remote storage system.")
+    public static long lake_autovacuum_grace_period_minutes = 5;
+
+    @ConfField(mutable = true, comment = "time threshold in hours, if a partition has not been updated for longer than this " +
+            "threshold, auto vacuum operations will no longer be triggered for that partition")
+    public static long lake_autovacuum_stale_partition_threshold = 12;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
@@ -2332,7 +2337,7 @@ public class Config extends ConfigBase {
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)
-    public static boolean enable_auto_tablet_distribution = false;
+    public static boolean enable_auto_tablet_distribution = true;
 
     /**
      * default size of minimum cache size of auto increment id allocation
@@ -2394,4 +2399,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean allow_default_light_schema_change = false;
+  
+    @ConfField(mutable = false)
+    public static int pipe_listener_interval_millis = 1000;
+    @ConfField(mutable = false)
+    public static int pipe_scheduler_interval_millis = 1000;
 }

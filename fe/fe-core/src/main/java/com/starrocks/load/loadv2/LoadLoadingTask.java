@@ -238,8 +238,7 @@ public class LoadLoadingTask extends LoadTask {
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 curCoordinator.endProfile();
-                curCoordinator.mergeIsomorphicProfiles(null);
-                profile.addChild(curCoordinator.getQueryProfile());
+                profile.addChild(curCoordinator.buildMergedQueryProfile(null));
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");

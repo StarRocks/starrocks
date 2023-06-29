@@ -4,6 +4,10 @@ StarRocks supports data transformation at loading.
 
 This feature supports [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), and [Routine Load](../loading/RoutineLoad.md) but does not support [Spark Load](../loading/SparkLoad.md).
 
+> **NOTICE**
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+
 This topic uses CSV data as an example to describe how to extract and transform data at loading. The data file formats that are supported vary depending on the loading method of your choice.
 
 > **NOTE**
@@ -64,6 +68,10 @@ If you choose [Routine Load](./RoutineLoad.md), make sure that topics are create
 
 2. Create tables in your StarRocks database `test_db`.
 
+   > **NOTE**
+   >
+   > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
    a. Create a table named `table1`, which consists of three columns: `event_date`, `event_type`, and `user_id`.
 
       ```SQL
@@ -73,7 +81,7 @@ If you choose [Routine Load](./RoutineLoad.md), make sure that topics are create
           `event_type` TINYINT COMMENT "event type",
           `user_id` BIGINT COMMENT "user ID"
       )
-      DISTRIBUTED BY HASH(user_id) BUCKETS 10;
+      DISTRIBUTED BY HASH(user_id);
       ```
 
    b. Create a table named `table2`, which consists of four columns: `date`, `year`, `month`, and `day`.
@@ -86,7 +94,7 @@ If you choose [Routine Load](./RoutineLoad.md), make sure that topics are create
           `month` TINYINT COMMENT "month",
           `day` TINYINT COMMENT "day"
       )
-      DISTRIBUTED BY HASH(date) BUCKETS 10;
+      DISTRIBUTED BY HASH(date);
       ```
 
 3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/data/input/` path of your HDFS cluster, publish the data of `file1.csv` to `topic1` of your Kafka cluster, and publish the data of `file2.csv` to `topic2` of your Kafka cluster.
@@ -125,6 +133,7 @@ If `file1.csv` is stored in your local file system, run the following command to
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns: user_id, user_gender, event_date, event_type" \
     -T file1.csv -XPUT \
@@ -223,6 +232,7 @@ If `file1.csv` is stored in your local file system, run the following command to
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns: user_id, user_gender, event_date, event_type" \
     -H "where: event_type=1" \
@@ -310,6 +320,7 @@ If `file2.csv` is stored in your local file system, run the following command to
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns:date,year=year(date),month=month(date),day=day(date)" \
     -T file2.csv -XPUT \

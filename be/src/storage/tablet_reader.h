@@ -38,7 +38,7 @@ public:
                  const TabletSchemaCSPtr& tablet_schema = nullptr);
     // *captured_rowsets* is captured forward before creating TabletReader.
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
-                 const std::vector<RowsetSharedPtr>& captured_rowsets,
+                 std::vector<RowsetSharedPtr> captured_rowsets,
                  const TabletSchemaSPtr* tablet_schema = nullptr);
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                  RowSourceMaskBuffer* mask_buffer);
@@ -82,6 +82,8 @@ private:
     static Status _to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                  MemPool* mempool);
 
+    Status _init_collector_for_pk_index_read();
+
     TabletSharedPtr _tablet;
     TabletSchemaCSPtr _tablet_schema;
     Version _version;
@@ -102,6 +104,9 @@ private:
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+
+    // used for pk index based pointer read
+    const TabletReaderParams* _reader_params = nullptr;
 };
 
 } // namespace starrocks

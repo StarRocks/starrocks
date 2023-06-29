@@ -43,10 +43,16 @@ namespace starrocks::spill {
 
 // some metrics for spill
 struct SpillProcessMetrics {
-    SpillProcessMetrics() = default;
-    SpillProcessMetrics(RuntimeProfile* profile);
-
+private:
+    // For profile
     std::shared_ptr<RuntimeProfile> _spiller_metrics;
+
+public:
+    SpillProcessMetrics() = default;
+    SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes);
+
+    // For query statistics
+    std::atomic_int64_t* total_spill_bytes;
 
     // time spent to append data into Spiller
     RuntimeProfile::Counter* append_data_timer = nullptr;
@@ -101,8 +107,10 @@ public:
 
     const SpillProcessMetrics& metrics() { return _metrics; }
 
-    // set partition
+    // set partitions for spiller only works when spiller has partitioned spill writer
     Status set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
+    // init partition by `num_partitions`
+    Status set_partition(RuntimeState* state, size_t num_partitions);
 
     // no thread-safe
     // TaskExecutor: Executor for runing io tasks

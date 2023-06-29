@@ -126,7 +126,7 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_prober.prepare(state, _unique_metrics.get()));
     _spill_factory = std::make_shared<spill::SpillerFactory>();
     _spiller = _spill_factory->create({});
-    _spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
+    _spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     _cross_join_context->incr_prober();
     return Status::OK();
 }
@@ -184,6 +184,11 @@ StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state)
         }
 
         _prober.reset_probe();
+    }
+    // if probe finished after reset probe side. it means probe side is empty
+    if (_prober.probe_finished()) {
+        _set_current_build_probe_finished(true);
+        return nullptr;
     }
 
     ASSIGN_OR_RETURN(auto res, _prober.probe_chunk(state, _build_chunk));

@@ -297,8 +297,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
     @Override
     public Long getToDeleteReplicaId(Long tabletId) {
-        Long beId = cachedReplicaId.remove(tabletId);
-        return beId == null ? -1L : beId;
+        Long replicaId = cachedReplicaId.remove(tabletId);
+        return replicaId == null ? -1L : replicaId;
     }
 
     private void setCachedReplicaId(Long tabletId, Long replicaId) {
@@ -927,7 +927,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             if (pathHash != -1) {
                 Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, beId);
-                if (replica.getPathHash() != pathHash) {
+                if (replica == null || replica.getPathHash() != pathHash) {
                     continue;
                 }
             }
@@ -944,7 +944,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : partitionTablets.entrySet()) {
             long totalSize = 0;
             for (Long tabletId : entry.getValue()) {
-                totalSize += GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, beId).getDataSize();
+                Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, beId);
+                if (replica != null) {
+                    totalSize += replica.getDataSize();
+                }
             }
             result.put(entry.getKey(), (double) totalSize / (entry.getValue().size() > 0 ? entry.getValue().size() : 1));
         }
@@ -1119,6 +1122,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         for (Pair<Long, Long> partition : partitions) {
             PartitionStat pStat = partitionStats.get(partition);
             // skew <= 1 means partition is balanced
+            // break all partitions because they are sorted by skew in desc order.
             if (pStat.skew <= 1) {
                 break;
             }
@@ -1131,6 +1135,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             } else {
                 tablets = getPartitionTablets(pStat.dbId, pStat.tableId, partition.first, partition.second, null,
                         Pair.create(beId, paths));
+            }
+
+            // partition may be dropped or materializedIndex may be replaced.
+            if (tablets.size() <= 1) {
+                continue;
             }
             boolean tabletFound = false;
             do {
@@ -1894,8 +1903,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 tabletGroups[i] = new ArrayList<>();
             }
             for (long tabletId : tablets) {
-                long pathHash = tabletInvertedIndex.getReplica(tabletId, this.backendId).getPathHash();
-                int sortIndex = pathSortIndex.get(pathHash);
+                Replica replica = tabletInvertedIndex.getReplica(tabletId, this.backendId);
+                if (replica == null) {
+                    continue;
+                }
+                int sortIndex = pathSortIndex.get(replica.getPathHash());
                 if (sortIndex > lastHighLoadIndex) {
                     continue;
                 }

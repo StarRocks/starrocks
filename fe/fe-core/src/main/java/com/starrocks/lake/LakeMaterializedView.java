@@ -30,7 +30,6 @@ import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -75,21 +74,21 @@ public class LakeMaterializedView extends MaterializedView {
     @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;
-        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
-        if (storageCacheInfo == null) {
+        DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partitionId);
+        if (dataCacheInfo == null) {
             cacheInfo = tableProperty.getStorageInfo().getCacheInfo();
         } else {
-            cacheInfo = storageCacheInfo.getCacheInfo();
+            cacheInfo = dataCacheInfo.getCacheInfo();
         }
         return cacheInfo;
     }
 
     @Override
-    public void setStorageInfo(FilePathInfo pathInfo, StorageCacheInfo storageCacheInfo) {
+    public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.setStorageInfo(new StorageInfo(pathInfo, storageCacheInfo.getCacheInfo()));
+        tableProperty.setStorageInfo(new StorageInfo(pathInfo, dataCacheInfo.getCacheInfo()));
     }
 
     @Override
@@ -118,7 +117,7 @@ public class LakeMaterializedView extends MaterializedView {
 
     @Override
     public Runnable delete(boolean replay) {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this, replay);
+        onErase(replay);
         return replay ? null : new DeleteLakeTableTask(this);
     }
 
@@ -128,13 +127,9 @@ public class LakeMaterializedView extends MaterializedView {
         if (tableProperty != null) {
             StorageInfo storageInfo = tableProperty.getStorageInfo();
             if (storageInfo != null) {
-                // enable_storage_cache
-                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
-                        String.valueOf(storageInfo.isEnableStorageCache()));
-
-                // storage_cache_ttl
-                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
-                        String.valueOf(storageInfo.getStorageCacheTtlS()));
+                // datacache.enable
+                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                        String.valueOf(storageInfo.isEnableDataCache()));
 
                 // enable_async_write_back
                 properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
@@ -150,15 +145,10 @@ public class LakeMaterializedView extends MaterializedView {
 
         Map<String, String> storageProperties = getProperties();
 
-        // enable_storage_cache
+        // datacache.enable
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                .append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE).append("\" = \"");
-        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
-
-        // storage_cache_ttl
-        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                .append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL).append("\" = \"");
-        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
+                .append(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).append("\" = \"");
+        sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)).append("\"");
 
         // allow_sync_write_back
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)

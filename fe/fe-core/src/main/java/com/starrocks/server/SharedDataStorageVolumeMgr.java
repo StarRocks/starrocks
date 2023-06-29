@@ -75,7 +75,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected String createInternalNoLock(String name, String svType, List<String> locations,
                                           Map<String, String> params, Optional<Boolean> enabled, String comment)
-            throws AnalysisException, DdlException {
+            throws DdlException {
         FileStoreInfo fileStoreInfo = StorageVolume.createFileStoreInfo(name, svType,
                 locations, params, enabled.orElse(true), comment);
         return GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(fileStoreInfo);
@@ -92,7 +92,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public StorageVolume getDefaultStorageVolume() throws AnalysisException {
+    public StorageVolume getDefaultStorageVolume() {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             if (defaultStorageVolumeId.isEmpty()) {
                 return getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
@@ -129,7 +129,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 locations.add("s3://" + Config.aws_s3_path);
                 break;
             case "hdfs":
-                locations.add("hdfs://" + Config.cloud_native_hdfs_url);
+                locations.add(Config.cloud_native_hdfs_url);
                 break;
             case "azblob":
                 // TODO

@@ -70,7 +70,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.RolePrivilegeCollection;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
@@ -605,13 +605,13 @@ public class ExpressionAnalyzer {
 
             Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
             // check child type can be cast
-            final String ERROR_MSG = "Column type %s does not support binary predicate operation";
+            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!Type.canCastTo(type1, compatibleType)) {
-                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()), node.getPos());
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
 
             if (!Type.canCastTo(type2, compatibleType)) {
-                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()), node.getPos());
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
 
             node.setType(Type.BOOLEAN);
@@ -1512,7 +1512,7 @@ public class ExpressionAnalyzer {
 
                 try {
                     for (Long roleId : session.getCurrentRoleIds()) {
-                        RolePrivilegeCollection rolePrivilegeCollection =
+                        RolePrivilegeCollectionV2 rolePrivilegeCollection =
                                 manager.getRolePrivilegeCollectionUnlocked(roleId, false);
                         if (rolePrivilegeCollection != null) {
                             roleName.add(rolePrivilegeCollection.getName());
@@ -1566,7 +1566,7 @@ public class ExpressionAnalyzer {
                         node.setValue(SqlModeHelper.decode((long) node.getValue()));
                     }
                 }
-            } catch (AnalysisException | DdlException e) {
+            } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }
             return null;

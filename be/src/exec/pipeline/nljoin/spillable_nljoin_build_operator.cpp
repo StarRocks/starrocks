@@ -23,7 +23,8 @@
 namespace starrocks::pipeline {
 Status SpillableNLJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(NLJoinBuildOperator::prepare(state));
-    _spill_channel->spiller()->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
+    _spill_channel->spiller()->set_metrics(
+            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     RETURN_IF_ERROR(_spill_channel->spiller()->prepare(state));
     _cross_join_context->input_channel(_driver_sequence).set_spiller(_spill_channel->spiller());
     if (state->spill_mode() == TSpillMode::FORCE) {
@@ -88,15 +89,15 @@ Status SpillableNLJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     _spill_options = std::make_shared<spill::SpilledOptions>();
-    _spill_options->spill_file_size = state->spill_mem_table_size();
+    _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->min_spilled_size = state->spill_operator_min_bytes();
-    _spill_options->max_memory_size_each_partition = state->spill_operator_max_bytes();
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "spillable-nestloop-join-build";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->read_shared = true;
+    _spill_options->encode_level = state->spill_encode_level();
 
     return Status::OK();
 }

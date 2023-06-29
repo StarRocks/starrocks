@@ -338,6 +338,9 @@ struct THdfsScanRange {
 
     // paimon split info
     14: optional string paimon_split_info
+
+    // paimon predicate info
+    15: optional string paimon_predicate_info
 }
 
 struct TBinlogScanRange {
@@ -480,7 +483,9 @@ struct TOlapScanNode {
   27: optional list<string> sort_key_column_names
   28: optional i32 max_parallel_scan_instance_num
   29: optional list<TColumnAccessPath> column_access_paths
-  30: required list<Descriptors.TColumn> columns_desc
+
+  30: optional bool use_pk_index
+  31: required list<Descriptors.TColumn> columns_desc
 }
 
 struct TJDBCScanNode {
@@ -648,7 +653,8 @@ enum TAggregationOp {
   BITMAP_UNION,
   ANY_VALUE,
   NTILE,
-  CUME_DIST
+  CUME_DIST,
+  PERCENT_RANK
 }
 
 //struct TAggregateFunctionCall {

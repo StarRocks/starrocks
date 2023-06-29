@@ -33,6 +33,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
@@ -286,6 +287,14 @@ public class QueryAnalyzer {
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
+                    ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+                    viewRelation.setAlias(tableRelation.getAlias());
+                    return viewRelation;
+                } else if (table instanceof HiveView) {
+                    HiveView hiveView = (HiveView) table;
+                    QueryStatement queryStatement = hiveView.getQueryStatement();
+                    View view = new View(hiveView.getId(), hiveView.getName(), hiveView.getFullSchema());
+                    view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
                     return viewRelation;
@@ -643,7 +652,7 @@ public class QueryAnalyzer {
                 analyzeExpression(expression, new AnalyzeState(), scope);
 
                 if (!expression.getType().canOrderBy()) {
-                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                    throw new SemanticException(Type.NOT_SUPPORT_ORDER_ERROR_MSG);
                 }
 
                 orderByElement.setExpr(expression);
@@ -945,7 +954,7 @@ public class QueryAnalyzer {
         if (expr instanceof BinaryPredicate) {
             for (Expr child : expr.getChildren()) {
                 if (!child.getType().canJoinOn()) {
-                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                    throw new SemanticException(Type.NOT_SUPPORT_JOIN_ERROR_MSG);
                 }
             }
         } else {

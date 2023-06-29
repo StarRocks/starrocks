@@ -48,7 +48,6 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
@@ -80,8 +79,8 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
-import com.starrocks.privilege.RolePrivilegeCollection;
-import com.starrocks.privilege.UserPrivilegeCollection;
+import com.starrocks.privilege.RolePrivilegeCollectionV2;
+import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
@@ -102,6 +101,7 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeStatus;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -220,9 +220,16 @@ public class EditLog {
                 case OperationType.OP_CREATE_TABLE:
                 case OperationType.OP_CREATE_TABLE_V2: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
-                    LOG.info("Begin to unprotect create table. db = "
-                            + info.getDbName() + " table = " + info.getTable().getId());
-                    globalStateMgr.replayCreateTable(info.getDbName(), info.getTable());
+
+                    if (info.getTable().isMaterializedView()) {
+                        LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
+                                + " create materialized view = " + info.getTable().getId()
+                                + " tableName = " + info.getTable().getName());
+                    } else {
+                        LOG.info("Begin to unprotect create table. db = "
+                                + info.getDbName() + " table = " + info.getTable().getId());
+                    }
+                    globalStateMgr.replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_DROP_TABLE:
@@ -238,13 +245,12 @@ public class EditLog {
                     globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }
-                case OperationType.OP_CREATE_MATERIALIZED_VIEW:
-                case OperationType.OP_CREATE_MATERIALIZED_VIEW_V2: {
+                case OperationType.OP_CREATE_MATERIALIZED_VIEW: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
                     LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
                             + " create materialized view = " + info.getTable().getId()
                             + " tableName = " + info.getTable().getName());
-                    globalStateMgr.replayCreateMaterializedView(info.getDbName(), ((MaterializedView) info.getTable()));
+                    globalStateMgr.replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION_V2: {
@@ -749,6 +755,11 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayDropTasks(dropTasksLog.getTaskIdList());
                     break;
                 }
+                case OperationType.OP_ALTER_TASK: {
+                    final Task task = (Task) journal.getData();
+                    globalStateMgr.getTaskManager().replayAlterTask(task);
+                    break;
+                }
                 case OperationType.OP_CREATE_TASK_RUN: {
                     final TaskRunStatus status = (TaskRunStatus) journal.getData();
                     globalStateMgr.getTaskManager().replayCreateTaskRun(status);
@@ -906,8 +917,11 @@ public class EditLog {
                     globalStateMgr.getAnalyzeMgr().replayAddBasicStatsMeta(basicStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should refresh cache here.
-                    globalStateMgr.getAnalyzeMgr().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
-                            basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
+                                basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
+                    }
                     break;
                 }
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
@@ -920,9 +934,12 @@ public class EditLog {
                     globalStateMgr.getAnalyzeMgr().replayAddHistogramStatsMeta(histogramStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should expire cache here.
-                    globalStateMgr.getAnalyzeMgr().refreshHistogramStatisticsCache(
-                            histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
-                            Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().refreshHistogramStatisticsCache(
+                                histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                                Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                    }
                     break;
                 }
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
@@ -1039,6 +1056,30 @@ public class EditLog {
                 case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
                     final TableAddOrDropColumnsInfo info = (TableAddOrDropColumnsInfo) journal.getData();
                     globalStateMgr.getSchemaChangeHandler().replayModifyTableAddOrDropColumns(info);
+                }
+                case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
+                    SetDefaultStorageVolumeLog log = (SetDefaultStorageVolumeLog) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replaySetDefaultStorageVolume(log);
+                    break;
+                }
+                case OperationType.OP_CREATE_STORAGE_VOLUME: {
+                    StorageVolume sv = (StorageVolume) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replayCreateStorageVolume(sv);
+                    break;
+                }
+                case OperationType.OP_UPDATE_STORAGE_VOLUME: {
+                    StorageVolume sv = (StorageVolume) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replayUpdateStorageVolume(sv);
+                    break;
+                }
+                case OperationType.OP_DROP_STORAGE_VOLUME: {
+                    DropStorageVolumeLog log = (DropStorageVolumeLog) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(log);
+                    break;
+                }
+                case OperationType.OP_PIPE: {
+                    PipeOpEntry opEntry = (PipeOpEntry) journal.getData();
+                    globalStateMgr.getPipeManager().getRepo().replay(opEntry);
                     break;
                 }
                 default: {
@@ -1156,9 +1197,10 @@ public class EditLog {
         logEdit(OperationType.OP_DELETE_AUTO_INCREMENT_ID, info);
     }
 
-    public void logCreateDb(Database db) {
+    public void logCreateDb(Database db, String storageVolumeId) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             CreateDbInfo createDbInfo = new CreateDbInfo(db.getId(), db.getFullName());
+            createDbInfo.setStorageVolumeId(storageVolumeId);
             logJsonObject(OperationType.OP_CREATE_DB_V2, createDbInfo);
         } else {
             logEdit(OperationType.OP_CREATE_DB, db);
@@ -1194,14 +1236,6 @@ public class EditLog {
             logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
         } else {
             logEdit(OperationType.OP_CREATE_TABLE, info);
-        }
-    }
-
-    public void logCreateMaterializedView(CreateTableInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_MATERIALIZED_VIEW_V2, info);
-        } else {
-            logEdit(OperationType.OP_CREATE_MATERIALIZED_VIEW, info);
         }
     }
 
@@ -1912,7 +1946,7 @@ public class EditLog {
             UserIdentity userIdentity,
             UserAuthenticationInfo authenticationInfo,
             UserProperty userProperty,
-            UserPrivilegeCollection privilegeCollection,
+            UserPrivilegeCollectionV2 privilegeCollection,
             short pluginId,
             short pluginVersion) {
         CreateUserInfo info = new CreateUserInfo(
@@ -1948,7 +1982,7 @@ public class EditLog {
 
     public void logUpdateUserPrivilege(
             UserIdentity userIdentity,
-            UserPrivilegeCollection privilegeCollection,
+            UserPrivilegeCollectionV2 privilegeCollection,
             short pluginId,
             short pluginVersion) {
         UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(
@@ -1957,7 +1991,7 @@ public class EditLog {
     }
 
     public void logUpdateRolePrivilege(
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified,
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
@@ -1969,7 +2003,7 @@ public class EditLog {
     }
 
     public void logDropRole(
-            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified,
+            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
             short pluginId,
             short pluginVersion) {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
@@ -2000,11 +2034,35 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
     }
 
+    public void logPipeOp(PipeOpEntry opEntry) {
+        logEdit(OperationType.OP_PIPE, opEntry);
+    }
+
     private void logJsonObject(short op, Object obj) {
         logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
     }
 
     public void logModifyTableAddOrDropColumns(TableAddOrDropColumnsInfo info) {
         logEdit(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, info);
+    }
+
+    public void logAlterTask(Task changedTask) {
+        logEdit(OperationType.OP_ALTER_TASK, changedTask);
+    }
+
+    public void logSetDefaultStorageVolume(SetDefaultStorageVolumeLog log) {
+        logEdit(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, log);
+    }
+
+    public void logCreateStorageVolume(StorageVolume storageVolume) {
+        logEdit(OperationType.OP_CREATE_STORAGE_VOLUME, storageVolume);
+    }
+
+    public void logUpdateStorageVolume(StorageVolume storageVolume) {
+        logEdit(OperationType.OP_UPDATE_STORAGE_VOLUME, storageVolume);
+    }
+
+    public void logDropStorageVolume(DropStorageVolumeLog log) {
+        logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
     }
 }

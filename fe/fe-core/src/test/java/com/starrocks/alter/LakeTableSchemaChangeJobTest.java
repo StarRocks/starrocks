@@ -40,11 +40,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -162,11 +162,11 @@ public class LakeTableSchemaChangeJobTest {
         builder.setFullPath("s3://test-bucket/object-1");
         FilePathInfo pathInfo = builder.build();
 
-        table.setStorageInfo(pathInfo, new StorageCacheInfo(false, 0, false));
-        StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
-        partitionInfo.setStorageCacheInfo(partitionId, storageCacheInfo);
+        table.setStorageInfo(pathInfo, new DataCacheInfo(false, false));
+        DataCacheInfo dataCacheInfo = new DataCacheInfo(false, false);
+        partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
 
-        db.createTable(table);
+        db.registerTableUnlocked(table);
 
         ColumnDef c1 = new ColumnDef("c1", TypeDef.create(PrimitiveType.DOUBLE));
         AddColumnClause alter = new AddColumnClause(c1, null, null, null);
@@ -509,7 +509,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
@@ -569,7 +569,7 @@ public class LakeTableSchemaChangeJobTest {
         });
         Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
 
         exception = Assert.assertThrows(AlterCancelException.class, () -> {
@@ -578,7 +578,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
@@ -807,7 +807,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // Add table back to database
-        db.createTable(table);
+        db.registerTableUnlocked(table);
 
         // We've mocked ColumnTypeConverter.publishVersion to throw RpcException, should this runFinishedRewritingJob will fail but
         // should not throw any exception.

@@ -40,14 +40,15 @@ namespace starrocks::pipeline {
 Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperator::prepare(state));
     _need_post_probe = has_post_probe(_join_prober->join_type());
-    _probe_spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
+    _probe_spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     metrics.hash_partitions = ADD_COUNTER(_unique_metrics.get(), "SpillPartitions", TUnit::UNIT);
     metrics.build_partition_peak_memory_usage = _unique_metrics->AddHighWaterMarkCounter(
             "SpillBuildPartitionPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     metrics.prober_peak_memory_usage = _unique_metrics->AddHighWaterMarkCounter(
             "SpillProberPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
-    _executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
+    auto wg = state->fragment_ctx()->workgroup();
+    _executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), wg);
     return Status::OK();
 }
 
@@ -56,7 +57,7 @@ void SpillableHashJoinProbeOperator::close(RuntimeState* state) {
 }
 
 bool SpillableHashJoinProbeOperator::has_output() const {
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::has_output();
     }
 
@@ -114,7 +115,7 @@ bool SpillableHashJoinProbeOperator::has_output() const {
 }
 
 bool SpillableHashJoinProbeOperator::need_input() const {
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::need_input();
     }
 
@@ -142,7 +143,7 @@ bool SpillableHashJoinProbeOperator::need_input() const {
 }
 
 bool SpillableHashJoinProbeOperator::is_finished() const {
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::is_finished();
     }
 
@@ -158,7 +159,7 @@ bool SpillableHashJoinProbeOperator::is_finished() const {
 }
 
 Status SpillableHashJoinProbeOperator::set_finishing(RuntimeState* state) {
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::set_finishing(state);
     }
     if (state->is_cancelled()) {
@@ -175,7 +176,7 @@ Status SpillableHashJoinProbeOperator::set_finished(RuntimeState* state) {
 
 Status SpillableHashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(_status());
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::push_chunk(state, chunk);
     }
 
@@ -346,7 +347,7 @@ Status SpillableHashJoinProbeOperator::_restore_probe_partition(RuntimeState* st
 
 StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_status());
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!spilled()) {
         return HashJoinProbeOperator::pull_chunk(state);
     }
 
@@ -445,12 +446,12 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
         }
     }
 
+    size_t avaliable_bytes = _mem_resource_manager.operator_avaliable_memory_bytes();
     // process the partition could be hold in memory
     if (_processing_partitions.empty()) {
         for (const auto* partition : _build_partitions) {
             if (!partition->in_mem && !_processed_partitions.count(partition->partition_id)) {
-                if ((partition->bytes + bytes_usage < runtime_state()->spill_operator_max_bytes() ||
-                     _processing_partitions.empty()) &&
+                if ((partition->bytes + bytes_usage < avaliable_bytes || _processing_partitions.empty()) &&
                     std::find(_processing_partitions.begin(), _processing_partitions.end(), partition) ==
                             _processing_partitions.end()) {
                     _processing_partitions.emplace_back(partition);
@@ -489,12 +490,13 @@ Status SpillableHashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperatorFactory::prepare(state));
 
     _spill_options = std::make_shared<spill::SpilledOptions>(config::spill_init_partition, false);
-    _spill_options->spill_file_size = state->spill_mem_table_size();
+    _spill_options->spill_mem_table_bytes_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "hash-join-probe";
     _spill_options->plan_node_id = _plan_node_id;
+    _spill_options->encode_level = state->spill_encode_level();
 
     return Status::OK();
 }

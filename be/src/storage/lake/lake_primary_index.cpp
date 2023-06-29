@@ -18,8 +18,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
 
-namespace starrocks {
-namespace lake {
+namespace starrocks::lake {
 
 Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
@@ -113,6 +112,4 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     return Status::OK();
 }
 
-} // namespace lake
-
-} // namespace starrocks
+} // namespace starrocks::lake

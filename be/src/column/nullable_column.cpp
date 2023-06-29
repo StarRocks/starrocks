@@ -251,6 +251,24 @@ int NullableColumn::compare_at(size_t left, size_t right, const Column& rhs, int
     }
 }
 
+int NullableColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
+    if (immutable_null_column_data()[left]) {
+        return safe_eq ? rhs.is_null(right) : EQUALS_NULL;
+    }
+
+    // left not null
+    if (rhs.is_nullable()) {
+        const auto& nullable_rhs = down_cast<const NullableColumn&>(rhs);
+        if (nullable_rhs.immutable_null_column_data()[right]) {
+            return safe_eq ? EQUALS_FALSE : EQUALS_NULL;
+        }
+        const auto& rhs_data = *(nullable_rhs._data_column);
+        return _data_column->equals(left, rhs_data, right, safe_eq);
+    } else {
+        return _data_column->equals(left, rhs, right, safe_eq);
+    }
+}
+
 uint32_t NullableColumn::serialize(size_t idx, uint8_t* pos) {
     // For nullable column don't have null column data and has_null is false.
     if (!_has_null) {

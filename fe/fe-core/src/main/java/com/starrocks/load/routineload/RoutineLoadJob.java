@@ -89,6 +89,7 @@ import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TransactionException;
@@ -279,6 +280,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected long committedTaskNum = 0;
     @SerializedName("at")
     protected long abortedTaskNum = 0;
+    @SerializedName("tcs")
+    protected long taskConsumeSecond = Config.routine_load_task_consume_second;
+    @SerializedName("tts")
+    protected long taskTimeoutSecond = Config.routine_load_task_timeout_second;
 
     // The tasks belong to this job
     protected List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
@@ -385,6 +390,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         } else {
             throw new UserException("Invalid format type.");
         }
+        taskConsumeSecond = stmt.getTaskConsumeSecond();
+        taskTimeoutSecond = stmt.getTaskTimeoutSecond();
     }
 
     private void setRoutineLoadDesc(RoutineLoadDesc routineLoadDesc) {
@@ -439,6 +446,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected void writeUnlock() {
         lock.writeLock().unlock();
+    }
+
+    public long getTaskConsumeSecond() {
+        return taskConsumeSecond;
+    }
+
+    public long getTaskTimeoutSecond() {
+        return taskTimeoutSecond;
     }
 
     public boolean isTrimspace() {
@@ -816,7 +831,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
                 StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
-                        Config.routine_load_task_timeout_second, true);
+                        taskTimeoutSecond, true);
                 streamLoadTask.setTxnId(txnId);
                 streamLoadTask.setLabel(label);
                 streamLoadTask.setTUniqueId(loadId);
@@ -1440,7 +1455,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 default:
                     row.add("");
             }
-            row.add(Joiner.on(", ").join(errorLogUrls));
+            // tracking url
+            if (!errorLogUrls.isEmpty()) {
+                row.add(Joiner.on(", ").join(errorLogUrls));
+                row.add("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            } else {
+                row.add("");
+                row.add("");
+            }
             row.add(otherMsg);
             return row;
         } finally {
@@ -1507,6 +1529,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         jobProperties.put("maxBatchRows", String.valueOf(maxBatchRows));
         jobProperties.put("currentTaskConcurrentNum", String.valueOf(currentTaskConcurrentNum));
         jobProperties.put("desireTaskConcurrentNum", String.valueOf(desireTaskConcurrentNum));
+        jobProperties.put("taskConsumeSecond", String.valueOf(taskConsumeSecond));
+        jobProperties.put("taskTimeoutSecond", String.valueOf(taskTimeoutSecond));
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
@@ -1578,6 +1602,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         out.writeLong(totalTaskExcutionTimeMs);
         out.writeLong(committedTaskNum);
         out.writeLong(abortedTaskNum);
+        out.writeLong(taskConsumeSecond);
+        out.writeLong(taskTimeoutSecond);
 
         origStmt.write(out);
         out.writeInt(jobProperties.size());
@@ -1642,6 +1668,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         totalTaskExcutionTimeMs = in.readLong();
         committedTaskNum = in.readLong();
         abortedTaskNum = in.readLong();
+        taskConsumeSecond = in.readLong();
+        taskTimeoutSecond = in.readLong();
 
         origStmt = OriginStatement.read(in);
 
@@ -1758,11 +1786,71 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             this.maxBatchRows = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
         }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)) {
+            this.taskConsumeSecond = Long.parseLong(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)) {
+            this.taskTimeoutSecond = Long.parseLong(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
+        }
         this.jobProperties.putAll(copiedJobProperties);
     }
 
     @Override
     public void gsonPostProcess() throws IOException {
         setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
+    }
+
+    public TRoutineLoadJobInfo toThrift() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Table tbl = null;
+        if (db != null) {
+            db.readLock();
+            try {
+                tbl = db.getTable(tableId);
+            } finally {
+                db.readUnlock();
+            }
+        }
+        readLock();
+        try {
+            TRoutineLoadJobInfo info = new TRoutineLoadJobInfo();
+            info.setId(id);
+            info.setName(name);
+            info.setCreate_time(TimeUtils.longToTimeString(createTimestamp));
+            info.setPause_time(TimeUtils.longToTimeString(pauseTimestamp));
+            info.setEnd_time(TimeUtils.longToTimeString(endTimestamp));
+            info.setDb_name(db == null ? String.valueOf(dbId) : db.getFullName());
+            info.setTable_name(tbl == null ? String.valueOf(tableId) : tbl.getName());
+            info.setState(getState().name());
+            info.setCurrent_task_num(getSizeOfRoutineLoadTaskInfoList());
+            info.setJob_properties(jobPropertiesToJsonString());
+            info.setData_source_properties(dataSourcePropertiesJsonToString());
+            info.setCustom_properties(customPropertiesJsonToString());
+            info.setData_source_type(dataSourceType.name());
+            info.setStatistic(getStatistic());
+            info.setProgress(getProgress().toJsonString());
+            switch (state) {
+                case PAUSED:
+                    info.setReasons_of_state_changed(pauseReason == null ? "" : pauseReason.toString());
+                    break;
+                case CANCELLED:
+                    info.setReasons_of_state_changed(cancelReason == null ? "" : cancelReason.toString());
+                    break;
+                default:
+                    info.setReasons_of_state_changed("");
+            }
+
+            // tracking url
+            if (!errorLogUrls.isEmpty()) {
+                info.setError_log_urls(Joiner.on(",").join(errorLogUrls));
+                info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+            info.setOther_msg(otherMsg);
+            return info;
+        } finally {
+            readUnlock();
+        }
     }
 }

@@ -38,7 +38,7 @@ ChunkChanger::~ChunkChanger() {
     }
 }
 
-void ChunkChanger::init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals) {
+void ChunkChanger::init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals) {
     _state = _obj_pool.add(
             new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, ExecEnv::GetInstance()));
 }
@@ -236,9 +236,17 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     return false;
                 }
                 auto new_col = new_col_status.value();
+                auto new_schema = new_chunk->schema();
+                if (!new_schema->field(i)->is_nullable() && new_col->is_nullable()) {
+                    LOG(WARNING) << "schema of column(" << new_schema->field(i)->name()
+                                 << ") is not null but data contains null";
+                    return false;
+                }
+                if (new_schema->field(i)->is_nullable()) {
+                    new_col = ColumnHelper::cast_to_nullable_column(new_col);
+                }
                 // TODO: no need to unpack const column later.
-                new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
-                new_chunk->update_column_by_index(new_col, i);
+                new_chunk->columns()[i] = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
             } else {
                 LogicalType ref_type = base_tablet_meta->tablet_schema_ptr()->column(ref_column).type();
                 LogicalType new_type = new_tablet_meta->tablet_schema_ptr()->column(i).type();
@@ -382,8 +390,15 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     return false;
                 }
                 auto new_col = new_col_status.value();
-                new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
-                new_chunk->update_column_by_index(new_col, i);
+                if (!new_schema.field(i)->is_nullable() && new_col->is_nullable()) {
+                    LOG(WARNING) << "schema of column(" << new_schema.field(i)->name()
+                                 << ") is not null but data contains null";
+                    return false;
+                }
+                if (new_schema.field(i)->is_nullable()) {
+                    new_col = ColumnHelper::cast_to_nullable_column(new_col);
+                }
+                new_chunk->columns()[i] = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
             } else {
                 DCHECK(_slot_id_to_index_map.find(ref_column) != _slot_id_to_index_map.end());
                 int base_index = _slot_id_to_index_map[ref_column];
@@ -507,7 +522,7 @@ Status ChunkChanger::prepare() {
     for (int i = 0; i < _schema_mapping.size(); ++i) {
         ColumnMapping* column_mapping = get_mutable_column_mapping(i);
         if (column_mapping == nullptr) {
-            return Status::InternalError("referenced column was missing: " + i);
+            return Status::InternalError("referenced column was missing: " + std::to_string(i));
         }
         int32_t ref_column = column_mapping->ref_column;
         if (ref_column < 0) {
@@ -533,7 +548,7 @@ void SchemaChangeUtils::init_materialized_params(const TAlterTabletReqV2& reques
         return;
     }
 
-    for (auto item : request.materialized_view_params) {
+    for (const auto& item : request.materialized_view_params) {
         AlterMaterializedViewParam mv_param;
         mv_param.column_name = item.column_name;
         /*

@@ -86,8 +86,12 @@ public:
         _query_deadline =
                 duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
-    void set_report_profile() { _is_report_profile = true; }
-    bool is_report_profile() { return _is_report_profile; }
+    void set_enable_profile() { _enable_profile = true; }
+    bool enable_profile() { return _enable_profile; }
+    void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
+        _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
+    }
+    int64_t get_runtime_profile_report_interval_ns() { return _runtime_profile_report_interval_ns; }
     void set_profile_level(const TPipelineProfileLevel::type& profile_level) { _profile_level = profile_level; }
     const TPipelineProfileLevel::type& profile_level() { return _profile_level; }
 
@@ -139,6 +143,8 @@ public:
     int64_t cpu_cost() const { return _total_cpu_cost_ns; }
     int64_t cur_scan_rows_num() const { return _total_scan_rows_num; }
     int64_t get_scan_bytes() const { return _total_scan_bytes; }
+    std::atomic_int64_t* mutable_total_spill_bytes() { return &_total_spill_bytes; }
+    int64_t get_spill_bytes() { return _total_spill_bytes; }
 
     // Query start time, used to check how long the query has been running
     // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
@@ -185,7 +191,8 @@ private:
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
     std::shared_ptr<RuntimeProfile> _profile;
-    bool _is_report_profile = false;
+    bool _enable_profile = false;
+    int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
     ObjectPool _object_pool;
@@ -198,6 +205,7 @@ private:
     std::atomic<int64_t> _total_cpu_cost_ns = 0;
     std::atomic<int64_t> _total_scan_rows_num = 0;
     std::atomic<int64_t> _total_scan_bytes = 0;
+    std::atomic<int64_t> _total_spill_bytes = 0;
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;

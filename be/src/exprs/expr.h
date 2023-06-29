@@ -56,7 +56,7 @@ class TColumnValue;
 class TExpr;
 class TExprNode;
 class Literal;
-class UserFunctionCacheEntry;
+struct UserFunctionCacheEntry;
 
 class Chunk;
 class ColumnRef;

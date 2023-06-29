@@ -15,11 +15,11 @@ E: (1064, 'Getting syntax error. Detail message: Materialized Column must be nul
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
 -- result:
-E: (1064, "Getting syntax error at line 1, column 95. Detail message: Input 'AS' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 95. Detail message: Unexpected input 'AS', the most similar input is {',', ')'}.")
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE DEFAULT "1.0" AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
 -- result:
-E: (1064, "Getting syntax error at line 1, column 94. Detail message: Input 'AS' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 94. Detail message: Unexpected input 'AS', the most similar input is {',', ')'}.")
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
 -- result:
@@ -351,7 +351,7 @@ E: (1064, 'Getting analyzing error. Detail message: Illege expression type for M
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
-E: (1064, "Getting syntax error at line 1, column 49. Detail message: Input '(' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 49. Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}.")
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS AUTO_INCREMENT (array_avg(array_data));
 -- result:
@@ -359,7 +359,7 @@ E: (1064, 'Getting analyzing error from line 1, column 40 to line 1, column 77. 
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS DEFAULT "1.0" (array_avg(array_data));
 -- result:
-E: (1064, "Getting syntax error at line 1, column 40. Detail message: Input 'DEFAULT' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 40. Detail message: Unexpected input 'DEFAULT', the most similar input is {'LEFT', DECIMAL_VALUE, 'DUPLICATE', 'FALSE', 'FILTER', '(', '[', '{', '+', '-', '!', '~', '@', '...'}.")
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (mc_1);
 -- result:
@@ -390,7 +390,7 @@ E: (1064, 'Getting analyzing error. Detail message: Illege expression type for M
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
-E: (1064, "Getting syntax error at line 1, column 52. Detail message: Input '(' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 52. Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}.")
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS AUTO_INCREMENT (array_avg(array_data));
 -- result:
@@ -398,7 +398,7 @@ E: (1064, 'Getting analyzing error from line 1, column 43 to line 1, column 80. 
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS DEFAULT "1.0" (array_avg(array_data));
 -- result:
-E: (1064, "Getting syntax error at line 1, column 43. Detail message: Input 'DEFAULT' is not valid at this position.")
+E: (1064, "Getting syntax error at line 1, column 43. Detail message: Unexpected input 'DEFAULT', the most similar input is {'LEFT', DECIMAL_VALUE, 'DUPLICATE', 'FALSE', 'FILTER', '(', '[', '{', '+', '-', '!', '~', '@', '...'}.")
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS (mc_2);
 -- result:
@@ -514,5 +514,170 @@ DROP TABLE t;
 -- result:
 -- !result
 DROP DATABASE test_normal_column_schema_change;
+-- result:
+-- !result
+-- name: test_add_multiple_column
+CREATE DATABASE test_add_multiple_column;
+-- result:
+-- !result
+USE test_add_multiple_column;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1), (2), (3);
+-- result:
+-- !result
+ALTER TABLE t ADD COLUMN (newcol1 BIGINT AS id * 10, newcol2 BIGINT AS id * 100);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	10	100
+2	20	200
+3	30	300
+-- !result
+SHOW CREATE TABLE t;
+-- result:
+t	CREATE TABLE `t` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `newcol1` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 100 COMMENT ""
+) ENGINE=OLAP 
+UNIQUE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 7 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+ALTER TABLE t ADD COLUMN (newcol3 BIGINT DEFAULT "0", newcol4 BIGINT DEFAULT "0");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	0	0	10	100
+2	0	0	20	200
+3	0	0	30	300
+-- !result
+SHOW CREATE TABLE t;
+-- result:
+t	CREATE TABLE `t` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `newcol3` bigint(20) NULL DEFAULT "0" COMMENT "",
+  `newcol4` bigint(20) NULL DEFAULT "0" COMMENT "",
+  `newcol1` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 100 COMMENT ""
+) ENGINE=OLAP 
+UNIQUE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 7 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+ALTER TABLE t ADD COLUMN (newcol5 BIGINT DEFAULT "0", newcol6 BIGINT AS id * 1000);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Can not add normal column and Materialized Column in the same time.')
+-- !result
+DROP DATABASE test_add_multiple_column;
+-- result:
+-- !result
+-- name: test_update
+CREATE DATABASE test_update;
+-- result:
+-- !result
+USE test_update;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT AS v2) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1, 2, 3);
+-- result:
+-- !result
+SET partial_update_mode = "row";
+-- result:
+-- !result
+UPDATE t SET v1 = 100 where id = 1;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	100	3	3
+-- !result
+UPDATE t SET v1 = 200 where v3 = 3;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	200	3	3
+-- !result
+UPDATE t SET v2 = 300 where v3 = 3;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	200	300	300
+-- !result
+UPDATE t SET v2 = 400 where v3 = 300;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	200	400	400
+-- !result
+INSERT INTO t VALUES (1, 2, 3);
+-- result:
+-- !result
+SET partial_update_mode = "column";
+-- result:
+-- !result
+UPDATE t SET v1 = 100 where id = 1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: All ref Column must be sepecfied in partial update mode.')
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	3	3
+-- !result
+UPDATE t SET v1 = 200 where v3 = 3;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: All ref Column must be sepecfied in partial update mode.')
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	3	3
+-- !result
+UPDATE t SET v2 = 300 where v3 = 3;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	300	300
+-- !result
+UPDATE t SET v2 = 400 where v3 = 300;
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	400	400
+-- !result
+DROP DATABASE test_update;
 -- result:
 -- !result

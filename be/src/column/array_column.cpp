@@ -399,7 +399,7 @@ int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_colum
     return lhs_size < rhs_size ? -1 : (lhs_size == rhs_size ? 0 : 1);
 }
 
-bool ArrayColumn::equals(size_t left, const Column& rhs, size_t right) const {
+int ArrayColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
     const auto& rhs_array = down_cast<const ArrayColumn&>(rhs);
 
     size_t lhs_offset = _offsets->get_data()[left];
@@ -409,31 +409,32 @@ bool ArrayColumn::equals(size_t left, const Column& rhs, size_t right) const {
     size_t rhs_end = rhs_array._offsets->get_data()[right + 1];
 
     if (lhs_end - lhs_offset != rhs_end - rhs_offset) {
-        return false;
+        return EQUALS_FALSE;
     }
-    auto lhs_elements = ColumnHelper::get_data_column(_elements.get());
-    auto rhs_elements = ColumnHelper::get_data_column(rhs_array._elements.get());
+
+    int ret = EQUALS_TRUE;
     while (lhs_offset < lhs_end) {
-        if (_elements->is_null(lhs_offset)) {
-            if (!rhs_array._elements->is_null(rhs_offset)) {
-                return false;
-            }
-        } else {
-            if (rhs_array._elements->is_null(rhs_offset)) {
-                return false;
-            }
-            if (!lhs_elements->equals(lhs_offset, *rhs_elements, rhs_offset)) {
-                return false;
-            }
+        auto tmp = _elements->equals(lhs_offset, *(rhs_array._elements.get()), rhs_offset, safe_eq);
+
+        // return directly if false
+        if (tmp == EQUALS_FALSE) {
+            return EQUALS_FALSE;
+        } else if (tmp == EQUALS_NULL) {
+            // need check all if is null
+            ret = EQUALS_NULL;
         }
+
         lhs_offset++;
         rhs_offset++;
     }
-    return true;
+
+    return safe_eq ? EQUALS_TRUE : ret;
 }
 
 void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* output) const {
-    CHECK(size() == rhs_column.size()) << "Two input columns must have same rows";
+    if (size() != rhs_column.size()) {
+        throw std::runtime_error("Two input columns in comparison must have same rows");
+    }
 
     size_t rows = size();
     output->resize(rows);

@@ -346,6 +346,14 @@ public:
     DEFINE_VECTORIZED_FN(years_sub);
 
     /**
+     * @param: [timestmap, quarter]
+     * @paramType columns: [TimestampColumn, IntColumn]
+     * @return TimestampColumn
+     */
+    DEFINE_VECTORIZED_FN(quarters_add);
+    DEFINE_VECTORIZED_FN(quarters_sub);
+
+    /**
      * @param: [timestmap, month]
      * @paramType columns: [TimestampColumn, IntColumn]
      * @return TimestampColumn
@@ -400,6 +408,14 @@ public:
      */
     DEFINE_VECTORIZED_FN(micros_add);
     DEFINE_VECTORIZED_FN(micros_sub);
+
+    /**
+     * @param: [timestmap, millis]
+     * @paramType columns: [TimestampColumn, IntColumn]
+     * @return TimestampColumn
+     */
+    DEFINE_VECTORIZED_FN(millis_add);
+    DEFINE_VECTORIZED_FN(millis_sub);
 
     /**
      * @param: [timestmap, timestamp]

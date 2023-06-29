@@ -340,6 +340,7 @@ public class OperationType {
     @Deprecated
     public static final short OP_DROP_TASK_RUNS = 10083;
     public static final short OP_UPDATE_TASK_RUN_STATE = 10084;
+    public static final short OP_ALTER_TASK = 10085;
 
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
@@ -445,7 +446,6 @@ public class OperationType {
     public static final short OP_RECOVER_PARTITION_V2 = 13003;
     public static final short OP_RENAME_TABLE_V2 = 13004;
     public static final short OP_RENAME_PARTITION_V2 = 13005;
-    public static final short OP_CREATE_MATERIALIZED_VIEW_V2 = 13006;
 
     public static final short OP_DROP_ROLLUP_V2 = 13010;
     public static final short OP_FINISH_CONSISTENCY_CHECK_V2 = 13011;
@@ -477,4 +477,18 @@ public class OperationType {
     public static final short OP_UPDATE_USER_PROP_V3 = 13061;
 
     public static final short OP_CREATE_STREAM_LOAD_TASK_V2 = 13070;
+
+    // storage volume
+    public static final short OP_SET_DEFAULT_STORAGE_VOLUME = 13100;
+    public static final short OP_CREATE_STORAGE_VOLUME = 13101;
+    public static final short OP_UPDATE_STORAGE_VOLUME = 13102;
+    public static final short OP_DROP_STORAGE_VOLUME = 13103;
+
+    // Pipe operations log
+    public static final short OP_PIPE = 12200;
+
+    /**
+     * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds
+     */
+    public static final short OP_TYPE_EOF = 20000;
 }

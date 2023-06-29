@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableMap;
@@ -253,7 +252,8 @@ public class StatisticsCalculatorTest {
                     null,
                     false,
                     Lists.newArrayList(),
-                    Lists.newArrayList());
+                    Lists.newArrayList(),
+                    false);
 
             GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
             groupExpression.setGroup(new Group(0));
@@ -316,7 +316,8 @@ public class StatisticsCalculatorTest {
                         null,
                         false,
                         Lists.newArrayList(),
-                        Lists.newArrayList());
+                        Lists.newArrayList(),
+                        false);
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -372,7 +373,8 @@ public class StatisticsCalculatorTest {
                         null,
                         false,
                         Lists.newArrayList(),
-                        Lists.newArrayList());
+                        Lists.newArrayList(),
+                        false);
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -400,7 +402,8 @@ public class StatisticsCalculatorTest {
                         null,
                         false,
                         Lists.newArrayList(),
-                        Lists.newArrayList());
+                        Lists.newArrayList(),
+                        false);
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryType.GE,
                 idDate, ConstantOperator.createDate(LocalDateTime.of(2014, 5, 1, 0, 0, 0))));
 
@@ -459,7 +462,8 @@ public class StatisticsCalculatorTest {
                         null,
                         false,
                         Lists.newArrayList(),
-                        Lists.newArrayList());
+                        Lists.newArrayList(),
+                        false);
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -489,7 +493,8 @@ public class StatisticsCalculatorTest {
                         null,
                         false,
                         Lists.newArrayList(),
-                        Lists.newArrayList());
+                        Lists.newArrayList(),
+                        false);
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryType.GE,
                 idDate, ConstantOperator.createDate(LocalDateTime.of(2020, 04, 24, 0, 0, 0))));
 

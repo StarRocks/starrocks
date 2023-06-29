@@ -65,9 +65,9 @@ class Tablet;
 class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
-class CompactionCandidate;
-class CompactionContext;
-class TabletBasicInfo;
+struct CompactionCandidate;
+struct CompactionContext;
+struct TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
@@ -294,6 +294,8 @@ public:
 
     void update_max_version_schema(const TabletSchemaSPtr& tablet_schema);
 
+    // verify all rowsets of current(max) version in this tablet
+    Status verify();
 
 protected:
     void on_shutdown() override;

@@ -34,7 +34,7 @@ class StarRocksNodesInfo;
 class LocalTabletReader;
 
 namespace serde {
-class ProtobufChunkMeta;
+struct ProtobufChunkMeta;
 }
 
 // Parameters used to create a TableReader supporting only single local tablet access
