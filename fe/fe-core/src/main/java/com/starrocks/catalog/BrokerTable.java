@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
@@ -63,11 +64,16 @@ public class BrokerTable extends Table {
     private static final String COLUMN_SEPARATOR = "column_separator";
     private static final String LINE_DELIMITER = "line_delimiter";
     private static final String FILE_FORMAT = "format";
+    @SerializedName("brn")
     private String brokerName;
+    @SerializedName("pts")
     private List<String> paths;
+    @SerializedName("cls")
     private String columnSeparator;
+    @SerializedName("rdl")
     private String rowDelimiter;
     private String fileFormat;
+    @SerializedName("brp")
     private Map<String, String> brokerProperties;
 
     public BrokerTable() {
