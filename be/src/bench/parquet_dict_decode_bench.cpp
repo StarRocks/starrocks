@@ -67,18 +67,21 @@ static void BM_DictDecoder(benchmark::State& state) {
     std::mt19937 rng(rd());
     std::uniform_int_distribution<int> dist(0, 99);
     std::vector<int32_t> dict_codes;
+    int count = 0;
 
     for (int i = 0; i < kTestChunkSize; i++) {
         int random_number = dist(rng);
         null_data[i] = 0;
         if (random_number < null_score) {
             null_data[i] = 1;
+            count += 1;
         }
         dict_codes.push_back(random_number % kDictSize);
     }
     nulls->update_has_null();
     if (debug) {
-        std::cout << "nulls. has_null = " << nulls->has_null() << "\n";
+        std::cout << "nulls. has_null = " << nulls->has_null() << ", null rate = " << count << "/" << kTestChunkSize
+                  << ".\n";
     }
 
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);

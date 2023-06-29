@@ -225,42 +225,17 @@ public:
         } else if (!all_null) {
             size_t size = dict_codes.size();
             const uint8_t* null_data_ptr = null_data.data();
-
-            size_t i = 0;
-            for (i = 0; (i + 8) < size; i += 8) {
-                uint64_t partial_null_value = 0;
-                memcpy(&partial_null_value, null_data_ptr, 8);
-
-                if (partial_null_value == 0x0101010101010101L) {
-                    // all values are null values.
-                } else if (partial_null_value == 0) {
-                    // no null values.
-                    for (int j = 0; j < 8; j++) {
-                        slices[i + j] = _dict[dict_codes[i + j]];
-                    }
-                } else {
-                    for (int j = 0; j < 8; j++) {
-                        if (!null_data_ptr[j]) {
-                            slices[i + j] = _dict[dict_codes[i + j]];
-                        }
-                    }
-                }
-                null_data_ptr += 8;
-            }
-
-            while (i < size) {
-                if (!null_data_ptr[i]) {
-                    slices[i] = _dict[dict_codes[i]];
-                }
-                i += 1;
+            for (size_t i = 0; i < size; i++) {
+                // if null, we assign dict code 0(there should be at least one value?)
+                int32_t code = (null_data_ptr[i]) ? 0 : dict_codes[i];
+                slices[i] = _dict[code];
             }
         }
 
-        // if there is no null, we already add tailing bytes to each dict value.
-        // so it's safe to call `append_strings_overflow`
-        // otherwise, slices[i] could be (data=nullptr, size =0), so it's not safe to call that
+        // if all null, then slices[i] is Slice(), and we can not call `append_strings_overflow`
+        // and for other cases, slices[i] is dict value, then we can call `append_strings_overflow`
         bool ret = false;
-        if (!has_null) {
+        if (!all_null) {
             ret = column->append_strings_overflow(slices, _max_value_length);
         } else {
             ret = column->append_strings(slices);
