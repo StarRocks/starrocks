@@ -49,6 +49,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PruneSubfieldRule implements TreeRewriteRule {
+    private static final List<String> SUPPORT_FUNCTIONS = ImmutableList.<String>builder()
+            .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE)
+            .build();
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
@@ -60,10 +63,6 @@ public class PruneSubfieldRule implements TreeRewriteRule {
      * collect all complex expressions, such as: MAP_KEYS, MAP_VALUES, map['key'], struct.a.b.c ...
      */
     private static class ComplexExpressionCollector extends ScalarOperatorVisitor<Void, Void> {
-        private static final List<String> SUPPORT_FUNCTIONS = ImmutableList.<String>builder()
-                .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE, FunctionSet.MAP_VALUES)
-                .build();
-
         private final List<ScalarOperator> complexExpressions = Lists.newArrayList();
 
         @Override
@@ -306,9 +305,6 @@ public class PruneSubfieldRule implements TreeRewriteRule {
      * normalize expression to ColumnAccessPath
      */
     private static class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Void> {
-        private static final List<String> NORMALIZE_FUNCTIONS =
-                ImmutableList.of(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE, FunctionSet.MAP_VALUES);
-
         private final Deque<AccessPath> allAccessPaths = Lists.newLinkedList();
 
         private AccessPath currentPath = null;
@@ -378,7 +374,7 @@ public class PruneSubfieldRule implements TreeRewriteRule {
 
         @Override
         public Void visitCall(CallOperator call, Void context) {
-            if (!NORMALIZE_FUNCTIONS.contains(call.getFnName())) {
+            if (!SUPPORT_FUNCTIONS.contains(call.getFnName())) {
                 return visit(call, context);
             }
 
