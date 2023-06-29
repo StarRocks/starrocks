@@ -1547,4 +1547,14 @@ public class ExpressionTest extends PlanTestBase {
         assertCContains(plan, "row('a', 1, 'a', 2).col1");
     }
 
+    @Test
+    public void testJsonArray() throws Exception {
+        String sql = "select array_distinct([PARSE_JSON('{1: 2}')])";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "array_distinct[([parse_json('{1: 2}')]); args: INVALID_TYPE; result: ARRAY<JSON>;");
+
+        sql = "select array_distinct([NULL])";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "array_distinct[([NULL]); args: INVALID_TYPE; result: ARRAY<BOOLEAN>;");
+    }
 }
