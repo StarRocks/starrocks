@@ -199,6 +199,8 @@ public class ConnectContext {
 
     private ConnectContext parent;
 
+    private boolean relationAliasCaseInsensitive = false;
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -613,6 +615,14 @@ public class ConnectContext {
 
     public ConnectContext getParent() {
         return parent;
+    }
+
+    public void setRelationAliasCaseInSensitive(boolean relationAliasCaseInsensitive) {
+        this.relationAliasCaseInsensitive = relationAliasCaseInsensitive;
+    }
+
+    public boolean isRelationAliasCaseInsensitive() {
+        return relationAliasCaseInsensitive;
     }
 
     // kill operation with no protect.
