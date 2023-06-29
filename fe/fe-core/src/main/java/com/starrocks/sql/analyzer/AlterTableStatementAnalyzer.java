@@ -28,6 +28,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -304,6 +305,14 @@ public class AlterTableStatementAnalyzer {
                     throw new SemanticException("Materialized Column only support olap table");
                 }
 
+                if (table.isCloudNativeTable()) {
+                    throw new SemanticException("Lake table does not support generated column");
+                }
+
+                if (((OlapTable) table).getKeysType() == KeysType.AGG_KEYS) {
+                    throw new SemanticException("Generated Column does not support AGG table");
+                }
+
                 clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
                 Expr expr = columnDef.materializedColumnExpr();
@@ -414,6 +423,14 @@ public class AlterTableStatementAnalyzer {
                     if (!table.isOlapTable()) {
                         throw new SemanticException("Materialized Column only support olap table");
                     }
+
+                    if (table.isCloudNativeTable()) {
+                        throw new SemanticException("Lake table does not support generated column");
+                    }
+
+                    if (((OlapTable) table).getKeysType() == KeysType.AGG_KEYS) {
+                        throw new SemanticException("Generated Column does not support AGG table");
+                    }
     
                     Expr expr = colDef.materializedColumnExpr();
                     TableName tableName = new TableName(context.getDatabase(), table.getName());
@@ -523,6 +540,14 @@ public class AlterTableStatementAnalyzer {
             if (columnDef.isMaterializedColumn()) {
                 if (!(table instanceof OlapTable)) {
                     throw new SemanticException("Materialized Column only support olap table");
+                }
+
+                if (table.isCloudNativeTable()) {
+                    throw new SemanticException("Lake table does not support generated column");
+                }
+
+                if (((OlapTable) table).getKeysType() == KeysType.AGG_KEYS) {
+                    throw new SemanticException("Generated Column does not support AGG table");
                 }
     
                 clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
