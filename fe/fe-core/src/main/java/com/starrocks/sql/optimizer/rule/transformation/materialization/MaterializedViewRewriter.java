@@ -138,7 +138,7 @@ public class MaterializedViewRewriter {
         // because optimizer will match MV's pattern which is subset of query opt tree
         // from top-down iteration.
         if (matchMode == MatchMode.COMPLETE) {
-            if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
+            if (!isJoinMatch(queryExpression, mvExpression)) {
                 return false;
             }
         } else if (matchMode == MatchMode.VIEW_DELTA) {
@@ -893,9 +893,7 @@ public class MaterializedViewRewriter {
     }
 
     private boolean isJoinMatch(OptExpression queryExpression,
-                                OptExpression mvExpression,
-                                List<Table> queryTables,
-                                List<Table> mvTables) {
+                                OptExpression mvExpression) {
         boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
         boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
         if (isQueryAllEqualInnerJoin && isMVAllEqualInnerJoin) {

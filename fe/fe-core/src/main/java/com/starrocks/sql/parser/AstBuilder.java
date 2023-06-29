@@ -3606,6 +3606,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             for (Identifier identifier : visit(context.bracketHint().identifier(), Identifier.class)) {
                 if (identifier.getValue().equals("_META_")) {
                     tableRelation.setMetaQuery(true);
+                } else {
+                    tableRelation.addTableHint(identifier.getValue());
                 }
             }
         }
