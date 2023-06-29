@@ -727,7 +727,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
-                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
+                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
+                case OperationType.OP_ALTER_TABLE_PROPERTIES: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
@@ -1667,6 +1668,10 @@ public class EditLog {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
                 roleId, privilegeCollection, pluginId, pluginVersion);
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
+    }
+
+    public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
     }
 
     public void logAuthUpgrade(Map<String, Long> roleNameToId) {

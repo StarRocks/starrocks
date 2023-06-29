@@ -2129,7 +2129,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                 }
                 dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                        DataProperty.getInferredDefaultDataProperty());
+                        DataProperty.getInferredDefaultDataProperty(), false);
                 if (hasMedium) {
                     olapTable.setStorageMedium(dataProperty.getStorageMedium());
                 }
@@ -2300,7 +2300,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                                DataProperty.getInferredDefaultDataProperty());
+                                DataProperty.getInferredDefaultDataProperty(), false);
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
                         if (olapTable.dynamicPartitionExists() && olapTable.getColocateGroup() != null) {
                             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
@@ -3346,13 +3346,13 @@ public class LocalMetastore implements ConnectorMetadata {
             // set storage medium
             boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.getInferredDefaultDataProperty());
+                    DataProperty.getInferredDefaultDataProperty(), false);
             if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
                 // set storage cooldown time into table property,
                 // because we don't have property in MaterializedView
                 materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME,
+                        .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                                 String.valueOf(dataProperty.getCooldownTimeMs()));
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
@@ -3851,6 +3851,35 @@ public class LocalMetastore implements ConnectorMetadata {
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
         editLog.logDynamicPartition(info);
     }
+
+    public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        Map<String, String> logProperties = new HashMap<>(properties);
+        DataProperty dataProperty = DataProperty.getInferredDefaultDataProperty();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            try {
+                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, dataProperty, false);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
+        if (!properties.isEmpty()) {
+            throw new DdlException("Modify failed because unknown properties: " + properties);
+        }
+        TableProperty tableProperty = table.getTableProperty();
+        if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            TStorageMedium storageMedium = dataProperty.getStorageMedium();
+            table.setStorageMedium(storageMedium);
+            tableProperty.getProperties()
+                    .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
+                            String.valueOf(dataProperty.getCooldownTimeMs()));
+        }
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+    }
+
 
     /**
      * Set replication number for unpartitioned table.
@@ -4962,4 +4991,5 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         return newPartitions;
     }
+
 }

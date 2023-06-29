@@ -726,11 +726,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         // storageCooldownTime
         Map<String, String> properties = this.getTableProperty().getProperties();
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
                     .append("\" = \"");
             sb.append(TimeUtils.longToTimeString(
-                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
+                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)))).append("\"");
         }
 
         // partition TTL
@@ -800,7 +800,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     static {
         NEED_SHOW_PROPS = new ImmutableSet.Builder<String>()
-        .add(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+        .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
         .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
         .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
         .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
@@ -823,7 +823,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // NEED_SHOW_PROPS
         NEED_SHOW_PROPS.forEach(prop -> {
             if (properties.containsKey(prop)) {
-                if (prop.equals(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
+                if (prop.equals(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
                     propsMap.put(prop, TimeUtils.longToTimeString(
                             Long.parseLong(properties.get(prop))));
                 } else {
