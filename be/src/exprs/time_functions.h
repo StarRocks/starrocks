@@ -105,6 +105,8 @@ public:
 
     /**
      * Get day of week_iso of the timestamp.
+     * syntax like select dayofweek_iso("2023-01-03");
+     * result is 2
      * @param context
      * @param columns [TimestampColumn] Columns that hold timestamps.
      * @return  IntColumn Day of the week_iso:
