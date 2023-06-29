@@ -183,6 +183,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         // create table
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
         OlapTable table;
+        String storageVolumeId = "";
         if (stmt.isExternal()) {
             table = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
@@ -220,9 +221,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Unknown storage volume \"" + volume + "\"");
                 }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                String storageVolumeId = sv.getId();
+                storageVolumeId = sv.getId();
                 metastore.setLakeStorageInfo(table, storageVolumeId, properties);
-                svm.bindTableToStorageVolume(sv.getId(), table.getId());
                 table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
@@ -554,6 +554,11 @@ public class OlapTableFactory implements AbstractTableFactory {
 
         // process lake table colocation properties, after partition and tablet creation
         colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* expectLakeTable */);
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && !storageVolumeId.isEmpty()) {
+            StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+            svm.bindTableToStorageVolume(storageVolumeId, tableId);
+        }
 
         // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
         LOG.info("Successfully create table[{};{}]", tableName, tableId);
