@@ -30,7 +30,7 @@
 - 创建分区表时指定不支持的 Properties 会导致空指针。[#21374](https://github.com/StarRocks/starrocks/issues/21374)
 - Information Schema 中的表权限过滤失效。[#23804](https://github.com/StarRocks/starrocks/pull/23804)
 - SHOW TABLE STATUS 结果展示不全。[#24279](https://github.com/StarRocks/starrocks/issues/24279)
-- 主键模型表在数据导入过程中同时进行 Schema Change，会导致 Schema Change 卡住。[#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- Schema change 和数据导入同时进行时 Schema change 偶尔会卡住。[#23456](https://github.com/StarRocks/starrocks/pull/23456)
 - 因为等待 RocksDB WAL flush 导致 brpc worker 同步等待，从而无法切换处理其他 bthread，导致主键模型高频导入出现断点。[#22489](https://github.com/StarRocks/starrocks/pull/22489)
 - 建表时可以成功创建非法数据类型 TIME 列。 [#23474](https://github.com/StarRocks/starrocks/pull/23474)
 - 物化视图 Union 查询改写失败。[#22922](https://github.com/StarRocks/starrocks/pull/22922)

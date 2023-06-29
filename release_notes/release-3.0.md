@@ -14,7 +14,7 @@
 
 修复了如下问题：
 
-- 主键模型表在数据导入过程中同时进行 Schema Change，会导致 Schema Change 卡住。 [#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- Schema change 和数据导入同时进行时 Schema change 偶尔会卡住。 [#23456](https://github.com/StarRocks/starrocks/pull/23456)
 - `pipeline_profile_level = 0` 时查询出错。 [#23873](https://github.com/StarRocks/starrocks/pull/23873)
 - `cloud_native_storage_type` 配置为 S3 时建表报错。
 - LDAP 账号没有密码也能登录。 [#24862](https://github.com/StarRocks/starrocks/pull/24862)

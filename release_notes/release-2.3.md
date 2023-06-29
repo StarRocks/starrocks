@@ -1,5 +1,28 @@
 # StarRocks version 2.3
 
+## 2.3.14
+
+发布日期： 2023 年 6 月 28 日
+
+### 功能优化
+
+- 优化 CREATE TABLE 超时报错信息，增加参数调整建议。[#24510](https://github.com/StarRocks/starrocks/pull/24510)
+- 主键模型表积累大量 Tablet 版本后内存占用的优化。[#20760](https://github.com/StarRocks/starrocks/pull/20760)
+- OLAP 外表元数据的同步改为数据加载时进行。[#24739](https://github.com/StarRocks/starrocks/pull/24739)
+- 解除 NetworkTime 对系统时钟的依赖，以解决系统时钟误差导致 Exchange 网络耗时估算异常的问题。[#24858](https://github.com/StarRocks/starrocks/pull/24858)
+
+### 问题修复
+
+修复了如下问题：
+
+- 对于频繁 TRUNCATE 的小表，应用低基数字典优化时查询报错。[#23185](https://github.com/StarRocks/starrocks/pull/23185)
+- 对包含 UNION 且第一个孩子是常量 NULL 的 View 进行查询时，会导致 BE crash。[#13792](https://github.com/StarRocks/starrocks/pull/13792)  
+- 基于 Bitmap Index 的查询有些情况下会返回错误。[#23484](https://github.com/StarRocks/starrocks/pull/23484)
+- BE 中 Round DOUBLE/FLOAT 转换成 DECIMAL 和 FE 不一致。[#23152](https://github.com/StarRocks/starrocks/pull/23152)
+- Schema change 和数据导入同时进行时 Schema change 偶尔会卡住。[#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- 使用 Broker Load、Spark Connector、或 Flink Connector 导入 Parquet 文件时偶尔会导致 BE OOM。[#25254](https://github.com/StarRocks/starrocks/pull/25254)
+- 查询语句中 ORDER BY 后是常量且有 LIMIT 时会报错 `unknown error`。[#25538](https://github.com/StarRocks/starrocks/pull/25538)
+
 ## 2.3.13
 
 发布日期： 2023 年 6 月 1 日
