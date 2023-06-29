@@ -4,11 +4,11 @@
 
 Returns whether all elements of an array match the given predicate.
 
-Returns `true` (1) if all the elements match the predicate (a special case is when the array is empty).
+- Returns `true` (1) if all the elements match the predicate (a special case is when the array is empty).
 
-Returns `false` (0) if one or more elements do not match.
+- Returns `false` (0) if one or more elements do not match.
 
-Returns NULL if the predicate returns NULL for one or more elements and `true` for all other elements.
+- Returns NULL if the predicate returns NULL for one or more elements and `true` for all other elements.
 
 This function is supported from v3.1 onwards.
 
@@ -27,6 +27,10 @@ Returns whether all elements of `arr1` match the given predicate in the lambda f
 - `arrN`: optional arrays used in the lambda function.
 
 - `lambda_function`: the lambda function used to match values.
+
+## Return value
+
+Returns a BOOLEAN value.
 
 ## Usage notes
 
