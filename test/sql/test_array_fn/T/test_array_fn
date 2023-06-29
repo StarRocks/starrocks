@@ -777,8 +777,6 @@ select bitmap_to_array(array_to_bitmap(cast ('null' as array<int>)));
 select REVERSE( cast ('null' as array<int>));
 
 
-
-
 select array_length([map{1:2, 2:3, 3:4}]);
 select array_append([map{1:2, 2:3, 3:4}], map{3: null, 4:5});
 select array_contains([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 4:5});
@@ -813,4 +811,3 @@ select array_intersect([row(1,2,3), row(3,4,5)], [row(3,4,5)]);
 select array_contains_all([row(1,2,3), row(3,4,5)], [row(3,4,5)]);
 select array_filter([row(1,2,3), row(3,4,5), row(4,5,6)], [0,1,0]);
 select cardinality([row(1,2,3), row(3,4,5)]);
-
