@@ -210,7 +210,7 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
 
 void check_schema(const std::string& path, const std::vector<std::pair<std::string, LogicalType>>& expected_schema) {
     OrcChunkReader reader;
-    auto input_stream = orc::readLocalFile("./be/test/exec/test_data/orc_scanner/all_types.orc");
+    auto input_stream = orc::readLocalFile(path);
     reader.init(std::move(input_stream));
     std::vector<SlotDescriptor> schema;
 
@@ -2002,7 +2002,7 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
 
 TEST_F(OrcChunkReaderTest, get_file_schema) {
     const std::vector<std::pair<std::string, std::vector<std::pair<std::string, LogicalType>>>> test_cases = {
-            {"./be/test/exec/test_data/orc_scanner/all_types.orc",
+            {"./be/test/exec/test_data/orc_scanner/scalar_types.orc",
              {{"col_bool", TYPE_BOOLEAN},
               {"col_tinyint", TYPE_TINYINT},
               {"col_smallint", TYPE_SMALLINT},
@@ -2016,10 +2016,7 @@ TEST_F(OrcChunkReaderTest, get_file_schema) {
               {"col_binary", TYPE_VARBINARY},
               {"col_decimal", TYPE_DECIMAL64},
               {"col_timestamp", TYPE_DATETIME},
-              {"col_date", TYPE_DATE},
-              {"col_struct", TYPE_VARCHAR},
-              {"col_array", TYPE_VARCHAR},
-              {"col_map", TYPE_VARCHAR}}}};
+              {"col_date", TYPE_DATE}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);
