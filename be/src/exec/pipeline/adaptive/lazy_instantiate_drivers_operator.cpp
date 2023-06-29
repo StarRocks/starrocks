@@ -120,7 +120,7 @@ void LazyInstantiateDriversOperator::close(RuntimeState* state) {
                     driver->prepare(state);
                 }
                 for (auto& driver : pipeline->drivers()) {
-                    driver->finalize(state, DriverState::FINISH);
+                    driver->finalize(state, DriverState::FINISH, 0, 0);
                 }
             }
         }
