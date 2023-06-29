@@ -128,6 +128,7 @@ import io.trino.sql.tree.JoinOn;
 import io.trino.sql.tree.JoinUsing;
 import io.trino.sql.tree.JsonArray;
 import io.trino.sql.tree.JsonArrayElement;
+import io.trino.sql.tree.JsonQuery;
 import io.trino.sql.tree.LambdaArgumentDeclaration;
 import io.trino.sql.tree.LambdaExpression;
 import io.trino.sql.tree.LikePredicate;
@@ -752,6 +753,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return visit(node.getInnerExpression(), context);
     }
 
+    @Override
+    protected ParseNode visitJsonQuery(JsonQuery jsonQuery, ParseTreeContext context) {
+        Expr inputExpr = (Expr) visit(jsonQuery.getJsonPathInvocation().getInputExpression(), context);
+        String jsonPath = jsonQuery.getJsonPathInvocation().getJsonPath().getValue();
+        com.starrocks.analysis.StringLiteral jsonPathLiteral =
+                new com.starrocks.analysis.StringLiteral(jsonPath.substring(jsonPath.indexOf('$')));
+        return new FunctionCallExpr("json_query", ImmutableList.of(inputExpr, jsonPathLiteral));
+    }
 
     @Override
     protected ParseNode visitJsonArray(JsonArray jsonArray, ParseTreeContext context) {
