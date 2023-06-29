@@ -4,7 +4,7 @@ A Hudi catalog is a kind of external catalog that enables you to query data from
 
 Also, you can directly transform and load data from Hudi by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Hudi catalogs. StarRocks supports Hudi catalogs from v2.4 onwards.
 
-To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
+To ensure successful SQL workloads on your Hudi cluster, your StarRocks cluster needs to integrate with two important components:
 
 - Object storage or distributed file system like AWS S3, other S3-compatible storage system, Microsoft Azure Storage, Google GCS, or HDFS
 
