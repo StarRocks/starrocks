@@ -87,7 +87,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     }
 
     private static void requiredValid(double value) throws SemanticException {
-        if (Double.isNaN(value) || Double.isInfinite(value) || Double.isFinite(value)) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
             throw new SemanticException("Invalid float/double value: " + value);
         }
     }
