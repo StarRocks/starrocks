@@ -572,7 +572,7 @@ CONF_mInt32(path_scan_interval_second, "86400");
 // The percent of max used capacity of a data dir
 CONF_mInt32(storage_flood_stage_usage_percent, "95"); // 95%
 // The min bytes that should be left of a data dir
-CONF_mInt64(storage_flood_stage_left_capacity_bytes, "1073741824"); // 1GB
+CONF_mInt64(storage_flood_stage_left_capacity_bytes, "107374182400"); // 100GB
 // Number of thread for flushing memtable per store.
 CONF_mInt32(flush_thread_num_per_store, "2");
 
