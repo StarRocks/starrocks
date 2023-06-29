@@ -2032,7 +2032,7 @@ public class Config extends ConfigBase {
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)
-    public static boolean enable_auto_tablet_distribution = false;
+    public static boolean enable_auto_tablet_distribution = true;
 
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
