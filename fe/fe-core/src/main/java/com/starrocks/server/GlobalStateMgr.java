@@ -3057,6 +3057,11 @@ public class GlobalStateMgr {
         localMetastore.modifyTableReplicationNum(db, table, properties);
     }
 
+    public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        localMetastore.alterTableProperties(db, table, properties);
+    }
+
     // The caller need to hold the db write lock
     public void modifyTableDefaultReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {

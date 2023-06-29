@@ -103,7 +103,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static com.starrocks.thrift.TStorageMedium.SSD;
 
@@ -250,7 +250,7 @@ public class ShowExecutorTest {
                 mv.getTableProperty();
                 minTimes = 0;
                 result = new TableProperty(
-                        Collections.singletonMap(PROPERTIES_STORAGE_COLDOWN_TIME, "100"));
+                        Collections.singletonMap(PROPERTIES_STORAGE_COOLDOWN_TIME, "100"));
             }
         };
 
