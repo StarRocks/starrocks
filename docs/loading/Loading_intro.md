@@ -121,6 +121,7 @@ You can determine the loading method of your choice based on your business scena
 - When you load data from another StarRocks cluster or from an Elasticsearch cluster, we recommend that you create a [StarRocks external table](../data_source/External_table.md#starrocks-external-table) or an [Elasticsearch external table](../data_source/External_table.md#elasticsearch-external-table) and then use [INSERT](../loading/InsertInto.md) to load the data.
 
   > **NOTICE**
+  >
   > StarRocks external tables only support data writes. They do not support data reads.
 
 - When you load data from MySQL databases, we recommend that you create a [MySQL external table](../data_source/External_table.md#mysql-external-table) and then use [INSERT](../loading/InsertInto.md) to load the data. If you want to load data in real time, we recommend that you load the data by following the instructions provided in [Realtime synchronization from MySQL](../loading/Flink_cdc_load.md).
