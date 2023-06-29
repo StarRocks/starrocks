@@ -2039,10 +2039,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int cloud_native_meta_port = 6090;
     // remote storage related configuration
-    /**
-     * storage type for cloud native table. Available options: "S3", "HDFS", "AZBLOB". case-insensitive
-     */
-    @ConfField
+    @ConfField(comment = "storage type for cloud native table. Available options: \"S3\", \"HDFS\", \"AZBLOB\". case-insensitive")
     public static String cloud_native_storage_type = "S3";
 
     // HDFS storage configuration
@@ -2197,11 +2194,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double lake_compaction_score_selector_min_score = 10.0;
 
-    /**
-     * -1 means calculate the value in an adaptive way.
-     * 0 will disable compaction.
-     */
-    @ConfField
+    @ConfField(comment = "-1 means calculate the value in an adaptive way. set this value to 0 will disable compaction.")
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
@@ -2222,14 +2215,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long lake_autovacuum_partition_naptime_seconds = 180;
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "History versions within this time range will not be deleted by auto vacuum.\n" +
+            "REMINDER: Set this to a value longer than the maximum possible execution time of queries, to avoid deletion of " +
+            "versions still being accessed.\n" +
+            "NOTE: Increasing this value may increase the space usage of the remote storage system.")
     public static long lake_autovacuum_grace_period_minutes = 5;
 
-    /**
-     * time threshold in hours, if a partition has not been updated for longer than this
-     * threshold, auto vacuum operations will no longer be triggered for that partition.
-     */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "time threshold in hours, if a partition has not been updated for longer than this " +
+            "threshold, auto vacuum operations will no longer be triggered for that partition")
     public static long lake_autovacuum_stale_partition_threshold = 12;
 
     @ConfField(mutable = true)
