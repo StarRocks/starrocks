@@ -2651,22 +2651,52 @@ public class ShowExecutor {
     }
 
     private void handleShowPipes() {
-        List<List<String>> rows = Lists.newArrayList();
+        List<List<Comparable>> rows = Lists.newArrayList();
+        ShowPipeStmt showStmt = (ShowPipeStmt) stmt;
         String dbName = ((ShowPipeStmt) stmt).getDbName();
         long dbId = GlobalStateMgr.getCurrentState().mayGetDb(dbName)
                 .map(Database::getId)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName));
         PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
-        pipeManager.getPipesUnlock().values().forEach(pipe -> {
+        for (Pipe pipe : pipeManager.getPipesUnlock().values()) {
             // show pipes in current database
             if (pipe.getPipeId().getDbId() != dbId) {
-                return;
+                continue;
             }
-            List<String> row = Lists.newArrayList();
+            List<Comparable> row = Lists.newArrayList();
             ShowPipeStmt.handleShow(row, pipe);
             rows.add(row);
-        });
-        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+        }
+
+        // order by
+        List<OrderByPair> orderByPairs = ((ShowPipeStmt) stmt).getOrderByPairs();
+        ListComparator<List<Comparable>> comparator = null;
+        if (orderByPairs != null) {
+            OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
+            comparator = new ListComparator<>(orderByPairs.toArray(orderByPairArr));
+        } else {
+            // sort by id asc
+            comparator = new ListComparator<>(0);
+        }
+        rows.sort(comparator);
+
+        // limit
+        long limit = showStmt.getLimit();
+        long offset = showStmt.getOffset() == -1L ? 0 : showStmt.getOffset();
+        if (offset >= rows.size()) {
+            rows = Lists.newArrayList();
+        } else if (limit != -1L) {
+            if ((limit + offset) < rows.size()) {
+                rows = rows.subList((int) offset, (int) (limit + offset));
+            } else {
+                rows = rows.subList((int) offset, rows.size());
+            }
+        }
+
+        List<List<String>> result = rows.stream().map(x -> x.stream().map(y -> (String) y)
+                        .collect(Collectors.toList()))
+                .collect(Collectors.toList());
+        resultSet = new ShowResultSet(stmt.getMetaData(), result);
     }
 
     private void handleDescPipe() {

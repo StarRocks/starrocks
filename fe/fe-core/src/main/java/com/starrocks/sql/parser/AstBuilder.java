@@ -3858,13 +3858,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.qualifiedName() != null) {
             dbName = getQualifiedName(context.qualifiedName()).toString();
         }
+        List<OrderByElement> orderBy = null;
+        if (context.ORDER() != null) {
+            orderBy = new ArrayList<>();
+            orderBy.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limit = null;
+        if (context.limitElement() != null) {
+            limit = (LimitElement) visit(context.limitElement());
+        }
         if (context.LIKE() != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowPipeStmt(dbName, stringLiteral.getValue(), null, createPos(context));
+            return new ShowPipeStmt(dbName, stringLiteral.getValue(), null, orderBy, limit, createPos(context));
         } else if (context.WHERE() != null) {
-            return new ShowPipeStmt(dbName, null, (Expr) visit(context.expression()), createPos(context));
+            return new ShowPipeStmt(dbName, null, (Expr) visit(context.expression()), orderBy, limit,
+                    createPos(context));
         } else {
-            return new ShowPipeStmt(dbName, null, null, createPos(context));
+            return new ShowPipeStmt(dbName, null, null, orderBy, limit, createPos(context));
         }
     }
 
