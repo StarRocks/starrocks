@@ -263,6 +263,7 @@ void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partiti
 Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush,
                                                              std::vector<SpilledPartition*>& partitions_need_split,
                                                              std::vector<SpilledPartition*>& partitions_need_flush) {
+    // find partitions that need split first
     if (options().splittable) {
         for (const auto& [pid, partition] : _id_to_partitions) {
             const auto& mem_table = partition->spill_writer->mem_table();
@@ -279,6 +280,8 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
         }
     }
 
+    // if the mem table of a partition is full, we flush it directly,
+    // otherwise, we treat it as a candidate
     std::vector<SpilledPartition*> partitions_can_flush;
     for (const auto& [pid, partition] : _id_to_partitions) {
         const auto& mem_table = partition->spill_writer->mem_table();
@@ -294,11 +297,15 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
         }
     }
 
+    // if this is not the final flush and we can find some partitions to flush, just return
     if (!is_final_flush && !partitions_need_flush.empty()) {
         return Status::OK();
     }
 
     if (is_final_flush) {
+        // for the final flush, we need to control the memory usage on hash join probe side,
+        // so we should ensure the partitions loaded in memory under a certain threshold.
+
         // order by bytes desc
         std::sort(partitions_can_flush.begin(), partitions_can_flush.end(),
                   [](SpilledPartition* left, SpilledPartition* right) { return left->bytes > right->bytes; });
@@ -313,6 +320,9 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
             in_mem_bytes += partition->bytes;
         }
     } else {
+        // for the flush during hash join build process, our goal is to reduce memory usage,
+        // so only need to refer to the size of mem table for selection.
+
         // order by mem usage desc
         std::sort(partitions_can_flush.begin(), partitions_can_flush.end(),
                   [](SpilledPartition* left, SpilledPartition* right) {
