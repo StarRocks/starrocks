@@ -176,6 +176,7 @@ public class FunctionSetTest {
         argTypes = new Type[] {TINYINT_ARRAY_ARRAY, Type.TINYINT};
         desc = new Function(new FunctionName("array_append"), argTypes, Type.INVALID, false);
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
+        System.out.println(fn);
         Assert.assertNull(fn);
 
         // array_append(ARRAY<ARRAY<TINYINT>>, ARRAY<VARCHAR>)

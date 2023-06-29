@@ -744,7 +744,7 @@ public class FunctionSet {
             return func;
         }
 
-        return matchCastFunction(desc, mode, fns);
+        return matchCastFunction(desc, mode, standFns);
     }
 
     private void addBuiltInFunction(Function fn) {

@@ -313,9 +313,9 @@ public class PolymorphicFunctionAnalyzer {
         Type typeElement;
 
         List<Type> allRealElementType = Lists.newArrayList();
-
-        for (int i = 0; i < declTypes.length; i++) {
-            Type declType = declTypes[i];
+        int size = fn.hasVarArgs() ? paramTypes.length : declTypes.length;
+        for (int i = 0; i < size; i++) {
+            Type declType = i >= declTypes.length ? fn.getVarArgsType() : declTypes[i];
             Type realType = paramTypes[i];
             if (declType instanceof AnyArrayType) {
                 if (realType.isNull()) {
