@@ -303,7 +303,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     if (config::starlet_cache_dir.empty()) {
         std::vector<std::string> starlet_cache_paths;
-        std::for_each(store_paths.begin(), store_paths.end(), [&](StorePath root_path) {
+        std::for_each(store_paths.begin(), store_paths.end(), [&](const StorePath& root_path) {
             std::string starlet_cache_path = root_path.path + "/starlet_cache";
             starlet_cache_paths.emplace_back(starlet_cache_path);
         });

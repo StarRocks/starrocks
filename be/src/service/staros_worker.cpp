@@ -190,14 +190,14 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
                     localconf[fslib::kS3CredentialType] = "default";
                 } else if (credential.has_simple_credential()) {
                     localconf[fslib::kS3CredentialType] = "simple";
-                    auto simple_credential = credential.simple_credential();
+                    auto& simple_credential = credential.simple_credential();
                     localconf[fslib::kS3CredentialSimpleAccessKeyId] = simple_credential.access_key();
                     localconf[fslib::kS3CredentialSimpleAccessKeySecret] = simple_credential.access_key_secret();
                 } else if (credential.has_profile_credential()) {
                     localconf[fslib::kS3CredentialType] = "instance_profile";
                 } else if (credential.has_assume_role_credential()) {
                     localconf[fslib::kS3CredentialType] = "assume_role";
-                    auto role_credential = credential.assume_role_credential();
+                    auto& role_credential = credential.assume_role_credential();
                     localconf[fslib::kS3CredentialAssumeRoleArn] = role_credential.iam_role_arn();
                     localconf[fslib::kS3CredentialAssumeRoleExternalId] = role_credential.external_id();
                 } else {
@@ -301,7 +301,7 @@ absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shar
     return std::move(fs);
 }
 
-Status to_status(absl::Status absl_status) {
+Status to_status(const absl::Status& absl_status) {
     switch (absl_status.code()) {
     case absl::StatusCode::kOk:
         return Status::OK();
