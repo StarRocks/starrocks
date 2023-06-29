@@ -23,7 +23,6 @@
 #include "exec/hdfs_scanner_orc.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
-#include "fs/fs.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
@@ -896,7 +895,7 @@ static void fill_array_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_
     const int elements_size = implicit_cast<int>(orc_list->offsets[from + size] - elements_from);
 
     fn_fill_elements(orc_list->elements.get(), elements, elements_from, elements_size, child_type,
-                     mapping->get_column_id_or_child_mapping(0).orc_mapping, ctx);
+                     mapping->get_orc_type_child_mapping(0).orc_mapping, ctx);
 }
 static void fill_array_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
                                         const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
@@ -956,7 +955,7 @@ static void fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t 
         const TypeDescriptor& key_type = type_desc.children[0];
         const FillColumnFunction& fn_fill_keys = find_fill_func(key_type.type, true);
         fn_fill_keys(orc_map->keys.get(), keys, keys_from, keys_size, key_type,
-                     mapping->get_column_id_or_child_mapping(0).orc_mapping, ctx);
+                     mapping->get_orc_type_child_mapping(0).orc_mapping, ctx);
     }
 
     ColumnPtr& values = col_map->values_column();
@@ -968,7 +967,7 @@ static void fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t 
         const TypeDescriptor& value_type = type_desc.children[1];
         const FillColumnFunction& fn_fill_values = find_fill_func(value_type.type, true);
         fn_fill_values(orc_map->elements.get(), values, values_from, values_size, value_type,
-                       mapping->get_column_id_or_child_mapping(1).orc_mapping, ctx);
+                       mapping->get_orc_type_child_mapping(1).orc_mapping, ctx);
     }
 }
 static void fill_map_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
@@ -1020,12 +1019,12 @@ static void fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size
 
     for (size_t i = 0; i < type_desc.children.size(); i++) {
         const TypeDescriptor& field_type = type_desc.children[i];
-        size_t column_id = mapping->get_column_id_or_child_mapping(i).orc_column_id;
+        size_t column_id = mapping->get_orc_type_child_mapping(i).orc_type->getColumnId();
 
         orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
         const FillColumnFunction& fn_fill_elements = find_fill_func(field_type.type, true);
         fn_fill_elements(field_cvb, field_columns[i], from, size, field_type,
-                         mapping->get_column_id_or_child_mapping(i).orc_mapping, ctx);
+                         mapping->get_orc_type_child_mapping(i).orc_mapping, ctx);
     }
 }
 static void fill_struct_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
