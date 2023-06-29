@@ -307,6 +307,7 @@ public class SharedDataStorageVolumeMgrTest {
 
         Config.cloud_native_storage_type = "azblob";
         Config.azure_blob_shared_key = "shared_key";
+        Config.azure_blob_sas_token = "sas_token";
         Config.azure_blob_endpoint = "endpoint";
         Config.azure_blob_path = "path";
         sdsvm.removeStorageVolume(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
@@ -315,6 +316,8 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getEndpoint());
         Assert.assertEquals("shared_key",
                 sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getCredential().getSharedKey());
+        Assert.assertEquals("sas_token",
+                sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getCredential().getSasToken());
     }
 
     @Test
