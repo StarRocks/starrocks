@@ -85,7 +85,8 @@ inline std::vector<TypeDescriptor> make_type_descs() {
 inline std::shared_ptr<::parquet::schema::GroupNode> make_schema() {
     auto type_descs = make_type_descs();
     std::vector<std::string> type_names{"array"};
-    auto ret = ParquetBuildHelper::make_schema(type_names, type_descs);
+    std::vector<FileColumnId> file_column_ids{FileColumnId{0}};
+    auto ret = ParquetBuildHelper::make_schema(type_names, type_descs, file_column_ids);
     EXPECT_TRUE(ret.ok());
     auto schema = ret.ValueOrDie();
     return schema;
