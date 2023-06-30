@@ -27,7 +27,7 @@ select * from tab1;
 
 
 -- name: test_alter_pk_reorder_column_type
-CREATE TABLE `test_pk_alter_double` (
+CREATE TABLE `test_alter_pk_reorder_column_type` (
   `k1` date NOT NULL COMMENT "",
   `v1` datetime NOT NULL COMMENT "",
   `v2` varchar(20) NOT NULL COMMENT "",
