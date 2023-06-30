@@ -23,11 +23,17 @@ The return value has the same type as `expr2`.
 ## Examples
 
 ```Plain Text
-mysql> select if(false,1,2);
-+-----------------+
-| if(FALSE, 1, 2) |
-+-----------------+
-|               2 |
-+-----------------+
-1 row in set (0.00 sec)
+mysql> select if(true,1,2);
++----------------+
+| if(TRUE, 1, 2) |
++----------------+
+|              1 |
++----------------+
+
+mysql> select if(false,2.14,2);
++--------------------+
+| if(FALSE, 2.14, 2) |
++--------------------+
+|               2.00 |
++--------------------+
 ```
