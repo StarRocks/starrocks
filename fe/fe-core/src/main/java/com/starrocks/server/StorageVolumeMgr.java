@@ -71,15 +71,15 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     protected Map<Long, String> tableToStorageVolume = new HashMap<>();
 
-    protected Set<String> paramNames = new HashSet<>();
+    protected static final Set<String> PARAM_NAMES = new HashSet<>();
 
-    public StorageVolumeMgr() {
+    static {
         Field[] fields = CloudConfigurationConstants.class.getFields();
         for (int i = 0; i < fields.length; ++i) {
             try {
                 Object obj = CloudConfigurationConstants.class.newInstance();
                 Object value = fields[i].get(obj);
-                paramNames.add((String) value);
+                PARAM_NAMES.add((String) value);
             } catch (InstantiationException | IllegalAccessException e) {
                 // do nothing
             }
@@ -278,7 +278,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     protected void validateParams(Map<String, String> params) throws DdlException {
         for (String key : params.keySet()) {
-            if (!paramNames.contains(key)) {
+            if (!PARAM_NAMES.contains(key)) {
                 throw new DdlException("Invalid properties " + key);
             }
         }
