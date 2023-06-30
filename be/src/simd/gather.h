@@ -65,5 +65,42 @@ struct SIMDGather {
             c++;
         }
     }
+
+
+    // b[i] = a[c[i]];
+    // T was int32_t or uint32_t
+    template <class TA, class TB, class TC>
+    static void gather64(TB* b, const TA* a, const TC* c, size_t buckets, int num_rows) {
+//        static_assert(sizeof(TB) == 4);
+//        static_assert(std::is_integral_v<TB>);
+//        static_assert(sizeof(TC) == 4);
+//        static_assert(std::is_integral_v<TC>);
+        int i = 0;
+#ifdef __AVX2__
+        if (buckets < max_process_size) {
+            // gather will collect data of size sizeof(int32)
+            // we only need the lower 16 bits
+            // eg:
+            // a = [0x12 0x34 0x56 0x78 0x9a 0x...]
+            // gather (a, [0,1,2,3], 2) will be:
+            // [0x12 0x32 0x56 0x78] [0x56 0x78 0x9a..0.] [....]
+            // use will use mask to get lower 16 bits
+            // [0x12 0x32 0x00 0x00] [0x56 0x78 0x00 0x00] [....]
+            for (; i + 4 <= num_rows; i += 4) {
+                __m128i loaded = _mm_loadu_si128(reinterpret_cast<const __m128i*>(c));
+                __m256i gathered = _mm256_i32gather_epi64((const long long int*)a, loaded, 4);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(b), gathered);
+                c += 4;
+                b += 4;
+            }
+            _mm256_zeroupper();
+        }
+#endif
+        for (; i < num_rows; i++) {
+            *b = a[*c];
+            b++;
+            c++;
+        }
+    }
 };
 } // namespace starrocks
