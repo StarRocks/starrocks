@@ -208,6 +208,22 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
     return records;
 }
 
+void check_schema(const std::string& path, const std::vector<std::pair<std::string, LogicalType>>& expected_schema) {
+    OrcChunkReader reader;
+    auto input_stream = orc::readLocalFile(path);
+    reader.init(std::move(input_stream));
+    std::vector<SlotDescriptor> schema;
+
+    auto st = reader.get_schema(&schema);
+    DCHECK(st.ok()) << st.get_error_msg();
+
+    EXPECT_EQ(schema.size(), expected_schema.size());
+    for (size_t i = 0; i < expected_schema.size(); ++i) {
+        EXPECT_EQ(schema[i].col_name(), expected_schema[i].first);
+        EXPECT_EQ(schema[i].type().type, expected_schema[i].second) << schema[i].col_name();
+    }
+}
+
 TEST_F(OrcChunkReaderTest, Normal) {
     std::vector<SlotDescriptor*> src_slot_descs;
     create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
@@ -1982,6 +1998,29 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
     EXPECT_EQ(result->num_columns(), 2);
 
     EXPECT_EQ("['1', {-2147483648:'0.999999999'}]", result->debug_row(0));
+}
+
+TEST_F(OrcChunkReaderTest, get_file_schema) {
+    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, LogicalType>>>> test_cases = {
+            {"./be/test/exec/test_data/orc_scanner/scalar_types.orc",
+             {{"col_bool", TYPE_BOOLEAN},
+              {"col_tinyint", TYPE_TINYINT},
+              {"col_smallint", TYPE_SMALLINT},
+              {"col_int", TYPE_INT},
+              {"col_bigint", TYPE_BIGINT},
+              {"col_float", TYPE_FLOAT},
+              {"col_double", TYPE_DOUBLE},
+              {"col_string", TYPE_VARCHAR},
+              {"col_char", TYPE_CHAR},
+              {"col_varchar", TYPE_VARCHAR},
+              {"col_binary", TYPE_VARBINARY},
+              {"col_decimal", TYPE_DECIMAL64},
+              {"col_timestamp", TYPE_DATETIME},
+              {"col_date", TYPE_DATE}}}};
+
+    for (const auto& test_case : test_cases) {
+        check_schema(test_case.first, test_case.second);
+    }
 }
 
 } // namespace starrocks

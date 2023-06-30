@@ -57,6 +57,7 @@ public:
 
     // src slot descriptors should exactly matches columns in row readers.
     explicit OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_slot_descriptors);
+    OrcChunkReader();
     ~OrcChunkReader();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
@@ -136,6 +137,8 @@ public:
     ColumnPtr get_row_delete_filter(const std::set<int64_t>& deleted_pos);
 
     bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);
+
+    Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
