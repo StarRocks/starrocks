@@ -389,7 +389,7 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
     return Status::OK();
 }
 
-static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
+void OrcChunkReader::_try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
     auto is_integer_type = [](LogicalType t) { return g_starrocks_int_type.count(t) > 0; };
     auto is_decimal_type = [](LogicalType t) { return g_starrocks_decimal_type.count(t) > 0; };
 
@@ -422,6 +422,12 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
         } else {
             from->type = LogicalType::TYPE_DECIMAL32;
         }
+    } else if (_broker_load_mode && !_strict_mode && t1 == LogicalType::TYPE_VARCHAR &&
+               t2 == LogicalType::TYPE_VARCHAR) {
+        // For broker load, the orc field length is larger than the maximum length of the starrocks field
+        // will cause load failure in non-strict mode. Here we keep the maximum length of the orc field
+        // the same as the maximum length of the starrocks field.
+        from->len = to.len;
     } else {
         // nothing to do.
     }
