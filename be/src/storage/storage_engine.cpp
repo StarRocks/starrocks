@@ -463,7 +463,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
         for (auto& it : _store_map) {
             if (it.second->is_used()) {
                 if (_available_storage_medium_type_count == 1 || it.second->storage_medium() == storage_medium) {
-                    if (it.second->available_bytes() > config::storage_flood_stage_left_capacity_bytes) {
+                    if (!it.second->capacity_limit_reached(0)) {
                         stores.push_back(it.second);
                     }
                 }
