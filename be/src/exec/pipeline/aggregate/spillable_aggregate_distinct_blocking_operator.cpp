@@ -174,8 +174,14 @@ bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
     if (!_aggregator->spiller()->spilled()) {
         return false;
     }
+    if (_accumulator.has_output()) {
+        return true;
+    }
     // has output data from spiller.
     if (_aggregator->spiller()->has_output_data()) {
+        return true;
+    }
+    if (_aggregator->spiller()->is_cancel()) {
         return true;
     }
     // has eos chunk
@@ -191,6 +197,12 @@ bool SpillableAggregateDistinctBlockingSourceOperator::is_finished() const {
     }
     if (!_aggregator->spiller()->spilled()) {
         return AggregateDistinctBlockingSourceOperator::is_finished();
+    }
+    if (_accumulator.has_output()) {
+        return false;
+    }
+    if (_aggregator->spiller()->is_cancel()) {
+        return true;
     }
     return _aggregator->is_spilled_eos() && !_has_last_chunk;
 }
@@ -220,6 +232,11 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::pull_chunk(
 StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
     DCHECK(_accumulator.need_input());
     ChunkPtr res;
+
+    if (_accumulator.has_output()) {
+        auto accumulated = std::move(_accumulator.pull());
+        return accumulated;
+    }
 
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
