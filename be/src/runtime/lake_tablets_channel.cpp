@@ -42,6 +42,7 @@
 #include "util/bthreads/shared_mutex.h"
 #include "util/compression/block_compression.h"
 #include "util/countdown_latch.h"
+#include "util/stack_trace_mutex.h"
 
 namespace starrocks {
 
@@ -83,7 +84,7 @@ private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
     struct Sender {
-        bthread::Mutex lock;
+        StackTraceMutex<bthread::Mutex> lock;
         int64_t next_seq = 0;
         bool has_incremental_open = false;
     };
@@ -119,7 +120,7 @@ private:
     private:
         friend class LakeTabletsChannel;
 
-        mutable bthread::Mutex _mtx;
+        mutable StackTraceMutex<bthread::Mutex> _mtx;
         PTabletWriterAddBatchResult* _response;
 
         Chunk _chunk;
@@ -154,10 +155,10 @@ private:
 
     std::vector<Sender> _senders;
 
-    mutable bthread::Mutex _dirty_partitions_lock;
+    mutable StackTraceMutex<bthread::Mutex> _dirty_partitions_lock;
     std::unordered_set<int64_t> _dirty_partitions;
 
-    mutable bthread::Mutex _chunk_meta_lock;
+    mutable StackTraceMutex<bthread::Mutex> _chunk_meta_lock;
     serde::ProtobufChunkMeta _chunk_meta;
     std::atomic<bool> _has_chunk_meta;
 
