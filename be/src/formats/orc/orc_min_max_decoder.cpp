@@ -149,7 +149,7 @@ static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::Colum
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
-            OrcTimestampHelper::orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns);
+            OrcTimestampHelper::orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns, true);
         }
 
         {
@@ -160,7 +160,7 @@ static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::Colum
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
-            OrcTimestampHelper::orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns);
+            OrcTimestampHelper::orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns, true);
         }
 
         DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_DATETIME);
