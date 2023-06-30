@@ -56,6 +56,14 @@ message RowsetMetadataPB {
     optional DeletePredicatePB delete_predicate = 6;
 }
 
+
+// At present, the lake persistent index reuses the logic of the persistent index,
+// and writes the index to the local disk, which may be upgraded and written to the remote end in the future,
+// the type is is to make it upgradable for compatibility；
+enum PersistentIndexTypePB {
+    LOCAL = 0;
+}
+
 message TabletMetadataPB {
     optional int64 id = 1;
     optional int64 version = 2;
@@ -75,6 +83,7 @@ message TabletMetadataPB {
     optional int64 prev_garbage_version = 9;
     repeated FileMetaPB orphan_files = 10;
     optional bool enable_persistent_index = 11;
+    optional PersistentIndexTypePB persistent_index_type = 12;
 }
 
 message TxnLogPB {

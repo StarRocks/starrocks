@@ -311,6 +311,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
 
     if (req.__isset.enable_persistent_index) {
         tablet_metadata_pb->set_enable_persistent_index(true);
+        tablet_metadata_pb->set_persistent_index_type(PersistentIndexType::LOCAL);
     }
 
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
