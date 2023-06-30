@@ -55,7 +55,7 @@ Status SortedAggregateStreamingSinkOperator::set_finishing(RuntimeState* state) 
         _accumulator.push(std::move(res));
     }
     _accumulator.finalize();
-    if (_accumulator.has_output()) {
+    while (_accumulator.has_output()) {
         auto accumulated = std::move(_accumulator.pull());
         _aggregator->offer_chunk_to_buffer(accumulated);
     }

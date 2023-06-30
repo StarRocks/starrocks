@@ -141,7 +141,7 @@ bool SpillableNLJoinProbeOperator::is_ready() const {
     if (res) {
         _init_chunk_stream();
     }
-    return _cross_join_context->is_right_finished();
+    return res;
 }
 
 bool SpillableNLJoinProbeOperator::is_finished() const {
