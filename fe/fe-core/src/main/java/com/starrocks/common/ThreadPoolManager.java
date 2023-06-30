@@ -138,7 +138,7 @@ public class ThreadPoolManager {
     public static PriorityThreadPoolExecutor newDaemonFixedPriorityThreadPool(int numThread, int queueSize,
             String poolName, boolean needRegisterMetric) {
         ThreadFactory threadFactory = namedThreadFactory(poolName);
-        PriorityThreadPoolExecutor threadPool = new PriorityThreadPoolExecutor(numThread, numThread, KEEP_ALIVE_TIME,
+        PriorityThreadPoolExecutor threadPool = new PriorityThreadPoolExecutor(numThread, numThread, 0,
                 TimeUnit.SECONDS, new PriorityBlockingQueue<>(queueSize), threadFactory,
                 new BlockedPolicy(poolName, 60));
         if (needRegisterMetric) {
