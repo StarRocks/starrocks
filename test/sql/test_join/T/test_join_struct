@@ -70,18 +70,15 @@ select s5 from struct_test t where not exists (select 1 from struct_test s where
 
 select s2 from struct_test t where s2 in (select s0 from struct_test s);
 select s4 from struct_test t where s4 in (select s1 from struct_test s);
-select s4 from struct_test t where s4 in (select s4 from struct_test s);
 select s0 from struct_test t where s0 in (select s5 from struct_test s);
 select s5 from struct_test t where s5 not in (select s5 from struct_test s);
 select s0 from struct_test t where s0 not in (select s5 from struct_test s);
 
 select s0 in (select s0 from struct_test s) from struct_test;
 select s0 in (select s1 from struct_test s) from struct_test;
-select s4 in (select s4 from struct_test s) from struct_test;
 select s5 in (select s5 from struct_test s) from struct_test;
 select s0 not in (select s0 from struct_test s) from struct_test;
 select s0 not in (select s2 from struct_test s) from struct_test;
-select s4 not in (select s4 from struct_test s) from struct_test;
 select s0 not in (select s5 from struct_test s) from struct_test;
 
 

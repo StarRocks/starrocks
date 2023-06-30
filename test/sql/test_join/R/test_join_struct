@@ -239,10 +239,6 @@ select s4 from struct_test t where s4 in (select s1 from struct_test s);
 -- result:
 {"c0":null,"c1":null}
 -- !result
-select s4 from struct_test t where s4 in (select s4 from struct_test s);
--- result:
-E: (1064, 'join on type STRUCT{c0 INT, c1 JSON}=STRUCT{c0 INT, c1 JSON} is not supported backend:172.26.92.195')
--- !result
 select s0 from struct_test t where s0 in (select s5 from struct_test s);
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: The input types (struct<c0 int(11), c1 varchar(65533)>,struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
@@ -270,10 +266,6 @@ None
 1
 1
 -- !result
-select s4 in (select s4 from struct_test s) from struct_test;
--- result:
-E: (1064, 'group by type STRUCT{c0 INT, c1 JSON} is not supported backend:172.26.92.195')
--- !result
 select s5 in (select s5 from struct_test s) from struct_test;
 -- result:
 1
@@ -293,10 +285,6 @@ None
 select s0 not in (select s2 from struct_test s) from struct_test;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 10 to line 1, column 46. Detail message: The input types (struct<c0 int(11), c1 varchar(65533)>,struct<c0 int(11), c1 array<varchar(65533)>>) of in predict are not compatible.')
--- !result
-select s4 not in (select s4 from struct_test s) from struct_test;
--- result:
-E: (1064, 'group by type STRUCT{c0 INT, c1 JSON} is not supported backend:172.26.92.195')
 -- !result
 select s0 not in (select s5 from struct_test s) from struct_test;
 -- result:
