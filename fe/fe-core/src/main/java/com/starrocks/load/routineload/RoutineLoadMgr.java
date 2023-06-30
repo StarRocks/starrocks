@@ -221,6 +221,13 @@ public class RoutineLoadMgr implements Writable {
     }
 
     public void addRoutineLoadJob(RoutineLoadJob routineLoadJob, String dbName) throws DdlException {
+        int beNum = 0;
+        slotLock.lock();
+        try {
+            beNum = beTasksNum.size();
+        } finally {
+            slotLock.unlock();
+        }
         writeLock();
         try {
             // check if db.routineLoadName has been used
@@ -228,17 +235,25 @@ public class RoutineLoadMgr implements Writable {
                 throw new DdlException("Name " + routineLoadJob.getName() + " already used in db "
                         + dbName);
             }
-            if (getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
-                    RoutineLoadJob.JobState.RUNNING, RoutineLoadJob.JobState.PAUSED)).size() >
-                    Config.max_routine_load_job_num) {
-                throw new DdlException("There are more than " + Config.max_routine_load_job_num
-                        + " routine load jobs are running. "
-                        + "Please modify FE config max_routine_load_job_num if you want more job");
+            long allSlotNum = beNum * Config.max_routine_load_task_num_per_be;
+            List<RoutineLoadJob> jobs = getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
+                        RoutineLoadJob.JobState.RUNNING, RoutineLoadJob.JobState.PAUSED));
+            long curSlotNum = 0;
+            for (RoutineLoadJob job : jobs) {
+                curSlotNum += job.calculateCurrentConcurrentTaskNum();
             }
-
+            int needSlotNum = routineLoadJob.calculateCurrentConcurrentTaskNum();
+            if (curSlotNum + needSlotNum > allSlotNum) {
+                throw new DdlException("Current routine load job is " + curSlotNum + ". "
+                        + "The new job need " + needSlotNum + " tasks. "
+                        + "But we only support " + beNum + "*" + Config.max_routine_load_task_num_per_be + " tasks."
+                        + "Please modify FE config max_routine_load_task_num_per_be if you want more job");
+            }
             unprotectedAddJob(routineLoadJob);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateRoutineLoadJob(routineLoadJob);
             LOG.info("create routine load job: id: {}, name: {}", routineLoadJob.getId(), routineLoadJob.getName());
+        } catch (MetaNotFoundException e) {
+            throw new DdlException(e.getMessage());
         } finally {
             writeUnlock();
         }
