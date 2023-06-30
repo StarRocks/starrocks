@@ -501,7 +501,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     auto query_ctx = _query_ctx.lock();
     // _query_ctx uses lazy initialization, maybe it is not initialized
-    // under certian circumstance
+    // under certain circumstance
     if (query_ctx == nullptr) {
         query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
         DCHECK(query_ctx != nullptr);

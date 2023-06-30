@@ -1733,6 +1733,7 @@ public class Coordinator {
             mergedInstanceProfile.getChildList().forEach(pair -> {
                 RuntimeProfile pipelineProfile = pair.first;
                 foldUnnecessaryLimitOperators(pipelineProfile);
+                setOperatorStatus(pipelineProfile);
                 newFragmentProfile.addChild(pipelineProfile);
             });
 
@@ -1766,7 +1767,8 @@ public class Coordinator {
                 RuntimeProfile pipelineProfile = pipelineProfilePair.first;
                 for (Pair<RuntimeProfile, Boolean> operatorProfilePair : pipelineProfile.getChildList()) {
                     RuntimeProfile operatorProfile = operatorProfilePair.first;
-                    if (!foundResultSink & operatorProfile.getName().contains("RESULT_SINK")) {
+                    if (!foundResultSink && (operatorProfile.getName().contains("RESULT_SINK") ||
+                            operatorProfile.getName().contains("OLAP_TABLE_SINK"))) {
                         long executionWallTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
                         Counter executionTotalTime =
                                 newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
@@ -1844,6 +1846,21 @@ public class Coordinator {
         }
 
         foldNames.forEach(pipelineProfile::removeChild);
+    }
+
+    private void setOperatorStatus(RuntimeProfile pipelineProfile) {
+        for (Pair<RuntimeProfile, Boolean> child : pipelineProfile.getChildList()) {
+            RuntimeProfile operatorProfile = child.first;
+            RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
+            Preconditions.checkNotNull(commonMetrics);
+
+            Counter closeTime = commonMetrics.getCounter("CloseTime");
+            Counter minCloseTime = commonMetrics.getCounter("__MIN_OF_CloseTime");
+            if (closeTime != null && closeTime.getValue() == 0 ||
+                    minCloseTime != null && minCloseTime.getValue() == 0) {
+                commonMetrics.addInfoString("Status", "Running");
+            }
+        }
     }
 
     /*

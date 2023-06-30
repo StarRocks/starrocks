@@ -130,7 +130,6 @@ void FragmentContext::report_exec_state_if_necessary() {
         return;
     }
     if (_last_report_exec_state_ns.compare_exchange_strong(last_report_exec_state_ns, now)) {
-        LOG(ERROR) << "report runtime profile, query_id=" << print_id(_query_id);
         state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
     }
 }
