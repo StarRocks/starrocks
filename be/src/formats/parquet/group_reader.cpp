@@ -46,6 +46,11 @@ Status GroupReader::init() {
     RETURN_IF_ERROR(_init_column_readers());
     _dict_filter_ctx.init(_param.read_cols.size());
     _process_columns_and_conjunct_ctxs();
+
+    return Status::OK();
+}
+
+Status GroupReader::prepare() {
     RETURN_IF_ERROR(_dict_filter_ctx.rewrite_conjunct_ctxs_to_predicates(_param, _column_readers, &_obj_pool,
                                                                          &_is_group_filtered));
     _init_read_chunk();
@@ -127,6 +132,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
     size_t active_rows = active_chunk->num_rows();
     if (active_rows > 0 && !_lazy_column_indices.empty()) {
+        _lazy_column_needed = true;
         ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
         RETURN_IF_ERROR(_lazy_skip_rows(_lazy_column_indices, lazy_chunk, *row_count));
 
@@ -167,6 +173,11 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 void GroupReader::close() {
     if (_param.sb_stream) {
         _param.sb_stream->release_to_offset(_end_offset);
+    }
+    if (_lazy_column_needed) {
+        _param.lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
+    } else {
+        _param.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
     }
     _column_readers.clear();
 }
@@ -262,19 +273,33 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices)
 
 void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
-    for (const auto& column : _param.read_cols) {
+    // collect io of active column
+    for (const auto& index : _active_column_indices) {
+        const auto& column = _param.read_cols[index];
         auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
         if (column.t_iceberg_schema_field == nullptr) {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, ranges, &end);
+            _collect_field_io_range(*schema_node, column.col_type_in_chunk, true, ranges, &end);
         } else {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, ranges,
+            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, true, ranges,
                                     &end);
+        }
+    }
+
+    // collect io of lazy column
+    for (const auto& index : _lazy_column_indices) {
+        const auto& column = _param.read_cols[index];
+        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
+        if (column.t_iceberg_schema_field == nullptr) {
+            _collect_field_io_range(*schema_node, column.col_type_in_chunk, false, ranges, &end);
+        } else {
+            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, false,
+                                    ranges, &end);
         }
     }
     *end_offset = end;
 }
 
-void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type, bool active,
                                           std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                           int64_t* end_offset) {
     // 1. We collect column io ranges for each row group to make up the shared buffer, so we get column
@@ -284,7 +309,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
     // we need to iterate the children and collect their io ranges.
     // 3. For subfield pruning, we collect io range based on col_type which is pruned by fe.
     if (field.type.type == LogicalType::TYPE_ARRAY) {
-        _collect_field_io_range(field.children[0], col_type.children[0], ranges, end_offset);
+        _collect_field_io_range(field.children[0], col_type.children[0], active, ranges, end_offset);
     } else if (field.type.type == LogicalType::TYPE_STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         ColumnReader::get_subfield_pos_with_pruned_type(field, col_type, _param.case_sensitive, subfield_pos);
@@ -293,7 +318,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             if (subfield_pos[i] == -1) {
                 continue;
             }
-            _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], ranges, end_offset);
+            _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], active, ranges, end_offset);
         }
     } else if (field.type.type == LogicalType::TYPE_MAP) {
         // ParquetFiled Map -> Map<Struct<key,value>>
@@ -301,7 +326,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
         auto index = 0;
         for (auto& child : field.children[0].children) {
             if ((!col_type.children[index].is_unknown_type())) {
-                _collect_field_io_range(child, col_type.children[index], ranges, end_offset);
+                _collect_field_io_range(child, col_type.children[index], active, ranges, end_offset);
             }
             ++index;
         }
@@ -314,20 +339,20 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size};
+        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size, .active = active};
         ranges->emplace_back(r);
         *end_offset = std::max(*end_offset, offset + size);
     }
 }
 
 void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
-                                          const TIcebergSchemaField* iceberg_schema_field,
+                                          const TIcebergSchemaField* iceberg_schema_field, bool active,
                                           std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                           int64_t* end_offset) {
     // Logically same with _collect_filed_io_range, just support schema change.
     if (field.type.type == LogicalType::TYPE_ARRAY) {
-        _collect_field_io_range(field.children[0], col_type.children[0], &iceberg_schema_field->children[0], ranges,
-                                end_offset);
+        _collect_field_io_range(field.children[0], col_type.children[0], &iceberg_schema_field->children[0], active,
+                                ranges, end_offset);
     } else if (field.type.type == LogicalType::TYPE_STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         std::vector<const TIcebergSchemaField*> iceberg_schema_subfield(col_type.children.size());
@@ -339,7 +364,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
                 continue;
             }
             _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], iceberg_schema_subfield[i],
-                                    ranges, end_offset);
+                                    active, ranges, end_offset);
         }
     } else if (field.type.type == LogicalType::TYPE_MAP) {
         // ParquetFiled Map -> Map<Struct<key,value>>
@@ -347,8 +372,8 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
         auto index = 0;
         for (auto& child : field.children[0].children) {
             if ((!col_type.children[index].is_unknown_type())) {
-                _collect_field_io_range(child, col_type.children[index], &iceberg_schema_field->children[index], ranges,
-                                        end_offset);
+                _collect_field_io_range(child, col_type.children[index], &iceberg_schema_field->children[index], active,
+                                        ranges, end_offset);
             }
             ++index;
         }
@@ -361,7 +386,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size};
+        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size, .active = active};
         ranges->emplace_back(r);
         *end_offset = std::max(*end_offset, offset + size);
     }
