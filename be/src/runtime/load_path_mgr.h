@@ -42,7 +42,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "runtime/dummy_load_path_mgr.h"
+#include "runtime/base_load_path_mgr.h"
 
 namespace starrocks {
 
@@ -51,7 +51,7 @@ class ExecEnv;
 
 // In every directory, '.trash' directory is used to save data need to delete
 // daemon thread is check no used directory to delete
-class LoadPathMgr : public DummyLoadPathMgr {
+class LoadPathMgr final : public BaseLoadPathMgr {
 public:
     LoadPathMgr(ExecEnv* env);
 
@@ -65,7 +65,6 @@ public:
 
     Status get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) override;
     std::string get_load_error_absolute_path(const std::string& file_path) override;
-    const std::string& get_load_error_file_dir() const { return _error_log_dir; }
 
     std::string get_load_rejected_record_absolute_path(const std::string& rejected_record_dir, const std::string& db,
                                                        const std::string& label, const int64_t id,

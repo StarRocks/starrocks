@@ -56,6 +56,7 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/dummy_load_path_mgr.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/heartbeat_flags.h"
@@ -260,7 +261,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
-    _load_path_mgr = store_paths.empty() ? new DummyLoadPathMgr() : new LoadPathMgr(this);
+    if (store_paths.empty()) {
+        _load_path_mgr = new DummyLoadPathMgr();
+    } else {
+        _load_path_mgr = new LoadPathMgr(this);
+    }
+
     _broker_mgr = new BrokerMgr(this);
     _bfd_parser = BfdParser::create();
     _load_channel_mgr = new LoadChannelMgr();

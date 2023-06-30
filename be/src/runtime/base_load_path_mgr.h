@@ -42,29 +42,33 @@
 #include <vector>
 
 #include "common/status.h"
-#include "runtime/base_load_path_mgr.h"
 
 namespace starrocks {
 
 class TUniqueId;
 class ExecEnv;
 
-class DummyLoadPathMgr final : public BaseLoadPathMgr {
+class BaseLoadPathMgr {
 public:
-    ~DummyLoadPathMgr() override = default;
+    virtual ~BaseLoadPathMgr() = default;
 
-    Status init() override;
+    virtual Status init() = 0;
 
-    Status allocate_dir(const std::string& db, const std::string& label, std::string* prefix) override;
+    virtual Status allocate_dir(const std::string& db, const std::string& label, std::string* prefix) = 0;
 
-    void get_load_data_path(std::vector<std::string>* data_paths) override;
+    virtual void get_load_data_path(std::vector<std::string>* data_paths) = 0;
 
-    Status get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) override;
-    std::string get_load_error_absolute_path(const std::string& file_path) override;
+    virtual Status get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) = 0;
+    virtual std::string get_load_error_absolute_path(const std::string& file_path) = 0;
+    const std::string& get_load_error_file_dir() const { return _error_log_dir; }
 
-    std::string get_load_rejected_record_absolute_path(const std::string& rejected_record_dir, const std::string& db,
-                                                       const std::string& label, const int64_t id,
-                                                       const TUniqueId& fragment_instance_id) override;
+    virtual std::string get_load_rejected_record_absolute_path(const std::string& rejected_record_dir,
+                                                               const std::string& db, const std::string& label,
+                                                               const int64_t id,
+                                                               const TUniqueId& fragment_instance_id) = 0;
+
+private:
+    std::string _error_log_dir;
 };
 
 } // namespace starrocks
