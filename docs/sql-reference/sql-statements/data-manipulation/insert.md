@@ -6,6 +6,8 @@ Inserts data into a specific table or overwrites a specific table with data. For
 
 You can submit an asynchronous INSERT task using [SUBMIT TASK](../data-manipulation/SUBMIT%20TASK.md).
 
+From v3.1 onwards, StarRocks supports sinking data in Parquet format from StarRocks tables to Iceberg tables by using the INSERT statement.
+
 ## Syntax
 
 ```Bash
@@ -52,11 +54,11 @@ Query OK, 5 rows affected, 2 warnings (0.05 sec)
 
 - After INSERT OVERWRITE statement is executed, StarRocks creates temporary partitions for the partitions that store the original data, inserts data into the temporary partitions, and swaps the original partitions with the temporary partitions. All these operations are executed in the Leader FE node. Therefore, if the Leader FE node crashes while executing INSERT OVERWRITE statement, the whole load transaction fails, and the temporary partitions are deleted.
 
-## Example
+## Examples
 
 The following examples are based on table `test`, which contains two columns `c1` and `c2`. The `c2` column has a default value of DEFAULT.
 
-- Import a row of data into the`test`table.
+- Import a row of data into the `test` table.
 
 ```SQL
 INSERT INTO test VALUES (1, 2);
@@ -69,7 +71,7 @@ When no target column is specified, the columns are loaded in sequential order i
 
 If there is a target column with no data inserted or data inserted using DEFAULT as the value, the column will use the default value as the loaded data. Therefore, in the above example, the outcomes of the third and fourth statements are the same.
 
-- Load multiple rows of data into the`test`table at one time.
+### Load multiple rows of data into the `test` table at one time
 
 ```SQL
 INSERT INTO test VALUES (1, 2), (3, 2 + 2);
@@ -80,23 +82,37 @@ INSERT INTO test (c1) VALUES (1), (3);
 
 Because the results of expressions are equivalent, the outcomes of the first and second statements are the same. The outcomes of the third and fourth statements are the same because they both use default value.
 
-- Import a query statement result into the `test` table.
+### Import a query statement result into the `test` table
 
 ```SQL
 INSERT INTO test SELECT * FROM test2;
 INSERT INTO test (c1, c2) SELECT * from test2;
 ```
 
-- Import a query result into the `test` table, and specify partition and label.
+### Import a query result into the `test` table, and specify partition and label
 
 ```SQL
 INSERT INTO test PARTITION(p1, p2) WITH LABEL `label1` SELECT * FROM test2;
 INSERT INTO test WITH LABEL `label1` (c1, c2) SELECT * from test2;
 ```
 
-- Overwrite the `test` table with a query result, and specify partition and label.
+### Overwrite the `test` table with a query result, and specify partition and label
 
 ```SQL
 INSERT OVERWRITE test PARTITION(p1, p2) WITH LABEL `label1` SELECT * FROM test3;
 INSERT OVERWRITE test WITH LABEL `label1` (c1, c2) SELECT * from test3;
+```
+
+### Sink the result of a SELECT query on the `test` table to an Iceberg table named `iceberg_table`, in append mode and with the destination partitions specified
+
+```SQL
+INSERT INTO iceberg_table PARTITION(k2=1)
+SELECT c1 from test;
+```
+
+### Sink the result of a SELECT query on the `test` table to an Iceberg table named `iceberg_table`, in overwrite mode and with the destination partitions specified
+
+```SQL
+INSERT INTO iceberg_table PARTITION(k2=1)
+SELECT c1 FROM test WHERE c2=11;
 ```

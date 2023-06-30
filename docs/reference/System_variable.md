@@ -413,6 +413,10 @@ The variables are described in alphabetical order. Variables with the `global` l
   * 1: default value. StarRocks simplifies the profile and combines metrics of the profile to reduce profile layers.
   * 2: StarRocks retains all the layers of the profile. The profile size is large in this scenario, especially when the SQL query is complex. This value is not recommended.
 
+* pipeline_sink_dop (v3.1 and later)
+
+  The degree of parallelism (DOP) of Iceberg sink operations. Type: integer. Default value: `32`. If you sink data to a partitioned Iceberg table, the actual DOP cannot exceed the number of partitions into which data will be inserted.
+
 * query_cache_entry_max_bytes (2.5 and later)
 
   The threshold for triggering the Passthrough mode. Valid values: 0 to 9223372036854775807. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by `query_cache_entry_max_bytes` or `query_cache_entry_max_rows`, the query is switched to Passthrough mode.

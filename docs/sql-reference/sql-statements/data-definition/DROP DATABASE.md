@@ -4,21 +4,25 @@
 
 Drops a database in StarRocks.
 
-Syntax:
+## Syntax
 
-```sql
-DROP DATABASE [IF EXISTS] <db_name> [FORCE]
+```SQL
+-- Versions earlier than v2.0
+DROP DATABASE [IF EXISTS] [FORCE] db_name
+-- v2.0 and later
+DROP DATABASE [IF EXISTS]  [catalog.]db_name [FORCE]
 ```
 
-Note:
+## Usage notes
 
-1. After executing DROP DATABASE for a while, you can restore the dropped database through RECOVER statement. See RECOVER statement for more detail.
-2. If DROP DATABASE FORCE is executed, the database will be deleted directly and cannot be recovered without checking whether there are unfinished activities in the database.  Generally this operation is not recommended.
+- After executing DROP DATABASE for a while, you can restore the dropped database through RECOVER statement. See [RECOVER](../data-definition/RECOVER.md) for more details.
+
+- If DROP DATABASE FORCE is executed, the database will be deleted directly and cannot be recovered without checking whether there are unfinished activities in the database. Generally this operation is not recommended.
 
 ## Examples
 
-1. Drop database db_text.
+The following example drops a database named `db_text`:
 
-    ```sql
-    DROP DATABASE db_test;
-    ```
+```SQL
+DROP DATABASE db_test;
+```

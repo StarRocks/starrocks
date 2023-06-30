@@ -11,7 +11,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 - Synchronously query a table and create a new table based on the query result, and then insert the query result into the new table.
 
   ```SQL
-  CREATE TABLE [IF NOT EXISTS] [database.]table_name
+  CREATE TABLE [IF NOT EXISTS] [[catalog.]database.]table_name
   [(column_name [, column_name2, ...]]
   [COMMENT "table comment"]
   [partition_desc]
@@ -33,6 +33,10 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
   [PROPERTIES ("key"="value", ...)]AS SELECT query
   [ ... ]
   ```
+
+> **NOTICE**
+>
+> StarRocks only supports creating an Iceberg table while inserting the result of synchronously querying an existing table into the new Iceberg table. StarRocks does not support inserting asynchronous query results at Iceberg table creation.
 
 ## Parameters
 

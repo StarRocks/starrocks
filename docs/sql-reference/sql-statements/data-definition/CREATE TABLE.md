@@ -7,7 +7,7 @@ Creates a new table in StarRocks.
 ## Syntax
 
 ```Plain%20Text
-CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
+CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [[catalog.]database.]table_name
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, index_definition12,]])
 [ENGINE = [olap|mysql|elasticsearch|hive|hudi|iceberg|jdbc]]
@@ -22,6 +22,8 @@ distribution_desc
 ```
 
 ## Parameters
+
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords when you set variables such as the catalog name, database name, table name, and column name in the CREATE TABLE statement. If you want to use such a keyword, enclose it in a pair of backticks (`). See [Keywords](../keywords.md).
 
 ### column_definition
 
@@ -471,6 +473,16 @@ PROPERTIES (
 > - The `child_column` in a table's `foreign_key_constraints` must be referenced to a `unique_key` in another table's `unique_constraints`.
 > - The number of `child_column` and `parent_column` must agree.
 > - The data types of the `child_column` and the corresponding `parent_column` must match.
+
+#### Configure Iceberg table properties
+
+When you create an Iceberg table, you can configure the following properties.
+
+| **Property**     | **Default value** | **Description**                                                     |
+| ---------------- | ----------------- | ------------------------------------------------------------------- |
+| location         | N/A               | The location of the database to which the Iceberg table belongs. If you do not specify this parameter, the Iceberg table is created within the current database. |
+| format           | PARQUET           | The format of the Iceberg table. Only the Parquet format is supported.          |
+| compression_type | SNAPPY            | The compression format of the Iceberg table. The following four compression formats are supported: SNAPPY, GZIP, ZSTD, and LZ4. |
 
 ## Examples
 
