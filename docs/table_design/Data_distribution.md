@@ -4,7 +4,8 @@ When you create a table, you must specify the data distribution method by config
 
 > NOTICE
 >
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
+> - Since v3.1, StarRocks supports random bucketing, which which randomly distribute data across all buckets. You do not need to specify a bucketing key when creating a table or adding partitions, making the table creation statement more user-friendly. For more information, [Random bucketing](#random-bucketing-since-v31).
+> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
 
 ## Basic concepts
 
@@ -22,7 +23,7 @@ Before you dive into the details of designing and managing data distribution, fa
 
 ## Partitioning methods
 
-Modern distributed database systems generally use four basic partitioning methods: round-robin, range, list, and hash.
+Modern distributed database systems generally use four basic distribution methods: round-robin, range, list, and hash.
 
 ![Data distribution method](../assets/3.3.2-1.png)
 
@@ -30,8 +31,9 @@ Modern distributed database systems generally use four basic partitioning method
 - **Range**: distributes data across different nodes based on the value range of partitioning columns.
 - **List**: distributes data across different nodes based on the discrete values of partitioning columns, such as age.
 - **Hash**: distributes data across different nodes based on a hash algorithm.
+- **Random**: distributes data randomly across different nodes.
 
-To achieve more flexible data distribution, you can combine the preceding four partitioning methods based on your business requirements, such as hash-hash, range-hash, and hash-list. **StarRocks offers the following two partitioning methods:**
+To achieve more flexible data distribution, you can combine the preceding distribution methods based on your business requirements, such as hash-hash, range-hash, and hash-list. **StarRocks offers the following data distribution methods:**
 
 - **Hash**: A hash-partitioned table has only one partition (the entire table is considered a partition). The partition is divided into tablets based on the bucketing column and the number of buckets (either manually specified or automatically configured).
 
@@ -69,6 +71,10 @@ To achieve more flexible data distribution, you can combine the preceding four p
   )
   DISTRIBUTED BY HASH(site_id);
   ```
+
+- **Random**: The data of the table is randomly distributed across different buckets.
+
+- **Range+Random**: The data of the table is partitioned based on the range of values in the partitioning column. The data within a partition is randomly distributed across different buckets.
 
 ## Design partitioning and bucketing rules
 
