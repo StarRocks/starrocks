@@ -857,7 +857,7 @@ struct TLoadTxnCommitRequest {
     10: optional i64 auth_code
     11: optional TTxnCommitAttachment txnCommitAttachment
     12: optional i64 thrift_rpc_timeout_ms
-    13: optional list<Types.TTabletFailInfo> failInfos12: optional string warehouse
+    13: optional list<Types.TTabletFailInfo> failInfos
 }
 
 struct TLoadTxnCommitResult {

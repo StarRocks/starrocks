@@ -58,6 +58,7 @@ namespace starrocks {
 
 namespace {
 constexpr size_t DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE = 2048;
+constexpr size_t MIN_CLONE_TASK_THREADS_IN_POOL = 2;
 } // namespace
 
 using TTaskTypeHash = std::hash<std::underlying_type<TTaskType::type>::type>;
