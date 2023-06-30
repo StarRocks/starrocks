@@ -71,6 +71,9 @@ struct GroupReaderParam {
     FileMetaData* file_metadata = nullptr;
 
     bool case_sensitive = false;
+
+    // used to identify io coalesce
+    std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
 };
 
 class GroupReader {
@@ -79,7 +82,10 @@ public:
                 int64_t row_group_first_row);
     ~GroupReader() = default;
 
+    // init used to init column reader, init dict_filter_ctx and devide active/lazy
     Status init();
+    // we need load dict for dict_filter, so prepare should be after collec_io_range
+    Status prepare();
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
@@ -133,10 +139,10 @@ private:
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type, bool active,
                                  std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
     void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
-                                 const TIcebergSchemaField* iceberg_schema_field,
+                                 const TIcebergSchemaField* iceberg_schema_field, bool active,
                                  std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
 
     // row group meta
@@ -155,6 +161,8 @@ private:
     std::vector<int> _active_column_indices;
     // lazy conlumns that hold read_col index
     std::vector<int> _lazy_column_indices;
+    // load lazy column or not
+    bool _lazy_column_needed = false;
 
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;

@@ -131,6 +131,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.timezone = _runtime_state->timezone();
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_stats;
+    ctx.lazy_column_coalesce_counter = _scanner_params.lazy_column_coalesce_counter;
 
     return Status::OK();
 }

@@ -70,6 +70,8 @@ protected:
 
     HdfsScannerContext* _create_scan_context() {
         auto* ctx = _pool.add(new HdfsScannerContext());
+        auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
         ctx->stats = &g_hdfs_scan_stats;
         return ctx;
     }

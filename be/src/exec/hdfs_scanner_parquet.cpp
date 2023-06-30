@@ -53,6 +53,10 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
     RuntimeProfile::Counter* build_iceberg_pos_filter_timer = nullptr;
 
+    // io coalesce
+    RuntimeProfile::Counter* group_active_lazy_coalesce_together = nullptr;
+    RuntimeProfile::Counter* group_active_lazy_coalesce_seperately = nullptr;
+
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::UNIT);
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
@@ -71,6 +75,11 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
     build_iceberg_pos_filter_timer = ADD_CHILD_TIMER(root, "BuildIcebergPosFilter", kParquetProfileSectionPrefix);
 
+    group_active_lazy_coalesce_together =
+            ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceTogether", TUnit::UNIT, kParquetProfileSectionPrefix);
+    group_active_lazy_coalesce_seperately =
+            ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceSeperately", TUnit::UNIT, kParquetProfileSectionPrefix);
+
     COUNTER_UPDATE(request_bytes_read, _stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _stats.request_bytes_read_uncompressed);
     COUNTER_UPDATE(value_decode_timer, _stats.value_decode_ns);
@@ -82,6 +91,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(group_dict_filter_timer, _stats.group_dict_filter_ns);
     COUNTER_UPDATE(group_dict_decode_timer, _stats.group_dict_decode_ns);
     COUNTER_UPDATE(build_iceberg_pos_filter_timer, _stats.build_iceberg_pos_filter_ns);
+    COUNTER_UPDATE(group_active_lazy_coalesce_together, _stats.group_active_lazy_coalesce_together);
+    COUNTER_UPDATE(group_active_lazy_coalesce_seperately, _stats.group_active_lazy_coalesce_seperately);
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
