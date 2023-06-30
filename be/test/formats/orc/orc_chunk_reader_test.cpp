@@ -1116,7 +1116,7 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         };
         slot_descs[1].type.len = 6;
         slot_descs[2].type.len = 6;
-        static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/10380.orc";
+        static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_varchar_column.orc";
         std::vector<SlotDescriptor*> src_slot_descriptors;
         ObjectPool pool;
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
