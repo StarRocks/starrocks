@@ -332,6 +332,12 @@ struct THdfsScanRange {
 
     // number of lines at the start of the file to skip
     12: optional i64 skip_header
+
+    // whether to use JNI scanner to read data of paimon table
+    13: optional bool use_paimon_jni_reader
+
+    // paimon split info
+    14: optional string paimon_split_info
 }
 
 struct TBinlogScanRange {
