@@ -12,30 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_local_persistent_index.h"
 
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/meta_file.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
 
-namespace starrocks {
-namespace lake {
+namespace starrocks::lake {
 
-Status LakePersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* tablet, const TabletMetadata& metadata,
-                                                  int64_t base_version, const MetaFileBuilder* builder) {
+Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* tablet, const TabletMetadata& metadata,
+                                                       int64_t base_version, const MetaFileBuilder* builder) {
+    if (!is_primary_key(metadata)) {
+        LOG(WARNING) << "tablet: " << tablet->id() << " is not primary key tablet";
+        return Status::NotSupported("Only PrimaryKey table is supported to use persistent index");
+    }
+
     MonotonicStopWatch timer;
     timer.start();
-    //        if (tablet->keys_type() != PRIMARY_KEYS) {
-    //            LOG(WARNING) << "tablet: " << tablet->id() << " is not primary key tablet";
-    //            return Status::NotSupported("Only PrimaryKey table is supported to use persistent index");
-    //        }
 
     PersistentIndexMetaPB index_meta;
 
+    // persistent_index_dir has been checked
     Status status = TabletMetaManager::get_persistent_index_meta(
             StorageEngine::instance()->get_persistent_index_store(), tablet->id(), &index_meta);
     if (!status.ok() && !status.is_not_found()) {
+        LOG(ERROR) << "get tablet persistent index meta failed, tablet: " << tablet->id()
+                   << "version: " << base_version;
         return Status::InternalError("get tablet persistent index meta failed");
     }
 
@@ -123,9 +127,12 @@ Status LakePersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* table
     _dump_snapshot = true;
 
     // clear l1
-    _l1_vec.clear();
-    _usage_and_size_by_key_length.clear();
-    _l1_merged_num.clear();
+    {
+        std::unique_lock wrlock(_lock);
+        _l1_vec.clear();
+        _usage_and_size_by_key_length.clear();
+        _l1_merged_num.clear();
+    }
     _has_l1 = false;
     for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
         auto [l0_shard_offset, l0_shard_size] = shard_info;
@@ -139,9 +146,9 @@ Status LakePersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* table
                     _usage_and_size_by_key_length.insert({key_size, {l0_kv_pairs_usage, l0_kv_pairs_size}});
             !inserted) {
             std::string msg = strings::Substitute(
-                    "load persistent index from tablet failed, insert usage and size by key size failed, key_size: "
-                    "$0",
-                    key_size);
+                    "load persistent index from tablet:$0 failed, insert usage and size by key size failed, key_size: "
+                    "$1",
+                    tablet->id(), key_size);
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
@@ -165,10 +172,8 @@ Status LakePersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* table
     data->set_offset(0);
     data->set_size(0);
 
-    int64_t apply_version = 0;
-    std::vector<uint32_t> rowset_ids;
-
     OlapReaderStatistics stats;
+    std::vector<uint32_t> rowset_ids;
     std::unique_ptr<Column> pk_column;
     if (pk_columns.size() > 1) {
         // more than one key column
@@ -185,9 +190,18 @@ Status LakePersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* table
     if (!rowsets.ok()) {
         return rowsets.status();
     }
+
+    size_t total_data_size = 0;
+    size_t total_segments = 0;
+    size_t total_rows = 0;
+
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
     // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
     for (auto& rowset : *rowsets) {
+        total_data_size += rowset->data_size();
+        total_segments += rowset->num_segments();
+        total_rows += rowset->num_rows();
+
         auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
         if (!res.ok()) {
             return res.status();
@@ -247,8 +261,6 @@ Status LakePersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* table
         }
     }
 
-    //RETURN_IF_ERROR(_build_commit(tablet, index_meta));
-    //-------------- build commit
     // commit: flush _l0 and build _l1
     // write PersistentIndexMetaPB in RocksDB
     status = commit(&index_meta);
@@ -257,7 +269,6 @@ Status LakePersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* table
         return status;
     }
     // write pesistent index meta
-    // data_dir -> rocksdb
     status = TabletMetaManager::write_persistent_index_meta(StorageEngine::instance()->get_persistent_index_store(),
                                                             tablet->id(), index_meta);
     if (!status.ok()) {
@@ -270,12 +281,13 @@ Status LakePersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* table
     _dump_snapshot = false;
     _flushed = false;
 
-    //---------------------------
-
-    LOG(INFO) << "build persistent index finish tablet: " << tablet->id() << " version:" << apply_version;
+    LOG(INFO) << "build persistent index finish tablet: " << tablet->id() << " version:" << base_version
+              << " #rowset:" << rowsets->size() << " #segment:" << total_segments << " data_size:" << total_data_size
+              << " size: " << _size << " l0_size: " << _l0->size() << " l0_capacity:" << _l0->capacity()
+              << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
+              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " memory: " << memory_usage()
+              << " time: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
 }
 
-} // namespace lake
-
-} // namespace starrocks
+} // namespace starrocks::lake

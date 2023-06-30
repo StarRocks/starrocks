@@ -155,10 +155,8 @@ public:
     DataDir* get_store(const std::string& path);
     DataDir* get_store(int64_t path_hash);
 
-    DataDir* get_persistent_index_store() {
-        DCHECK(_persistent_index_data_dir != nullptr);
-        return _persistent_index_data_dir;
-    }
+    bool is_lake_persistent_index_dir_inited();
+    DataDir* get_persistent_index_store();
 
     uint32_t available_storage_medium_type_count() { return _available_storage_medium_type_count; }
 

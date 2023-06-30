@@ -2645,7 +2645,14 @@ public class GlobalStateMgr {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                         .append("\" = \"");
-                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)).append("\"");
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+                if (olapTable.enablePersistentIndex() && !Strings.isNullOrEmpty(olapTable.getPersistentIndexTypeString())) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                            .append("\" = \"");
+                    sb.append(olapTable.getPersistentIndexTypeString()).append("\"");
+                }
             } else {
                 // in memory
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)

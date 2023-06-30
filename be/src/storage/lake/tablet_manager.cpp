@@ -310,8 +310,17 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_cumulative_point(0);
 
     if (req.__isset.enable_persistent_index) {
-        tablet_metadata_pb->set_enable_persistent_index(true);
-        tablet_metadata_pb->set_persistent_index_type(PersistentIndexType::LOCAL);
+        tablet_metadata_pb->set_enable_persistent_index(req.enable_persistent_index);
+        if (req.__isset.persistent_index_type) {
+            switch (req.persistent_index_type) {
+            case TPersistentIndexType::LOCAL:
+                tablet_metadata_pb->set_persistent_index_type(PersistentIndexTypePB::LOCAL);
+                break;
+            default:
+                return Status::InternalError(
+                        strings::Substitute("Unknown persistent index type, tabletId:$0", req.tablet_id));
+            }
+        }
     }
 
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {

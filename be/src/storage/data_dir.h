@@ -114,7 +114,7 @@ public:
     std::string get_absolute_shard_path(int64_t shard_id);
     std::string get_absolute_tablet_path(int64_t shard_id, int64_t tablet_id, int32_t schema_hash);
 
-    Status create_dir_if_path_not_exists(std::string path);
+    Status create_dir_if_path_not_exists(const std::string& path);
     void find_tablet_in_trash(int64_t tablet_id, std::vector<std::string>* paths);
 
     static std::string get_root_path_from_schema_hash_path_in_trash(const std::string& schema_hash_dir_in_trash);

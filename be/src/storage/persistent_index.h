@@ -34,7 +34,7 @@ class Schema;
 class Column;
 
 namespace lake {
-class LakePersistentIndex;
+class LakeLocalPersistentIndex;
 }
 
 // Add version for persistent index file to support future upgrade compatibility
@@ -336,7 +336,7 @@ public:
 
 private:
     friend class PersistentIndex;
-    friend class starrocks::lake::LakePersistentIndex;
+    friend class starrocks::lake::LakeLocalPersistentIndex;
 
     template <int N>
     void _init_loop_helper();
@@ -422,7 +422,7 @@ public:
 
 private:
     friend class PersistentIndex;
-    friend class starrocks::lake::LakePersistentIndex;
+    friend class starrocks::lake::LakeLocalPersistentIndex;
     friend class ImmutableIndexWriter;
 
     Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
@@ -525,7 +525,7 @@ class PersistentIndex {
 public:
     // |path|: directory that contains index files
     PersistentIndex(std::string path);
-    ~PersistentIndex();
+    virtual ~PersistentIndex();
 
     bool loaded() const { return (bool)_l0; }
 
@@ -632,8 +632,8 @@ public:
 
     bool is_error() { return _error; }
 
-    void set_dump_snapshot(bool dump_snapshot) { _dump_snapshot = dump_snapshot; }
-    void set_flushed(bool flushed) { _flushed = flushed; }
+    //    void set_dump_snapshot(bool dump_snapshot) { _dump_snapshot = dump_snapshot; }
+    //    void set_flushed(bool flushed) { _flushed = flushed; }
 
 private:
     size_t _dump_bound();
@@ -677,14 +677,14 @@ private:
 
     Status _update_usage_and_size_by_key_length(std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size);
 
-    // prevent concurrent operations
-    // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
-    mutable std::shared_mutex _lock;
-
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
 
 protected:
+    // prevent concurrent operations
+    // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
+    mutable std::shared_mutex _lock;
+
     // index storage directory
     std::string _path;
     size_t _key_size = 0;

@@ -72,15 +72,9 @@ public:
 
     [[nodiscard]] Status delete_metadata(int64_t version);
 
-    bool get_enable_persistent_index(int64_t version) {
-        auto tablet_metadata = _mgr->get_tablet_metadata(_id, version);
-        if (!tablet_metadata.ok()) {
-            LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << _id << ", version: " << version
-                         << ", error: " << tablet_metadata.status();
-            return false;
-        }
-        return (*tablet_metadata)->enable_persistent_index();
-    }
+    bool get_enable_persistent_index(int64_t version);
+
+    StatusOr<PersistentIndexTypePB> get_persistent_index_type(int64_t version);
 
     [[nodiscard]] Status put_txn_log(const TxnLog& log);
 

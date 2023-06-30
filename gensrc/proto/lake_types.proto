@@ -59,7 +59,7 @@ message RowsetMetadataPB {
 
 // At present, the lake persistent index reuses the logic of the persistent index,
 // and writes the index to the local disk, which may be upgraded and written to the remote end in the future,
-// the type is is to make it upgradable for compatibility；
+// the type is is to make it upgradable for compatibility.
 enum PersistentIndexTypePB {
     LOCAL = 0;
 }

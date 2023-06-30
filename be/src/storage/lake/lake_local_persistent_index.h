@@ -21,24 +21,15 @@
 #include "storage/persistent_index.h"
 #include "storage/storage_engine.h"
 
-namespace starrocks {
-
-namespace lake {
+namespace starrocks::lake {
 
 class MetaFileBuilder;
 
-class LakePersistentIndex : public PersistentIndex {
+class LakeLocalPersistentIndex : public PersistentIndex {
 public:
-    LakePersistentIndex(std::string path) : PersistentIndex(path) { _path = path; }
+    explicit LakeLocalPersistentIndex(std::string path) : PersistentIndex(path) { _path = path; }
 
-    ~LakePersistentIndex() {}
-
-    DataDir* getTabletDataDir(int64_t tablet_id) {
-        StorageEngine* storage_engine = StorageEngine::instance();
-        DCHECK(storage_engine != nullptr);
-        std::vector<DataDir*> dirs = storage_engine->get_stores();
-        _meta_dir = dirs[tablet_id % dirs.size()];
-    }
+    ~LakeLocalPersistentIndex() override {}
 
     Status load_from_lake_tablet(starrocks::lake::Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
@@ -48,5 +39,4 @@ private:
     std::string _path;
 };
 
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::lake
