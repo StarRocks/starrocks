@@ -131,7 +131,6 @@ auto type_dispatch_basic_and_complex_types(LogicalType ltype, Functor fun, Args.
     }
 }
 
-
 template <class Functor, class... Args>
 auto type_dispatch_all(LogicalType ltype, Functor fun, Args... args) {
     switch (ltype) {

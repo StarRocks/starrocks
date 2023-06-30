@@ -154,7 +154,7 @@ private:
     EvalCmpZero _comparator;
 };
 
-template<bool is_equal>
+template <bool is_equal>
 class CommonEqualsPredicate final : public Predicate {
 public:
     explicit CommonEqualsPredicate(const TExprNode& node) : Predicate(node) {}
