@@ -76,6 +76,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         return HashJoinBuildOperator::set_finishing(state);
     }
 
+    DCHECK(spill_strategy() == spill::SpillStrategy::SPILL_ALL);
     // if this operator is changed to spill mode just before set_finishing,
     // we should create spill task
     if (!_join_builder->spiller()->spilled()) {
