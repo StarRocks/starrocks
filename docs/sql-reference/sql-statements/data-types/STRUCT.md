@@ -8,7 +8,9 @@ Field names in a struct must be unique. Fields can be of primitive data types (s
 
 A field within a struct can also be another STRUCT, ARRAY, or MAP, which allows you to create nested data structures, for example, `STRUCT<a INT, b STRUCT<c INT, d INT>, c MAP<INT, INT>, d ARRAY<INT>>`.
 
-The STRUCT data type is supported from v3.1 onwards. In v3.1, you can define STRUCT columns when you create a StarRocks table, load STRUCT data into that table, and query MAP data. Since v2.5, StarRocks supports querying complex data types MAP and STRUCT from data lakes.
+The STRUCT data type is supported from v3.1 onwards. In v3.1, you can define STRUCT columns when you create a StarRocks table, load STRUCT data into that table, and query MAP data.
+
+From v2.5 onwards, StarRocks supports querying complex data types MAP and STRUCT from data lakes. You can use external catalogs provided by StarRocks to query MAP and STRUCT data from Apache Hive™, Apache Hudi, and Apache Iceberg. You can only query data from ORC and Parquet files. For more information about how to use external catalogs to query external data sources, see [Overview of catalogs](../../../data_source/catalog/catalog_overview.md) and topics related to the required catalog type.
 
 ## Syntax
 
