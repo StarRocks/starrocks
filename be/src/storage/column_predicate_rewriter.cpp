@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <utility>
 
 #include "column/binary_column.h"
@@ -303,10 +304,11 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
     const auto* pred = down_cast<const ColumnExprPredicate*>(raw_pred);
-    if (value_size <= pred->runtime_state()->chunk_size()) {
+    size_t chunk_size = std::min<size_t>(pred->runtime_state()->chunk_size(), std::numeric_limits<uint16_t>::max());
+
+    if (value_size <= chunk_size) {
         RETURN_IF_ERROR(pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size));
     } else {
-        size_t chunk_size = pred->runtime_state()->chunk_size();
         auto dict_column = raw_dict_column->clone_empty();
         SparseRange range(0, value_size);
         auto iter = range.new_iterator();
