@@ -2194,7 +2194,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double lake_compaction_score_selector_min_score = 10.0;
 
-    @ConfField(comment = "-1 means calculate the value in an adaptive way. set this value to 0 will disable compaction.")
+    @ConfField(mutable = true, comment = "-1 means calculate the value in an adaptive way. set this value to 0 " +
+            "will disable compaction.")
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
