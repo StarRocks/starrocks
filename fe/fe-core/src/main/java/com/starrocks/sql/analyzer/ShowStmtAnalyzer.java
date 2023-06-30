@@ -359,7 +359,7 @@ public class ShowStmtAnalyzer {
                                         String defaultStr = column.getMetaDefaultValue(extras);
                                         String extraStr = StringUtils.join(extras, ",");
                                         List<String> row = Arrays.asList(
-                                                column.getDisplayName(),
+                                                column.getName(),
                                                 // In Mysql, the Type column should lowercase, and the Null column should uppercase.
                                                 // If you do not follow this specification, it may cause the BI system,
                                                 // such as superset, to fail to recognize the column type.
@@ -438,7 +438,7 @@ public class ShowStmtAnalyzer {
                                 String extraStr = StringUtils.join(extras, ",");
                                 List<String> row = Arrays.asList("",
                                         "",
-                                        column.getDisplayName(),
+                                        column.getName(),
                                         // In Mysql, the Type column should lowercase, and the Null column should uppercase.
                                         // If you do not follow this specification, it may cause the BI system,
                                         // such as superset, to fail to recognize the column type.
