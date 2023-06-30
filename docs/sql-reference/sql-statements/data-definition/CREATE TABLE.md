@@ -482,7 +482,7 @@ When you create an Iceberg table, you can configure the following properties.
 | ---------------- | ----------------- | ------------------------------------------------------------------- |
 | location         | N/A               | The location of the database to which the Iceberg table belongs. If you do not specify this parameter, the Iceberg table is created within the current database. |
 | format           | PARQUET           | The format of the Iceberg table. Only the Parquet format is supported.          |
-| compression_type | SNAPPY            | The compression format of the Iceberg table. The following four compression formats are supported: SNAPPY, GZIP, ZSTD, and LZ4. |
+| compression_type | GZIP              | The compression format of the Iceberg table. The supported compression formats include SNAPPY, GZIP, ZSTD, and LZ4. |
 
 ## Examples
 

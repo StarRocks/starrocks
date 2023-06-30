@@ -16,7 +16,7 @@ PROPERTIES ("location"="<database_path>")
 | **Parameter**      | **Required** | **Description**                                                              |
 | ------------------ | ------------ | ---------------------------------------------------------------------------- |
 | database_name      | Yes          | The name of the database.                                                    |
-| location           | No           | The location of the database. This parameter is supported from v3.1 onwards. |
+| location           | No           | The location of the database. This parameter is supported from v3.1 onwards, and you can specify this parameter only when you create a database within an Elasticsearch catalog. |
 
 ## Examples
 
