@@ -60,3 +60,7 @@ skip_res_cmd = [
     "select curdate\\(\\)",
     "select current_date\\(\\)",
 ]
+
+skip_files = set([
+    # 'test_parquet_dict_null_predicate'
+])
