@@ -29,14 +29,17 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 
@@ -121,6 +124,47 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             // for not
             return predicate;
         }
+    }
+
+    @Override
+    public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        List<ScalarOperator> rhs = predicate.getChildren().subList(1, predicate.getChildren().size());
+        if (predicate.isSubquery()) {
+            return predicate;
+        }
+        if (!rhs.stream().allMatch(ScalarOperator::isConstant)) {
+            return predicate;
+        }
+
+        List<ScalarOperator> result = new ArrayList<>();
+        ScalarOperator lhs = predicate.getChild(0);
+        boolean isIn = !predicate.isNotIn();
+
+        List<ScalarOperator> constants = predicate.getChildren().stream().skip(1).filter(ScalarOperator::isConstant)
+                .collect(Collectors.toList());
+        if (constants.size() == 1) {
+            BinaryType op =
+                    isIn ? BinaryType.EQ : BinaryType.NE;
+            result.add(new BinaryPredicateOperator(op, lhs, constants.get(0)));
+        } else if (!constants.isEmpty()) {
+            for (ScalarOperator constant : constants) {
+                BinaryType op =
+                        isIn ? BinaryType.EQ : BinaryType.NE;
+                result.add(new BinaryPredicateOperator(op, lhs, constant));
+            }
+        }
+
+        predicate.getChildren().stream().skip(1).filter(ScalarOperator::isVariable).forEach(child -> {
+            BinaryPredicateOperator newOp;
+            if (isIn) {
+                newOp = new BinaryPredicateOperator(BinaryType.EQ, lhs, child);
+            } else {
+                newOp = new BinaryPredicateOperator(BinaryType.NE, lhs, child);
+            }
+            result.add(newOp);
+        });
+
+        return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
     }
 
     private ConstantOperator createConstantIntegerOne(Type type) {

@@ -126,7 +126,7 @@ public class PredicateSplitTest {
                     )
             );
             PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-            Assert.assertEquals(predicate, predicateSplit.getResidualPredicates());
+            Assert.assertEquals(predicate, predicateSplit.getRangePredicates());
         }
 
         {
