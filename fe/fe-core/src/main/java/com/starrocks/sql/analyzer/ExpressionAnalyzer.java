@@ -796,10 +796,15 @@ public class ExpressionAnalyzer {
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
 
+            if (compatibleType == Type.INVALID) {
+                throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
+                        Collectors.joining(",")) + ") of in predict are not compatible", node.getPos());
+            }
+
             for (Expr child : node.getChildren()) {
                 Type type = child.getType();
-                if (type.isJsonType()) {
-                    throw new SemanticException("InPredicate of JSON is not supported", child.getPos());
+                if (type.isJsonType() && queryExpressions.size() > 0) { // TODO: enable it after support join on JSON
+                    throw new SemanticException("In predicate of JSON does not support subquery", child.getPos());
                 }
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(

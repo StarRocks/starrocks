@@ -102,7 +102,7 @@ public class TypeManager {
     }
 
     private static Type getCommonStructType(StructType t1, StructType t2) {
-        if (t1.getFields().size() != t1.getFields().size()) {
+        if (t1.getFields().size() != t2.getFields().size()) {
             return Type.INVALID;
         }
         ArrayList<StructField> fields = Lists.newArrayList();

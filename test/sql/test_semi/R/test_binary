@@ -51,55 +51,55 @@ insert into sc2 values (4, [14,24,3,44], [map{44: 440}, map{404: 401}], [row(41,
 insert into sc2 values (5, [15,25,35,45], [map{3: 550}, map{505: 501}], [row(51, 52), row(3, 53)], map{54: 45, 56: 15, 3: 3}, map{3: [2, 20, 3, 23]}, map{505: row(3, 52)}, row(5, [5, 50, 51], map{4:555}, row(3, 550)));
 -- result:
 -- !result
-select * from sc2 where array1 is null;
+select * from sc2 where array1 is null order by v1;
 -- result:
 3	None	[{33:null},{303:301}]	[{"a":31,"b":32},{"a":null,"b":33}]	{34:43,36:13,32:null}	{303:null}	{303:{"c":31,"b":32}}	None
 -- !result
-select * from sc2 where array1 = [11,null,31,41];
+select * from sc2 where array1 = [11,null,31,41] order by v1;
 -- result:
 -- !result
-select * from sc2 where array1 = [15,25,35,45];
+select * from sc2 where array1 = [15,25,35,45] order by v1;
 -- result:
 5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
 5	[15,25,35,45]	[{3:550},{505:501}]	[{"a":51,"b":52},{"a":3,"b":53}]	{54:45,56:15,3:3}	{3:[2,20,3,23]}	{505:{"c":3,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":{4:555},"s4":{"e":3,"f":550}}
 -- !result
-select * from sc2 where array1 = [map{"a":21,"b":22},null];
+select * from sc2 where array1 = [map{"a":21,"b":22},null] order by v1;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 57. Detail message: Column type array<int(11)> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
 -- !result
-select * from sc2 where array3 = [map{"a":21,"b":22},null];
+select * from sc2 where array3 = [map{"a":21,"b":22},null] order by v1;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 57. Detail message: Column type array<struct<a int(11), b int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
 -- !result
-select * from sc2 where array3 = [named_struct("a",21,"b",22),null];
+select * from sc2 where array3 = [named_struct("a",21,"b",22),null] order by v1;
 -- result:
 -- !result
-select * from sc2 where array3 = [row(21,22),null];
+select * from sc2 where array3 = [row(21,22),null] order by v1;
 -- result:
 -- !result
-select * from sc2 where array2 = [map{null:550},map{505:501}];
+select * from sc2 where array2 = [map{null:550},map{505:501}] order by v1;
 -- result:
 -- !result
-select * from sc2 where array2 = [map{44:440},map{404:401}];
--- result:
-4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
-4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
--- !result
-select * from sc2 where map1 = null;
--- result:
--- !result
-select * from sc2 where map1 = map{14:41,null:11,12:31};
--- result:
--- !result
-select * from sc2 where map1 = map{44:44,46:14,42:34};
+select * from sc2 where array2 = [map{44:440},map{404:401}] order by v1;
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
 4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
-select * from sc2 where map1 = map{34:43,36:13,32:null};
+select * from sc2 where map1 = null order by v1;
 -- result:
 -- !result
-select * from sc2 where map2 = map{505:[5,50,51,23]};
+select * from sc2 where map1 = map{14:41,null:11,12:31} order by v1;
+-- result:
+-- !result
+select * from sc2 where map1 = map{44:44,46:14,42:34} order by v1;
+-- result:
+4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
+-- !result
+select * from sc2 where map1 = map{34:43,36:13,32:null} order by v1;
+-- result:
+-- !result
+select * from sc2 where map2 = map{505:[5,50,51,23]} order by v1;
 -- result:
 -- !result
 select cast(row(1, null) as struct<a int, b array<int>>);
@@ -114,86 +114,86 @@ select cast(row(1, TRUE) as struct<a int, b map<int, int>>);
 -- result:
 {"a":1,"b":null}
 -- !result
-select * from sc2 where map2 = map{null:null};
+select * from sc2 where map2 = map{null:null} order by v1;
 -- result:
 -- !result
-select * from sc2 where map2 = map{null:[4,null,41,23]};
+select * from sc2 where map2 = map{null:[4,null,41,23]} order by v1;
 -- result:
 -- !result
-select * from sc2 where map2 = map{101:[1,10,11,23]};
+select * from sc2 where map2 = map{101:[1,10,11,23]} order by v1;
 -- result:
 1	[11,null,31,41]	[{11:110},{101:101}]	[{"a":11,"b":12},{"a":12,"b":13}]	{14:41,null:11,12:31}	{101:[1,10,11,23]}	{101:{"c":null,"b":12}}	{"s1":1,"s2":[1,10,11],"s3":{101:111,null:null},"s4":{"e":111,"f":110}}
 1	[11,3,31,41]	[{11:110},{101:101}]	[{"a":11,"b":12},{"a":12,"b":13}]	{14:41,3:11,12:31}	{101:[1,10,11,23]}	{101:{"c":3,"b":12}}	{"s1":1,"s2":[1,10,11],"s3":{101:111,3:3},"s4":{"e":111,"f":110}}
 -- !result
-select * from sc2 where map1 = map{46:14,42:34,44:44};
+select * from sc2 where map1 = map{46:14,42:34,44:44} order by v1;
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
 4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
-select * from sc2 where map1 = map{54:45,56:15};
+select * from sc2 where map1 = map{54:45,56:15} order by v1;
 -- result:
 -- !result
-select * from sc2 where map1 = map{null:null, 54:45,56:15};
+select * from sc2 where map1 = map{null:null, 54:45,56:15} order by v1;
 -- result:
 -- !result
-select * from sc2 where map3 = map{505:row(null, 52)};
+select * from sc2 where map3 = map{505:row(null, 52)} order by v1;
 -- result:
 -- !result
-select * from sc2 where map2 = map{null:[4,null,41,23]};
+select * from sc2 where map2 = map{null:[4,null,41,23]} order by v1;
 -- result:
 -- !result
-select * from sc2 where st1 = row(2,null, map{202:null}, row(222,220));
+select * from sc2 where st1 = row(2,null, map{202:null}, row(222,220)) order by v1;
 -- result:
 -- !result
-select * from sc2 where st1 = named_struct("s1", 5,"s2",[5,50,51],"s3",null,"s4", row(null,550));
+select * from sc2 where st1 = named_struct("s1", 5,"s2",[5,50,51],"s3",null,"s4", row(null,550)) order by v1;
 -- result:
 -- !result
-select * from sc2 where array1 = null;
+select * from sc2 where array1 = null order by v1;
 -- result:
 -- !result
-select * from sc2 where st1 = null;
+select * from sc2 where st1 = null order by v1;
 -- result:
 -- !result
-select array1 = [11,null,31,41] from sc2;
+select array1 = [11,null,31,41] from sc2 order by v1;
 -- result:
-0
-0
-None
-0
 None
 None
-0
-0
-0
-0
--- !result
-select array1 = [15,25,35,45] from sc2;
--- result:
 0
 0
 None
 0
 0
+0
+0
+0
+-- !result
+select array1 = [15,25,35,45] from sc2 order by v1;
+-- result:
+0
+0
+0
+0
+None
 0
 0
 0
 1
 1
 -- !result
-select array1 = [map{"a":21,"b":22},null] from sc2;
+select array1 = [map{"a":21,"b":22},null] from sc2 order by v1;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 40. Detail message: Column type array<int(11)> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
 -- !result
-select array3 = [map{"a":21,"b":22},null] from sc2;
+select array3 = [map{"a":21,"b":22},null] from sc2 order by v1;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 40. Detail message: Column type array<struct<a int(11), b int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
 -- !result
-select array3 = [named_struct("a",21,"b",22),null] from sc2;
+select array3 = [named_struct("a",21,"b",22),null] from sc2 order by v1;
 -- result:
-None
-None
 0
 0
+None
+None
 0
 0
 0
@@ -201,12 +201,12 @@ None
 0
 0
 -- !result
-select array3 = [row(21,22),null] from sc2;
+select array3 = [row(21,22),null] from sc2 order by v1;
 -- result:
-None
-None
 0
 0
+None
+None
 0
 0
 0
@@ -214,7 +214,7 @@ None
 0
 0
 -- !result
-select array2 = [map{null:550},map{505:501}] from sc2;
+select array2 = [map{null:550},map{505:501}] from sc2 order by v1;
 -- result:
 0
 0
@@ -227,7 +227,7 @@ select array2 = [map{null:550},map{505:501}] from sc2;
 None
 None
 -- !result
-select array2 = [map{44:440},map{404:401}] from sc2;
+select array2 = [map{44:440},map{404:401}] from sc2 order by v1;
 -- result:
 0
 0
@@ -240,7 +240,7 @@ select array2 = [map{44:440},map{404:401}] from sc2;
 0
 0
 -- !result
-select map1 = null from sc2;
+select map1 = null from sc2 order by v1;
 -- result:
 None
 None
@@ -253,11 +253,11 @@ None
 None
 None
 -- !result
-select map1 = map{14:41,null:11,12:31} from sc2;
+select map1 = map{14:41,null:11,12:31} from sc2 order by v1;
 -- result:
 None
-0
-0
+None
+None
 0
 0
 0
@@ -266,11 +266,11 @@ None
 0
 0
 -- !result
-select map1 = map{44:44,46:14,42:34} from sc2;
+select map1 = map{44:44,46:14,42:34} from sc2 order by v1;
 -- result:
+0
+0
 None
-0
-0
 0
 0
 0
@@ -279,20 +279,20 @@ None
 0
 0
 -- !result
-select map1 = map{34:43,36:13,32:null} from sc2;
+select map1 = map{34:43,36:13,32:null} from sc2 order by v1;
 -- result:
-None
-None
-None
-None
 0
 0
+None
+None
+None
+None
 0
 0
 0
 0
 -- !result
-select map2 = map{505:[5,50,51,23]} from sc2;
+select map2 = map{505:[5,50,51,23]} from sc2 order by v1;
 -- result:
 0
 0
@@ -305,7 +305,7 @@ select map2 = map{505:[5,50,51,23]} from sc2;
 None
 0
 -- !result
-select map2 = map{null:null} from sc2;
+select map2 = map{null:null} from sc2 order by v1;
 -- result:
 None
 None
@@ -318,22 +318,37 @@ None
 None
 None
 -- !result
-select map2 = map{null:[4,null,41,23]} from sc2;
+select map2 = map{null:[4,null,41,23]} from sc2 order by v1;
 -- result:
 0
 0
-None
-None
 0
 0
+None
+None
 None
 None
 None
 0
 -- !result
-select map2 = map{101:[1,10,11,23]} from sc2;
+select map2 = map{101:[1,10,11,23]} from sc2 order by v1;
+-- result:
+1
+1
+0
+0
+0
+0
+0
+0
+None
+0
+-- !result
+select map1 = map{46:14,42:34,44:44} from sc2 order by v1;
 -- result:
 0
+0
+None
 0
 0
 0
@@ -341,88 +356,21 @@ select map2 = map{101:[1,10,11,23]} from sc2;
 1
 0
 0
-None
-0
 -- !result
-select map1 = map{46:14,42:34,44:44} from sc2;
--- result:
-None
-0
-0
-0
-0
-0
-1
-1
-0
-0
--- !result
-select map1 = map{54:45,56:15} from sc2;
--- result:
-None
-0
-0
-0
-0
-0
-0
-0
-0
-0
--- !result
-select map1 = map{null:null, 54:45,56:15} from sc2;
--- result:
-None
-None
-None
-None
-None
-None
-None
-None
-None
-None
--- !result
-select map3 = map{505:row(null, 52)} from sc2;
--- result:
-0
-0
-0
-0
-0
-0
-0
-0
-None
-None
--- !result
-select map2 = map{null:[4,null,41,23]} from sc2;
+select map1 = map{54:45,56:15} from sc2 order by v1;
 -- result:
 0
 0
 None
-None
-0
-0
-None
-None
-None
-0
--- !result
-select st1 = row(2,null, map{202:null}, row(222,220)) from sc2;
--- result:
-None
-None
-None
 0
 0
 0
-None
+0
 0
 0
 0
 -- !result
-select st1 = named_struct("s1", 5,"s2",[5,50,51],"s3",null,"s4", row(null,550)) from sc2;
+select map1 = map{null:null, 54:45,56:15} from sc2 order by v1;
 -- result:
 0
 0
@@ -435,7 +383,59 @@ None
 None
 None
 -- !result
-select array1 = null from sc2;
+select map3 = map{505:row(null, 52)} from sc2 order by v1;
+-- result:
+0
+0
+0
+0
+0
+0
+0
+0
+None
+None
+-- !result
+select map2 = map{null:[4,null,41,23]} from sc2 order by v1;
+-- result:
+0
+0
+0
+0
+None
+None
+None
+None
+None
+0
+-- !result
+select st1 = row(2,null, map{202:null}, row(222,220)) from sc2 order by v1;
+-- result:
+0
+0
+None
+None
+None
+0
+None
+0
+0
+0
+-- !result
+select st1 = named_struct("s1", 5,"s2",[5,50,51],"s3",null,"s4", row(null,550)) from sc2 order by v1;
+-- result:
+0
+0
+0
+0
+None
+0
+0
+0
+None
+None
+-- !result
+select array1 = null from sc2 order by v1;
 -- result:
 None
 None
@@ -448,7 +448,7 @@ None
 None
 None
 -- !result
-select st1 = null from sc2;
+select st1 = null from sc2 order by v1;
 -- result:
 None
 None
@@ -461,180 +461,715 @@ None
 None
 None
 -- !result
-select * from sc2 where array1 = [11,3,31,41];
+select * from sc2 where array1 = [11,3,31,41] order by v1;
 -- result:
 1	[11,3,31,41]	[{11:110},{101:101}]	[{"a":11,"b":12},{"a":12,"b":13}]	{14:41,3:11,12:31}	{101:[1,10,11,23]}	{101:{"c":3,"b":12}}	{"s1":1,"s2":[1,10,11],"s3":{101:111,3:3},"s4":{"e":111,"f":110}}
 -- !result
-select * from sc2 where array1 = [15,25,35,45];
+select * from sc2 where array1 = [15,25,35,45] order by v1;
 -- result:
 5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
 5	[15,25,35,45]	[{3:550},{505:501}]	[{"a":51,"b":52},{"a":3,"b":53}]	{54:45,56:15,3:3}	{3:[2,20,3,23]}	{505:{"c":3,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":{4:555},"s4":{"e":3,"f":550}}
 -- !result
-select * from sc2 where array1 = [map{"a":21,"b":22},3];
+select * from sc2 where array1 = [map{"a":21,"b":22},3] order by v1;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: types MAP<VARCHAR,TINYINT> and TINYINT cannot be matched.')
 -- !result
-select * from sc2 where array3 = [map{"a":21,"b":22},3];
+select * from sc2 where array3 = [map{"a":21,"b":22},3] order by v1;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: types MAP<VARCHAR,TINYINT> and TINYINT cannot be matched.')
 -- !result
-select * from sc2 where array3 = [named_struct("a",21,"b",22), row(12, 13)];
+select * from sc2 where array3 = [named_struct("a",21,"b",22), row(12, 13)] order by v1;
 -- result:
 2	[12,22,32,42]	[{22:220},{3:201}]	[{"a":21,"b":22},{"a":12,"b":13}]	{34:43,36:13,32:3}	{202:[2,20,3,23]}	{202:{"c":21,"b":22}}	{"s1":2,"s2":[2,3,4],"s3":{202:3},"s4":{"e":222,"f":220}}
 -- !result
-select * from sc2 where array3 = [row(21,22)];
+select * from sc2 where array3 = [row(21,22)] order by v1;
 -- result:
 -- !result
-select * from sc2 where array2 = [map{3:550},map{505:501}];
+select * from sc2 where array2 = [map{3:550},map{505:501}] order by v1;
 -- result:
 5	[15,25,35,45]	[{3:550},{505:501}]	[{"a":51,"b":52},{"a":3,"b":53}]	{54:45,56:15,3:3}	{3:[2,20,3,23]}	{505:{"c":3,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":{4:555},"s4":{"e":3,"f":550}}
 -- !result
-select * from sc2 where array2 = [map{44:440},map{404:401}];
+select * from sc2 where array2 = [map{44:440},map{404:401}] order by v1;
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
 4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
-select * from sc2 where map1 = map{14:41,3:11,12:31};
+select * from sc2 where map1 = map{14:41,3:11,12:31} order by v1;
 -- result:
 1	[11,3,31,41]	[{11:110},{101:101}]	[{"a":11,"b":12},{"a":12,"b":13}]	{14:41,3:11,12:31}	{101:[1,10,11,23]}	{101:{"c":3,"b":12}}	{"s1":1,"s2":[1,10,11],"s3":{101:111,3:3},"s4":{"e":111,"f":110}}
 -- !result
-select * from sc2 where map1 = map{44:44,46:14,42:34};
+select * from sc2 where map1 = map{44:44,46:14,42:34} order by v1;
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
 4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
-select * from sc2 where map1 = map{34:43,36:13,32:3};
+select * from sc2 where map1 = map{34:43,36:13,32:3} order by v1;
 -- result:
 2	[12,22,32,42]	[{22:220},{3:201}]	[{"a":21,"b":22},{"a":12,"b":13}]	{34:43,36:13,32:3}	{202:[2,20,3,23]}	{202:{"c":21,"b":22}}	{"s1":2,"s2":[2,3,4],"s3":{202:3},"s4":{"e":222,"f":220}}
 3	[12,22,32,42]	[{33:3},{303:301}]	[{"a":31,"b":32},{"a":3,"b":33}]	{34:43,36:13,32:3}	{303:[4,3,41,23]}	{303:{"c":31,"b":32}}	{"s1":2,"s2":[2,3,4],"s3":{201:3},"s4":{"e":222,"f":220}}
 -- !result
-select * from sc2 where map2 = map{505:[5,50,51,23]};
+select * from sc2 where map2 = map{505:[5,50,51,23]} order by v1;
 -- result:
 -- !result
-select * from sc2 where map2 = map{3:[4,3,41,23]};
+select * from sc2 where map2 = map{3:[4,3,41,23]} order by v1;
 -- result:
 4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
-select * from sc2 where map2 = map{101:[1,10,11,44]};
+select * from sc2 where map2 = map{101:[1,10,11,44]} order by v1;
 -- result:
 -- !result
-select * from sc2 where map1 = map{46:14,42:34,44:44};
+select * from sc2 where map1 = map{46:14,42:34,44:44} order by v1;
 -- result:
 4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
 4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
 -- !result
-select * from sc2 where map3 = map{505:row(3, 52)};
+select * from sc2 where map3 = map{505:row(3, 52)} order by v1;
 -- result:
 5	[15,25,35,45]	[{3:550},{505:501}]	[{"a":51,"b":52},{"a":3,"b":53}]	{54:45,56:15,3:3}	{3:[2,20,3,23]}	{505:{"c":3,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":{4:555},"s4":{"e":3,"f":550}}
 -- !result
-select * from sc2 where st1 = row(2,[2,3,4], map{202:3}, row(222,220));
+select * from sc2 where st1 = row(2,[2,3,4], map{202:3}, row(222,220)) order by v1;
 -- result:
 2	[12,22,32,42]	[{22:220},{3:201}]	[{"a":21,"b":22},{"a":12,"b":13}]	{34:43,36:13,32:3}	{202:[2,20,3,23]}	{202:{"c":21,"b":22}}	{"s1":2,"s2":[2,3,4],"s3":{202:3},"s4":{"e":222,"f":220}}
 -- !result
-select * from sc2 where st1 = named_struct("s1", 5,"s2",[5,50,51],"s3",3,"s4", row(3,550));
+select * from sc2 where st1 = named_struct("s1", 5,"s2",[5,50,51],"s3",3,"s4", row(3,550)) order by v1;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 89. Detail message: Column type struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>> does not support binary predicate operation with type struct<s1 tinyint(4), s2 array<tinyint(4)>, s3 tinyint(4), s4 struct<col1 tinyint(4), col2 smallint(6)>>.')
 -- !result
-select * from sc2 where array1 <=> [11,null,31,41];
+select array1 <=> [11,null,31,41] from sc2 order by v1;
 -- result:
-1	[11,null,31,41]	[{11:110},{101:101}]	[{"a":11,"b":12},{"a":12,"b":13}]	{14:41,null:11,12:31}	{101:[1,10,11,23]}	{101:{"c":null,"b":12}}	{"s1":1,"s2":[1,10,11],"s3":{101:111,null:null},"s4":{"e":111,"f":110}}
+1
+0
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where array1 <=> [15,25,35,45];
+select array1 <=> [15,25,35,45] from sc2 order by v1;
 -- result:
-5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
-5	[15,25,35,45]	[{3:550},{505:501}]	[{"a":51,"b":52},{"a":3,"b":53}]	{54:45,56:15,3:3}	{3:[2,20,3,23]}	{505:{"c":3,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":{4:555},"s4":{"e":3,"f":550}}
+0
+0
+0
+0
+0
+0
+0
+0
+1
+1
 -- !result
-select * from sc2 where array1 <=> [map{"a":21,"b":22},null];
+select array1 <=> [map{"a":21,"b":22},null] from sc2 order by v1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 59. Detail message: Column type array<int(11)> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 42. Detail message: Column type array<int(11)> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
 -- !result
-select * from sc2 where array3 <=> [map{"a":21,"b":22},null];
+select array3 <=> [map{"a":21,"b":22},null] from sc2 order by v1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 59. Detail message: Column type array<struct<a int(11), b int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 42. Detail message: Column type array<struct<a int(11), b int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
 -- !result
-select * from sc2 where array3 <=> [named_struct("a",21,"b",22),null];
+select array3 <=> [named_struct("a",21,"b",22),null] from sc2 order by v1;
 -- result:
-2	[12,22,32,42]	[{22:220},{null:201}]	[{"a":21,"b":22},null]	None	{202:[2,20,null,23]}	{202:{"c":21,"b":22}}	{"s1":2,"s2":null,"s3":{202:null},"s4":{"e":222,"f":220}}
+0
+0
+1
+0
+0
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where array3 <=> [row(21,22),null];
+select array3 <=> [row(21,22),null] from sc2 order by v1;
 -- result:
-2	[12,22,32,42]	[{22:220},{null:201}]	[{"a":21,"b":22},null]	None	{202:[2,20,null,23]}	{202:{"c":21,"b":22}}	{"s1":2,"s2":null,"s3":{202:null},"s4":{"e":222,"f":220}}
+0
+0
+1
+0
+0
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where array2 <=> [map{null:550},map{505:501}];
+select array2 <=> [map{null:550},map{505:501}] from sc2 order by v1;
 -- result:
-5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
+0
+0
+0
+0
+0
+0
+0
+0
+1
+0
 -- !result
-select * from sc2 where array2 <=> [map{44:440},map{404:401}];
+select array2 <=> [map{44:440},map{404:401}] from sc2 order by v1;
 -- result:
-4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
-4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
+0
+0
+0
+0
+0
+0
+1
+1
+0
+0
 -- !result
-select * from sc2 where map1 <=> null;
+select map1 <=> null from sc2 order by v1;
 -- result:
-2	[12,22,32,42]	[{22:220},{null:201}]	[{"a":21,"b":22},null]	None	{202:[2,20,null,23]}	{202:{"c":21,"b":22}}	{"s1":2,"s2":null,"s3":{202:null},"s4":{"e":222,"f":220}}
+0
+0
+1
+0
+0
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where map1 <=> map{14:41,null:11,12:31};
+select map1 <=> map{14:41,null:11,12:31} from sc2 order by v1;
 -- result:
-1	[11,null,31,41]	[{11:110},{101:101}]	[{"a":11,"b":12},{"a":12,"b":13}]	{14:41,null:11,12:31}	{101:[1,10,11,23]}	{101:{"c":null,"b":12}}	{"s1":1,"s2":[1,10,11],"s3":{101:111,null:null},"s4":{"e":111,"f":110}}
+1
+0
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where map1 <=> map{44:44,46:14,42:34};
+select map1 <=> map{44:44,46:14,42:34} from sc2 order by v1;
 -- result:
-4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
-4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
+0
+0
+0
+0
+0
+0
+1
+1
+0
+0
 -- !result
-select * from sc2 where map1 <=> map{34:43,36:13,32:null};
+select map1 <=> map{34:43,36:13,32:null} from sc2 order by v1;
 -- result:
-3	None	[{33:null},{303:301}]	[{"a":31,"b":32},{"a":null,"b":33}]	{34:43,36:13,32:null}	{303:null}	{303:{"c":31,"b":32}}	None
+0
+0
+0
+0
+1
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where map2 <=> map{505:[5,50,51,23]};
+select map2 <=> map{505:[5,50,51,23]} from sc2 order by v1;
 -- result:
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where map2 <=> map{null:null};
+select map2 <=> map{null:null} from sc2 order by v1;
 -- result:
-5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
+0
+0
+0
+0
+0
+0
+0
+0
+1
+0
 -- !result
-select * from sc2 where map2 <=> map{null:[4,null,41,23]};
+select map2 <=> map{null:[4,null,41,23]} from sc2 order by v1;
 -- result:
-4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+0
+0
+0
+0
+0
+0
+1
+0
+0
+0
 -- !result
-select * from sc2 where map2 <=> map{101:[1,10,11,23]};
+select map2 <=> map{101:[1,10,11,23]} from sc2 order by v1;
 -- result:
-1	[11,null,31,41]	[{11:110},{101:101}]	[{"a":11,"b":12},{"a":12,"b":13}]	{14:41,null:11,12:31}	{101:[1,10,11,23]}	{101:{"c":null,"b":12}}	{"s1":1,"s2":[1,10,11],"s3":{101:111,null:null},"s4":{"e":111,"f":110}}
-1	[11,3,31,41]	[{11:110},{101:101}]	[{"a":11,"b":12},{"a":12,"b":13}]	{14:41,3:11,12:31}	{101:[1,10,11,23]}	{101:{"c":3,"b":12}}	{"s1":1,"s2":[1,10,11],"s3":{101:111,3:3},"s4":{"e":111,"f":110}}
+1
+1
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where map1 <=> map{46:14,42:34,44:44};
+select map1 <=> map{46:14,42:34,44:44} from sc2 order by v1;
 -- result:
-4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
-4	[14,24,3,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{3:[4,3,41,23]}	{404:{"c":41,"b":42}}	{"s1":3,"s2":[4,3,41],"s3":{3:444},"s4":{"e":110,"f":330}}
+0
+0
+0
+0
+0
+0
+1
+1
+0
+0
 -- !result
-select * from sc2 where map1 <=> map{54:45,56:15};
+select map1 <=> map{54:45,56:15} from sc2 order by v1;
 -- result:
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where map1 <=> map{null:null, 54:45,56:15};
+select map1 <=> map{null:null, 54:45,56:15} from sc2 order by v1;
 -- result:
-5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
+0
+0
+0
+0
+0
+0
+0
+0
+1
+0
 -- !result
-select * from sc2 where map3 <=> map{505:row(null, 52)};
+select map3 <=> map{505:row(null, 52)} from sc2 order by v1;
 -- result:
-5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
+0
+0
+0
+0
+0
+0
+0
+0
+1
+0
 -- !result
-select * from sc2 where map2 <=> map{null:[4,null,41,23]};
+select map2 <=> map{null:[4,null,41,23]} from sc2 order by v1;
 -- result:
-4	[14,24,null,44]	[{44:440},{404:401}]	[{"a":41,"b":42},{"a":42,"b":43}]	{44:44,46:14,42:34}	{null:[4,null,41,23]}	{404:{"c":41,"b":42}}	{"s1":null,"s2":[4,null,41],"s3":{null:444},"s4":null}
+0
+0
+0
+0
+0
+0
+1
+0
+0
+0
 -- !result
-select * from sc2 where st1 <=> row(2,null, map{202:null}, row(222,220));
+select st1 <=> row(2,null, map{202:null}, row(222,220)) from sc2 order by v1;
 -- result:
-2	[12,22,32,42]	[{22:220},{null:201}]	[{"a":21,"b":22},null]	None	{202:[2,20,null,23]}	{202:{"c":21,"b":22}}	{"s1":2,"s2":null,"s3":{202:null},"s4":{"e":222,"f":220}}
+0
+0
+1
+0
+0
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where st1 <=> named_struct("s1", 5,"s2",[5,50,51],"s3",null,"s4", row(null,550));
+select st1 <=> named_struct("s1", 5,"s2",[5,50,51],"s3",null,"s4", row(null,550)) from sc2 order by v1;
 -- result:
-5	[15,25,35,45]	[{null:550},{505:501}]	[{"a":51,"b":52},{"a":null,"b":53}]	{54:45,56:15,null:null}	{null:null}	{505:{"c":null,"b":52}}	{"s1":5,"s2":[5,50,51],"s3":null,"s4":{"e":null,"f":550}}
+0
+0
+0
+0
+0
+0
+0
+0
+1
+0
 -- !result
-select * from sc2 where array1 <=> null;
+select array1 <=> null from sc2 order by v1;
 -- result:
-3	None	[{33:null},{303:301}]	[{"a":31,"b":32},{"a":null,"b":33}]	{34:43,36:13,32:null}	{303:null}	{303:{"c":31,"b":32}}	None
+0
+0
+0
+0
+1
+0
+0
+0
+0
+0
 -- !result
-select * from sc2 where st1 <=> null;
+select st1 <=> null from sc2 order by v1;
 -- result:
-3	None	[{33:null},{303:301}]	[{"a":31,"b":32},{"a":null,"b":33}]	{34:43,36:13,32:null}	{303:null}	{303:{"c":31,"b":32}}	None
+0
+0
+0
+0
+1
+0
+0
+0
+0
+0
+-- !result
+select array1 != [11,null,31,41] from sc2 order by v1;
+-- result:
+0
+1
+1
+1
+None
+1
+1
+1
+1
+1
+-- !result
+select array1 != [15,25,35,45] from sc2 order by v1;
+-- result:
+1
+1
+1
+1
+None
+1
+1
+1
+0
+0
+-- !result
+select array1 != [map{"a":21,"b":22},null] from sc2 order by v1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 41. Detail message: Column type array<int(11)> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
+-- !result
+select array3 != [map{"a":21,"b":22},null] from sc2 order by v1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 41. Detail message: Column type array<struct<a int(11), b int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
+-- !result
+select array3 != [named_struct("a",21,"b",22),null] from sc2 order by v1;
+-- result:
+1
+1
+0
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select array3 != [row(21,22),null] from sc2 order by v1;
+-- result:
+1
+1
+0
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select array2 != [map{null:550},map{505:501}] from sc2 order by v1;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select array2 != [map{44:440},map{404:401}] from sc2 order by v1;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select map1 != null from sc2 order by v1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select map1 != map{14:41,null:11,12:31} from sc2 order by v1;
+-- result:
+None
+None
+None
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select map1 != map{44:44,46:14,42:34} from sc2 order by v1;
+-- result:
+1
+1
+None
+1
+1
+1
+0
+0
+1
+1
+-- !result
+select map1 != map{34:43,36:13,32:null} from sc2 order by v1;
+-- result:
+1
+1
+None
+None
+None
+None
+1
+1
+1
+1
+-- !result
+select map2 != map{505:[5,50,51,23]} from sc2 order by v1;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+None
+1
+-- !result
+select map2 != map{null:null} from sc2 order by v1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select map2 != map{null:[4,null,41,23]} from sc2 order by v1;
+-- result:
+1
+1
+1
+1
+None
+None
+None
+None
+None
+1
+-- !result
+select map2 != map{101:[1,10,11,23]} from sc2 order by v1;
+-- result:
+0
+0
+1
+1
+1
+1
+1
+1
+None
+1
+-- !result
+select map1 != map{46:14,42:34,44:44} from sc2 order by v1;
+-- result:
+1
+1
+None
+1
+1
+1
+0
+0
+1
+1
+-- !result
+select map1 != map{54:45,56:15} from sc2 order by v1;
+-- result:
+1
+1
+None
+1
+1
+1
+1
+1
+1
+1
+-- !result
+select map1 != map{null:null, 54:45,56:15} from sc2 order by v1;
+-- result:
+1
+1
+None
+1
+1
+1
+1
+1
+None
+None
+-- !result
+select map3 != map{505:row(null, 52)} from sc2 order by v1;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+None
+None
+-- !result
+select map2 != map{null:[4,null,41,23]} from sc2 order by v1;
+-- result:
+1
+1
+1
+1
+None
+None
+None
+None
+None
+1
+-- !result
+select st1 != row(2,null, map{202:null}, row(222,220)) from sc2 order by v1;
+-- result:
+1
+1
+None
+None
+None
+1
+None
+1
+1
+1
+-- !result
+select st1 != named_struct("s1", 5,"s2",[5,50,51],"s3",null,"s4", row(null,550)) from sc2 order by v1;
+-- result:
+1
+1
+1
+1
+None
+1
+1
+1
+None
+None
+-- !result
+select array1 != null from sc2 order by v1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select st1 != null from sc2 order by v1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select map{1:1,null:2} = map{1:1,2:null};
+-- result:
+None
+-- !result
+select map{1:1,null:2} != map{1:1,2:null};
+-- result:
+None
+-- !result
+select map{1:1,null:2} != map{null:2,3:null};
+-- result:
+1
+-- !result
+select map{1:1,null:2} = map{null:2,3:null};
+-- result:
+0
+-- !result
+select map{1:1,null:2} = map{null:3,1:null};
+-- result:
+0
+-- !result
+select map{1:1,null:2} != map{null:3,1:null};
+-- result:
+1
 -- !result

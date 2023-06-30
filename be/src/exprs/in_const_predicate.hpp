@@ -479,11 +479,13 @@ public:
                         continue;
                     }
                     // input[j] is not null
-                    bool is_equal = input_data[0]->equals(id_0, *input_data[j], id);
-                    if (is_equal) {
+                    auto is_equal = input_data[0]->equals(id_0, *input_data[j], id, false);
+                    if (is_equal == 1) {
                         res_null_data[i] = false;
                         res_data[i] = !_is_not_in;
                         break;
+                    } else if (is_equal == -1) {
+                        has_null = true;
                     }
                 }
                 if (_is_not_in == res_data[i]) {
