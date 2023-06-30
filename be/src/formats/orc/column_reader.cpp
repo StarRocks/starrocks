@@ -133,8 +133,7 @@ Status BooleanColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col
 
         auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
         auto* nulls = c->null_column()->get_data().data();
-        auto* values =
-                ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(c->data_column())->get_data().data();
+        auto* values = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(c->data_column())->get_data().data();
 
         auto* cvbd = data->data.data();
         auto pos = from;
@@ -272,8 +271,8 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
 
 template <LogicalType Type>
 template <typename OrcColumnVectorBatch>
-Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
-                                                        size_t from, size_t size) {
+Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, size_t from,
+                                                        size_t size) {
     int col_start = col->size();
     col->resize(col_start + size);
 
@@ -317,8 +316,7 @@ Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* da
 }
 
 template <LogicalType Type>
-Status FloatColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
-                                         size_t size) {
+Status FloatColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::DoubleVectorBatch*>(cvb);
         int col_start = col->size();
@@ -374,16 +372,15 @@ Status DecimalColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col
     return Status::OK();
 }
 
-void DecimalColumnReader::_fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb,
-                                                                  ColumnPtr& col, size_t from, size_t size) {
+void DecimalColumnReader::_fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
+                                                                  size_t from, size_t size) {
     auto* data = down_cast<orc::Decimal64VectorBatch*>(cvb);
 
     int col_start = col->size();
     col->resize(col->size() + size);
 
     static_assert(sizeof(DecimalV2Value) == sizeof(int128_t));
-    auto* values =
-            reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(col.get())->get_data().data());
+    auto* values = reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(col.get())->get_data().data());
 
     auto* cvbd = data->values.data();
 
@@ -392,30 +389,26 @@ void DecimalColumnReader::_fill_decimal_column_from_orc_decimal64(orc::ColumnVec
     }
 
     if (DecimalV2Value::SCALE < data->scale) {
-        int128_t d =
-                DecimalV2Value::get_scale_base(data->scale - DecimalV2Value::SCALE);
+        int128_t d = DecimalV2Value::get_scale_base(data->scale - DecimalV2Value::SCALE);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] / d;
         }
     } else if (DecimalV2Value::SCALE > data->scale) {
-        int128_t m =
-                DecimalV2Value::get_scale_base(DecimalV2Value::SCALE - data->scale);
+        int128_t m = DecimalV2Value::get_scale_base(DecimalV2Value::SCALE - data->scale);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] * m;
         }
     }
 }
 
-void DecimalColumnReader::_fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb,
-                                                                   ColumnPtr& col, size_t from,
-                                                                   size_t size) {
+void DecimalColumnReader::_fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
+                                                                   size_t from, size_t size) {
     auto* data = down_cast<orc::Decimal128VectorBatch*>(cvb);
 
     int col_start = col->size();
     col->resize(col->size() + size);
 
-    auto* values =
-            reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(col.get())->get_data().data());
+    auto* values = reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(col.get())->get_data().data());
 
     for (int i = col_start; i < col_start + size; ++i, ++from) {
         uint64_t hi = data->values[from].getHighBits();
@@ -423,23 +416,20 @@ void DecimalColumnReader::_fill_decimal_column_from_orc_decimal128(orc::ColumnVe
         values[i] = (((int128_t)hi) << 64) | (int128_t)lo;
     }
     if (DecimalV2Value::SCALE < data->scale) {
-        int128_t d =
-                DecimalV2Value::get_scale_base(data->scale - DecimalV2Value::SCALE);
+        int128_t d = DecimalV2Value::get_scale_base(data->scale - DecimalV2Value::SCALE);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] / d;
         }
     } else if (DecimalV2Value::SCALE > data->scale) {
-        int128_t m =
-                DecimalV2Value::get_scale_base(DecimalV2Value::SCALE - data->scale);
+        int128_t m = DecimalV2Value::get_scale_base(DecimalV2Value::SCALE - data->scale);
         for (int i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] * m;
         }
     }
 }
 
-void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBatch* cvb,
-                                                                            ColumnPtr& col, size_t from,
-                                                                            size_t size) {
+void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
+                                                                            size_t from, size_t size) {
     int col_start = col->size();
     auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
     auto& null_column = c->null_column();
@@ -461,8 +451,7 @@ void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal64(orc:
 }
 
 void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorBatch* cvb,
-                                                                             ColumnPtr& col, size_t from,
-                                                                             size_t size) {
+                                                                             ColumnPtr& col, size_t from, size_t size) {
     int col_start = col->size();
     auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
     auto& null_column = c->null_column();
@@ -484,8 +473,8 @@ void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal128(orc
 }
 
 template <LogicalType DecimalType>
-Status Decimal32Or64Or128ColumnReader<DecimalType>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
-                                                             size_t from, size_t size) {
+Status Decimal32Or64Or128ColumnReader<DecimalType>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
+                                                             size_t size) {
     _fill_decimal_column_from_orc_decimal64_or_decimal128(cvb, col, from, size);
     return Status::OK();
 }
@@ -734,8 +723,7 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
     return Status::OK();
 }
 
-Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
-                                       size_t size) {
+Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (_nullable) {
         auto* data = down_cast<orc::StringVectorBatch*>(cvb);
 
@@ -924,8 +912,7 @@ Status ArrayColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, 
     return Status::OK();
 }
 
-Status ArrayColumnReader::_fill_array_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
-                                             size_t size) {
+Status ArrayColumnReader::_fill_array_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     auto* orc_list = down_cast<orc::ListVectorBatch*>(cvb);
     auto* col_array = down_cast<ArrayColumn*>(col.get());
 
@@ -984,8 +971,7 @@ Status MapColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, si
     return Status::OK();
 }
 
-Status MapColumnReader::_fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
-                                         size_t size) {
+Status MapColumnReader::_fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     auto* orc_map = down_cast<orc::MapVectorBatch*>(cvb);
     auto* col_map = down_cast<MapColumn*>(col.get());
 
@@ -1056,8 +1042,7 @@ Status StructColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
     return Status::OK();
 }
 
-Status StructColumnReader::_fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
-                                               size_t size) {
+Status StructColumnReader::_fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     auto* orc_struct = down_cast<orc::StructVectorBatch*>(cvb);
     auto* col_struct = down_cast<StructColumn*>(col.get());
 
