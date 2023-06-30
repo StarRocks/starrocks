@@ -128,26 +128,6 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
     }
 }
 
-Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
-                                                const std::unordered_map<int, std::string>& column_id_to_orc_name,
-                                                std::string* orc_column_name) {
-    auto col_name = format_column_name(desc->col_name(), _case_sensitive);
-    auto it = _formatted_slot_name_to_column_id.find(col_name);
-    if (it == _formatted_slot_name_to_column_id.end()) {
-        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
-                                     desc->col_name(), _current_file_name);
-        return Status::NotFound(s);
-    }
-    auto it2 = column_id_to_orc_name.find(it->second);
-    if (it2 == column_id_to_orc_name.end()) {
-        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
-                                     desc->col_name(), _current_file_name);
-        return Status::NotFound(s);
-    }
-    *orc_column_name = it2->second;
-    return Status::OK();
-}
-
 Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& mapping) {
     // TODO(SmithCruise) delete _name_to_column_id, _hive_column_names when develop subfield lazy load.
     build_column_name_to_id_mapping(&_formatted_slot_name_to_column_id, _hive_column_names, _reader->getType(),

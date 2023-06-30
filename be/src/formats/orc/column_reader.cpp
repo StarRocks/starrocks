@@ -16,6 +16,7 @@
 
 #include "common/statusor.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/utils.h"
 
 namespace starrocks {
 

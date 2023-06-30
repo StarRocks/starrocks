@@ -30,6 +30,40 @@ namespace starrocks {
 
 class OrcChunkReader;
 
+template <typename T>
+struct DecimalVectorBatchSelector {
+    using Type = std::conditional_t<
+            std::is_same_v<T, int64_t>, orc::Decimal64VectorBatch,
+            std::conditional_t<std::is_same_v<T, starrocks::int128_t>, orc::Decimal128VectorBatch, void>>;
+};
+
+const std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_logical_type_mapping = {
+        {orc::BOOLEAN, starrocks::TYPE_BOOLEAN},
+        {orc::BYTE, starrocks::TYPE_TINYINT},
+        {orc::SHORT, starrocks::TYPE_SMALLINT},
+        {orc::INT, starrocks::TYPE_INT},
+        {orc::LONG, starrocks::TYPE_BIGINT},
+        {orc::FLOAT, starrocks::TYPE_FLOAT},
+        {orc::DOUBLE, starrocks::TYPE_DOUBLE},
+        {orc::DECIMAL, starrocks::TYPE_DECIMALV2},
+        {orc::DATE, starrocks::TYPE_DATE},
+        {orc::TIMESTAMP, starrocks::TYPE_DATETIME},
+        {orc::STRING, starrocks::TYPE_VARCHAR},
+        {orc::BINARY, starrocks::TYPE_VARBINARY},
+        {orc::CHAR, starrocks::TYPE_CHAR},
+        {orc::VARCHAR, starrocks::TYPE_VARCHAR},
+        {orc::TIMESTAMP_INSTANT, starrocks::TYPE_DATETIME},
+};
+
+// NOLINTNEXTLINE
+const std::set<LogicalType> g_starrocks_int_type = {
+        starrocks::TYPE_BOOLEAN, starrocks::TYPE_TINYINT,  starrocks::TYPE_SMALLINT, starrocks::TYPE_INT,
+        starrocks::TYPE_BIGINT,  starrocks::TYPE_LARGEINT, starrocks::TYPE_FLOAT,    starrocks::TYPE_DOUBLE};
+const std::set<orc::TypeKind> g_orc_decimal_type = {orc::DECIMAL};
+const std::set<LogicalType> g_starrocks_decimal_type = {starrocks::TYPE_DECIMAL32, starrocks::TYPE_DECIMAL64,
+                                                        starrocks::TYPE_DECIMAL128, starrocks::TYPE_DECIMALV2,
+                                                        starrocks::TYPE_DECIMAL};
+
 class ORCColumnReader {
 public:
     ORCColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)

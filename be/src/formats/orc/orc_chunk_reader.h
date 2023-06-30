@@ -24,7 +24,6 @@
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "formats/orc/column_reader.h"
-#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
@@ -171,11 +170,7 @@ private:
     // slot id to position in orc.
     std::unordered_map<SlotId, int> _slot_id_to_position;
     std::vector<Expr*> _cast_exprs;
-    //    std::vector<FillColumnFunction> _fill_functions;
     std::vector<std::unique_ptr<ORCColumnReader>> _column_readers;
-    Status _slot_to_orc_column_name(const SlotDescriptor* slot,
-                                    const std::unordered_map<int, std::string>& column_id_to_orc_name,
-                                    std::string* orc_column_name);
     Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_position_in_orc();
     Status _init_src_types(const std::unique_ptr<OrcMapping>& mapping);
