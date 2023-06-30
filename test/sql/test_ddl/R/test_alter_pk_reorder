@@ -53,3 +53,36 @@ select * from tab1;
 600	600	600	600	600
 700	700	700	700	700
 -- !result
+
+
+
+-- name: test_alter_pk_reorder_column_type
+CREATE TABLE `test_pk_alter_double` (
+  `k1` date NOT NULL COMMENT "",
+  `v1` datetime NOT NULL COMMENT "",
+  `v2` varchar(20) NOT NULL COMMENT "",
+  `v3` varchar(20) NOT NULL COMMENT "",
+  `v4` double NOT NULL COMMENT "",
+  `v5` float NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+ORDER BY(`v2`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v4);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Table test_db_e29d521016fd11eeb17200163e237e98.test_alter_pk_reorder_column_type is not found.')
+-- !result
+ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v5);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Table test_db_e29d521016fd11eeb17200163e237e98.test_alter_pk_reorder_column_type is not found.')
+-- !result
+ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Table test_db_e29d521016fd11eeb17200163e237e98.test_alter_pk_reorder_column_type is not found.')
+-- !result
