@@ -179,6 +179,7 @@ public class Column implements Writable {
         return this.name;
     }
 
+<<<<<<< HEAD
     public String getDisplayName() {
         if (defineExpr == null) {
             return name;
@@ -187,6 +188,8 @@ public class Column implements Writable {
         }
     }
 
+=======
+>>>>>>> 8e18441c2 ([BugFix] fix desc rollup column name (#26134))
     public String getNameWithoutPrefix(String prefix) {
         if (isNameWithPrefix(prefix)) {
             return name.substring(prefix.length());

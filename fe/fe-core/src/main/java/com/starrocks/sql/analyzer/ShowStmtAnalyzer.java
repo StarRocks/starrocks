@@ -335,9 +335,13 @@ public class ShowStmtAnalyzer {
                                         String defaultStr = column.getMetaDefaultValue(extras);
                                         String extraStr = StringUtils.join(extras, ",");
                                         List<String> row = Arrays.asList(
+<<<<<<< HEAD
                                                 column.getDisplayName(),
                                                 column.getType().canonicalName(),
                                                 column.isAllowNull() ? "YES" : "NO",
+=======
+                                                column.getName(),
+>>>>>>> 8e18441c2 ([BugFix] fix desc rollup column name (#26134))
                                                 // In Mysql, the Type column should lowercase, and the Null column should uppercase.
                                                 // If you do not follow this specification, it may cause the BI system,
                                                 // such as superset, to fail to recognize the column type.
@@ -414,9 +418,13 @@ public class ShowStmtAnalyzer {
                                 String extraStr = StringUtils.join(extras, ",");
                                 List<String> row = Arrays.asList("",
                                         "",
+<<<<<<< HEAD
                                         column.getDisplayName(),
                                         column.getType().canonicalName(),
                                         column.isAllowNull() ? "YES" : "NO",
+=======
+                                        column.getName(),
+>>>>>>> 8e18441c2 ([BugFix] fix desc rollup column name (#26134))
                                         // In Mysql, the Type column should lowercase, and the Null column should uppercase.
                                         // If you do not follow this specification, it may cause the BI system,
                                         // such as superset, to fail to recognize the column type.
