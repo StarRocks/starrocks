@@ -12,7 +12,7 @@ ARRAY_AGG(col [order by col0 [desc | asc] [nulls first | nulls last] ...])
 
 ## 参数说明
 
-- `col`：需要进行数值串联的列。支持的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、CHAR、DATETIME、DATE。
+- `col`：需要进行数值串联的列。支持的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、CHAR、DATETIME、DATE、ARRAY (3.1 及以后)、MAP (3.1 及以后)、STRUCT (3.1 及以后)。
 
 - `col0`: 排序列，决定 `col` 中元素的顺序。可以有多个排序列。
 

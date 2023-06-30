@@ -14,11 +14,7 @@ if(expr1,expr2,expr3);
 
 `expr1`: 支持的数据类型为 BOOLEAN。
 
-`expr2`: 支持的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DATETIME、DATE、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128、VARCHAR、BITMAP、PERCENTILE、HLL、TIME。
-
-`expr3`: 支持的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DATETIME、DATE、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128、VARCHAR、BITMAP、PERCENTILE、HLL、TIME。
-
-> 注：`expr2` 与 `expr3` 类型需要一致。
+`expr2` 和 `expr3` 必须在数据类型上能够兼容，否则返回报错。
 
 ## 返回值说明
 
@@ -33,5 +29,11 @@ mysql> select if(false,1,2);
 +-----------------+
 |               2 |
 +-----------------+
-1 row in set (0.00 sec)
+
+mysql> select if(false,2.14,2);
++--------------------+
+| if(FALSE, 2.14, 2) |
++--------------------+
+|               2.00 |
++--------------------+
 ```

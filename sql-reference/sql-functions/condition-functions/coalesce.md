@@ -12,7 +12,7 @@ coalesce(expr1,...);
 
 ## 参数说明
 
-`expr1`: 支持的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DATETIME、DATE、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128、VARCHAR、BITMAP、PERCENTILE、HLL、TIME。
+`expr1`: 表达式必须在数据类型上能够兼容，否则返回报错。
 
 ## 返回值说明
 
@@ -27,5 +27,11 @@ mysql> select coalesce(3,NULL,1,1);
 +-------------------------+
 |                       3 |
 +-------------------------+
-1 row in set (0.00 sec)
+
+mysql> select coalesce(NULL,2,1,1);
++-------------------------+
+| coalesce(NULL, 2, 1, 1) |
++-------------------------+
+|                       2 |
++-------------------------+
 ```

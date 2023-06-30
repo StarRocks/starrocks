@@ -12,11 +12,7 @@ nullif(expr1,expr2);
 
 ## 参数说明
 
-`expr1`: 支持的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DATETIME、DATE、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128、VARCHAR、BITMAP、PERCENTILE、HLL、TIME。
-
-`expr2`: 支持的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DATETIME、DATE、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128、VARCHAR、BITMAP、PERCENTILE、HLL、TIME。
-
-> 注：`expr1` 与 `expr2` 类型需要一致。
+`expr1` 与 `expr2` 必须在数据类型上能够兼容，否则返回报错。
 
 ## 返回值说明
 
@@ -30,6 +26,13 @@ mysql> select nullif(1,2);
 | nullif(1, 2) |
 +--------------+
 |            1 |
++--------------+
+
+mysql> select nullif(1,1);
++--------------+
+| nullif(1, 1) |
++--------------+
+|         NULL |
 +--------------+
 1 row in set (0.01 sec)
 ```
