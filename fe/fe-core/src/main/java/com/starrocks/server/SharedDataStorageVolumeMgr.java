@@ -132,7 +132,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 locations.add(Config.cloud_native_hdfs_url);
                 break;
             case "azblob":
-                // TODO
+                locations.add("azblob://" + Config.azure_blob_path);
+                break;
             default:
                 return locations;
         }
@@ -153,7 +154,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             case "hdfs":
                 // TODO
             case "azblob":
-                // TODO
+                params.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, Config.azure_blob_shared_key);
+                params.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, Config.azure_blob_sas_token);
+                params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, Config.azure_blob_endpoint);
+                break;
             default:
                 return params;
         }

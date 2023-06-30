@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AzBlobCredentialInfo;
+import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.io.Text;
@@ -42,13 +44,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
 
 public class StorageVolume implements Writable, GsonPostProcessable {
     public enum StorageVolumeType {
         UNKNOWN,
         S3,
-        HDFS
+        HDFS,
+        AZBLOB
     }
 
     // Without id, the scenario like "create storage volume 'a', drop storage volume 'a', create storage volume 'a'"
@@ -84,7 +88,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.locations = new ArrayList<>(locations);
         this.comment = comment;
         this.enabled = enabled;
-        setEmptyAuthenticationIfNeeded(params);
+        preprocessAuthenticationIfNeeded(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
         if (!isValidCloudConfiguration()) {
             throw new SemanticException("Storage params is not valid");
@@ -147,6 +151,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return StorageVolumeType.S3;
             case "hdfs":
                 return StorageVolumeType.HDFS;
+            case "azblob":
+                return StorageVolumeType.AZBLOB;
             default:
                 return StorageVolumeType.UNKNOWN;
         }
@@ -158,6 +164,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return cloudConfiguration.getCloudType() == CloudType.AWS;
             case HDFS:
                 return cloudConfiguration.getCloudType() == CloudType.HDFS;
+            case AZBLOB:
+                return cloudConfiguration.getCloudType() == CloudType.AZURE;
             default:
                 return false;
         }
@@ -229,15 +237,29 @@ public class StorageVolume implements Writable, GsonPostProcessable {
             case HDFS:
                 // TODO
             case AZBLOB:
-                // TODO
+                AzBlobFileStoreInfo azBlobFileStoreInfo = fsInfo.getAzblobFsInfo();
+                params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, azBlobFileStoreInfo.getEndpoint());
+                AzBlobCredentialInfo azBlobcredentialInfo = azBlobFileStoreInfo.getCredential();
+                String sharedKey = azBlobcredentialInfo.getSharedKey();
+                if (!Strings.isNullOrEmpty(sharedKey)) {
+                    params.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, sharedKey);
+                }
+                String sasToken = azBlobcredentialInfo.getSasToken();
+                if (!Strings.isNullOrEmpty(sasToken)) {
+                    params.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, sasToken);
+                }
+                return params;
             default:
                 return params;
         }
     }
 
-    private void setEmptyAuthenticationIfNeeded(Map<String, String> params) {
+    private void preprocessAuthenticationIfNeeded(Map<String, String> params) {
         if (svt == StorageVolumeType.HDFS) {
             params.computeIfAbsent(HDFS_AUTHENTICATION, key -> HDFSCloudCredential.EMPTY);
+        } else if (svt == StorageVolumeType.AZBLOB) {
+            String container = locations.get(0).split("/")[0];
+            params.put(AZURE_BLOB_CONTAINER, container);
         }
     }
 
