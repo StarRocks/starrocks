@@ -131,9 +131,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |---|---|---|
 |enable_strict_storage_medium_check|FALSE|建表时，是否严格校验存储介质类型。<br>为 true 时表示在建表时，会严格校验 BE 上的存储介质。比如建表时指定 `storage_medium = HDD`，而 BE 上只配置了 SSD，那么建表失败。<br>为 FALSE 时则忽略介质匹配，建表成功。|
 |enable_auto_tablet_distribution| TRUE| 是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量)](../table_design/Data_distribution.md#确定分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br>新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>自 2.5.6 版本起，StarRocks 支持设置该参数。  |
-|capacity_used_percent_high_water|0.75|BE 上磁盘使用容量的度量值，超过 0.75 之后，尽量不再往这个 tablet 上发送建表、克隆的任务，直到恢复正常。|
-|storage_high_watermark_usage_percent|85|BE 存储目录下空间使用率的最大值。如果超限，则不能继续往该路径写数据。|
-|storage_min_left_capacity_bytes|2 \* 1024 \* 1024 \* 1024|BE 存储目录下剩余空间的最小值，单位为 Byte。如果超限，则不能继续往该路径写数据。|
+|storage_usage_soft_limit_percent|90|如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。|
+|storage_usage_soft_limit_reserve_bytes|200 \* 1024 \* 1024 \* 1024|默认 200GB，单位为 Byte，如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_soft_limit_percent`，则不能继续往该路径 clone tablet。|
 |catalog_trash_expire_second|86400|删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复，单位为秒。|
 |alter_table_timeout_second|86400|Schema change 超时时间，单位为秒。|
 |recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br>这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。|
@@ -363,8 +362,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | path_gc_check_step                                    | 1000        | N/A    | 单次连续 scan 最大的文件数量。                                   |
 | path_gc_check_step_interval_ms                        | 10          | ms     | 多次连续 scan 文件间隔时间。                                     |
 | path_scan_interval_second                             | 86400       | second | gc 线程清理过期数据的间隔时间。                                 |
-| storage_flood_stage_usage_percent                     | 95          | %      | 如果空间使用率超过该值，会拒绝 Load 和 Restore 作业。        |
-| storage_flood_stage_left_capacity_bytes               | 1073741824  | Byte   | 如果剩余空间小于该值，会拒绝 Load Restore 作业。 |
+| storage_flood_stage_usage_percent                     | 95          | %      | 如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。        |
+| storage_flood_stage_left_capacity_bytes               | 107374182400| Byte   | 如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。 |
 | tablet_meta_checkpoint_min_new_rowsets_num            | 10          | N/A    | 自上次 TabletMeta Checkpoint 至今新创建的 rowset 数量。        |
 | tablet_meta_checkpoint_min_interval_secs              | 600         | second | TabletMeta Checkpoint 线程轮询的时间间隔。         |
 | max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个分区内部同时运行的最大事务数量。            |
