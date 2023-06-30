@@ -509,11 +509,11 @@ Status SegmentIterator::_get_row_ranges_by_key_ranges() {
         rowid_t upper_rowid = num_rows();
 
         if (!range.upper().empty()) {
-            _init_column_iterators<false>(range.upper().schema());
+            RETURN_IF_ERROR(_init_column_iterators<false>(range.upper().schema()));
             RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
         }
         if (!range.lower().empty() && upper_rowid > 0) {
-            _init_column_iterators<false>(range.lower().schema());
+            RETURN_IF_ERROR(_init_column_iterators<false>(range.lower().schema()));
             RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
         }
         if (lower_rowid <= upper_rowid) {
@@ -541,10 +541,10 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
 
         const auto& upper = short_key_range->upper;
         if (upper->tuple_key != nullptr) {
-            _init_column_iterators<false>(upper->tuple_key->schema());
+            RETURN_IF_ERROR(_init_column_iterators<false>(upper->tuple_key->schema()));
             RETURN_IF_ERROR(_lookup_ordinal(*(upper->tuple_key), !upper->inclusive, num_rows(), &upper_rowid));
         } else if (!upper->short_key.empty()) {
-            _init_column_iterators<false>(*(upper->short_key_schema));
+            RETURN_IF_ERROR(_init_column_iterators<false>(*(upper->short_key_schema)));
             RETURN_IF_ERROR(_lookup_ordinal(upper->short_key, *(upper->short_key_schema), !upper->inclusive, num_rows(),
                                             &upper_rowid));
         }
@@ -552,10 +552,10 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         if (upper_rowid > 0) {
             const auto& lower = short_key_range->lower;
             if (lower->tuple_key != nullptr) {
-                _init_column_iterators<false>(lower->tuple_key->schema());
+                RETURN_IF_ERROR(_init_column_iterators<false>(lower->tuple_key->schema()));
                 RETURN_IF_ERROR(_lookup_ordinal(*(lower->tuple_key), lower->inclusive, upper_rowid, &lower_rowid));
             } else if (!lower->short_key.empty()) {
-                _init_column_iterators<false>(*(lower->short_key_schema));
+                RETURN_IF_ERROR(_init_column_iterators<false>(*(lower->short_key_schema)));
                 RETURN_IF_ERROR(_lookup_ordinal(lower->short_key, *(lower->short_key_schema), lower->inclusive,
                                                 upper_rowid, &lower_rowid));
             }
