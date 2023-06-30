@@ -80,12 +80,12 @@ std::string JindoSdkConfig::trim(const std::string& s) {
 }
 
 bool JindoClientFactory::option_equals(const JdoOptions_t& left, const JdoOptions_t& right) {
-    std::string left_endpoint(jdo_getOption(left, OSS_ENDPOINT_KEY, "x"));
-    std::string right_endpoint(jdo_getOption(right, OSS_ENDPOINT_KEY, "y"));
-    std::string left_ak_id(jdo_getOption(left, OSS_ACCESS_KEY_ID, "x"));
-    std::string right_ak_id(jdo_getOption(right, OSS_ACCESS_KEY_ID, "y"));
-    std::string left_ak_secret(jdo_getOption(left, OSS_ACCESS_KEY_SECRET, "x"));
-    std::string right_ak_secret(jdo_getOption(right, OSS_ACCESS_KEY_SECRET, "y"));
+    std::string left_endpoint(jdo_getOption(left, OSS_ENDPOINT_KEY, ""));
+    std::string right_endpoint(jdo_getOption(right, OSS_ENDPOINT_KEY, ""));
+    std::string left_ak_id(jdo_getOption(left, OSS_ACCESS_KEY_ID, ""));
+    std::string right_ak_id(jdo_getOption(right, OSS_ACCESS_KEY_ID, ""));
+    std::string left_ak_secret(jdo_getOption(left, OSS_ACCESS_KEY_SECRET, ""));
+    std::string right_ak_secret(jdo_getOption(right, OSS_ACCESS_KEY_SECRET, ""));
     return left_endpoint == right_endpoint && left_ak_id == right_ak_id && left_ak_secret == right_ak_secret;
 }
 
@@ -153,10 +153,12 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
 
     for (size_t i = 0; i < _items; i++) {
         if (option_equals(_configs[i], jdo_options)) {
+            LOG(INFO) << "Reuse jindo client for " << uri_prefix << ", index " << i;
             return _clients[i];
         }
     }
 
+    LOG(INFO) << "Creating jindo client for " << uri_prefix;
     JdoSystem_t client = jdo_createSystem(jdo_options, uri_prefix.c_str());
     auto jdo_ctx = jdo_createContext1(client);
     ASSIGN_OR_RETURN(auto user_name, get_local_user())
@@ -166,6 +168,7 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
     if (UNLIKELY(!init_status.ok())) {
         LOG(ERROR) << fmt::format("Failed to init the jindo file system for {} and file {}.", uri_prefix, uri.key());
         if (client != nullptr) {
+            LOG(INFO) << "Free invalid jindo client for " << uri_prefix;
             JdoContext_t ctx = jdo_createContext1(client);
             jdo_destroySystem(ctx);
             jdo_freeContext(ctx);
@@ -178,6 +181,7 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
     if (UNLIKELY(_items >= MAX_CLIENTS_ITEMS)) {
         int idx = _rand.Uniform(MAX_CLIENTS_ITEMS);
 
+        LOG(INFO) << "Free jindo client for " << uri_prefix << ", index " << _items;
         auto old_client = _clients[idx];
         JdoContext_t ctx = jdo_createContext1(old_client);
         jdo_destroySystem(ctx);
@@ -187,6 +191,7 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
         _configs[idx] = jdo_options;
         _clients[idx] = client;
     } else {
+        LOG(INFO) << "Put jindo client for " << uri_prefix << ", index " << _items;
         _configs[_items] = jdo_options;
         _clients[_items] = client;
         _items++;

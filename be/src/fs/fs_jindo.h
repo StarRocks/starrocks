@@ -82,7 +82,7 @@ private:
 
     std::mutex _lock;
     int _items{0};
-    // _configs[i] is the client configuration of |_clients[i].
+    // _configs[i] is the client configuration of _clients[i].
     JdoOptions_t _configs[MAX_CLIENTS_ITEMS];
     JdoSystem_t _clients[MAX_CLIENTS_ITEMS];
     Random _rand;
