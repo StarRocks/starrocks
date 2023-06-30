@@ -15,7 +15,10 @@
 package com.starrocks.credential.azure;
 
 import com.google.common.base.Preconditions;
+import com.staros.proto.AzBlobCredentialInfo;
+import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
@@ -114,8 +117,16 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        // TODO: Support azure credential
-        return null;
+        FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
+        fileStore.setFsType(FileStoreType.AZBLOB);
+        AzBlobFileStoreInfo.Builder azBlobFileStoreInfo = AzBlobFileStoreInfo.newBuilder();
+        azBlobFileStoreInfo.setEndpoint(endpoint);
+        AzBlobCredentialInfo.Builder azBlobCredentialInfo = AzBlobCredentialInfo.newBuilder();
+        azBlobCredentialInfo.setSharedKey(sharedKey);
+        azBlobCredentialInfo.setSasToken(sasToken);
+        azBlobFileStoreInfo.setCredential(azBlobCredentialInfo.build());
+        fileStore.setAzblobFsInfo(azBlobFileStoreInfo.build());
+        return fileStore.build();
     }
 }
 

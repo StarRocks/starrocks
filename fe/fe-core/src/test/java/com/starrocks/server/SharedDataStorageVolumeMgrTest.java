@@ -295,6 +295,29 @@ public class SharedDataStorageVolumeMgrTest {
         sv = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         Assert.assertEquals("region1", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getRegion());
         Assert.assertEquals("endpoint1", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getEndpoint());
+
+        String svKey = "test";
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        sdsvm.createStorageVolume(svKey, "S3", locations, storageParams, Optional.empty(), "");
+        sdsvm.setDefaultStorageVolume(svKey);
+
+        Config.cloud_native_storage_type = "azblob";
+        Config.azure_blob_shared_key = "shared_key";
+        Config.azure_blob_sas_token = "sas_token";
+        Config.azure_blob_endpoint = "endpoint";
+        Config.azure_blob_path = "path";
+        sdsvm.removeStorageVolume(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        sdsvm.createOrUpdateBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getEndpoint());
+        Assert.assertEquals("shared_key",
+                sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getCredential().getSharedKey());
+        Assert.assertEquals("sas_token",
+                sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getCredential().getSasToken());
     }
 
     @Test
