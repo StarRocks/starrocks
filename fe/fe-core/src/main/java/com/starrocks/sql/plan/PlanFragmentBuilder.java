@@ -3143,7 +3143,8 @@ public class PlanFragmentBuilder {
 
             prepareContextSlots(node, context, tupleDesc);
 
-            scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, false, 1);
+            int dop = ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism();
+            scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, false, dop);
             scanNode.setUseVectorizedLoad(true);
 
             Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), context.getConnectContext());
