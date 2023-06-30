@@ -22,9 +22,10 @@ ADD_BE_BENCH(${SRC_DIR}/bench/block_cache_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_array_bench)
 #ADD_BE_BENCH(${SRC_DIR}/bench/block_cache_bench)
-<<<<<<< HEAD
-=======
 ADD_BE_BENCH(${SRC_DIR}/bench/roaring_bitmap_mem_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_dict_decode_bench)
+<<<<<<< HEAD
 >>>>>>> a0a54ac43 ([BugFix] handle null value in dict colum in parquet file (#25800))
 >>>>>>> 47771bf5b ([BugFix] handle null value in dict colum in parquet file (#25800))
+=======
+>>>>>>> 41c3c5499 (fix for comment)
