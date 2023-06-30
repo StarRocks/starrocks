@@ -532,6 +532,7 @@
       + [week_iso](./sql-reference/sql-functions/date-time-functions/week_iso.md)
       + [weekofyear](./sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [weeks_add](./sql-reference/sql-functions/date-time-functions/weeks_add.md)
+      + [day_of_week_iso](./sql-reference/sql-functions/date-time-functions/day_of_week_iso.md)
       + [weeks_diff](./sql-reference/sql-functions/date-time-functions/weeks_diff.md)
       + [weeks_sub](./sql-reference/sql-functions/date-time-functions/weeks_sub.md)
       + [year](./sql-reference/sql-functions/date-time-functions/year.md)
