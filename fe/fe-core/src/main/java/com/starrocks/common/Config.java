@@ -2200,13 +2200,13 @@ public class Config extends ConfigBase {
     @ConfField
     public static int experimental_lake_publish_version_threads = 16;
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
-    @ConfField
+    @ConfField(comment = "how many partitions can autovacuum be executed simultaneously at most")
     public static int lake_autovacuum_parallel_partitions = 8;
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "the minimum delay between autovacuum runs on any given partition")
     public static long lake_autovacuum_partition_naptime_seconds = 180;
 
     @ConfField(mutable = true, comment = "History versions within this time range will not be deleted by auto vacuum.\n" +
