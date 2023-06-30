@@ -316,6 +316,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
         while (iter.has_more()) {
             auto next_range = iter.next(chunk_size);
             size_t num_rows = next_range.span_size();
+            DCHECK_LE(next_range.begin() + num_rows, raw_dict_column->size());
             dict_column->append(*raw_dict_column, next_range.begin(), num_rows);
             RETURN_IF_ERROR(pred->evaluate(dict_column.get(), selection_cursor, 0, num_rows));
             dict_column->reset_column();
