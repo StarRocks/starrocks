@@ -227,8 +227,8 @@ public:
             const uint8_t* null_data_ptr = null_data.data();
             for (size_t i = 0; i < size; i++) {
                 // if null, we assign dict code 0(there should be at least one value?)
-                // null = 0, mask = 0x00000000
-                // null = 1, mask = 0xffffffff
+                // null = 0, mask = 0xffffffff
+                // null = 1, mask = 0x00000000
                 uint32_t mask = ~(static_cast<uint32_t>(-null_data_ptr[i]));
                 int32_t code = mask & dict_codes[i];
                 slices[i] = _dict[code];
