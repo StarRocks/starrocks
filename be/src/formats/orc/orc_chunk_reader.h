@@ -175,7 +175,7 @@ private:
     Status _init_position_in_orc();
     Status _init_src_types(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_cast_exprs();
-    Status _init_fill_functions();
+    Status _init_column_readers();
     // holding Expr* in cast_exprs;
     ObjectPool _pool;
     uint64_t _read_chunk_size;

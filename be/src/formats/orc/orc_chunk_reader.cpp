@@ -216,7 +216,7 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
     // TODO(SmithCruise) delete _init_position_in_orc() when develop subfield lazy load.
     RETURN_IF_ERROR(_init_position_in_orc());
     RETURN_IF_ERROR(_init_cast_exprs());
-    RETURN_IF_ERROR(_init_fill_functions());
+    RETURN_IF_ERROR(_init_column_readers());
     return Status::OK();
 }
 
@@ -449,10 +449,8 @@ Status OrcChunkReader::_init_cast_exprs() {
     return Status::OK();
 }
 
-Status OrcChunkReader::_init_fill_functions() {
+Status OrcChunkReader::_init_column_readers() {
     int column_size = _src_slot_descriptors.size();
-    //    _fill_functions.clear();
-    //    _fill_functions.resize(column_size);
     _column_readers.clear();
 
     for (int column_pos = 0; column_pos < column_size; ++column_pos) {
@@ -460,8 +458,6 @@ Status OrcChunkReader::_init_fill_functions() {
         if (slot_desc == nullptr) {
             continue;
         }
-        //        LogicalType type = _src_types[column_pos].type;
-        //        _fill_functions[column_pos] = find_fill_func(type, slot_desc->is_nullable());
         ASSIGN_OR_RETURN(
                 std::unique_ptr<ORCColumnReader> column_reader,
                 ORCColumnReader::create(
