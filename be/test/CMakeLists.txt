@@ -368,6 +368,7 @@ set(EXEC_FILES
         ./util/cpu_usage_info_test.cpp
         ./util/timezone_utils_test.cpp
         ./util/concurrent_limiter_test.cpp
+        ./util/stack_trace_mutex_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
