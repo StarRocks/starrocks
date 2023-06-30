@@ -74,7 +74,7 @@ To achieve more flexible data distribution, you can combine the preceding four p
 
 Before you partition a table, determine the partitioning column, bucketing column, and the number of tablets.
 
-### Choose partitioning columns
+### Partitioning
 
 Data in a partitioned table is divided based on partitioning columns, also called partition keys. Generally, date or area is used as the partitioning column. In StarRocks, only the column of the DATE, DATETIME or INT type can be used as the partitioning column. We recommend that you follow the suggestions below to decide the partitioning column:
 
@@ -82,7 +82,9 @@ Data in a partitioned table is divided based on partitioning columns, also calle
 - The column that is often used as a filter in queries.
 - The amount of data in each partition must be less than 100 GB.
 
-### Choose bucketing columns
+### Bucketing
+
+#### Hash bucketing
 
 Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
 
@@ -99,13 +101,13 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 - One bucketing column: This method can reduce data transmission between nodes. It improves the performance of short-running query because short-running query only runs on one server and scan a small amount of data.
 - Multiple bucketing columns: This method makes the most of the concurrency performance of a distributed cluster. It improves the performance of long-running query because long-running query runs across multiple servers and scan a large amount of data by using multiple servers in parallel. We recommend that you choose three bucketing columns at most.
 
-#### Precautions
+**Precautions**
 
 - **When  a table is created, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
 - Bucketing columns cannot be modified after they are specified.
 
-#### Examples
+**Examples**
 
 The following statement creates a table named `site_access`.
 
@@ -149,6 +151,44 @@ CREATE TABLE site_access
 )
 AGGREGATE KEY(site_id, city_code, user_name)
 DISTRIBUTED BY HASH(site_id,city_code);
+```
+
+#### Random bucketing (since v3.1)
+
+For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. Additionally, there is no need to set bucketing columns during table creation, simplifying the CREATE TABLE statement. It is suitable for scenarios with relatively small data sizes and requirement for high query performance.
+
+However, note that random bucketing may not be suitable for scenarios that involve querying and aggregating based on specific columns. In such cases, hash bucketing may be more appropriate as it can store similar data in the same bucket, facilitating data access and processing.
+
+**Precautions**
+- You can not use random bucketing to create a Primary Key table, a Unique Key table, or an aggregated table.
+- You can not specify a table bucketed randomly to belong to a Colocation Group.
+- Spark Load can not be used to load data into tables bucketed randomly.
+
+In the following example, a table site_access1 is created by using random bucketing, and the system automatically sets the number of buckets.
+
+```SQL
+CREATE TABLE site_access1(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+DUPLICATE KEY(event_day,site_id,city_code,pv);
+```
+
+However, if you are familiar with StarRocks' bucketing mechanism, you can also manually set the number of buckets when creating a table with random bucketing.
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+DUPLICATE KEY(event_day,site_id,city_code,pv)
+DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
 ```
 
 ### Determine the number of buckets
