@@ -39,6 +39,8 @@ using std::string;
 
 namespace starrocks {
 
+extern std::vector<std::string> list_stack_trace_of_long_wait_mutex();
+
 #define REG_VAR(TYPE, NAME) cls.var<&TYPE::NAME>(#NAME)
 #define REG_METHOD(TYPE, NAME) cls.func<&TYPE::NAME>(#NAME)
 #define REG_STATIC_METHOD(TYPE, NAME) cls.funcStatic<&TYPE::NAME>(#NAME)
@@ -186,6 +188,7 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&unix_seconds>("unix_seconds");
         // uncomment this to enable executing shell commands
         // cls.funcStaticExt<&exec_whitelist>("exec");
+        cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
         REG_METHOD(ExecEnv, process_mem_tracker);
         REG_METHOD(ExecEnv, query_pool_mem_tracker);
         REG_METHOD(ExecEnv, load_mem_tracker);
