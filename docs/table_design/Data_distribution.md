@@ -164,7 +164,7 @@ However, note that random bucketing may not be suitable for scenarios that invol
 - You can not specify a table bucketed randomly to belong to a Colocation Group.
 - Spark Load can not be used to load data into tables bucketed randomly.
 
-In the following example, a table site_access1 is created by using random bucketing, and the system automatically sets the number of buckets.
+In the following example, a table `site_access1` is created by using random bucketing, and the system automatically sets the number of buckets.
 
 ```SQL
 CREATE TABLE site_access1(
