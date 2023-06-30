@@ -81,11 +81,8 @@ Status ColumnChunkReader::skip_page() {
     if (_page_parse_state != PAGE_HEADER_PARSED) {
         return Status::InternalError("Page header has not been parsed before skiping page data");
     }
-    const auto& header = *_page_reader->current_header();
-    uint32_t compressed_size = header.compressed_page_size;
-    uint32_t uncompressed_size = header.uncompressed_page_size;
-    size_t size = _compress_codec != nullptr ? compressed_size : uncompressed_size;
-    RETURN_IF_ERROR(_page_reader->skip_bytes(size));
+    uint64_t next_header_pos = _page_reader->get_next_header_pos();
+    RETURN_IF_ERROR(_page_reader->seek_to_offset(next_header_pos));
     _opts.stats->page_skip += 1;
 
     _page_parse_state = PAGE_DATA_PARSED;

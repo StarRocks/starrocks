@@ -46,11 +46,13 @@ public:
     Status skip_bytes(size_t size);
 
     // seek to read position, this position must be a start of a page header.
-    void seek_to_offset(uint64_t offset) {
+    Status seek_to_offset(uint64_t offset) {
         _offset = offset;
         _next_header_pos = offset;
-        _stream->seek(offset);
+        return _stream->seek(offset);
     }
+
+    uint64_t get_next_header_pos() const { return _next_header_pos; }
 
     uint64_t get_offset() const { return _offset; }
 
