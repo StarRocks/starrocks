@@ -107,6 +107,7 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
 HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
                                                   const TupleDescriptor* tuple_desc) {
     auto* param = _pool.add(new HdfsScannerParams());
+    auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     param->fs = FileSystem::Default();
     param->path = file;
     param->file_size = range->file_length;
@@ -132,6 +133,7 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     param->materialize_index_in_chunk = materialize_index_in_chunk;
     param->materialize_slots = mat_slots;
     param->partition_slots = part_slots;
+    param->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     return param;
 }
 

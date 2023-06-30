@@ -47,6 +47,8 @@ public:
 protected:
     HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _pool.add(new HdfsScannerContext());
+        auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
 
         std::vector<Utils::SlotDesc> slot_descs;
         for (auto& type_desc : type_descs) {

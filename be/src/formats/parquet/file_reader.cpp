@@ -450,6 +450,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.file = _file;
     _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
+    _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.
@@ -477,26 +478,45 @@ Status FileReader::_init_group_readers() {
     }
     _row_group_size = _row_group_readers.size();
 
-    // if coalesce read enabled, we have to
-    // 1. allocate shared buffered input stream and
-    // 2. collect io ranges of every row group reader.
-    // 3. set io ranges to the stream.
-    if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
-        for (auto& r : _row_group_readers) {
-            int64_t end_offset = 0;
-            r->collect_io_ranges(&ranges, &end_offset);
-            r->set_end_offset(end_offset);
-        }
-        _sb_stream->set_io_ranges(ranges);
-        _group_reader_param.sb_stream = _sb_stream;
-    }
-
     // initialize row group readers.
     for (auto& r : _row_group_readers) {
         RETURN_IF_ERROR(r->init());
     }
+
+    if (!_row_group_readers.empty()) {
+        // prepare first row group
+        RETURN_IF_ERROR(_prepare_cur_row_group());
+    }
+
     return Status::OK();
+}
+
+Status FileReader::_prepare_cur_row_group() {
+    auto& r = _row_group_readers[_cur_row_group_idx];
+    // if coalesce read enabled, we have to
+    // 0. clear last group memory
+    // 1. allocate shared buffered input stream and
+    // 2. collect io ranges of every row group reader.
+    // 3. set io ranges to the stream.
+    if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) {
+        // clear last group memory;
+        _sb_stream->release();
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+        r->collect_io_ranges(&ranges, &end_offset);
+        int32_t counter = _scanner_ctx->lazy_column_coalesce_counter->load(std::memory_order_relaxed);
+        if (counter >= 0 || !config::io_coalesce_adaptive_lazy_active) {
+            _scanner_ctx->stats->group_active_lazy_coalesce_together += 1;
+        } else {
+            _scanner_ctx->stats->group_active_lazy_coalesce_seperately += 1;
+        }
+        r->set_end_offset(end_offset);
+        _sb_stream->set_io_ranges(ranges, counter >= 0);
+        _group_reader_param.sb_stream = _sb_stream;
+    }
+
+    // prepare row group
+    return r->prepare();
 }
 
 Status FileReader::get_next(ChunkPtr* chunk) {
@@ -520,6 +540,10 @@ Status FileReader::get_next(ChunkPtr* chunk) {
             if (status.is_end_of_file()) {
                 _row_group_readers[_cur_row_group_idx]->close();
                 _cur_row_group_idx++;
+                if (_cur_row_group_idx < _row_group_size) {
+                    // prepare new group
+                    RETURN_IF_ERROR(_prepare_cur_row_group());
+                }
                 return Status::OK();
             }
         } else {
