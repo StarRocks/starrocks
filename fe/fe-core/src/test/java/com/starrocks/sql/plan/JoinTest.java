@@ -34,6 +34,20 @@ import org.junit.Test;
 public class JoinTest extends PlanTestBase {
 
     @Test
+    public void test() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from t0 where case v1 when 1 then 1 when 2 then 2 when 3 then 3 else 4 end in (1,2);";
+        sql = "select * from t0 where case v1 when 1 then 1 when 2 then 2 when 3 then 3 else 4 end in (1,4)";
+        sql = "select * from t0 where case v1 when 1 then 1 when 2 then 2 when 3 then 3 end in (1,4)";
+        sql = "select * from t0 where case v1 when 1 then 1 when 2 then 2 when 3 then 3 end in (5) is null";
+        sql = "select * from t0 where case v1 when 1 then 'a' when 2 then 'b' when 3 then 'c' else 'd' end in ('a', 'd')";
+
+
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
+
+    @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select * from colocate1 left join colocate2 on colocate1.k1=colocate2.k1;";

@@ -27,12 +27,23 @@ public class NegateFilterShuttle extends BaseScalarOperatorShuttle {
 
     private static NegateFilterShuttle INSTANCE = new NegateFilterShuttle();
 
+    private NegateFilterShuttle() {}
+
     public static NegateFilterShuttle getInstance() {
         return INSTANCE;
     }
 
     public ScalarOperator negateFilter(ScalarOperator scalarOperator) {
         return scalarOperator.accept(this, null);
+    }
+
+    @Override
+    public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
+        ScalarOperator negation = new CompoundPredicateOperator(CompoundType.NOT, scalarOperator);
+        if (scalarOperator.isNullable()) {
+            return new CompoundPredicateOperator(CompoundType.OR, negation, new IsNullPredicateOperator(scalarOperator));
+        }
+        return negation;
     }
 
     @Override
@@ -66,7 +77,10 @@ public class NegateFilterShuttle extends BaseScalarOperatorShuttle {
             negation = predicate.negative();
         }
 
-        if (predicate.getChild(0).isNullable()) {
+        if (predicate.getChild(1).isNullable()) {
+            ScalarOperator isNull = new IsNullPredicateOperator(predicate);
+            return new CompoundPredicateOperator(CompoundType.OR, negation, isNull);
+        } else if (predicate.getChild(0).isNullable()) {
             ScalarOperator isNull = new IsNullPredicateOperator(predicate.getChild(0));
             return new CompoundPredicateOperator(CompoundType.OR, negation, isNull);
         } else {
