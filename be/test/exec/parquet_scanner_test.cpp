@@ -695,7 +695,12 @@ TEST_F(ParquetScannerTest, get_file_schema) {
               {"col_json_list_struct", TYPE_VARCHAR},
               {"col_json_struct_struct", TYPE_VARCHAR},
               {"col_json_struct_string", TYPE_VARCHAR},
-              {"col_json_json_string", TYPE_VARCHAR}}}};
+              {"col_json_json_string", TYPE_VARCHAR}}},
+            {test_exec_dir + "/test_data/parquet_data/decimal.parquet",
+             {{"col_decimal32", TYPE_DECIMAL32},
+              {"col_decimal64", TYPE_DECIMAL64},
+              {"col_decimal128_byte_array", TYPE_DECIMAL128},
+              {"col_decimal128_fixed_len_byte_array", TYPE_DECIMAL128}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);

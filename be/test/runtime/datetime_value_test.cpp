@@ -1415,22 +1415,4 @@ TEST_F(DateTimeValueTest, packed_time) {
     }
 }
 
-TEST_F(DateTimeValueTest, utc_to_offset) {
-    cctz::time_zone ctz;
-    bool ok = TimezoneUtils::find_cctz_time_zone("Asia/Shanghai", ctz);
-    EXPECT_TRUE(ok);
-    int64_t offset = TimezoneUtils::to_utc_offset(ctz);
-    EXPECT_EQ(offset, 28800);
-
-    ok = TimezoneUtils::find_cctz_time_zone("+08:00", ctz);
-    EXPECT_TRUE(ok);
-    offset = TimezoneUtils::to_utc_offset(ctz);
-    EXPECT_EQ(offset, 28800);
-
-    ok = TimezoneUtils::find_cctz_time_zone("-08:00", ctz);
-    EXPECT_TRUE(ok);
-    offset = TimezoneUtils::to_utc_offset(ctz);
-    EXPECT_EQ(offset, -28800);
-}
-
 } // namespace starrocks

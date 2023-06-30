@@ -41,7 +41,6 @@ import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetFileSchemaRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
@@ -234,10 +233,7 @@ public class TableFunctionTable extends Table {
                 throw new DdlException("non-scalar type is not supported: " + slot.colName);
             }
             PScalarType scalarType = slot.slotType.types.get(0).scalarType;
-
-            TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(scalarType.type);
-
-            columns.add(new Column(slot.colName, ScalarType.createType(PrimitiveType.fromThrift(tPrimitiveType)), true));
+            columns.add(new Column(slot.colName, ScalarType.createType(scalarType), true));
         }
         return columns;
     }
