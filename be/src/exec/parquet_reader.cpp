@@ -216,7 +216,9 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
             } else if (logical_type->is_time()) {
                 tp = TypeDescriptor(TYPE_TIME);
             } else if (logical_type->is_decimal()) {
-                tp = TypeDescriptor(TYPE_DECIMAL);
+                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
+                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, decimal_logical_type->precision(),
+                                                           decimal_logical_type->scale());
             } else {
                 tp = TypeDescriptor(TYPE_INT);
             }
@@ -229,7 +231,9 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
             } else if (logical_type->is_timestamp()) {
                 tp = TypeDescriptor(TYPE_DATETIME);
             } else if (logical_type->is_decimal()) {
-                tp = TypeDescriptor(TYPE_DECIMAL);
+                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
+                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, decimal_logical_type->precision(),
+                                                           decimal_logical_type->scale());
             } else {
                 tp = TypeDescriptor(TYPE_BIGINT);
             }
@@ -241,14 +245,18 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
             if (logical_type->is_string()) {
                 tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             } else if (logical_type->is_decimal()) {
-                tp = TypeDescriptor(TYPE_DECIMAL);
+                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
+                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
+                                                           decimal_logical_type->scale());
             } else {
                 tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             }
             break;
         case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
             if (logical_type->is_decimal()) {
-                tp = TypeDescriptor(TYPE_DECIMAL);
+                auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
+                tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
+                                                           decimal_logical_type->scale());
             } else {
                 tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             }
