@@ -5,7 +5,7 @@ When you create a table, you can define the primary key and sort key separately.
 > **NOTE**
 >
 > In versions earlier than v3.0, the Primary Key table does not support decoupling the primary key and sort key.
-> Since version 3.1, StarRocks's shared-data mode supports the Primary Key tables. However, enabling the persistent index for a Primary Key table is not supported.
+> Since version 3.1, StarRocks's shared-data mode supports the Primary Key table. However, enabling the persistent index for a Primary Key table is not supported.
 
 ## Scenarios
 
