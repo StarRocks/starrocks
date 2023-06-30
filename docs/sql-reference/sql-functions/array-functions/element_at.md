@@ -4,11 +4,9 @@
 
 Returns the element at the specified position (index) from a given array. If any parameter is NULL or if the position does not exist, the result is NULL.
 
-This function is the alias of the subscript operator `[]`.
+This function is the alias of the subscript operator `[]`. It is supported from v3.0 onwards.
 
 If you want to retrieve a value from a key-value pair in a map, see [element_at](../map-functions/element_at.md).
-
-This function is supported from v3.0 onwards.
 
 ## Syntax
 
