@@ -603,6 +603,7 @@ public class GlobalStateMgr {
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
+<<<<<<< HEAD
                 new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
                         Config.desired_max_waiting_jobs, !isCheckpointCatalog);
         // One load job will be split into multiple loading tasks, the queue size is not
@@ -610,6 +611,16 @@ public class GlobalStateMgr {
         this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
                 Config.async_load_task_pool_size,
                 Config.desired_max_waiting_jobs * 10, !isCheckpointCatalog);
+=======
+                new LeaderTaskExecutor("pending_load_task_scheduler", Config.max_broker_load_job_concurrency,
+                        Config.desired_max_waiting_jobs, !isCkptGlobalState);
+        // One load job will be split into multiple loading tasks, the queue size is not
+        // determined, so set desired_max_waiting_jobs * 10
+        this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
+                Config.max_broker_load_job_concurrency,
+                Config.desired_max_waiting_jobs * 10, !isCkptGlobalState);
+
+>>>>>>> e30f3faf7 ([Enhancement] Rename FE config async_load_task_pool_size to max_broker_load_job_concurrency and make it mutable (#25736))
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadManager = new LoadManager(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
@@ -657,6 +668,16 @@ public class GlobalStateMgr {
                 gsm.transferToNonLeader(newType);
             }
         };
+
+        getConfigRefreshDaemon().registerListener(() -> {
+            try {
+                if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
+                    loadingLoadTaskScheduler.setCorePoolSize(Config.max_broker_load_job_concurrency);
+                }
+            } catch (Exception e) {
+                LOG.warn("check config failed", e);
+            }
+        });
     }
 
     public static void destroyCheckpoint() {
