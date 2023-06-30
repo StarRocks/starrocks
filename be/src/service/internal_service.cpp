@@ -50,6 +50,7 @@
 #include "common/closure_guard.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/orc_scanner.h"
 #include "exec/parquet_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
@@ -819,6 +820,11 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
         case TFileFormatType::FORMAT_PARQUET:
             p_scanner = std::make_unique<ParquetScanner>(&state, &profile, scan_range, &counter, true);
             break;
+
+        case TFileFormatType::FORMAT_ORC:
+            p_scanner = std::make_unique<ORCScanner>(&state, &profile, scan_range, &counter, true);
+            break;
+
         default:
             auto err_msg = fmt::format("get file schema failed, format: {} not supported", to_string(tp));
             LOG(WARNING) << err_msg;
