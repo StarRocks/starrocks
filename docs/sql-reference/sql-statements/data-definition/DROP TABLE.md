@@ -2,7 +2,7 @@
 
 ## Description
 
-This statement is used to delete a table.
+Deletes a table. From v3.1 onwards, this statement can be used to drop an Iceberg table created within an Iceberg catalog.
 
 ## Syntax
 
@@ -12,9 +12,9 @@ DROP TABLE [IF EXISTS] [[catalog.]db_name.]table_name [FORCE]
 
 ## Usage notes
 
-- If a table was deleted within 24 hours by using the DROP TABLE statement, you can use the [RECOVER](../data-definition/RECOVER.md) statement to restore the table.
+- After you drop a StarRocks table by using the DROP TABLE statement, you can use the [RECOVER](../data-definition/RECOVER.md) statement to restore the table within a specified period of time (24 hours by default).
 
-- If DROP Table FORCE is executed, the table will be deleted directly and cannot be recovered without checking whether there are unfinished activities in the database. Generally this operation is not recommended.
+- After you drop a StarRocks table by using the DROP Table FORCE statement, the table will be deleted directly and cannot be recovered without checking whether there are unfinished activities in the database. Generally this operation is not recommended.
 
 ## Examples
 
