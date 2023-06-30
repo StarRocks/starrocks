@@ -111,7 +111,8 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
     }
 }
 
-StreamLoadAction::StreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {
+StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
+        : _exec_env(exec_env), _http_concurrent_limiter(limiter) {
     StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_requests_total",
                                                              &streaming_load_requests_total);
     StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_bytes", &streaming_load_bytes);
@@ -207,7 +208,19 @@ int StreamLoadAction::on_header(HttpRequest* req) {
         ctx->label = generate_uuid_string();
     }
 
-    LOG(INFO) << "new income streaming load request." << ctx->brief() << ", db=" << ctx->db << ", tbl=" << ctx->table;
+    if (config::enable_http_stream_load_limit && !ctx->check_and_set_http_limiter(_http_concurrent_limiter)) {
+        LOG(WARNING) << "income streaming load request hit limit." << ctx->brief() << ", db=" << ctx->db
+                     << ", tbl=" << ctx->table;
+        ctx->status =
+                Status::ResourceBusy(fmt::format("Stream Load exceed http cuncurrent limit {}, please try again later",
+                                                 config::webserver_num_workers - 1));
+        auto str = ctx->to_json();
+        HttpChannel::send_reply(req, str);
+        return -1;
+    } else {
+        LOG(INFO) << "new income streaming load request." << ctx->brief() << ", db=" << ctx->db
+                  << ", tbl=" << ctx->table;
+    }
 
     VLOG(1) << "streaming load request: " << req->debug_string();
 
