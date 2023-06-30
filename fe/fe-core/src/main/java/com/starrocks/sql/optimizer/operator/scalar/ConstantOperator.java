@@ -86,6 +86,13 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
     }
 
+    private static void requiredValid(double value) throws SemanticException {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            throw new SemanticException("Invalid float/double value: " + value);
+        }
+    }
+
+
     private final Object value;
     private final boolean isNull;
 
@@ -134,11 +141,13 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return new ConstantOperator(value, Type.LARGEINT);
     }
 
-    public static ConstantOperator createFloat(double value) {
+    public static ConstantOperator createFloat(double value) throws SemanticException {
+        requiredValid(value);
         return new ConstantOperator(value, Type.FLOAT);
     }
 
-    public static ConstantOperator createDouble(double value) {
+    public static ConstantOperator createDouble(double value) throws SemanticException {
+        requiredValid(value);
         return new ConstantOperator(value, Type.DOUBLE);
     }
 

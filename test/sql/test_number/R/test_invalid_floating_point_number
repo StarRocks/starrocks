@@ -1,0 +1,13 @@
+-- name: test_invalid_floating_point_number
+select cast('NaN' as float), cast('NaN' as double);
+-- result:
+None	None
+-- !result
+select cast('-Infinity' as float), cast('-Infinity' as double);
+-- result:
+None	None
+-- !result
+select cast('Infinity' as float), cast('Infinity' as double);
+-- result:
+None	None
+-- !result
