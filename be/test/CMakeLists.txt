@@ -366,6 +366,7 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
+        ./util/timezone_utils_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
