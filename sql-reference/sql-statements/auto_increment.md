@@ -384,7 +384,7 @@ mysql > SELECT * FROM test_tbl3 ORDER BY id;
   - DELETE 操作的同时，还存在一个部分列更新的导入任务，其中只包含 UPSERT 操作。如果 UPSERT 操作和 DELETE 操作命中了同一行数据，并且 UPSERT 操作在 DELETE 操作后执行，则该 UPSERT 操作可能会失效。
   - 存在一个部分列更新的导入任务，其中包含若干个对同一行数据的 UPSERT、DELETE 操作。如果某个 UPSERT 操作在 DELETE 操作后执行，则该 UPSERT 操作可能会失效。
 - 不支持使用 ALTER TABLE 添加 `AUTO_INCREMENT` 属性。
-- 存算分离模式暂时不支持该功能。
+- 自 3.1 版本起存算分离模式支持该功能。
 - 不支持设置自增列的起始值和自增步长。
 
 ## Keywords
