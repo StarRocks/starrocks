@@ -17,7 +17,7 @@ ARRAY<ARRAY<type>>
 ARRAY<type> NOT NULL
 ~~~
 
-`type` specifies the data types of elements in an array. StarRocks supports the following element types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, and DATE.
+`type` specifies the data types of elements in an array. StarRocks supports the following element types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, DATE, JSON, ARRAY (since v3.1), MAP (since v3.1), and STRUCT (since v3.1).
 
 Elements in an array are nullable by default, for example, `[null, 1 ,2]`. You cannot specify elements in an array as NOT NULL. However, you can specify an ARRAY column as NOT NULL when you create a table, such as the third example in the following code snippet.
 
