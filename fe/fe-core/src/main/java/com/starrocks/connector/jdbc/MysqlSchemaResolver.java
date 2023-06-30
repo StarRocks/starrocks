@@ -56,6 +56,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         PrimitiveType primitiveType;
         switch (dataType) {
             case Types.BOOLEAN:
+            case Types.BIT:
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case Types.TINYINT:
