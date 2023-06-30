@@ -210,6 +210,10 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Primiti
     int64_t item_processed = 0;
     int64_t data_size = 0;
     int64_t mem_usage = 0;
+    const int64_t max_buffered_rows = 1024 * 1024;
+    const int64_t max_buffered_bytes = max_buffered_rows * 256;
+    const std::vector<SlotId> early_materialized_slots;
+
     for (auto _ : state) {
         state.PauseTiming();
         std::unique_ptr<ChunksSorter> sorter;
@@ -220,7 +224,8 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Primiti
         switch (sorter_algo) {
         case FullSort: {
             sorter = std::make_unique<ChunksSorterFullSort>(suite._runtime_state.get(), &sort_exprs, &asc_arr,
-                                                            &null_first, "");
+                                                            &null_first, "", max_buffered_rows, max_buffered_bytes,
+                                                            early_materialized_slots);
             expected_rows = total_rows;
             break;
         }

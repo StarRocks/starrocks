@@ -17,7 +17,11 @@
 namespace starrocks {
 namespace vectorized {
 class Column;
+<<<<<<< HEAD
 } // namespace vectorized
+=======
+class NullableColumn;
+>>>>>>> a0a54ac43 ([BugFix] handle null value in dict colum in parquet file (#25800))
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -56,12 +60,19 @@ public:
 
     virtual Status get_dict_values(vectorized::Column* column) { return _reader->get_dict_values(column); }
 
+<<<<<<< HEAD
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) {
         return _reader->get_dict_values(dict_codes, column);
+=======
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
+                                   Column* column) {
+        return _reader->get_dict_values(dict_codes, nulls, column);
+>>>>>>> a0a54ac43 ([BugFix] handle null value in dict colum in parquet file (#25800))
     }
 
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
-        return _reader->get_dict_codes(dict_values, dict_codes);
+    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, const NullableColumn& nulls,
+                                  std::vector<int32_t>* dict_codes) {
+        return _reader->get_dict_codes(dict_values, nulls, dict_codes);
     }
 
 protected:

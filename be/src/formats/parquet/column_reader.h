@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
+
 #include "formats/parquet/column_converter.h"
 #include "io/shared_buffered_input_stream.h"
 
@@ -60,11 +61,17 @@ public:
         return Status::NotSupported("get_dict_values is not supported");
     }
 
+<<<<<<< HEAD
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) {
+=======
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
+                                   Column* column) {
+>>>>>>> a0a54ac43 ([BugFix] handle null value in dict colum in parquet file (#25800))
         return Status::NotSupported("get_dict_values is not supported");
     }
 
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
+    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, const NullableColumn& nulls,
+                                  std::vector<int32_t>* dict_codes) {
         return Status::NotSupported("get_dict_codes is not supported");
     }
 
