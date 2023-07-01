@@ -843,7 +843,10 @@ int64_t Tablet::max_continuous_version() const {
     } else {
         std::shared_lock rdlock(_meta_lock);
         int64_t v = _timestamped_version_tracker.get_max_continuous_version();
-        DCHECK_EQ(v, _max_continuous_version_from_beginning_unlocked().second);
+        if (tablet_state() == TABLET_RUNNING) {
+            // only check when tablet in running state
+            DCHECK_EQ(v, _max_continuous_version_from_beginning_unlocked().second);
+        }
         return v;
     }
 }
