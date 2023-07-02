@@ -57,7 +57,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -167,7 +166,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
-    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty,
+    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty inferredDataProperty,
                                                    boolean isDefault)
             throws AnalysisException {
         String mediumKey = PROPERTIES_STORAGE_MEDIUM;
@@ -178,7 +177,7 @@ public class PropertyAnalyzer {
         }
 
         if (properties == null) {
-            return oldDataProperty;
+            return inferredDataProperty;
         }
 
         TStorageMedium storageMedium = null;
@@ -206,7 +205,7 @@ public class PropertyAnalyzer {
         } // end for properties
 
         if (!hasCooldown && !hasMedium) {
-            return oldDataProperty;
+            return inferredDataProperty;
         }
 
         properties.remove(mediumKey);
@@ -229,11 +228,7 @@ public class PropertyAnalyzer {
 
         if (storageMedium == TStorageMedium.SSD && !hasCooldown) {
             // set default cooldown time
-            coolDownTimeStamp = ((Config.tablet_sched_storage_cooldown_second <= 0) ||
-                    ((DataProperty.MAX_COOLDOWN_TIME_MS - currentTimeMs) / 1000L <
-                            Config.tablet_sched_storage_cooldown_second)) ?
-                    DataProperty.MAX_COOLDOWN_TIME_MS :
-                    currentTimeMs + Config.tablet_sched_storage_cooldown_second * 1000L;
+            coolDownTimeStamp = DataProperty.getSsdCooldownTimeMs();
         }
 
         Preconditions.checkNotNull(storageMedium);
