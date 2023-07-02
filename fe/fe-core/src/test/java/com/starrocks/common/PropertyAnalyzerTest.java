@@ -162,6 +162,22 @@ public class PropertyAnalyzerTest {
         // avoid UT fail because time zone different
         DateLiteral dateLiteral = new DateLiteral(tomorrowTimeStr, Type.DATETIME);
         Assert.assertEquals(dateLiteral.unixTimestamp(TimeUtils.getTimeZone()), dataProperty.getCooldownTimeMs());
+
+        Map<String, String> properties1 = Maps.newHashMap();
+        properties1.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "HDD");
+        Config.tablet_sched_storage_cooldown_second = 60;
+        dataProperty =
+                PropertyAnalyzer.analyzeDataProperty(properties1, new DataProperty(TStorageMedium.SSD), false);
+        // Use specified storage medium even if SSD is inferred.
+        Assert.assertEquals(TStorageMedium.HDD, dataProperty.getStorageMedium());
+
+        Map<String, String> properties2 = Maps.newHashMap();
+        Config.tablet_sched_storage_cooldown_second = 60;
+        DataProperty defaultDP = new DataProperty(TStorageMedium.SSD, DataProperty.getSsdCooldownTimeMs());
+        dataProperty =
+                PropertyAnalyzer.analyzeDataProperty(properties2, defaultDP, false);
+        // If not specified, the default value should be used
+        Assert.assertEquals(dataProperty, defaultDP);
     }
 
     @Test
