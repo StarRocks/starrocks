@@ -37,13 +37,13 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
+    Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    bool pending_finish() const override { return _aggregator->has_pending_restore(); }
 
 private:
     StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);

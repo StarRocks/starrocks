@@ -157,6 +157,9 @@ Status SpillableHashJoinProbeOperator::set_finishing(RuntimeState* state) {
     if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
         return HashJoinProbeOperator::set_finishing(state);
     }
+    if (state->is_cancelled()) {
+        _probe_spiller->cancel();
+    }
     _is_finishing = true;
     return Status::OK();
 }
@@ -164,18 +167,6 @@ Status SpillableHashJoinProbeOperator::set_finishing(RuntimeState* state) {
 Status SpillableHashJoinProbeOperator::set_finished(RuntimeState* state) {
     _is_finished = true;
     return HashJoinProbeOperator::set_finished(state);
-}
-
-bool SpillableHashJoinProbeOperator::pending_finish() const {
-    if (!_latch.ready()) {
-        return true;
-    }
-
-    if (_probe_spiller->has_pending_data()) {
-        return true;
-    }
-
-    return false;
 }
 
 Status SpillableHashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
@@ -234,8 +225,9 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         }
         probe_partition->num_rows += size;
     };
-    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, executor,
-                                                      spill::MemTrackerGuard(tls_mem_tracker)));
+    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(
+            state, chunk, hash_column.get(), partition_processer, executor,
+            spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
 
     return Status::OK();
 }
@@ -251,6 +243,7 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
         if (state->is_cancelled()) {
             return Status::Cancelled("cancelled");
         }
+
         RETURN_IF_ERROR(
                 reader->trigger_restore(state, spill::SyncTaskExecutor{}, spill::MemTrackerGuard(tls_mem_tracker)));
         auto chunk_st = reader->restore(state, spill::SyncTaskExecutor{}, spill::MemTrackerGuard(tls_mem_tracker));
@@ -281,8 +274,8 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
             if (auto acquired = query_ctx.lock()) {
                 SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
                 _update_status(_load_partition_build_side(state, reader, i));
+                _latch.count_down();
             }
-            _latch.count_down();
         };
         RETURN_IF_ERROR(_executor->submit(std::move(task)));
     }
