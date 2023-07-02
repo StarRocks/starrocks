@@ -381,18 +381,21 @@ public class LocalMetastore implements ConnectorMetadata {
             if (fullNameToDb.containsKey(dbName)) {
                 throw new AlreadyExistsException("Database Already Exists");
             } else {
-                id = getNextId();
-                Database db = new Database(id, dbName);
-                unprotectCreateDb(db);
                 String storageVolumeId = "";
-                if (RunMode.allowCreateLakeTable()) {
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                     String volume = StorageVolumeMgr.DEFAULT;
                     if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
                         volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
                     }
-                    storageVolumeId = bindStorageVolumeToDb(id, volume);
+                    storageVolumeId = getStorageVolumeId(volume);
                 }
+                id = getNextId();
+                Database db = new Database(id, dbName);
+                unprotectCreateDb(db);
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db, storageVolumeId);
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    GlobalStateMgr.getCurrentState().getStorageVolumeMgr().bindDbToStorageVolume(storageVolumeId, id);
+                }
             }
         } finally {
             unlock();
@@ -4593,7 +4596,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private String bindStorageVolumeToDb(long dbId, String volume) throws DdlException {
+    private String getStorageVolumeId(String volume) throws DdlException {
         StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         StorageVolume sv = null;
         if (volume.equals(StorageVolumeMgr.DEFAULT)) {
@@ -4604,9 +4607,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (sv == null) {
             throw new DdlException("Unknown storage volume \"" + volume + "\"");
         }
-        String storageVolumeId = sv.getId();
-        svm.bindDbToStorageVolume(storageVolumeId, dbId);
-        return storageVolumeId;
+        return sv.getId();
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
