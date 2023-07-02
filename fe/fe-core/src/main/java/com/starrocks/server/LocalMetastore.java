@@ -3421,6 +3421,10 @@ public class LocalMetastore implements ConnectorMetadata {
                         properties, db, materializedView);
                 materializedView.setForeignKeyConstraints(foreignKeyConstraints);
             }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                materializedView.setEnableReplicatedStorage(PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, false));
+            }
 
             if (!properties.isEmpty()) {
                 // here, all properties should be checked
