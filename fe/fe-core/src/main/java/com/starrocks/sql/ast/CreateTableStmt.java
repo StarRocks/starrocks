@@ -56,6 +56,8 @@ public class CreateTableStmt extends DdlStmt {
     // for backup. set to -1 for normal use
     private int tableSignature;
 
+    private String storageVolumeId;
+
     public CreateTableStmt(boolean ifNotExists,
                            boolean isExternal,
                            TableName tableName,
@@ -280,6 +282,14 @@ public class CreateTableStmt extends DdlStmt {
 
     public void setDistributionDesc(DistributionDesc distributionDesc) {
         this.distributionDesc = distributionDesc;
+    }
+
+    public void setStorageVolumeId(String storageVolumeId) {
+        this.storageVolumeId = storageVolumeId;
+    }
+
+    public String getStorageVolumeId() {
+        return storageVolumeId;
     }
 
     public static CreateTableStmt read(DataInput in) throws IOException {

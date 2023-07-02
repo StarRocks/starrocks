@@ -799,8 +799,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         Table table = tableFactory.createTable(this, db, stmt);
-        String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                .getStorageVolumeIdOfTable(table.getId());
+        String storageVolumeId = stmt.getStorageVolumeId();
 
         onCreate(db, table, storageVolumeId, stmt.isSetIfNotExists());
         return true;
@@ -1997,6 +1996,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
                 table.onCreate(db);
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && !storageVolumeId.isEmpty()) {
+                    StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                    svm.bindTableToStorageVolume(storageVolumeId, table.getId());
+                }
             } finally {
                 db.writeUnlock();
             }
