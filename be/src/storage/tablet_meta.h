@@ -92,10 +92,10 @@ class TabletUpdates;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
-    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
-                         uint32_t next_unique_id,
-                         const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                         TabletMetaSharedPtr* tablet_meta);
+    [[nodiscard]] static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                                       uint32_t next_unique_id,
+                                       const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+                                       TabletMetaSharedPtr* tablet_meta);
 
     static TabletMetaSharedPtr create();
 
@@ -109,15 +109,15 @@ public:
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
-    Status create_from_file(const std::string& file_path);
-    Status save(const std::string& file_path);
-    static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
-    static Status reset_tablet_uid(const std::string& file_path);
+    [[nodiscard]] Status create_from_file(const std::string& file_path);
+    [[nodiscard]] Status save(const std::string& file_path);
+    [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
+    [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-    Status save_meta(DataDir* data_dir);
+    [[nodiscard]] Status save_meta(DataDir* data_dir);
 
-    Status serialize(std::string* meta_binary);
-    Status deserialize(std::string_view data);
+    [[nodiscard]] Status serialize(std::string* meta_binary);
+    [[nodiscard]] Status deserialize(std::string_view data);
     void init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb = nullptr);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
@@ -178,7 +178,7 @@ public:
     bool version_for_delete_predicate(const Version& version);
     std::string full_name() const;
 
-    Status set_partition_id(int64_t partition_id);
+    void set_partition_id(int64_t partition_id);
 
     // used when create new tablet
     void create_inital_updates_meta();

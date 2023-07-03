@@ -292,7 +292,7 @@ TEST_F(DefaultCompactionPolicyTest, test_candidate_rowsets_empty) {
     tablet_meta->set_tablet_schema(schema);
 
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_FALSE(compact(tablet).ok());
@@ -309,7 +309,7 @@ TEST_F(DefaultCompactionPolicyTest, test_min_cumulative_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     auto res = compact(tablet);
@@ -337,7 +337,7 @@ TEST_F(DefaultCompactionPolicyTest, test_max_cumulative_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     auto res = compact(tablet);
@@ -367,7 +367,7 @@ TEST_F(DefaultCompactionPolicyTest, test_tablet_not_running) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     tablet->set_tablet_state(TABLET_NOTREADY);
     init_compaction_context(tablet);
 
@@ -403,7 +403,7 @@ TEST_F(DefaultCompactionPolicyTest, test_missed_first_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     {
@@ -439,7 +439,7 @@ TEST_F(DefaultCompactionPolicyTest, test_missed_version_after_cumulative_point) 
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(4, tablet->version_count());
@@ -544,7 +544,7 @@ TEST_F(DefaultCompactionPolicyTest, test_missed_two_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(4, tablet->version_count());
@@ -682,7 +682,7 @@ TEST_F(DefaultCompactionPolicyTest, test_delete_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
@@ -760,7 +760,7 @@ TEST_F(DefaultCompactionPolicyTest, test_missed_and_delete_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(5, tablet->version_count());
@@ -872,7 +872,7 @@ TEST_F(DefaultCompactionPolicyTest, test_multi_segment_cumulative_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     auto res = compact(tablet);
@@ -887,4 +887,38 @@ TEST_F(DefaultCompactionPolicyTest, test_multi_segment_cumulative_compaction) {
     ASSERT_EQ(0, versions[0].second);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(DefaultCompactionPolicyTest, test_shortcut_compaction) {
+    LOG(INFO) << "test_shortcut_compaction";
+    create_tablet_schema(UNIQUE_KEYS);
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    write_new_version(tablet_meta);
+    write_empty_version(tablet_meta);
+    write_empty_version(tablet_meta);
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    ASSERT_OK(tablet->init());
+    init_compaction_context(tablet);
+    ASSERT_EQ(3, tablet->version_count());
+
+    bool is_shortcut_compaction = false;
+    auto res = compact(tablet, &is_shortcut_compaction);
+    ASSERT_TRUE(res.ok());
+    ASSERT_TRUE(is_shortcut_compaction);
+
+    ASSERT_EQ(1, tablet->version_count());
+    ASSERT_EQ(3, tablet->cumulative_layer_point());
+    std::vector<Version> versions;
+    tablet->list_versions(&versions);
+    ASSERT_EQ(1, versions.size());
+    ASSERT_EQ(0, versions[0].first);
+    ASSERT_EQ(2, versions[0].second);
+}
+
+>>>>>>> 4d573bed8 ([Enhancement] Declare some methods with nodiscard attribute (#26343))
 } // namespace starrocks

@@ -964,8 +964,8 @@ Status Tablet::_contains_version(const Version& version) {
     return Status::OK();
 }
 
-Status Tablet::set_partition_id(int64_t partition_id) {
-    return _tablet_meta->set_partition_id(partition_id);
+void Tablet::set_partition_id(int64_t partition_id) {
+    _tablet_meta->set_partition_id(partition_id);
 }
 
 TabletInfo Tablet::get_tablet_info() const {
@@ -1376,6 +1376,28 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     }
 }
 
+<<<<<<< HEAD
+=======
+Status Tablet::verify() {
+    int64_t version = max_continuous_version();
+    std::vector<RowsetSharedPtr> rowsets;
+    {
+        std::shared_lock l(get_header_lock());
+        RETURN_IF_ERROR(capture_consistent_rowsets(Version(0, version), &rowsets));
+        Rowset::acquire_readers(rowsets);
+    }
+    DeferOp defer([&rowsets]() { Rowset::release_readers(rowsets); });
+    for (auto& rowset : rowsets) {
+        auto st = rowset->verify();
+        if (!st.ok()) {
+            return st.clone_and_append(strings::Substitute("tablet:$0 version:$1 rowset:$2", tablet_id(), version,
+                                                           rowset->rowset_id().to_string()));
+        }
+    }
+    return Status::OK();
+}
+
+>>>>>>> 4d573bed8 ([Enhancement] Declare some methods with nodiscard attribute (#26343))
 std::string Tablet::schema_debug_string() const {
     return _tablet_meta->tablet_schema().debug_string();
 }
