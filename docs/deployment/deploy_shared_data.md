@@ -31,7 +31,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 | run_mode                            | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
 | cloud_native_meta_port              | The cloud-native meta service RPC port. Default: `6090`.     |
 | cloud_native_storage_type           | The type of object storage you use. Valid value: `S3` (Default). |
-| aws_s3_path                         | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it. |
+| aws_s3_path                         | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`. |
 | aws_s3_endpoint                     | The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. |
 | aws_s3_region                       | The region in which your S3 bucket resides, for example, `us-west-2`. |
 | aws_s3_use_aws_sdk_default_behavior | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
@@ -49,9 +49,16 @@ Before starting FEs, add the following configuration items in the FE configurati
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_aws_sdk_default_behavior = true
     ```
 
@@ -61,9 +68,16 @@ Before starting FEs, add the following configuration items in the FE configurati
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_access_key = <access_key>
     aws_s3_secret_key = <secret_key>
     ```
@@ -74,9 +88,16 @@ Before starting FEs, add the following configuration items in the FE configurati
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     ```
 
@@ -86,9 +107,16 @@ Before starting FEs, add the following configuration items in the FE configurati
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     aws_s3_iam_role_arn = <role_arn>
     ```
@@ -99,9 +127,16 @@ Before starting FEs, add the following configuration items in the FE configurati
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     aws_s3_iam_role_arn = <role_arn>
     aws_s3_external_id = <external_id>
@@ -113,6 +148,8 @@ Before starting FEs, add the following configuration items in the FE configurati
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # For example, testbucket/subpath
   aws_s3_path = <s3_path>
 
   # For example: us-east-1
@@ -131,6 +168,8 @@ Before starting FEs, add the following configuration items in the FE configurati
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # For example, testbucket/subpath
   aws_s3_path = <s3_path>
 
   # For example: us-east-1
