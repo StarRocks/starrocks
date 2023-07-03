@@ -1,0 +1,190 @@
+name: Report on the pull request
+
+on:
+  workflow_run:
+    workflows: [ "CI PIPELINE 2" ]
+    types:
+      - completed
+
+permissions: write-all
+
+jobs:
+
+  FE-UT-REPORT:
+    runs-on: [ self-hosted, normal ]
+    if: >
+      github.event.workflow_run.event == 'pull_request'
+    env:
+      PR_NUMBER: ${{ github.event.workflow_run.event.number }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: INFO
+        id: info
+        run: |
+          branch=${{ github.event.workflow_run.base_ref }}
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
+          echo "branch=${branch}" >> $GITHUB_OUTPUT
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
+      - name: Download FE UT XML
+        id: download-ut-xml
+        env:
+          branch: ${{ steps.info.outputs.branch }}
+          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
+        run: |
+          mkdir fe-ut && cd fe-ut
+          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/
+          size=$(ossutil64 --config-file ~/.ossutilconfig ${oss_path} | grep "total du size" | awk -F':' '{print $NF}')
+          echo "size=${size}" >> $GITHUB_OUTPUT
+          if [[ "$size" != "0" ]]; then
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+          fi
+
+      - name: Publish UT Report
+        uses: mikepenz/action-junit-report@v3
+        if: steps.download-ut-xml.outputs.size != '0'
+        env:
+          github_token: ${{ secrets.PAT }}
+          token: ${{ secrets.PAT }}
+        with:
+          check_name: 'FE UT Report'
+          detailed_summary: true
+          report_paths: ./fe-ut/*.xml
+
+      # Incremental Coverage
+      - name: Download Incremental Coverage Result
+        id: download-incremental-result
+        env:
+          branch: ${{ steps.info.outputs.branch }}
+          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
+        run: |
+          mkdir fe-result && cd fe-result
+          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/
+          size=$(ossutil64 --config-file ~/.ossutilconfig ${oss_path} | grep "total du size" | awk -F':' '{print $NF}')
+          echo "size=${size}" >> $GITHUB_OUTPUT
+          if [[ "$size" != "0" ]]; then
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+          fi
+
+      - name: Publish Incremental Coverage Report
+        if: steps.download-incremental-result.outputs.size != '0'
+        run: |
+          rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+          time_count=0
+          pull_status=1
+          export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+          export PATH=$JAVA_HOME/bin:$PATH;
+          while (( $pull_status != 0 )); do
+            if (( $time_count == 3 )); then
+              exit 1
+            fi
+            timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover ${{ github.workspace }}/fe-result/ --github-token ${{ secrets.PAT }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+            pull_status=$?
+            time_count=`expr $time_count + 1`
+          done
+          
+  SQL-Tester-REPORT:
+    runs-on: [ self-hosted, normal ]
+    if: >
+      github.event.workflow_run.event == 'pull_request'
+    env:
+      PR_NUMBER: ${{ github.event.workflow_run.event.number }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: INFO
+        id: info
+        run: |
+          branch=${{ github.event.workflow_run.base_ref }}
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
+          echo "branch=${branch}" >> $GITHUB_OUTPUT
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
+      - name: Download SQL-Tester XML
+        id: download-SQL-Tester-xml
+        env:
+          branch: ${{ steps.info.outputs.branch }}
+          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
+        run: |
+          mkdir sql-tester-result && cd sql-tester-result
+          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/
+          size=$(ossutil64 --config-file ~/.ossutilconfig ${oss_path} | grep "total du size" | awk -F':' '{print $NF}')
+          echo "size=${size}" >> $GITHUB_OUTPUT
+          if [[ "$size" != "0" ]]; then
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+          fi
+
+      - name: Prepare Tools
+        if: steps.download-SQL-Tester-xml.outputs.size != '0'
+        run: |
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
+      - name: Publish SQL-Tester Report
+        uses: ./.actions/nose-report-action
+        with:
+          check_name: 'SQL-Tester Report'
+          fail_on_failure: true
+          detailed_summary: true
+          token: ${{ secrets.PAT }}
+          report_paths: 'sql-tester-result/*.xml'
+
+  Admit-REPORT:
+    runs-on: [ self-hosted, normal ]
+    if: >
+      github.event.workflow_run.event == 'pull_request'
+    env:
+      PR_NUMBER: ${{ github.event.workflow_run.event.number }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: INFO
+        id: info
+        run: |
+          branch=${{ github.event.workflow_run.base_ref }}
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
+          echo "branch=${branch}" >> $GITHUB_OUTPUT
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
+      - name: Download Admit XML
+        id: download-admit-xml
+        env:
+          branch: ${{ steps.info.outputs.branch }}
+          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
+        run: |
+          mkdir admit-result && cd admit-result
+          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/
+          size=$(ossutil64 --config-file ~/.ossutilconfig ${oss_path} | grep "total du size" | awk -F':' '{print $NF}')
+          echo "size=${size}" >> $GITHUB_OUTPUT
+          if [[ "$size" != "0" ]]; then
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+          fi
+
+      - name: Prepare Tools
+        if: steps.download-admit-xml.outputs.size != '0'
+        run: |
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
+      - name: Publish Admit Report
+        uses: ./.actions/nose-report-action
+        with:
+          check_name: 'Admit Report'
+          fail_on_failure: true
+          detailed_summary: true
+          token: ${{ secrets.PAT }}
+          report_paths: 'admit-result/*.xml'
