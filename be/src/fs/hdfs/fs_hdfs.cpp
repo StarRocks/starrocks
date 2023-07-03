@@ -187,7 +187,7 @@ Status HDFSWritableFile::append(const Slice& data) {
     }
     if (r != data.size) {
         auto error_msg =
-                "Fail to append {}, expect written size: {}, actual written size {} "_format(_path, data.size, r);
+                fmt::format("Fail to append {}, expect written size: {}, actual written size {} ", _path, data.size, r);
         LOG(WARNING) << error_msg;
         return Status::IOError(error_msg);
     }
@@ -340,7 +340,7 @@ Status HdfsFileSystem::iterate_dir(const std::string& dir, const std::function<b
     int numEntries;
     fileinfo = hdfsListDirectory(hdfs_client->hdfs_fs, dir.data(), &numEntries);
     if (fileinfo == nullptr) {
-        return Status::InvalidArgument("hdfs list directory error {}"_format(dir));
+        return Status::InvalidArgument(fmt::format("hdfs list directory error {}", dir));
     }
     for (int i = 0; i < numEntries && fileinfo; ++i) {
         // obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size()
@@ -375,7 +375,7 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
     int numEntries;
     fileinfo = hdfsListDirectory(hdfs_client->hdfs_fs, dir.data(), &numEntries);
     if (fileinfo == nullptr) {
-        return Status::InvalidArgument("hdfs list directory error {}"_format(dir));
+        return Status::InvalidArgument(fmt::format("hdfs list directory error {}", dir));
     }
     for (int i = 0; i < numEntries && fileinfo; ++i) {
         // obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size()
@@ -391,7 +391,7 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
             std::string mName(fileinfo[i].mName);
             std::size_t found = mName.rfind('/');
             if (found == std::string::npos) {
-                return Status::InvalidArgument("parse path fail {}"_format(dir));
+                return Status::InvalidArgument(fmt::format("parse path fail {}", dir));
             }
 
             dir_size = found + 1;
@@ -530,7 +530,7 @@ Status HdfsFileSystem::rename_file(const std::string& src, const std::string& ta
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     int ret = hdfsRename(hdfs_client->hdfs_fs, src.data(), target.data());
     if (ret != 0) {
-        return Status::InvalidArgument("rename file from {} to {} error"_format(src, target));
+        return Status::InvalidArgument(fmt::format("rename file from {} to {} error", src, target));
     }
     return Status::OK();
 }
