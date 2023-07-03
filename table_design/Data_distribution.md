@@ -390,7 +390,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     ```
 
     如果需要开启该功能，则您需要确保 FE 动态参数 `enable_auto_tablet_distribution` 为 `true`。
-    建表后，您可以执行 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) 来查看 StarRock 自动设置的分桶数量。
+    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) 来查看 StarRock 为分区自动设置的分桶数量。
 
   - 方式二：手动设置分桶数量
 
