@@ -2378,6 +2378,33 @@ StatusOr<ColumnPtr> TimeFunctions::make_date(FunctionContext* context, const Col
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+// date_diff
+StatusOr<ColumnPtr> TimeFunctions::test_diff(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
+    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
+    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
+
+    auto size = columns[2]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    for (int row = 0; row < size; ++row) {
+        TimestampValue l = (TimestampValue)lv_column.value(row);
+        TimestampValue r = (TimestampValue)rv_column.value(row);
+        auto type_str = type_column.value(row).to_string;
+        if (type_str == "hour") {
+            result.append(l.diff_microsecond(r) / USECS_PER_HOUR);
+            continue;
+        }else if (type_str == "second") {
+            result.append(l.diff_microsecond(r) / USECS_PER_HOUR);
+            continue;
+        }else if (type_str == "millisecond") {
+            result.append(l.diff_microsecond(r) / USECS_PER_MILLIS);
+            continue;
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 // last_day
 StatusOr<ColumnPtr> TimeFunctions::last_day(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DATETIME> data_column(columns[0]);

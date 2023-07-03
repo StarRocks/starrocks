@@ -355,6 +355,14 @@ public:
     DEFINE_VECTORIZED_FN(time_diff);
 
     /**
+     * Calculate time difference  from the first timestamp to the second timestamp, unit can be day/hour/seconds/millisecond.
+     * @param context
+     * @param columns [TimestampColumn] Columns that holds two groups timestamps for calculation.
+     * @return  BigintColumn difference in seconds between the two timestamps. It can be negative.
+     */
+    DEFINE_VECTORIZED_FN(test_diff);
+
+    /**
      * @param: [timestmap, year]
      * @paramType columns: [TimestampColumn, IntColumn]
      * @return TimestampColumn
