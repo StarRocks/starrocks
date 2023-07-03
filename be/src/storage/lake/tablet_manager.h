@@ -59,11 +59,11 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletManager);
 
-    Status create_tablet(const TCreateTabletReq& req);
+    [[nodiscard]] Status create_tablet(const TCreateTabletReq& req);
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
-    Status delete_tablet(int64_t tablet_id);
+    [[nodiscard]] Status delete_tablet(int64_t tablet_id);
 
     // Returns the the newly created tablet metadata
     StatusOr<TabletMetadataPtr> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
@@ -73,9 +73,9 @@ public:
 
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
-    Status put_tablet_metadata(const TabletMetadata& metadata);
+    [[nodiscard]] Status put_tablet_metadata(const TabletMetadata& metadata);
 
-    Status put_tablet_metadata(TabletMetadataPtr metadata);
+    [[nodiscard]] Status put_tablet_metadata(TabletMetadataPtr metadata);
 
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version);
 
@@ -85,11 +85,11 @@ public:
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id, bool filter_tablet);
 
-    Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
+    [[nodiscard]] Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
 
-    Status put_txn_log(const TxnLog& log);
+    [[nodiscard]] Status put_txn_log(const TxnLog& log);
 
-    Status put_txn_log(TxnLogPtr log);
+    [[nodiscard]] Status put_txn_log(TxnLogPtr log);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
@@ -99,22 +99,22 @@ public:
 
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 
-    Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
+    [[nodiscard]] Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
 
-    Status delete_txn_vlog(int64_t tablet_id, int64_t version);
+    [[nodiscard]] Status delete_txn_vlog(int64_t tablet_id, int64_t version);
 
-    Status delete_segment(int64_t tablet_id, std::string_view segment_name);
+    [[nodiscard]] Status delete_segment(int64_t tablet_id, std::string_view segment_name);
 
     // Transform a txn log into versioned txn log(i.e., rename `{tablet_id}_{txn_id}.log` to `{tablet_id}_{log_version}.vlog`)
-    Status publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version);
+    [[nodiscard]] Status publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version);
 
-    Status put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
+    [[nodiscard]] Status put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
 
-    Status delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
+    [[nodiscard]] Status delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
 
     // put tablet_metadata and delvec to meta file. Only in PK table
-    Status put_tablet_metadata_delvec(const TabletMetadata& metadata,
-                                      const std::vector<std::pair<std::string, DelVectorPtr>>& del_vecs);
+    [[nodiscard]] Status put_tablet_metadata_delvec(const TabletMetadata& metadata,
+                                                    const std::vector<std::pair<std::string, DelVectorPtr>>& del_vecs);
 
     void prune_metacache();
 

@@ -197,7 +197,7 @@ public:
 
         TabletSharedPtr tablet =
                 Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-        tablet->init();
+        ASSERT_OK(tablet->init());
         tablet->calculate_cumulative_point();
 
         BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
@@ -267,7 +267,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_LE_1) {
     tablet_meta->set_tablet_schema(schema);
 
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(base_compaction.compact().ok());
 }
@@ -315,7 +315,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_EQ_2) {
     }
 
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     tablet->calculate_cumulative_point();
 
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);

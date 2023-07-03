@@ -200,13 +200,13 @@ protected:
         _tablets_channel.reset();
         _load_channel.reset();
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(10086));
-        tablet.delete_txn_log(kTxnId);
+        ASSERT_OK(tablet.delete_txn_log(kTxnId));
         ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10087));
-        tablet.delete_txn_log(kTxnId);
+        ASSERT_OK(tablet.delete_txn_log(kTxnId));
         ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10088));
-        tablet.delete_txn_log(kTxnId);
+        ASSERT_OK(tablet.delete_txn_log(kTxnId));
         ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10089));
-        tablet.delete_txn_log(kTxnId);
+        ASSERT_OK(tablet.delete_txn_log(kTxnId));
         (void)fs::remove_all(kTestGroupPath);
         _tablet_manager->prune_metacache();
     }
@@ -574,7 +574,7 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
     add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
 
-    _tablet_manager->delete_tablet(10089);
+    ASSERT_OK(_tablet_manager->delete_tablet(10089));
 
     _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
     ASSERT_NE(TStatusCode::OK, add_chunk_response.status().status_code());

@@ -452,7 +452,7 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
     for (int32_t i = 0; i < page_size; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
-        _parse_zone_map(zm, &detail);
+        RETURN_IF_ERROR(_parse_zone_map(zm, &detail));
         bool matched = true;
         for (const auto* predicate : predicates) {
             if (!predicate->zone_map_filter(detail)) {
@@ -477,7 +477,8 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
         return true;
     }
     ZoneMapDetail detail;
-    _parse_zone_map(*_segment_zone_map, &detail);
+    auto st = _parse_zone_map(*_segment_zone_map, &detail);
+    CHECK(st.ok()) << st;
     auto filter = [&](const ColumnPredicate* pred) { return pred->zone_map_filter(detail); };
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }

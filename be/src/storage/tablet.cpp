@@ -1085,8 +1085,8 @@ Status Tablet::_contains_version(const Version& version) {
     return Status::OK();
 }
 
-Status Tablet::set_partition_id(int64_t partition_id) {
-    return _tablet_meta->set_partition_id(partition_id);
+void Tablet::set_partition_id(int64_t partition_id) {
+    _tablet_meta->set_partition_id(partition_id);
 }
 
 TabletInfo Tablet::get_tablet_info() const {
@@ -1610,7 +1610,7 @@ Status Tablet::verify() {
     std::vector<RowsetSharedPtr> rowsets;
     {
         std::shared_lock l(get_header_lock());
-        capture_consistent_rowsets(Version(0, version), &rowsets);
+        RETURN_IF_ERROR(capture_consistent_rowsets(Version(0, version), &rowsets));
         Rowset::acquire_readers(rowsets);
     }
     DeferOp defer([&rowsets]() { Rowset::release_readers(rowsets); });

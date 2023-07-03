@@ -64,29 +64,29 @@ public:
 
     [[nodiscard]] std::string root_location() const;
 
-    Status put_metadata(const TabletMetadata& metadata);
+    [[nodiscard]] Status put_metadata(const TabletMetadata& metadata);
 
-    Status put_metadata(TabletMetadataPtr metadata);
+    [[nodiscard]] Status put_metadata(TabletMetadataPtr metadata);
 
     StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
-    Status delete_metadata(int64_t version);
+    [[nodiscard]] Status delete_metadata(int64_t version);
 
-    Status put_txn_log(const TxnLog& log);
+    [[nodiscard]] Status put_txn_log(const TxnLog& log);
 
-    Status put_txn_log(TxnLogPtr log);
+    [[nodiscard]] Status put_txn_log(TxnLogPtr log);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t version);
 
-    Status delete_txn_log(int64_t txn_id);
+    [[nodiscard]] Status delete_txn_log(int64_t txn_id);
 
-    Status delete_txn_vlog(int64_t version);
+    [[nodiscard]] Status delete_txn_vlog(int64_t version);
 
-    Status put_tablet_metadata_lock(int64_t version, int64_t expire_time);
+    [[nodiscard]] Status put_tablet_metadata_lock(int64_t version, int64_t expire_time);
 
-    Status delete_tablet_metadata_lock(int64_t version, int64_t expire_time);
+    [[nodiscard]] Status delete_tablet_metadata_lock(int64_t version, int64_t expire_time);
 
     // `segment_max_rows` is used in vertical writer
     // NOTE: This method may update the version hint
@@ -119,7 +119,7 @@ public:
 
     [[nodiscard]] std::string delvec_location(std::string_view delvec_name) const;
 
-    Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
+    [[nodiscard]] Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 
