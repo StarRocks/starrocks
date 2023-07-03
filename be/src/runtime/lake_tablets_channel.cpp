@@ -404,7 +404,10 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                     Slice slice(data, dict_word.size());
                     global_dict.emplace(slice, i);
                 }
-                _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
+                GlobalDictsWithVersion<GlobalDictMap> dict;
+                dict.dict = std::move(global_dict);
+                dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+                _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
             }
         }
     }
