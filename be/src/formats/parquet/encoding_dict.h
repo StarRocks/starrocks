@@ -8,6 +8,7 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "simd/simd.h"
 #include "util/coding.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
@@ -181,19 +182,79 @@ public:
         return Status::OK();
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) override {
-        std::vector<Slice> slices(dict_codes.size());
-        for (size_t i = 0; i < dict_codes.size(); i++) {
-            slices[i] = _dict[dict_codes[i]];
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, const vectorized::NullableColumn& nulls,
+                           vectorized::Column* column) override {
+        const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
+        bool has_null = nulls.has_null();
+        bool all_null = false;
+
+        if (has_null) {
+            size_t count = SIMD::count_nonzero(null_data);
+            all_null = (count == null_data.size());
         }
-        [[maybe_unused]] auto ret = column->append_strings_overflow(slices, _max_value_length);
+
+        // dict codes size and column size HAVE TO BE EXACTLY SAME.
+        std::vector<Slice> slices(dict_codes.size());
+        if (!has_null) {
+            for (size_t i = 0; i < dict_codes.size(); i++) {
+                slices[i] = _dict[dict_codes[i]];
+            }
+        } else if (!all_null) {
+            size_t size = dict_codes.size();
+            const uint8_t* null_data_ptr = null_data.data();
+            for (size_t i = 0; i < size; i++) {
+                // if null, we assign dict code 0(there should be at least one value?)
+                // null = 0, mask = 0xffffffff
+                // null = 1, mask = 0x00000000
+                uint32_t mask = ~(static_cast<uint32_t>(-null_data_ptr[i]));
+                int32_t code = mask & dict_codes[i];
+                slices[i] = _dict[code];
+            }
+        }
+
+        // if all null, then slices[i] is Slice(), and we can not call `append_strings_overflow`
+        // and for other cases, slices[i] is dict value, then we can call `append_strings_overflow`
+        bool ret = false;
+        if (!all_null) {
+            ret = column->append_strings_overflow(slices, _max_value_length);
+        } else {
+            ret = column->append_strings(slices);
+        }
+
+        if (UNLIKELY(!ret)) {
+            return Status::InternalError("DictDecoder append strings to column failed");
+        }
         return Status::OK();
     }
 
-    Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) override {
-        for (auto& dict_value : dict_values) {
-            // dict value always exists in _dict_code_by_value
-            dict_codes->emplace_back(_dict_code_by_value[dict_value]);
+    Status get_dict_codes(const std::vector<Slice>& dict_values, const vectorized::NullableColumn& nulls,
+                          std::vector<int32_t>* dict_codes) override {
+        const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
+        bool has_null = nulls.has_null();
+        bool all_null = false;
+
+        // dict values size and dict codes size don't need to be matched.
+        // if nulls[i], then there is no need to get code of dict_values[i]
+
+        if (has_null) {
+            size_t count = SIMD::count_nonzero(null_data);
+            all_null = (count == null_data.size());
+        }
+        if (all_null) {
+            return Status::OK();
+        }
+
+        if (!has_null) {
+            dict_codes->reserve(dict_values.size());
+            for (size_t i = 0; i < dict_values.size(); i++) {
+                dict_codes->emplace_back(_dict_code_by_value[dict_values[i]]);
+            }
+        } else {
+            for (size_t i = 0; i < dict_values.size(); i++) {
+                if (!null_data[i]) {
+                    dict_codes->emplace_back(_dict_code_by_value[dict_values[i]]);
+                }
+            }
         }
         return Status::OK();
     }
