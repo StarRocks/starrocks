@@ -40,7 +40,7 @@ select * from hive_map order by col_int;
 3 rows in set (0.05 sec)
 ```
 
-After a Hive catalog is created in your database, you can use this catalog and the map_keys() function to obtain all the keys from each row of the `col_map` column.
+After a [Hive catalog](../../../data_source/catalog/hive_catalog.md#create-a-hive-catalog) is created in your cluster, you can use this catalog and the map_keys() function to obtain all the keys from each row of the `col_map` column.
 
 ```Plain
 select map_keys(col_map) from hive_map order by col_int;

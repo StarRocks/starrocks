@@ -431,14 +431,9 @@
     + Map Functions
       + [cardinality](./sql-reference/sql-functions/map-functions/cardinality.md)
       + [element_at](./sql-reference/sql-functions/map-functions/element_at.md)
-      + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
-      + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
-      + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
       + [map_size](./sql-reference/sql-functions/map-functions/map_size.md)
       + [map_values](./sql-reference/sql-functions/map-functions/map_values.md)
-      + [transform_keys](./sql-reference/sql-functions/map-functions/transform_keys.md)
-      + [transform_values](./sql-reference/sql-functions/map-functions/transform_values.md)
     + Binary Functions
       + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
       + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
