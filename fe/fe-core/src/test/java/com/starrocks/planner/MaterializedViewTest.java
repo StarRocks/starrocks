@@ -3450,7 +3450,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testRightAntiJoin() {
+    public void testRightAntiJoinJoin() {
         {
             String q = "select deptno from emps\n"
                     + "left anti join depts using (deptno)";
@@ -3531,4 +3531,5 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                             + "where emps.empid > 10");
         }
     }
+
 }
