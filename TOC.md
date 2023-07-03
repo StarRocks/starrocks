@@ -313,8 +313,10 @@
       + 其他类型
         + [ARRAY](/sql-reference/sql-statements/data-types/Array.md)
         + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
-        + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
+        + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
+        + [MAP](/sql-reference/sql-statements/data-types/Map.md)
+        + [STRUCT](/sql-reference/sql-statements/data-types/STRUCT.md)
     + [关键字](/sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](/sql-reference/sql-statements/auto_increment.md)
   + 函数参考
@@ -422,6 +424,7 @@
       + [split](/sql-reference/sql-functions/string-functions/split.md)
       + [split_part](/sql-reference/sql-functions/string-functions/split_part.md)
       + [starts_with](/sql-reference/sql-functions/string-functions/starts_with.md)
+      + [str_to_bitmap](/sql-reference/sql-functions/string-functions/str_to_map.md)
       + [strleft](/sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](/sql-reference/sql-functions/string-functions/strright.md)
       + [substring](/sql-reference/sql-functions/string-functions/substr.md)
@@ -461,6 +464,8 @@
       + [var_samp](/sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](/sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Array 函数
+      + [all_match](/sql-reference/sql-functions/array-functions/all_match.md)
+      + [any_match](/sql-reference/sql-functions/array-functions/any_match.md)
       + [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](/sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](/sql-reference/sql-functions/array-functions/array_avg.md)
@@ -471,6 +476,7 @@
       + [array_difference](/sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_distinct](/sql-reference/sql-functions/array-functions/array_distinct.md)
       + [array_filter](/sql-reference/sql-functions/array-functions/array_filter.md)
+      + [array_generate](/sql-reference/sql-functions/array-functions/array_generate.md)
       + [array_intersect](/sql-reference/sql-functions/array-functions/array_intersect.md)
       + [array_join](/sql-reference/sql-functions/array-functions/array_join.md)
       + [array_length](/sql-reference/sql-functions/array-functions/array_length.md)
@@ -485,6 +491,8 @@
       + [array_sortby](/sql-reference/sql-functions/array-functions/array_sortby.md)
       + [array_sum](/sql-reference/sql-functions/array-functions/array_sum.md)
       + [array_to_bitmap](/sql-reference/sql-functions/array-functions/array_to_bitmap.md)
+      + [cardinality](/sql-reference/sql-functions/array-functions/cardinality.md)
+      + [element_at](/sql-reference/sql-functions/array-functions/element_at.md)
       + [reverse](/sql-reference/sql-functions/string-functions/reverse.md)
       + [unnest](/sql-reference/sql-functions/array-functions/unnest.md)
     + Bitmap 函数
@@ -533,7 +541,11 @@
         + [json_query](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map 函数
+      + [cardinality](/sql-reference/sql-functions/map-functions/cardinality.md)
+      + [distinct_map_keys](/sql-reference/sql-functions/map-functions/distinct_map_keys.md)
+      + [element_at](/sql-reference/sql-functions/map-functions/element_at.md)
       + [map_apply](/sql-reference/sql-functions/map-functions/map_apply.md)
+      + [map_concat](/sql-reference/sql-functions/map-functions/map_concat.md)
       + [map_filter](/sql-reference/sql-functions/map-functions/map_filter.md)
       + [map_from_arrays](/sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](/sql-reference/sql-functions/map-functions/map_keys.md)
@@ -541,6 +553,9 @@
       + [map_values](/sql-reference/sql-functions/map-functions/map_values.md)
       + [transform_keys](/sql-reference/sql-functions/map-functions/transform_keys.md)
       + [transform_values](/sql-reference/sql-functions/map-functions/transform_values.md)
+    + Struct 函数
+      + [named_struct](/sql-reference/sql-functions/struct-functions/named_struct.md)
+      + [row](/sql-reference/sql-functions/struct-functions/row.md)
     + Bit 函数
       + [bitand](/sql-reference/sql-functions/bit-functions/bitand.md)
       + [bitnot](/sql-reference/sql-functions/bit-functions/bitnot.md)
