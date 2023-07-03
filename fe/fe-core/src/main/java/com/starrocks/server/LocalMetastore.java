@@ -392,9 +392,16 @@ public class LocalMetastore implements ConnectorMetadata {
                 id = getNextId();
                 Database db = new Database(id, dbName);
                 unprotectCreateDb(db);
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db, storageVolumeId);
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                    GlobalStateMgr.getCurrentState().getStorageVolumeMgr().bindDbToStorageVolume(storageVolumeId, id);
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA &&
+                        !GlobalStateMgr.getCurrentState().getStorageVolumeMgr().bindDbToStorageVolume(storageVolumeId, id)) {
+                    throw new DdlException(String.format("Storage volume with id %s not exists", storageVolumeId));
+                }
+                try {
+                    GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db, storageVolumeId);
+                } catch (Exception e) {
+                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                        GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindDbToStorageVolume(id);
+                    }
                 }
             }
         } finally {
