@@ -433,10 +433,6 @@ public class MaterializedViewAnalyzer {
                 }
                 column.setIsKey(true);
                 column.setAggregationType(null, false);
-                // list partition does not support partition column is null
-                if (keyColType.getPrimitiveType() == PrimitiveType.VARCHAR) {
-                    column.setIsAllowNull(false);
-                }
             }
             return mvColumns;
         }
