@@ -155,7 +155,6 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.label = ctx->label;
-    request.warehouse = ctx->warehouse;
     // set timestamp
     request.__set_timestamp(GetCurrentTimeMicros());
     if (ctx->timeout_second != -1) {

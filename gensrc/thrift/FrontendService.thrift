@@ -668,7 +668,6 @@ struct TMasterOpRequest {
     31: optional bool isLastStmt
     32: optional string modified_variables_sql
     33: optional Types.TUserRoles user_roles
-    34: optional string warehouse
 }
 
 struct TColumnDefinition {
@@ -725,7 +724,6 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
-    12: optional string warehouse
 }
 
 struct TLoadTxnBeginResult {
@@ -790,7 +788,6 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
-    56: optional string warehouse
 }
 
 struct TStreamLoadPutResult {
@@ -876,7 +873,6 @@ struct TLoadTxnRollbackRequest {
     9: optional i64 auth_code
     10: optional TTxnCommitAttachment txnCommitAttachment
     11: optional list<Types.TTabletFailInfo> failInfos
-    12: optional string warehouse
 }
 
 struct TLoadTxnRollbackResult {

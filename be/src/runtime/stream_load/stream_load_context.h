@@ -198,7 +198,6 @@ public:
     std::string table;
     std::string label;
     // optional
-    std::string warehouse = "";
     double max_filter_ratio = 0.0;
     int32_t timeout_second = -1;
     AuthInfo auth;
