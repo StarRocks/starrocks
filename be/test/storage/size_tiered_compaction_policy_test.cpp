@@ -346,7 +346,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_candidate_rowsets_empty) {
     tablet_meta->set_tablet_schema(schema);
 
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_FALSE(compact(tablet).ok());
@@ -363,7 +363,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_min_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     auto res = compact(tablet);
@@ -390,7 +390,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_tablet_not_running) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     tablet->set_tablet_state(TABLET_NOTREADY);
     init_compaction_context(tablet);
 
@@ -423,7 +423,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_max_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     auto res = compact(tablet);
@@ -450,7 +450,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_missed_first_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     {
@@ -485,7 +485,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_missed_version_after_cumulative_poin
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
@@ -551,7 +551,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_missed_two_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
@@ -644,7 +644,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_delete_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
@@ -682,7 +682,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_missed_and_delete_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(6, tablet->version_count());
@@ -772,7 +772,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_two_delete_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(4, tablet->version_count());
@@ -807,7 +807,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_two_delete_missed_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(4, tablet->version_count());
@@ -876,7 +876,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_descending_order_level_size) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
@@ -911,7 +911,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_order_level_size) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
@@ -947,7 +947,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(8, tablet->version_count());
@@ -1012,7 +1012,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_base_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
@@ -1047,7 +1047,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_base_and_backtrace_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(7, tablet->version_count());
@@ -1100,7 +1100,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_delete_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(5, tablet->version_count());
@@ -1135,7 +1135,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_no_backtrace_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(4, tablet->version_count());
@@ -1160,7 +1160,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_force_base_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
@@ -1211,7 +1211,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_manual_force_base_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
@@ -1260,7 +1260,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_manual_force_base_compaction_less_mi
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
@@ -1314,7 +1314,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_base_compaction_multi_dele
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(6, tablet->version_count());
@@ -1351,7 +1351,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_base_compaction_continous_
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(6, tablet->version_count());
@@ -1388,7 +1388,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_delete_limit) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(7, tablet->version_count());
@@ -1422,7 +1422,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_large_dup_base_rowset) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(4, tablet->version_count());
@@ -1475,7 +1475,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_large_dup_base_rowset_force_compact)
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     ASSERT_EQ(4, tablet->version_count());
@@ -1521,7 +1521,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_one_delete_shortcut_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     init_compaction_context(tablet);
 
     write_empty_version(tablet);

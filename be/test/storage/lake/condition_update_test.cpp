@@ -140,7 +140,7 @@ public:
         // check primary index cache's ref
         EXPECT_TRUE(_update_manager->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-        tablet.delete_txn_log(_txn_id);
+        ASSERT_OK(tablet.delete_txn_log(_txn_id));
         _txn_id++;
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
         (void)fs::remove_all(kTestGroupPath);

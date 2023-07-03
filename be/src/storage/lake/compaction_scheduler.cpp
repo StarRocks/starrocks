@@ -84,11 +84,12 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
           _task_queue_count(config::compact_threads),
           _task_queues(new TaskQueue[_task_queue_count]) {
     CHECK_GT(_task_queue_count, 0);
-    ThreadPoolBuilder("clound_native_compact")
-            .set_min_threads(_task_queue_count)
-            .set_max_threads(_task_queue_count)
-            .set_max_queue_size(_task_queue_count)
-            .build(&_threads);
+    auto st = ThreadPoolBuilder("clound_native_compact")
+                      .set_min_threads(_task_queue_count)
+                      .set_max_threads(_task_queue_count)
+                      .set_max_queue_size(_task_queue_count)
+                      .build(&_threads);
+    CHECK(st.ok()) << st;
 
     for (int i = 0; i < _task_queue_count; i++) {
         CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());

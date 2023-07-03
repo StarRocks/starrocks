@@ -334,7 +334,7 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load) {
         c1->set_is_key(false);
         c1->set_is_nullable(false);
     }
-    _tablet_manager->put_tablet_metadata(metadata);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
     const TabletSchema* ptr = nullptr;
 

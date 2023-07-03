@@ -50,7 +50,7 @@ void GlobalDriverExecutor::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->_worker_thread(); });
+        (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
     }
 }
 
@@ -60,7 +60,7 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->_worker_thread(); });
+        (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
     }
 }
 

@@ -405,8 +405,11 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
     std::vector<std::pair<Status, std::string>> pair_vec(affected_dirs.size());
     auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (auto dir : affected_dirs) {
-        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flushWAL(); });
+        auto st = token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flushWAL(); });
         pair_vec[i].second = dir->path();
+        if (!st.ok()) {
+            pair_vec[i].first = std::move(st);
+        }
         i++;
     }
 
