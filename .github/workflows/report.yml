@@ -34,6 +34,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ github.event.workflow_run.id }}
+          workflow: test_fork.yml
           name: 'pr_num'
 
       - name: Read the pr_num file
