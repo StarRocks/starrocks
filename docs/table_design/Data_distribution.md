@@ -83,7 +83,7 @@ Data in partitions can be subdivided into tablets based on the hash values of th
 - high cardinality column such as ID
 - column that often used as a filter in queries
 
-But if the column that satisfies both requirements does not exist, you need to determine the buckting column according to the complexity of queries.
+But if the column that satisfies both requirements does not exist, you need to determine the bucketing column according to the complexity of queries.
 
 - If the query is complex, it is recommended that you select the high cardinality column as the bucketing column to ensure that the data is as balanced as possible in each bucket and improve the cluster resource utilization.
 - If the query is relatively simple, then it is recommended to select the column that is often used as in the query condition as the bucketing column to improve the query efficiency.
@@ -162,7 +162,68 @@ DISTRIBUTED BY HASH(site_id,city_code); --do not need to set the number of bucke
 
 If you intend to set the number of buckets, StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contains about 10 GB of raw data. You can estimate the amount of data in each partition of a table and then decide the number of tablets. To enable the parallel scanning on tablets, make sure the `GLOBAL enable_tablet_internal_parallel` is enabled.
 
+<<<<<<< HEAD
 > Note: You cannot modify the number of tablets for an existing partition. You can only modify the number of tablets when you add a partition.
+=======
+    Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition.
+
+    Example:
+
+    ```SQL
+    CREATE TABLE site_access(
+        site_id INT DEFAULT '10',
+        city_code SMALLINT,
+        user_name VARCHAR(32) DEFAULT '',
+        pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY(site_id, city_code, user_name)
+    DISTRIBUTED BY HASH(site_id,city_code); -- do not need to set the number of buckets
+    ```
+
+    To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` is set to `TRUE`. After a table is created, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the bucket number automatically set by StarRocks for each partition.
+
+  - Method 2: manually set the number of buckets
+
+    StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimate the the amount of data in each partition of a table and then decide the number of tablets. To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
+
+    ```sql
+    CREATE TABLE site_access (
+        site_id INT DEFAULT '10',
+        city_code SMALLINT,
+        user_name VARCHAR(32) DEFAULT '',
+        pv BIGINT SUM DEFAULT '0')
+    AGGREGATE KEY(site_id, city_code, user_name)
+    DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30; -- Suppose the amount of raw data that you want to load into a partition is 300 GB. Because we recommend that each tablet contain 10 GB of raw data, the number of buckets can be set to 30.
+    ```
+
+- How to set the number of buckets when adding a partition
+
+  - Method 1: automatically set the number of buckets (Recommended)
+
+    Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition.
+    To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` retains the default value `TRUE`.
+
+    To disable this feature, run the `ADMIN SET FRONTEND CONFIG ('enable_auto_tablet_distribution' = 'false');` statement. And when a new partition is added without specifying the number of buckets, the new partition inherits the the number of buckets set at the creation of the table. After a new partition is added successfully, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the number of buckets automatically set by StarRocks for the new partition.
+
+  - Method 2: manually set the number of buckets
+
+    You can also manually specify the bucket count when adding a new partition. To calculate the number of buckets for a new partition, you can refer to the approach used when manually setting the number of buckets at table creation, as mentioned above.
+
+    ```sql
+    -- Manually create partitions
+    ALTER TABLE <table_name> 
+    ADD PARTITION <partition_name>
+        [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
+        
+    -- Dynamic partitioning
+    ALTER TABLE <table_name> 
+    SET ("dynamic_partition.buckets"="xxx");
+    ```
+
+> **NOTICE**
+>
+> You cannot modify the number of buckets for an existing partition. You can only modify the number of buckets when you add a partition.
+>>>>>>> 8ccef46b4 ([Doc] update show create table and optimize show partitions (#26379))
 
 ## Manage  partitions
 
