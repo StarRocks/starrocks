@@ -766,10 +766,10 @@ public:
     template <class U>
     STLCountingAllocator(const STLCountingAllocator<U>& x) : Alloc(x), bytes_used_(x.bytes_used()) {}
 
-    pointer allocate(size_type n, std::allocator<void>::const_pointer hint = nullptr) {
+    pointer allocate(size_type n) {
         assert(bytes_used_ != NULL);
         *bytes_used_ += n * sizeof(T);
-        return Alloc::allocate(n, hint);
+        return Alloc::allocate(n);
     }
 
     void deallocate(pointer p, size_type n) {
