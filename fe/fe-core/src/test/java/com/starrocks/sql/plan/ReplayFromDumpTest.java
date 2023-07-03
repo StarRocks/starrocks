@@ -873,4 +873,31 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(new CTEProperty(1), expression.getLogicalProperty().getUsedCTEs());
         Assert.assertEquals(4, result.second.getCteProduceFragments().size());
     }
+
+    @Test
+    public void testMV_JoinAgg1() throws Exception {
+        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg1");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
+        Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
+    }
+
+    @Test
+    public void testMV_JoinAgg2() throws Exception {
+        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
+    }
+
+    @Test
+    public void testMV_JoinAgg3() throws Exception {
+        FeConstants.isReplayFromQueryDump = true;
+        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg3"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
+        FeConstants.isReplayFromQueryDump = false;
+    }
 }

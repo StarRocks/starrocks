@@ -153,8 +153,10 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
             // deserialize partition names
             JsonArray partitionNamesJson = dumpJsonObject.getAsJsonArray("PartitionNames");
             List<String> partitionNames = Lists.newArrayList();
-            for (JsonElement partitionName : partitionNamesJson) {
-                partitionNames.add(partitionName.getAsString());
+            if (partitionNamesJson != null) {
+                for (JsonElement partitionName : partitionNamesJson) {
+                    partitionNames.add(partitionName.getAsString());
+                }
             }
             hiveTableDumpInfo.setPartitionNames(partitionNames);
 

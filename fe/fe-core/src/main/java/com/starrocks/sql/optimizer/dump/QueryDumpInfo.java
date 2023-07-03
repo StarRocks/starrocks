@@ -37,9 +37,9 @@ public class QueryDumpInfo implements DumpInfo {
     private String originStmt = "";
     private final Set<Resource> resourceSet = new HashSet<>();
     // tableId-><dbName, table>
-    private final Map<Long, Pair<String, Table>> tableMap = new HashMap<>();
+    private final Map<Long, Pair<String, Table>> tableMap = new LinkedHashMap<>();
     // resourceName->dbName->tableName->externalTable
-    private final Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> hmsTableMap = new HashMap<>();
+    private final Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> hmsTableMap = new LinkedHashMap<>();
     // viewId-><dbName, view>
     private final Map<Long, Pair<String, View>> viewMap = new LinkedHashMap<>();
     // tableName->partitionName->partitionRowCount
