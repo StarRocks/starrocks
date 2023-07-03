@@ -339,14 +339,6 @@ public:
     DEFINE_VECTORIZED_FN(to_date);
 
     /**
-     * Calculate days from the first timestamp to the second timestamp. Only the date part of the timestamps are used in calculation.
-     * @param context
-     * @param columns [TimestampColumn] Columns that holds two groups timestamps for calculation.
-     * @return  BigIntColumn Difference in days between the two timestamps. It can be negative.
-     */
-    DEFINE_VECTORIZED_FN(date_diff);
-
-    /**
      * Calculate time difference in seconds from the first timestamp to the second timestamp.
      * @param context
      * @param columns [TimestampColumn] Columns that holds two groups timestamps for calculation.
