@@ -13,7 +13,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 > 说明
 >
 > * 支持 PartitionId，PartitionName，State，Buckets，ReplicationNum，LastConsistencyCheckTime 等列的过滤。
-> * 该语法只支持 OLAP 表，ES 表和 HIVE 表请使用 SHOW PROC '/dbs/db_id/table_id/partitions';
+> * 该语法只支持 StarRocks 表 (即建表时 `"ENGINE" = "OLAP"`)。Elasticsearch 外表和 Hive 外表请使用 SHOW PROC '/dbs/db_id/table_id/partitions'。
+> * 自 3.0 版本起，该操作需要对应表的 SELECT 权限。 3.0 版本之前，该操作需要对应数据库和表的 SELECT_PRIV 权限。
 
 ## 示例
 
