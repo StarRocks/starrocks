@@ -318,6 +318,7 @@ int main(int argc, char** argv) {
 #if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
     if (starrocks::config::block_cache_enable) {
         starrocks::config::block_cache_enable = false;
+        LOG(ERROR) << "block cache is disabled because no cache engine is supported, please check your build options.";
     }
 #endif
 

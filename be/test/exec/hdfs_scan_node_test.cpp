@@ -34,6 +34,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
+        config::block_cache_enable = false;
 
         _exec_env = ExecEnv::GetInstance();
 
