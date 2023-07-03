@@ -1834,7 +1834,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_EQ(true, result->is_null(0));
     }
-    
+
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("", 0), 1);
 
