@@ -14,6 +14,9 @@
 
 #include "formats/parquet/group_reader.h"
 
+#include <memory>
+#include <sstream>
+
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
@@ -23,6 +26,7 @@
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_or_predicate.h"
 #include "utils.h"
 
 namespace starrocks::parquet {
@@ -42,6 +46,11 @@ Status GroupReader::init() {
     RETURN_IF_ERROR(_init_column_readers());
     _dict_filter_ctx.init(_param.read_cols.size());
     _process_columns_and_conjunct_ctxs();
+
+    return Status::OK();
+}
+
+Status GroupReader::prepare() {
     RETURN_IF_ERROR(_dict_filter_ctx.rewrite_conjunct_ctxs_to_predicates(_param, _column_readers, &_obj_pool,
                                                                          &_is_group_filtered));
     _init_read_chunk();
@@ -123,6 +132,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
     size_t active_rows = active_chunk->num_rows();
     if (active_rows > 0 && !_lazy_column_indices.empty()) {
+        _lazy_column_needed = true;
         ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
         RETURN_IF_ERROR(_lazy_skip_rows(_lazy_column_indices, lazy_chunk, *row_count));
 
@@ -163,6 +173,11 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 void GroupReader::close() {
     if (_param.sb_stream) {
         _param.sb_stream->release_to_offset(_end_offset);
+    }
+    if (_lazy_column_needed) {
+        _param.lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
+    } else {
+        _param.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
     }
     _column_readers.clear();
 }
@@ -258,19 +273,33 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices)
 
 void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
-    for (const auto& column : _param.read_cols) {
+    // collect io of active column
+    for (const auto& index : _active_column_indices) {
+        const auto& column = _param.read_cols[index];
         auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
         if (column.t_iceberg_schema_field == nullptr) {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, ranges, &end);
+            _collect_field_io_range(*schema_node, column.col_type_in_chunk, true, ranges, &end);
         } else {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, ranges,
+            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, true, ranges,
                                     &end);
+        }
+    }
+
+    // collect io of lazy column
+    for (const auto& index : _lazy_column_indices) {
+        const auto& column = _param.read_cols[index];
+        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
+        if (column.t_iceberg_schema_field == nullptr) {
+            _collect_field_io_range(*schema_node, column.col_type_in_chunk, false, ranges, &end);
+        } else {
+            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, false,
+                                    ranges, &end);
         }
     }
     *end_offset = end;
 }
 
-void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type, bool active,
                                           std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                           int64_t* end_offset) {
     // 1. We collect column io ranges for each row group to make up the shared buffer, so we get column
@@ -280,7 +309,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
     // we need to iterate the children and collect their io ranges.
     // 3. For subfield pruning, we collect io range based on col_type which is pruned by fe.
     if (field.type.type == LogicalType::TYPE_ARRAY) {
-        _collect_field_io_range(field.children[0], col_type.children[0], ranges, end_offset);
+        _collect_field_io_range(field.children[0], col_type.children[0], active, ranges, end_offset);
     } else if (field.type.type == LogicalType::TYPE_STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         ColumnReader::get_subfield_pos_with_pruned_type(field, col_type, _param.case_sensitive, subfield_pos);
@@ -289,7 +318,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             if (subfield_pos[i] == -1) {
                 continue;
             }
-            _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], ranges, end_offset);
+            _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], active, ranges, end_offset);
         }
     } else if (field.type.type == LogicalType::TYPE_MAP) {
         // ParquetFiled Map -> Map<Struct<key,value>>
@@ -297,7 +326,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
         auto index = 0;
         for (auto& child : field.children[0].children) {
             if ((!col_type.children[index].is_unknown_type())) {
-                _collect_field_io_range(child, col_type.children[index], ranges, end_offset);
+                _collect_field_io_range(child, col_type.children[index], active, ranges, end_offset);
             }
             ++index;
         }
@@ -310,20 +339,20 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size};
+        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size, .active = active};
         ranges->emplace_back(r);
         *end_offset = std::max(*end_offset, offset + size);
     }
 }
 
 void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
-                                          const TIcebergSchemaField* iceberg_schema_field,
+                                          const TIcebergSchemaField* iceberg_schema_field, bool active,
                                           std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                           int64_t* end_offset) {
     // Logically same with _collect_filed_io_range, just support schema change.
     if (field.type.type == LogicalType::TYPE_ARRAY) {
-        _collect_field_io_range(field.children[0], col_type.children[0], &iceberg_schema_field->children[0], ranges,
-                                end_offset);
+        _collect_field_io_range(field.children[0], col_type.children[0], &iceberg_schema_field->children[0], active,
+                                ranges, end_offset);
     } else if (field.type.type == LogicalType::TYPE_STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         std::vector<const TIcebergSchemaField*> iceberg_schema_subfield(col_type.children.size());
@@ -335,7 +364,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
                 continue;
             }
             _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], iceberg_schema_subfield[i],
-                                    ranges, end_offset);
+                                    active, ranges, end_offset);
         }
     } else if (field.type.type == LogicalType::TYPE_MAP) {
         // ParquetFiled Map -> Map<Struct<key,value>>
@@ -343,8 +372,8 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
         auto index = 0;
         for (auto& child : field.children[0].children) {
             if ((!col_type.children[index].is_unknown_type())) {
-                _collect_field_io_range(child, col_type.children[index], &iceberg_schema_field->children[index], ranges,
-                                        end_offset);
+                _collect_field_io_range(child, col_type.children[index], &iceberg_schema_field->children[index], active,
+                                        ranges, end_offset);
             }
             ++index;
         }
@@ -357,7 +386,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size};
+        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size, .active = active};
         ranges->emplace_back(r);
         *end_offset = std::max(*end_offset, offset + size);
     }
@@ -375,18 +404,6 @@ bool GroupReader::_can_use_as_dict_filter_column(const SlotDescriptor* slot,
     SlotId slot_id = slot->id();
     if (conjunct_ctxs_by_slot.find(slot_id) == conjunct_ctxs_by_slot.end()) {
         return false;
-    }
-
-    // check is null or is not null
-    // is null or is not null conjunct should not eval dict value, this will always return empty set
-    for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
-        const Expr* root_expr = ctx->root();
-        if (root_expr->node_type() == TExprNodeType::FUNCTION_CALL) {
-            std::string is_null_str;
-            if (root_expr->is_null_scalar_function(is_null_str)) {
-                return false;
-            }
-        }
     }
 
     // check all data pages dict encoded
@@ -543,11 +560,15 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
     for (int col_idx : _dict_column_indices) {
         const auto& column = param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
-        ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
-        std::shared_ptr<BinaryColumn> dict_value_column = BinaryColumn::create();
-        dict_value_chunk->append_column(dict_value_column, slot_id);
 
+        // --------
+        // create dict value chunk for evaluation.
+        ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
+        ColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        dict_value_chunk->append_column(dict_value_column, slot_id);
         RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(dict_value_column.get()));
+        // append a null value to check if null is ok or not.
+        dict_value_column->append_default();
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs_by_slot[slot_id], dict_value_chunk.get()));
         dict_value_chunk->check_or_die();
 
@@ -557,24 +578,50 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
             return Status::OK();
         }
 
-        // get dict codes
+        // ---------
+        // get dict codes according to dict values.
+        auto* dict_nullable_column = down_cast<NullableColumn*>(dict_value_column.get());
+        auto* dict_value_binary_column = down_cast<BinaryColumn*>(dict_nullable_column->data_column().get());
         std::vector<int32_t> dict_codes;
-        RETURN_IF_ERROR(column_readers[slot_id]->get_dict_codes(dict_value_column->get_data(), &dict_codes));
+        RETURN_IF_ERROR(column_readers[slot_id]->get_dict_codes(dict_value_binary_column->get_data(),
+                                                                *dict_nullable_column, &dict_codes));
 
         // eq predicate is faster than in predicate
         // TODO: improve not eq and not in
-        if (dict_codes.size() == 1) {
-            _predicates[slot_id] =
-                    new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0]));
+        if (dict_codes.size() == 0) {
+            _predicates[slot_id] = nullptr;
+        } else if (dict_codes.size() == 1) {
+            _predicates[slot_id] = obj_pool->add(
+                    new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0])));
         } else {
             std::vector<std::string> str_codes;
             str_codes.reserve(dict_codes.size());
             for (int code : dict_codes) {
                 str_codes.emplace_back(std::to_string(code));
             }
-            _predicates[slot_id] = new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes);
+            _predicates[slot_id] =
+                    obj_pool->add(new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes));
         }
-        obj_pool->add(_predicates[slot_id]);
+
+        // check if NULL works or not.
+        if (dict_value_column->has_null()) {
+            ColumnPredicate* old = _predicates[slot_id];
+            // new = old or (is_null);
+            ColumnPredicate* result = nullptr;
+            ColumnPredicate* is_null_pred =
+                    obj_pool->add(new_column_null_predicate(get_type_info(kDictCodeFieldType), slot_id, true));
+
+            if (old != nullptr) {
+                ColumnOrPredicate* or_pred =
+                        obj_pool->add(new ColumnOrPredicate(get_type_info(kDictCodeFieldType), slot_id));
+                or_pred->add_child(old);
+                or_pred->add_child(is_null_pred);
+                result = or_pred;
+            } else {
+                result = is_null_pred;
+            }
+            _predicates[slot_id] = result;
+        }
     }
 
     return Status::OK();
@@ -595,7 +642,6 @@ void GroupReader::DictFilterContext::init_chunk(const GroupReaderParam& param, C
 
 bool GroupReader::DictFilterContext::filter_chunk(ChunkPtr* chunk, Filter* filter) {
     if (_predicates.empty()) return false;
-
     auto iter = _predicates.begin();
     SlotId slot_id = iter->first;
     auto pred = iter->second;
@@ -620,16 +666,19 @@ Status GroupReader::DictFilterContext::decode_chunk(
         if (_is_dict_filter_column[col_idx]) {
             int chunk_index = column.col_idx_in_chunk;
 
-            ColumnPtr& dict_codes = read_chunk->get_column_by_slot_id(slot_id);
             ColumnPtr& dict_values = (*chunk)->get_column_by_slot_id(slot_id);
             dict_values->resize(0);
 
+            // decode dict code to dict values.
+            // note that in dict code, there could be null value.
+            ColumnPtr& dict_codes = read_chunk->get_column_by_slot_id(slot_id);
             auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
             auto* codes_column =
                     ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
-            RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(codes_column->get_data(), dict_values.get()));
-
+            RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(codes_column->get_data(), *codes_nullable_column,
+                                                                     dict_values.get()));
             DCHECK_EQ(dict_codes->size(), dict_values->size());
+
             if (slots[chunk_index]->is_nullable()) {
                 auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
                 auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());

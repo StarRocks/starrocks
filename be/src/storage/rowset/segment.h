@@ -92,8 +92,9 @@ public:
                                                    const FooterPointerPB* partial_rowset_footer = nullptr,
                                                    bool skip_fill_local_cache = true);
 
-    static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                       const FooterPointerPB* partial_rowset_footer);
+    [[nodiscard]] static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                                     size_t* footer_length_hint,
+                                                     const FooterPointerPB* partial_rowset_footer);
 
     Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
             TabletSchemaCSPtr tablet_schema);
@@ -111,8 +112,8 @@ public:
     StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t id, ColumnAccessPath* path = nullptr,
                                                                   const TabletSchemaCSPtr& tablet_schema = nullptr);
 
-    Status new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options, BitmapIndexIterator** iter,
-                                     const TabletSchemaCSPtr& tablet_schema);
+    [[nodiscard]] Status new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options, BitmapIndexIterator** iter,
+                                                   const TabletSchemaCSPtr& tablet_schema);
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
@@ -156,7 +157,7 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    Status load_index(bool skip_fill_local_cache = true);
+    [[nodiscard]] Status load_index(bool skip_fill_local_cache = true);
     bool has_loaded_index() const;
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
@@ -165,7 +166,7 @@ public:
 
     bool is_valid_column(uint32_t column_index) const;
     // read short_key_index, for data check, just used in unit test now
-    Status get_short_key_index(std::vector<std::string>* sk_index_values);
+    [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
     DISALLOW_COPY_AND_MOVE(Segment);
 

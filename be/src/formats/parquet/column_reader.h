@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+
 #include "formats/parquet/column_converter.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
@@ -78,11 +79,13 @@ public:
 
     virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) {
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
+                                   Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
     }
 
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
+    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, const NullableColumn& nulls,
+                                  std::vector<int32_t>* dict_codes) {
         return Status::NotSupported("get_dict_codes is not supported");
     }
 

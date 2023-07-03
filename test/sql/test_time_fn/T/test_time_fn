@@ -190,6 +190,13 @@ select week_iso("2023-01-03");
 select week_iso("");
 select week_iso(NULL);
 
+-- name: test_dayofweek_iso
+select dayofweek_iso("2023-01-01");
+select dayofweek_iso("2023-01-02");
+select dayofweek_iso("2023-01-03");
+select dayofweek_iso("");
+select dayofweek_iso(NULL);
+
 -- name: test_makedate
 CREATE TABLE IF NOT EXISTS `makedate_test` (
   `id` int,

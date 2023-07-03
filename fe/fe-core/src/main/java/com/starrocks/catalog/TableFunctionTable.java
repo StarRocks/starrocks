@@ -41,7 +41,6 @@ import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetFileSchemaRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
@@ -135,7 +134,7 @@ public class TableFunctionTable extends Table {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
         }
 
-        if (!format.equalsIgnoreCase("parquet")) {
+        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
             throw new DdlException("not supported format: " + format);
         }
     }
@@ -174,10 +173,22 @@ public class TableFunctionTable extends Table {
         brokerScanRange.setParams(params);
         brokerScanRange.setBroker_addresses(Lists.newArrayList());
 
+        TFileFormatType fileFormat;
+        switch (format.toLowerCase()) {
+            case "parquet":
+                fileFormat = TFileFormatType.FORMAT_PARQUET;
+                break;
+            case "orc":
+                fileFormat = TFileFormatType.FORMAT_ORC;
+                break;
+            default:
+                throw new TException("unsupported format: " + format);
+        }
+
         for (int i = 0; i < filelist.size(); ++i) {
             TBrokerRangeDesc rangeDesc = new TBrokerRangeDesc();
             rangeDesc.setFile_type(TFileType.FILE_BROKER);
-            rangeDesc.setFormat_type(TFileFormatType.FORMAT_PARQUET);
+            rangeDesc.setFormat_type(fileFormat);
             rangeDesc.setPath(filelist.get(i).path);
             rangeDesc.setSplittable(filelist.get(i).isSplitable);
             rangeDesc.setStart_offset(0);
@@ -234,10 +245,7 @@ public class TableFunctionTable extends Table {
                 throw new DdlException("non-scalar type is not supported: " + slot.colName);
             }
             PScalarType scalarType = slot.slotType.types.get(0).scalarType;
-
-            TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(scalarType.type);
-
-            columns.add(new Column(slot.colName, ScalarType.createType(PrimitiveType.fromThrift(tPrimitiveType)), true));
+            columns.add(new Column(slot.colName, ScalarType.createType(scalarType), true));
         }
         return columns;
     }
