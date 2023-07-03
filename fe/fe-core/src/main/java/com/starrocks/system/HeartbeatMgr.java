@@ -69,7 +69,6 @@ import org.json.JSONObject;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -92,12 +91,6 @@ public class HeartbeatMgr extends FrontendDaemon {
                 Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
     }
 
-    public static long computeMinActiveTxnId() {
-        long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId();
-        Optional<Long> b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getMinActiveTxnId();
-        return Math.min(a, b.orElse(Long.MAX_VALUE));
-    }
-
     public void setLeader(int clusterId, String token, long epoch) {
         TMasterInfo tMasterInfo = new TMasterInfo(
                 new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port), clusterId, epoch);
@@ -105,7 +98,6 @@ public class HeartbeatMgr extends FrontendDaemon {
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = HeartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
-        tMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
         MASTER_INFO.set(tMasterInfo);
     }
 
@@ -291,7 +283,6 @@ public class HeartbeatMgr extends FrontendDaemon {
                 long flags = HeartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
-                copiedMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
                 copiedMasterInfo.setRun_mode(RunMode.toTRunMode(RunMode.getCurrentRunMode()));
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
