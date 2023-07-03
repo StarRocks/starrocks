@@ -2,38 +2,54 @@
 
 ## Description
 
-Create an unnamed STRUCT/ROW value from the given values.
+Creates a named STRUCT or ROW value from the given values. It supports unnamed struct. You do not need to specify the field names. StarRocks automatically generates column names, such as `col1, col2,...`.
+
+This function is supported from v3.1 onwards.
+
+struct() is the alias of row().
 
 ## Syntax
 
-```
+```Haskell
 STRUCT row(ANY val, ...)
 ```
 
 ## Parameters
 
-This function is a variable argument function. Callers should give at least one argument.
+`val`: an expression of any supported type.
+
+This function is a variable argument function. You must pass at least one argument. `value` is nullable. Separate multiple values with a comma (`,`).
 
 ## Return value
 
-Return a STRUCT value which is consisted from the input values.
+Returns a STRUCT value which consists of the input values.
 
 ## Examples
 
 ```Plaintext
-select row(1,"Star","Rocks");
-+-------------------------+
-| row(1, 'Star', 'Rocks') |
-+-------------------------+
-| {1,"Star","Rocks"}      |
-+-------------------------+
+select row(1,"Apple","Pear");
++-----------------------------------------+
+| row(1, 'Apple', 'Pear')                 |
++-----------------------------------------+
+| {"col1":1,"col2":"Apple","col3":"Pear"} |
++-----------------------------------------+
+
+select row("Apple", NULL);
++------------------------------+
+| row('Apple', NULL)           |
++------------------------------+
+| {"col1":"Apple","col2":null} |
++------------------------------+
+
+select struct(1,2,3);
++------------------------------+
+| row(1, 2, 3)                 |
++------------------------------+
+| {"col1":1,"col2":2,"col3":3} |
++------------------------------+
 ```
 
-```Plaintext
-select row("StarRocks", NULL);
-+------------------------+
-| row('StarRocks', NULL) |
-+------------------------+
-| {"StarRocks",null}     |
-+------------------------+
-```
+## References
+
+- [STRUCT data type](../../sql-statements/data-types/STRUCT.md)
+- [named_struct](named_struct.md)

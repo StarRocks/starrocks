@@ -313,7 +313,6 @@
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [MAP](./sql-reference/sql-statements/data-types/Map.md)
         + [STRUCT](./sql-reference/sql-statements/data-types/STRUCT.md)
-
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + Function Reference
@@ -362,6 +361,7 @@
       + [array_difference](./sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_distinct](./sql-reference/sql-functions/array-functions/array_distinct.md)
       + [array_filter](./sql-reference/sql-functions/array-functions/array_filter.md)
+      + [array_generate](./sql-reference/sql-functions/array-functions/array_generate.md)
       + [array_intersect](./sql-reference/sql-functions/array-functions/array_intersect.md)
       + [array_join](./sql-reference/sql-functions/array-functions/array_join.md)
       + [array_length](./sql-reference/sql-functions/array-functions/array_length.md)
@@ -647,9 +647,10 @@
       + [percentile_hash](./sql-reference/sql-functions/percentile-functions/percentile_hash.md)
       + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + Scalar Functions
-      + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
+      + [hll_cardinality](./sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Struct Functions
-      + [row](/sql-reference/sql-functions/struct-functions/row.md)
+      + [named_struct](./sql-reference/sql-functions/struct-functions/named_struct.md)
+      + [row](./sql-reference/sql-functions/struct-functions/row.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
