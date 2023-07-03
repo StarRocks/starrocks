@@ -18,7 +18,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
