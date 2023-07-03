@@ -200,9 +200,11 @@ public class SharedDataStorageVolumeMgrTest {
             Assert.assertTrue(e.getMessage().contains("Default volume can not be disabled"));
         }
 
+        Assert.assertFalse(svm.bindDbToStorageVolume("0", 1L));
+        Assert.assertFalse(svm.bindTableToStorageVolume("0", 1L));
         // bind/unbind db and table to storage volume
-        svm.bindDbToStorageVolume(sv.getId(), 1L);
-        svm.bindTableToStorageVolume(sv.getId(), 1L);
+        Assert.assertTrue(svm.bindDbToStorageVolume(sv.getId(), 1L));
+        Assert.assertTrue(svm.bindTableToStorageVolume(sv.getId(), 1L));
 
         // remove
         try {
