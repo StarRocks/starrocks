@@ -83,7 +83,7 @@ Data in partitions can be subdivided into tablets based on the hash values of th
 - high cardinality column such as ID
 - column that often used as a filter in queries
 
-But if the column that satisfies both requirements does not exist, you need to determine the buckting column according to the complexity of queries.
+But if the column that satisfies both requirements does not exist, you need to determine the bucketing column according to the complexity of queries.
 
 - If the query is complex, it is recommended that you select the high cardinality column as the bucketing column to ensure that the data is as balanced as possible in each bucket and improve the cluster resource utilization.
 - If the query is relatively simple, then it is recommended to select the column that is often used as in the query condition as the bucketing column to improve the query efficiency.
