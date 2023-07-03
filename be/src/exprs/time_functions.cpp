@@ -2393,16 +2393,12 @@ StatusOr<ColumnPtr> TimeFunctions::date_diff(FunctionContext* context, const Col
         auto type_str = type_column.value(row).to_string;
         if (type_str == "hour") {
             result.append(l.diff_microsecond(r) / USECS_PER_HOUR);
-            continue;
-        }else if (type_str == "second") {
+        } else if (type_str == "second") {
             result.append(l.diff_microsecond(r) / USECS_PER_SEC);
-            continue;
-        }else if (type_str == "minute") {
+        } else if (type_str == "minute") {
             result.append(l.diff_microsecond(r) / USECS_PER_MINUTE);
-            continue;
-        }else if (type_str == "millisecond") {
+        } else if (type_str == "millisecond") {
             result.append(l.diff_microsecond(r) / USECS_PER_MILLIS);
-            continue;
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
