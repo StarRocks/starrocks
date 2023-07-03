@@ -8,9 +8,9 @@
 
 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
 
-- 如果您在建表时指定了分桶数，SHOW CREATE TABLE 的结果会显示分桶数。
+- 如果您在建表时指定了分桶数，SHOW CREATE TABLE 会显示分桶数。
 
-- 如果您在建表时没有指定分桶数，SHOW CREATE TABLE 查看分区的分桶数，您可以通过 [SHOW PARTITIONS](SHOW%20PARTITIONS.md) 查看分区的分桶数。
+- 如果您在建表时没有指定分桶数，SHOW CREATE TABLE 不会显示分桶数，您可以通过 [SHOW PARTITIONS](SHOW%20PARTITIONS.md) 查看分区的分桶数。
 
 2.5.7 之前的版本在建表时必须设置分桶数，因此 SHOW CREATE TABLE 会显示分桶数。
 
