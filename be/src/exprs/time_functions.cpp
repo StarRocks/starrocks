@@ -2390,7 +2390,7 @@ StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Colu
     for (int row = 0; row < size; ++row) {
         TimestampValue l = (TimestampValue)lv_column.value(row);
         TimestampValue r = (TimestampValue)rv_column.value(row);
-        auto type_str = type_column.value(row).to_string;
+        auto type_str = type_column.value(row).to_string();
         if (type_str == "hour") {
             result.append(l.diff_microsecond(r) / USECS_PER_HOUR);
         } else if (type_str == "second") {
