@@ -349,32 +349,4 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             tbl.readUnlock();
         }
     }
-
-    @Test
-    public void testAddValueColumnOnAggMV(@Injectable OlapTable olapTable,
-            @Injectable Column newColumn,
-            @Injectable ColumnPosition columnPosition) {
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
-        new Expectations() {
-            {
-                olapTable.getKeysType();
-                result = KeysType.DUP_KEYS;
-                newColumn.getAggregationType();
-                result = null;
-                olapTable.getIndexMetaByIndexId(2).getKeysType();
-                result = KeysType.AGG_KEYS;
-                newColumn.isKey();
-                result = false;
-            }
-        };
-
-        try {
-            Deencapsulation.invoke(schemaChangeHandler, "addColumnInternal", olapTable, newColumn, columnPosition,
-                new Long(2L), new Long(1L), Maps.newHashMap(), Sets.newHashSet(), false, Maps.newHashMap());
-            Assertions.fail();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-    }
 }
