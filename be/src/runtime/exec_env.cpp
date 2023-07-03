@@ -429,12 +429,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                  ? CpuInfo::num_cores()
                                  : config::pipeline_scan_thread_pool_thread_num;
+    int num_extra_io_threads = 4;
 
     std::unique_ptr<ThreadPool> scan_worker_thread_pool;
     // TODO(murph): why +10
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_scan_io")
                             .set_min_threads(0)
-                            .set_max_threads(num_io_threads + 10)
+                            .set_max_threads(num_io_threads + num_extra_io_threads)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&scan_worker_thread_pool));
