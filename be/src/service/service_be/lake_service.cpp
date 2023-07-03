@@ -577,10 +577,7 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
                              ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-
-    // The BE process already has enough threads. I don't want to create more threads, so I directly use
-    // the thread pool for creating local tablet's replica.
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::CREATE);
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DROP);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("vacuum thread pool is null");
         return;
@@ -604,9 +601,6 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
                                   ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-
-    // The BE process already has enough threads. I don't want to create more threads, so I directly use
-    // the thread pool for dropping local tablet's replica.
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DROP);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("full vacuum thread pool is null");
