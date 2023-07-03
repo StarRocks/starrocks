@@ -34,6 +34,11 @@ Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadat
     return _status;
 }
 
+bool LakePrimaryIndex::is_load(int64_t base_version) {
+    std::lock_guard<std::mutex> lg(_lock);
+    return _loaded && _data_version >= base_version;
+}
+
 Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                        const MetaFileBuilder* builder) {
     MonotonicStopWatch watch;
