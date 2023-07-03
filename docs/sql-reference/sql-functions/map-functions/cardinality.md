@@ -2,7 +2,9 @@
 
 ## Description
 
-Returns the number of elements in a MAP value, it is an alias of [map_size()](map_size.md).
+Returns the number of elements in a MAP value. MAP is an unordered collection of key-value pairs, for example, `{"a":1, "b":2}`. One key-value pair constitutes one element. `{"a":1, "b":2}` contains two elements.
+
+This function is supported from v3.0 onwards. It is the alias of [map_size()](map_size.md).
 
 From version 2.5, StarRocks supports querying complex data types MAP and STRUCT from data lakes. MAP is an unordered collection of key-value pairs, for example, `{"a":1, "b":2}`. One key-value pair constitutes one element, for example, `{"a":1, "b":2}` contains two elements.
 
@@ -42,7 +44,7 @@ select * from hive_map order by col_int;
 3 rows in set (0.05 sec)
 ```
 
-After a Hive catalog is created in your database, you can use this catalog and the cardinality() function to obtain the number of elements in each row of the `cardinality` column.
+After a [Hive catalog](../../../data_source/catalog/hive_catalog.md#create-a-hive-catalog) is created in your cluster, you can use this catalog and the cardinality() function to obtain the number of elements in each row of the `cardinality` column.
 
 ```Plaintext
 select cardinality(col_map) from hive_map order by col_int;
