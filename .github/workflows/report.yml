@@ -21,13 +21,43 @@ permissions:
   statuses: write
   
 jobs:
-
-  FE-UT-REPORT:
+  INFO:
     runs-on: [ self-hosted, normal ]
     if: >
       github.event.workflow_run.event == 'pull_request'
+    outputs:
+      PR_NUMBER: steps.pr_num_reader.outputs.content
+      BASE_REF: steps.pr_details.outputs.base_ref
+    steps:
+      - name: Download workflow artifact
+        uses: dawidd6/action-download-artifact@v2.11.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ github.event.workflow_run.id }}
+          name: 'pr_num'
+
+      - name: Read the pr_num file
+        id: pr_num_reader
+        uses: juliangruber/read-file-action@v1.0.0
+        with:
+          path: ./pr_num/pr_num.txt
+
+      - name: PR DETAILS
+        id: pr_details
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr_num_reader.outputs.content }}
+          REPO: ${{ github.repository }}
+        run: |
+          base_ref=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName -q .baseRefName`
+          echo "base_ref=${base_ref}" >> $GITHUB_OUTPUT 
+
+  FE-UT-REPORT:
+    runs-on: [ self-hosted, normal ]
+    needs: INFO
     env:
-      PR_NUMBER: ${{ github.event.workflow_run.event.number }}
+      PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
+      branch: ${{ needs.INFO.outputs.BASE_REF }}
     steps:
       - name: CLEAN
         run: |
@@ -37,16 +67,13 @@ jobs:
       - name: INFO
         id: info
         run: |
-          branch=${{ github.event.workflow_run.base_ref }}
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
-          echo "branch=${branch}" >> $GITHUB_OUTPUT
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - name: Download FE UT XML
         id: download-ut-xml
         env:
-          branch: ${{ steps.info.outputs.branch }}
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
           mkdir fe-ut && cd fe-ut
@@ -72,7 +99,6 @@ jobs:
       - name: Download Incremental Coverage Result
         id: download-incremental-result
         env:
-          branch: ${{ steps.info.outputs.branch }}
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
           mkdir fe-result && cd fe-result
@@ -104,10 +130,10 @@ jobs:
           
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, normal ]
-    if: >
-      github.event.workflow_run.event == 'pull_request'
+    needs: INFO
     env:
-      PR_NUMBER: ${{ github.event.workflow_run.event.number }}
+      PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
+      branch: ${{ needs.INFO.outputs.BASE_REF }}
     steps:
       - name: CLEAN
         run: |
@@ -116,16 +142,13 @@ jobs:
       - name: INFO
         id: info
         run: |
-          branch=${{ github.event.workflow_run.base_ref }}
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
-          echo "branch=${branch}" >> $GITHUB_OUTPUT
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - name: Download SQL-Tester XML
         id: download-SQL-Tester-xml
         env:
-          branch: ${{ steps.info.outputs.branch }}
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
           mkdir sql-tester-result && cd sql-tester-result
@@ -154,10 +177,10 @@ jobs:
 
   Admit-REPORT:
     runs-on: [ self-hosted, normal ]
-    if: >
-      github.event.workflow_run.event == 'pull_request'
+    needs: INFO
     env:
-      PR_NUMBER: ${{ github.event.workflow_run.event.number }}
+      PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
+      branch: ${{ needs.INFO.outputs.BASE_REF }}
     steps:
       - name: CLEAN
         run: |
@@ -166,16 +189,13 @@ jobs:
       - name: INFO
         id: info
         run: |
-          branch=${{ github.event.workflow_run.base_ref }}
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
-          echo "branch=${branch}" >> $GITHUB_OUTPUT
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - name: Download Admit XML
         id: download-admit-xml
         env:
-          branch: ${{ steps.info.outputs.branch }}
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
           mkdir admit-result && cd admit-result
