@@ -100,6 +100,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
@@ -2238,8 +2239,10 @@ public class ShowExecutor {
 
     private void handleShowPolicy() {
         ShowPolicyStmt showPolicyStmt = (ShowPolicyStmt) stmt;
-        Map<String, Policy> policies = GlobalStateMgr.getCurrentState().getSecurityPolicyManager().getNameToPolicy(
-                showPolicyStmt.getCatalog(), showPolicyStmt.getDbName(), showPolicyStmt.getPolicyType());
+        Map<String, Policy> policies = GlobalStateMgr.getCurrentState().getSecurityPolicyManager()
+                .getOrCreateNamePolicyMapByDBUID(
+                        DbUID.generate(showPolicyStmt.getCatalog(), showPolicyStmt.getDbName()),
+                        showPolicyStmt.getPolicyType());
         List<List<String>> rows = new ArrayList<>();
         if (policies != null) {
             for (Map.Entry<String, Policy> policyEntry : policies.entrySet()) {
@@ -2263,12 +2266,12 @@ public class ShowExecutor {
     private void handleShowCreatePolicy() {
         ShowCreatePolicyStmt describePolicyStmt = (ShowCreatePolicyStmt) stmt;
         Policy policy = GlobalStateMgr.getCurrentState().getSecurityPolicyManager()
-                .getPolicyByName(describePolicyStmt.getPolicyType(), describePolicyStmt.getPolicyName());
+                .getPolicyByName(describePolicyStmt.getPolicyType(), describePolicyStmt.getPolicyName(), false);
 
         List<String> row = new ArrayList<>();
         row.add(policy.getName());
 
-        row.add(AstToSQLBuilder.toSQL(new CreatePolicyStmt(false, false, policy.getPolicyType(),
+        row.add(AstToSQLBuilder.toSQL(new CreatePolicyStmt(false, policy.getPolicyType(),
                 new PolicyName("", "", policy.getName(), NodePosition.ZERO),
                 policy.getArgNames(),
                 policy.getArgTypes().stream().map(TypeDef::new).collect(Collectors.toList()),

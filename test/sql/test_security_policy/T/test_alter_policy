@@ -1,0 +1,22 @@
+-- name: test_alter_policy
+create database test_alter_policy;
+use test_alter_policy;
+create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
+show create masking policy mp;
+alter masking policy mp set body -> v1 + 2;
+show create masking policy mp;
+alter masking policy mp set comment = "mp comment";
+show create masking policy mp;
+alter masking policy mp rename to mp2;
+show masking policies;
+show create masking policy mp2;
+
+create row access policy rp as (v1 bigint) returns boolean -> true;
+show create row access policy rp;
+alter row access policy rp set body -> false;
+show create row access policy rp;
+alter row access policy rp set comment = "rp comment";
+show create row access policy rp;
+alter row access policy rp rename to rp2;
+show row access policies;
+show create row access policy rp2;

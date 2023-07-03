@@ -11,7 +11,6 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class CreatePolicyStmt extends DdlStmt {
-    private final boolean replaceIfExists;
     private final boolean ifNotExists;
     private final PolicyType policyType;
     private final PolicyName policyName;
@@ -21,11 +20,10 @@ public class CreatePolicyStmt extends DdlStmt {
     private final Expr expression;
     private final String comment;
 
-    public CreatePolicyStmt(boolean replaceIfExists, boolean ifNotExists, PolicyType policyType, PolicyName policyName,
+    public CreatePolicyStmt(boolean ifNotExists, PolicyType policyType, PolicyName policyName,
                             List<String> argNames, List<TypeDef> argTypeDefs, TypeDef returnType,
                             Expr expression, String comment, NodePosition pos) {
         super(pos);
-        this.replaceIfExists = replaceIfExists;
         this.ifNotExists = ifNotExists;
         this.policyType = policyType;
         this.policyName = policyName;
@@ -34,10 +32,6 @@ public class CreatePolicyStmt extends DdlStmt {
         this.returnType = returnType;
         this.expression = expression;
         this.comment = comment;
-    }
-
-    public boolean isReplaceIfExists() {
-        return replaceIfExists;
     }
 
     public boolean isIfNotExists() {

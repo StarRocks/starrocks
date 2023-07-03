@@ -59,9 +59,14 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
+import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
+import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.Policy;
+import com.starrocks.epack.sql.ast.PolicyName;
+import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
@@ -1052,6 +1057,18 @@ public class EditLog {
                     globalStateMgr.getSecurityPolicyManager().replayCreatePolicy(policy);
                     break;
                 }
+                case OperationTypeEPack.OP_DROP_POLICY: {
+                    DropPolicyLog policy = (DropPolicyLog) journal.getData();
+                    globalStateMgr.getSecurityPolicyManager().replayDropPolicy(policy);
+                    break;
+                }
+                case OperationTypeEPack.OP_ALTER_POLICY_SET_BODY:
+                case OperationTypeEPack.OP_ALTER_POLICY_SET_COMMENT:
+                case OperationTypeEPack.OP_ALTER_POLICY_RENAME: {
+                    AlterPolicyLog alterPolicyInfo = (AlterPolicyLog) journal.getData();
+                    globalStateMgr.getSecurityPolicyManager().replayAlterPolicy(alterPolicyInfo);
+                    break;
+                }
                 case OperationType.OP_MV_JOB_STATE: {
                     MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
                     MaterializedViewMgr.getInstance().replay(job);
@@ -2027,6 +2044,30 @@ public class EditLog {
     public void logCreateRowAccessPolicy(Policy policy) {
         CreatePolicyLog createPolicyInfo = new CreatePolicyLog(policy);
         logEdit(OperationTypeEPack.OP_CREATE_ROW_ACCESS_POLICY, createPolicyInfo);
+    }
+
+    public void logDropPolicy(PolicyName policyName, DbUID db, Policy policy) {
+        DropPolicyLog dropPolicyInfo =
+                new DropPolicyLog(policy.getPolicyType(), policy.getPolicyId(), db, policyName.getName());
+        logEdit(OperationTypeEPack.OP_DROP_POLICY, dropPolicyInfo);
+    }
+
+    public void logAlterPolicySetBody(PolicyName policyName, PolicyType policyType, String policyBody) {
+        AlterPolicyLog alterPolicyInfo = new AlterPolicyLog(policyName, policyType,
+                new AlterPolicyLog.PolicySetBodyInfo(policyBody));
+        logEdit(OperationTypeEPack.OP_ALTER_POLICY_SET_BODY, alterPolicyInfo);
+    }
+
+    public void logAlterPolicySetComment(PolicyName policyName, PolicyType policyType, String comment) {
+        AlterPolicyLog alterPolicyInfo = new AlterPolicyLog(policyName, policyType,
+                new AlterPolicyLog.PolicySetCommentInfo(comment));
+        logEdit(OperationTypeEPack.OP_ALTER_POLICY_SET_COMMENT, alterPolicyInfo);
+    }
+
+    public void logAlterPolicyRename(PolicyName policyName, PolicyType policyType, String newPolicyName) {
+        AlterPolicyLog alterPolicyInfo = new AlterPolicyLog(policyName, policyType,
+                new AlterPolicyLog.PolicyRenameInfo(newPolicyName));
+        logEdit(OperationTypeEPack.OP_ALTER_POLICY_RENAME, alterPolicyInfo);
     }
 
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {

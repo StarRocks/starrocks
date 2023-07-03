@@ -30,7 +30,7 @@ public class CreatePolicyLog implements Writable {
     private String name;
 
     @SerializedName(value = "db")
-    private DbUID dbPEntryObject;
+    private DbUID dbUID;
 
     @SerializedName(value = "argNames")
     private List<String> argNames;
@@ -54,7 +54,7 @@ public class CreatePolicyLog implements Writable {
         this.policyType = policy.getPolicyType();
         this.policyId = policy.getPolicyId();
         this.name = policy.getName();
-        this.dbPEntryObject = policy.getDbPEntryObject();
+        this.dbUID = policy.getDbUID();
         this.argNames = policy.getArgNames();
         this.argTypes = policy.getArgTypes();
         this.retType = policy.getRetType();
@@ -74,8 +74,8 @@ public class CreatePolicyLog implements Writable {
         return name;
     }
 
-    public DbUID getDbPEntryObject() {
-        return dbPEntryObject;
+    public DbUID getDbUID() {
+        return dbUID;
     }
 
     public List<String> getArgNames() {

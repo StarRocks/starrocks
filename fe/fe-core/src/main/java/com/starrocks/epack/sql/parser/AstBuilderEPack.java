@@ -46,7 +46,7 @@ public class AstBuilderEPack extends AstBuilder {
 
         String comment = context.comment() == null ? "" : ((StringLiteral) visit(context.comment())).getStringValue();
 
-        return new CreatePolicyStmt(context.OR() != null, context.IF() != null,
+        return new CreatePolicyStmt(context.IF() != null,
                 PolicyType.COLUMN_MASKING, policyName, argNames, argTypes, new TypeDef(getType(context.type())),
                 (Expr) visit(context.expression()), comment, createPos(context));
     }
@@ -118,7 +118,7 @@ public class AstBuilderEPack extends AstBuilder {
 
         String comment = context.comment() == null ? "" : ((StringLiteral) visit(context.comment())).getStringValue();
 
-        return new CreatePolicyStmt(context.OR() != null, context.IF() != null,
+        return new CreatePolicyStmt(context.IF() != null,
                 PolicyType.ROW_ACCESS, policyName, argNames, argTypes, new TypeDef(Type.BOOLEAN),
                 (Expr) visit(context.expression()), comment, createPos(context));
     }
@@ -128,7 +128,7 @@ public class AstBuilderEPack extends AstBuilder {
         QualifiedName qualifiedName = getQualifiedName(context.policyName);
         PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
 
-        if (context.SET() != null) {
+        if (context.BODY() != null) {
             return new AlterPolicyStmt(PolicyType.ROW_ACCESS, policyName, context.IF() != null,
                     new AlterPolicyStmt.PolicySetBody((Expr) visit(context.expression())), createPos(context));
         } else if (context.COMMENT() != null) {

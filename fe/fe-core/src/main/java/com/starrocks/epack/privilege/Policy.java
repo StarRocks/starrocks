@@ -12,7 +12,7 @@ public class Policy {
     private final PolicyType policyType;
     private final Long policyId;
     private String name;
-    private final DbUID dbPEntryObject;
+    private final DbUID dbUID;
     private final List<String> argNames;
     private final List<Type> argTypes;
     private final Type retType;
@@ -27,7 +27,7 @@ public class Policy {
         this.policyId = policyId;
 
         this.name = policyName;
-        this.dbPEntryObject = dbPEntryObject;
+        this.dbUID = dbPEntryObject;
 
         this.argNames = argNames;
         this.argTypes = argTypes;
@@ -52,8 +52,8 @@ public class Policy {
         this.name = name;
     }
 
-    public DbUID getDbPEntryObject() {
-        return dbPEntryObject;
+    public DbUID getDbUID() {
+        return dbUID;
     }
 
     public List<String> getArgNames() {

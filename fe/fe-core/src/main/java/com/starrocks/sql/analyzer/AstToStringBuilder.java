@@ -259,6 +259,11 @@ public class AstToStringBuilder {
             sb.append(" RETURNS ").append(stmt.getReturnType().toSql());
             sb.append(" -> ");
             sb.append(visit(stmt.getExpression()));
+
+            if (stmt.getComment() != null && !stmt.getComment().equals("")) {
+                sb.append(" COMMENT \"").append(stmt.getComment()).append("\"");
+            }
+
             return sb.toString();
         }
 

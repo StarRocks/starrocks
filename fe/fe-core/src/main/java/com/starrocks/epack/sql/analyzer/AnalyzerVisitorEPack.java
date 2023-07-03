@@ -2,7 +2,9 @@
 
 package com.starrocks.epack.sql.analyzer;
 
+import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.qe.ConnectContext;
@@ -13,6 +15,18 @@ public class AnalyzerVisitorEPack extends AnalyzerVisitor {
 
     @Override
     public Void visitCreatePolicyStatement(CreatePolicyStmt stmt, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropPolicyStatement(DropPolicyStmt stmt, ConnectContext context) {
+        SecurityPolicyAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterPolicyStatement(AlterPolicyStmt stmt, ConnectContext context) {
         SecurityPolicyAnalyzer.analyze(stmt, context);
         return null;
     }

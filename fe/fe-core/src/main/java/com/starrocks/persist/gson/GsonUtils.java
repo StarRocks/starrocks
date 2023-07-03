@@ -113,6 +113,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -357,6 +358,13 @@ public class GsonUtils {
                     .registerSubtype(SharedNothingStorageVolumeMgr.class, "SharedNothingStorageVolumeMgr")
                     .registerSubtype(SharedDataStorageVolumeMgr.class, "SharedDataStorageVolumeMgr");
 
+    public static final RuntimeTypeAdapterFactory<AlterPolicyLog.AlterPolicyClauseInfo>
+            ALTER_POLICY_CLAUSE_TYPE_RUNTIME_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(AlterPolicyLog.AlterPolicyClauseInfo.class, "clazz")
+                    .registerSubtype(AlterPolicyLog.PolicyRenameInfo.class, "PolicyRenameInfo")
+                    .registerSubtype(AlterPolicyLog.PolicySetBodyInfo.class, "PolicySetBodyInfo")
+                    .registerSubtype(AlterPolicyLog.PolicySetCommentInfo.class, "PolicySetCommentInfo");
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -414,6 +422,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(ABSTRACT_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(STORAGE_VOLUME_MGR_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ALTER_POLICY_CLAUSE_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

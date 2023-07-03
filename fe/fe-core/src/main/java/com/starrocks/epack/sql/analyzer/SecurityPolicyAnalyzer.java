@@ -7,7 +7,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
@@ -73,6 +75,20 @@ public class SecurityPolicyAnalyzer {
                 TypeManager.addCastExpr(result, statement.getReturnType().getType());
             }
 
+            return null;
+        }
+
+        @Override
+        public Void visitDropPolicyStatement(DropPolicyStmt stmt, ConnectContext session) {
+            PolicyName policyName = stmt.getPolicyName();
+            normalizationPolicyName(session, policyName);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterPolicyStatement(AlterPolicyStmt stmt, ConnectContext session) {
+            PolicyName policyName = stmt.getPolicyName();
+            normalizationPolicyName(session, policyName);
             return null;
         }
 

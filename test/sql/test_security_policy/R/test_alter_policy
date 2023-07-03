@@ -1,0 +1,71 @@
+-- name: test_alter_policy
+create database test_alter_policy;
+-- result:
+-- !result
+use test_alter_policy;
+-- result:
+-- !result
+create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
+-- result:
+-- !result
+show create masking policy mp;
+-- result:
+mp	CREATE MASKING POLICY mp AS (v1 bigint(20)) RETURNS bigint(20) -> `v1` + 1
+-- !result
+alter masking policy mp set body -> v1 + 2;
+-- result:
+-- !result
+show create masking policy mp;
+-- result:
+mp	CREATE MASKING POLICY mp AS (v1 bigint(20)) RETURNS bigint(20) -> `v1` + 2
+-- !result
+alter masking policy mp set comment = "mp comment";
+-- result:
+-- !result
+show create masking policy mp;
+-- result:
+mp	CREATE MASKING POLICY mp AS (v1 bigint(20)) RETURNS bigint(20) -> `v1` + 2 COMMENT "mp comment"
+-- !result
+alter masking policy mp rename to mp2;
+-- result:
+-- !result
+show masking policies;
+-- result:
+mp2	MASKING	default_catalog	test_alter_policy
+-- !result
+show create masking policy mp2;
+-- result:
+mp2	CREATE MASKING POLICY mp2 AS (v1 bigint(20)) RETURNS bigint(20) -> `v1` + 2 COMMENT "mp comment"
+-- !result
+create row access policy rp as (v1 bigint) returns boolean -> true;
+-- result:
+-- !result
+show create row access policy rp;
+-- result:
+rp	CREATE ROW ACCESS POLICY rp AS (v1 bigint(20)) RETURNS boolean -> TRUE
+-- !result
+alter row access policy rp set body -> false;
+-- result:
+-- !result
+show create row access policy rp;
+-- result:
+rp	CREATE ROW ACCESS POLICY rp AS (v1 bigint(20)) RETURNS boolean -> FALSE
+-- !result
+alter row access policy rp set comment = "rp comment";
+-- result:
+-- !result
+show create row access policy rp;
+-- result:
+rp	CREATE ROW ACCESS POLICY rp AS (v1 bigint(20)) RETURNS boolean -> FALSE COMMENT "rp comment"
+-- !result
+alter row access policy rp rename to rp2;
+-- result:
+-- !result
+show row access policies;
+-- result:
+rp2	ROW ACCESS	default_catalog	test_alter_policy
+-- !result
+show create row access policy rp2;
+-- result:
+rp2	CREATE ROW ACCESS POLICY rp2 AS (v1 bigint(20)) RETURNS boolean -> FALSE COMMENT "rp comment"
+-- !result
