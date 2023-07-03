@@ -197,6 +197,12 @@ select dayofweek_iso("2023-01-03");
 select dayofweek_iso("");
 select dayofweek_iso(NULL);
 
+-- name: test_date_diff
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "millisecond");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "hour");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "minute");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:59:59", "second");
+
 -- name: test_makedate
 CREATE TABLE IF NOT EXISTS `makedate_test` (
   `id` int,

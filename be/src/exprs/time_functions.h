@@ -360,7 +360,7 @@ public:
      * @param columns [TimestampColumn] Columns that holds two groups timestamps for calculation.
      * @return  BigintColumn difference in seconds between the two timestamps. It can be negative.
      */
-    DEFINE_VECTORIZED_FN(test_diff);
+    DEFINE_VECTORIZED_FN(date_diff);
 
     /**
      * @param: [timestmap, year]

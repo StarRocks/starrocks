@@ -2379,7 +2379,7 @@ StatusOr<ColumnPtr> TimeFunctions::make_date(FunctionContext* context, const Col
 }
 
 // date_diff
-StatusOr<ColumnPtr> TimeFunctions::test_diff(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::date_diff(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
     ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
@@ -2395,7 +2395,10 @@ StatusOr<ColumnPtr> TimeFunctions::test_diff(FunctionContext* context, const Col
             result.append(l.diff_microsecond(r) / USECS_PER_HOUR);
             continue;
         }else if (type_str == "second") {
-            result.append(l.diff_microsecond(r) / USECS_PER_HOUR);
+            result.append(l.diff_microsecond(r) / USECS_PER_SEC);
+            continue;
+        }else if (type_str == "minute") {
+            result.append(l.diff_microsecond(r) / USECS_PER_MINUTE);
             continue;
         }else if (type_str == "millisecond") {
             result.append(l.diff_microsecond(r) / USECS_PER_MILLIS);
