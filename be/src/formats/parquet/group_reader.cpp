@@ -546,7 +546,7 @@ Status GroupReader::_dict_decode(vectorized::ChunkPtr* chunk) {
         auto* codes_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int32_t>>(
                 codes_nullable_column->data_column());
         RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(codes_column->get_data(), *codes_nullable_column,
-                                                                 dict_values.get()));
+                                                                  dict_values.get()));
         DCHECK_EQ(dict_codes->size(), dict_values->size());
 
         if (slots[chunk_index]->is_nullable()) {
