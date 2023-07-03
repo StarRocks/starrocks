@@ -68,7 +68,6 @@ bool GroupReader::_can_use_any_column() const {
 }
 
 void GroupReader::_init_use_any_column() {
-    VLOG_FILE << "[xxx] init_use_any_column = OK";
     UseAnyColumnContext& ctx = _use_any_column_ctx;
     ctx.row_count = _row_group_metadata->num_rows;
 
