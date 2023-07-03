@@ -8,10 +8,10 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 
 ## Syntax
 
-- Synchronously query a table and create a new table based on the query result, and then insert the query result into the new table.
+- Synchronously query a table and create a new StarRocks table based on the query result, and then insert the query result into the new table.
 
   ```SQL
-  CREATE TABLE [IF NOT EXISTS] [[catalog.]database.]table_name
+  CREATE TABLE [IF NOT EXISTS] [database.]table_name
   [(column_name [, column_name2, ...]]
   [COMMENT "table comment"]
   [partition_desc]
@@ -21,7 +21,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
   [ ... ]
   ```
 
-- Asynchronously query a table and create a new table based on the query result, and then insert the query result into the new table.
+- Asynchronously query a table and create a new StarRocks table based on the query result, and then insert the query result into the new table.
 
   ```SQL
   SUBMIT [/*+ SET_VAR(key=value) */] TASK [[database.]<task_name>]AS
@@ -34,9 +34,22 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
   [ ... ]
   ```
 
-> **NOTICE**
->
-> StarRocks only supports creating an Iceberg table while inserting the result of synchronously querying an existing table into the new Iceberg table. StarRocks does not support inserting asynchronous query results at Iceberg table creation.
+- Synchronously query a table and create a new Iceberg table based on the query result, and then insert the query result into the new table.
+
+  ```SQL
+  CREATE EXTERNAL TABLE [IF NOT EXISTS] [[catalog.]database.]table_name
+  [(column_name [, column_name2, ...]]
+  [COMMENT "table comment"]
+  [partition_desc]
+  [distribution_desc]
+  [PROPERTIES ("key"="value", ...)]
+  AS SELECT query
+  [ ... ]
+  ```
+
+  > **NOTICE**
+  >
+  > StarRocks only supports creating an Iceberg table while inserting the result of synchronously querying an existing table into the new Iceberg table. StarRocks does not support inserting asynchronous query results at Iceberg table creation.
 
 ## Parameters
 
@@ -73,14 +86,18 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 
 ## Examples
 
-Example 1: Synchronously query a table `order` and create a new table `order_new` based on the query result, and then insert the query result into the new table.
+### Example 1
+
+Synchronously query a table `order` and create a new StarRocks table `order_new` based on the query result, and then insert the query result into the new table.
 
 ```SQL
 CREATE TABLE order_new
 AS SELECT * FROM order;
 ```
 
-Example 2: Synchronously query the `k1`, `k2`, and `k3` columns in the table `order` and create a new table `order_new` based on the query result, and then insert the query result into the new table. Additionally, set the column names of the new table to `a`, `b`, and `c`.
+### Example 2
+
+Synchronously query the `k1`, `k2`, and `k3` columns in the table `order` and create a new StarRocks table `order_new` based on the query result, and then insert the query result into the new table. Additionally, set the column names of the new table to `a`, `b`, and `c`.
 
 ```SQL
 CREATE TABLE order_new (a, b, c)
@@ -94,7 +111,9 @@ CREATE TABLE order_new
 AS SELECT k1 AS a, k2 AS b, k3 AS c FROM order;
 ```
 
-Example 3: Synchronously query the largest value of the `salary` column in the table `employee` and create a new table `employee_new` based on the query result, and then insert the query result into the new table. Additionally, set the column name of the new table to `salary_max`.
+### Example 3
+
+Synchronously query the largest value of the `salary` column in the table `employee` and create a new StarRocks table `employee_new` based on the query result, and then insert the query result into the new table. Additionally, set the column name of the new table to `salary_max`.
 
 ```SQL
 CREATE TABLE employee_new
@@ -113,7 +132,9 @@ SELECT * FROM employee_new;
 +------------+
 ```
 
-Example 4: Synchronously query four tables, including `lineorder`, `customer`, `supplier`, and `part` and create a new table `lineorder_flat` based on the query result, and then insert the query result to the new table. Additionally, specify the partitioning method and bucketing method for the new table.
+### Example 4
+
+Synchronously query four tables, including `lineorder`, `customer`, `supplier`, and `part` and create a new StarRocks table `lineorder_flat` based on the query result, and then insert the query result to the new table. Additionally, specify the partitioning method and bucketing method for the new table.
 
 ```SQL
 CREATE TABLE lineorder_flat
@@ -165,7 +186,9 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-Example 5: Asynchronously query the table `order_detail` and create a new table `order_statistics` based on the query result, and then insert the query result into the new table.
+### Example 5
+
+Asynchronously query the table `order_detail` and create a new StarRocks table `order_statistics` based on the query result, and then insert the query result into the new table.
 
 ```Plain%20Text
 SUBMIT TASK AS CREATE TABLE order_statistics AS SELECT COUNT(*) as count FROM order_detail;
@@ -215,4 +238,14 @@ Query the new table when the state of the TaskRun is `SUCCESS`.
 
 ```SQL
 SELECT * FROM order_statistics;
+```
+
+### Example 6
+
+Synchronously query the `c1` and `c2` columns of the table `source_table` and create a new Iceberg table `target_table` within the `iceberg_db` database of the Iceberg catalog `iceberg_catalog` based on the query result. Then, insert the query result into the new table, specify `k1` and `k2` as the column names for the new table, and specify `k2` as the partition column.
+
+```SQL
+CREATE EXTERNAL TABLE iceberg_catalog.iceberg_db.target_table
+(k1, k2) PARTITION BY (k2) 
+AS SELECT c1, c2 FROM source_table;
 ```

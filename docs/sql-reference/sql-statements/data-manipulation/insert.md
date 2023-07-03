@@ -113,6 +113,6 @@ SELECT c1 from test;
 ### Sink the result of a SELECT query on the `test` table to an Iceberg table named `iceberg_table`, in overwrite mode and with the destination partitions specified
 
 ```SQL
-INSERT INTO iceberg_table PARTITION(k2=1)
+INSERT OVERWRITE iceberg_table PARTITION(k2=1)
 SELECT c1 FROM test WHERE c2=11;
 ```
