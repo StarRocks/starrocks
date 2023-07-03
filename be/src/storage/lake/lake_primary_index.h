@@ -41,6 +41,8 @@ public:
     Status lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                      const MetaFileBuilder* builder);
 
+    bool is_load(int64_t base_version);
+
     int64_t data_version() const { return _data_version; }
     void update_data_version(int64_t version) { _data_version = version; }
 

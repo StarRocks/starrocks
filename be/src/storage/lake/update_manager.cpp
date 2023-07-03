@@ -56,23 +56,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
-    // 1. load rowset update data to cache, get upsert and delete list
-    const uint32_t rowset_id = metadata.next_rowset_id();
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
-    auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), txn_id));
-    state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
-    // only use state entry once, remove it when publish finish or fail
-    DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
-    auto& state = state_entry->value();
-    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
-    _update_state_cache.update_object_size(state_entry, state.memory_usage());
-    cost_str << " [UpdateStateCache load] " << watch.elapsed_time();
-    watch.reset();
-    // 2. rewrite segment file if it is partial update
-    RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet));
-    cost_str << " [UpdateStateCache rewrite segment] " << watch.elapsed_time();
-    watch.reset();
-    // 3. update primary index
+    // 1. update primary index
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -86,6 +70,24 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     }
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+    cost_str << " [primary index load] " << watch.elapsed_time();
+    watch.reset();
+    // 2. load rowset update data to cache, get upsert and delete list
+    const uint32_t rowset_id = metadata.next_rowset_id();
+    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
+    auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), txn_id));
+    state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    // only use state entry once, remove it when publish finish or fail
+    DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
+    auto& state = state_entry->value();
+    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
+    _update_state_cache.update_object_size(state_entry, state.memory_usage());
+    cost_str << " [UpdateStateCache load] " << watch.elapsed_time();
+    watch.reset();
+    // 3. rewrite segment file if it is partial update
+    RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet));
+    cost_str << " [UpdateStateCache rewrite segment] " << watch.elapsed_time();
+    watch.reset();
     PrimaryIndex::DeletesMap new_deletes;
     for (uint32_t i = 0; i < op_write.rowset().segments_size(); i++) {
         new_deletes[rowset_id + i] = {};
@@ -255,33 +257,28 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
     return Status::OK();
 }
 
-Status UpdateManager::_handle_index_op(Tablet* tablet, const TabletMetadata& metadata, const int64_t base_version,
-                                       const MetaFileBuilder* builder,
+Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version,
                                        const std::function<void(LakePrimaryIndex&)>& op) {
-    auto index_entry = _index_cache.get_or_create(tablet->id());
-    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
-    auto& index = index_entry->value();
-    auto st = index.lake_load(tablet, metadata, base_version, builder);
-    _index_cache.update_object_size(index_entry, index.memory_usage());
-    if (!st.ok()) {
-        _index_cache.remove(index_entry);
-        std::string msg =
-                strings::Substitute("get_rss_rowids_by_pk error: load primary index failed: $0", st.to_string());
-        LOG(ERROR) << msg;
-        return Status::InternalError(msg);
+    auto index_entry = _index_cache.get(tablet->id());
+    if (index_entry == nullptr) {
+        return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
     }
+    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+    auto& index = index_entry->value();
+    if (!index.is_load(base_version)) {
+        return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
+    }
     op(index);
 
     return Status::OK();
 }
 
-Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
-                                              const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
-                                              const MetaFileBuilder* builder,
+Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_version,
+                                              const std::vector<ColumnUniquePtr>& upserts,
                                               std::vector<std::vector<uint64_t>*>* rss_rowids) {
-    return _handle_index_op(tablet, metadata, base_version, builder, [&](LakePrimaryIndex& index) {
+    return _handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
         // get rss_rowids for each segment of rowset
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
@@ -291,11 +288,10 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetada
     });
 }
 
-Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
-                                              const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
-                                              const MetaFileBuilder* builder,
+Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_version,
+                                              const std::vector<ColumnUniquePtr>& upserts,
                                               std::vector<std::vector<uint64_t>>* rss_rowids) {
-    return _handle_index_op(tablet, metadata, base_version, builder, [&](LakePrimaryIndex& index) {
+    return _handle_index_op(tablet, base_version, [&](LakePrimaryIndex& index) {
         // get rss_rowids for each segment of rowset
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
@@ -640,8 +636,13 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
         auto st = state.load(txnlog.op_write(), *metadata_ptr, metadata_ptr->version(), tablet, nullptr, false);
         if (!st.ok()) {
             _update_state_cache.remove(state_entry);
-            LOG(ERROR) << strings::Substitute("lake primary table preload_update_state id:$0 error:$1", tablet->id(),
-                                              st.to_string());
+            if (!st.is_uninitialized()) {
+                LOG(ERROR) << strings::Substitute("lake primary table preload_update_state id:$0 error:$1",
+                                                  tablet->id(), st.to_string());
+            } else {
+                LOG(INFO) << strings::Substitute("lake primary table preload_update_state id:$0 failed:$1",
+                                                 tablet->id(), st.to_string());
+            }
             // not return error even it fail, because we can load update state in publish again.
         } else {
             // just release it, will use it again in publish

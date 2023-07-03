@@ -50,8 +50,10 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
         _tablet_id = metadata.id();
         _status = _do_load(op_write, metadata, tablet);
         if (!_status.ok()) {
-            LOG(WARNING) << "load RowsetUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
-                         << get_stack_trace();
+            if (!_status.is_uninitialized()) {
+                LOG(WARNING) << "load RowsetUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
+                             << get_stack_trace();
+            }
             if (_status.is_mem_limit_exceeded()) {
                 LOG(WARNING) << CurrentThread::mem_tracker()->debug_string();
             }
@@ -298,8 +300,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const Tx
     }
     DCHECK_EQ(_upserts.size(), num_segments);
     // use upserts to get rowids in each segment
-    RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, metadata, _upserts, _base_version, _builder,
-                                                                  &rss_rowids));
+    RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids));
 
     for (size_t i = 0; i < num_segments; i++) {
         std::vector<uint32_t> rowids;
@@ -407,8 +408,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
     }
     DCHECK_EQ(_upserts.size(), num_segments);
     // use upserts to get rowids in each segment
-    RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, metadata, _upserts, _base_version, _builder,
-                                                                  &rss_rowids));
+    RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids));
 
     int64_t t_read_values = MonotonicMillis();
     size_t total_rows = 0;
@@ -540,8 +540,8 @@ Status RowsetUpdateState::_resolve_conflict(const TxnLogPB_OpWrite& op_write, co
     for (uint32_t segment_id = 0; segment_id < num_segments; segment_id++) {
         new_rss_rowids_vec[segment_id].resize(_upserts[segment_id]->size());
     }
-    RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, metadata, _upserts, _base_version, _builder,
-                                                                  &new_rss_rowids_vec));
+    RETURN_IF_ERROR(
+            tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &new_rss_rowids_vec));
 
     size_t total_conflicts = 0;
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
