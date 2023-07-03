@@ -2,7 +2,7 @@
 
 ## 功能
 
-将两个 ARRAY 数组作为 key 和 value 组合成一个 MAP 对象。
+将两个 ARRAY 数组作为 Key 和 Value 组合成一个 MAP 对象。
 
 该命令从 3.0 版本开始支持。
 
@@ -14,12 +14,12 @@ MAP map_from_arrays(ARRAY keys, ARRAY values)
 
 ## 参数说明
 
-- `keys`: 用于生成 MAP 中的 key 值。`keys` 中的元素必须唯一。
-- `values`: 用于生成 MAP 中的 value 值.
+- `keys`: 用于生成 MAP 中的 Key 值。`keys` 中的元素必须唯一。
+- `values`: 用于生成 MAP 中的 Value 值.
 
 ## 返回值说明
 
-返回一个 MAP 值，map 中的 key 为 `keys` 中的元素，map 中的 value 为 `values` 中的元素。
+返回一个 MAP 值，Map 中的 Key 为 `keys` 中的元素，Map 中的 Value 为 `values` 中的元素。
 
 返回规则如下：
 

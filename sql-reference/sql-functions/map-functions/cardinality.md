@@ -1,17 +1,15 @@
-# map_size
+# cardinality
 
 ## 功能
 
-计算 Map 中元素的个数。MAP 里保存的是键值对 (key-value pair)，比如 `{"a":1, "b":2}`。一个键值对算作一个元素，比如 `{"a":1, "b":2}` 的元素个数为 2。
+计算 Map 中元素的个数，返回值类型是 INT。MAP 中保存的是键值对 (key-value pair)，比如 `{"a":1, "b":2}`。一个键值对算作一个元素，`{"a":1, "b":2}` 的元素个数为 2。
 
-该函数别名为 [cardinality](cardinality.md)。
-
-该函数从 2.5 版本开始支持。
+该函数从 3.0 版本开始支持。函数别名为 [map_size](map_size.md)。
 
 ## 语法
 
 ```Haskell
-map_size(any_map)
+INT cardinality(any_map)
 ```
 
 ## 参数说明
@@ -22,7 +20,7 @@ map_size(any_map)
 
 返回 INT 类型的值。如果输入参数是 NULL，结果也是 NULL。
 
-MAP 中的 Key 和 Value 可以是 NULL，会正常计算。
+MAP 中的 Key 和 Value 可以为 NULL，会正常计算。
 
 ## 示例
 
@@ -55,14 +53,14 @@ SELECT * FROM test_map ORDER BY col_int;
 计算 `col_map` 列每行的元素个数。
 
 ```Plain
-SELECT map_size(col_map) FROM test_map ORDER BY col_int;
-+-------------------+
-| map_size(col_map) |
-+-------------------+
-|                 2 |
-|                 1 |
-|                 2 |
-+-------------------+
+SELECT cardinality(col_map) FROM test_map ORDER BY col_int;
++----------------------+
+| cardinality(col_map) |
++----------------------+
+|                 2    |
+|                 1    |
+|                 2    |
++----------------------+
 ```
 
 ### 查询外部数据湖中的 MAP 数据
@@ -70,7 +68,7 @@ SELECT map_size(col_map) FROM test_map ORDER BY col_int;
 假设 Hive 中有表 `hive_map`，数据如下：
 
 ```Plain
-select * from hive_map order by col_int;
+SELECT * FROM hive_map ORDER BY col_int;
 +---------+---------------+
 | col_int | col_map       |
 +---------+---------------+
@@ -81,16 +79,16 @@ select * from hive_map order by col_int;
 3 rows in set (0.05 sec)
 ```
 
-通过在 StarRocks 集群中[创建 Hive catalog](../../../data_source/catalog/hive_catalog.md#创建-hive-catalog)来访问该表，计算 `col_map` 列每行的元素个数。
+通过在 StarRocks 集群中[创建 Hive catalog](../../../data_source/catalog/hive_catalog.md#创建-hive-catalog) 来访问该表，计算 `col_map` 列每行的元素个数。
 
 ```Plaintext
-select map_size(col_map) from hive_map order by col_int;
-+-------------------+
-| map_size(col_map) |
-+-------------------+
-|                 2 |
-|                 1 |
-|                 2 |
-+-------------------+
+SELECT cardinality(col_map) FROM hive_map ORDER BY col_int;
++----------------------+
+| cardinality(col_map) |
++----------------------+
+|                    2 |
+|                    1 |
+|                    2 |
++----------------------+
 3 rows in set (0.05 sec)
 ```
