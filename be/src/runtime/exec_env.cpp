@@ -153,16 +153,16 @@ static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
 
 bool ExecEnv::_is_init = false;
 
-Status ExecEnv::init(ExecEnv* env, const std::vector<StorePath>& store_paths) {
+Status ExecEnv::init(ExecEnv* env, const std::vector<StorePath>& store_paths, bool as_cn) {
     DeferOp op([]() { ExecEnv::_is_init = true; });
-    return env->_init(store_paths);
+    return env->_init(store_paths, as_cn);
 }
 
 bool ExecEnv::is_init() {
     return _is_init;
 }
 
-Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
+Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
     _metrics = StarRocksMetrics::instance()->metrics();
@@ -261,7 +261,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
-    if (store_paths.empty()) {
+    if (store_paths.empty() && as_cn) {
         _load_path_mgr = new DummyLoadPathMgr();
     } else {
         _load_path_mgr = new LoadPathMgr(this);

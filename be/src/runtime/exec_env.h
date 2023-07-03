@@ -110,7 +110,7 @@ class DirManager;
 class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
-    static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths);
+    static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths, bool as_cn = false);
     static bool is_init();
     static void stop(ExecEnv* exec_env);
     static void destroy(ExecEnv* exec_env);
@@ -236,7 +236,7 @@ public:
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
 private:
-    Status _init(const std::vector<StorePath>& store_paths);
+    Status _init(const std::vector<StorePath>& store_paths, bool as_cn);
     void _stop();
     void _destroy();
     void _reset_tracker();
