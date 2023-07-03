@@ -381,28 +381,22 @@ public class LocalMetastore implements ConnectorMetadata {
             if (fullNameToDb.containsKey(dbName)) {
                 throw new AlreadyExistsException("Database Already Exists");
             } else {
+                id = getNextId();
+                Database db = new Database(id, dbName);
                 String storageVolumeId = "";
                 if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    // In shared data mode, storage volume needs to be bound to db before creating db.
                     String volume = StorageVolumeMgr.DEFAULT;
                     if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
                         volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
                     }
                     storageVolumeId = getStorageVolumeId(volume);
-                }
-                id = getNextId();
-                Database db = new Database(id, dbName);
-                unprotectCreateDb(db);
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA &&
-                        !GlobalStateMgr.getCurrentState().getStorageVolumeMgr().bindDbToStorageVolume(storageVolumeId, id)) {
-                    throw new DdlException(String.format("Storage volume with id %s not exists", storageVolumeId));
-                }
-                try {
-                    GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db, storageVolumeId);
-                } catch (Exception e) {
-                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                        GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindDbToStorageVolume(id);
+                    if (!GlobalStateMgr.getCurrentState().getStorageVolumeMgr().bindDbToStorageVolume(storageVolumeId, id)) {
+                        throw new DdlException(String.format("Storage volume with id %s not exists", storageVolumeId));
                     }
                 }
+                unprotectCreateDb(db);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db, storageVolumeId);
             }
         } finally {
             unlock();
