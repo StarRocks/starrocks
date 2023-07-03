@@ -222,7 +222,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
                 String storageVolumeId = sv.getId();
                 metastore.setLakeStorageInfo(table, storageVolumeId, properties);
-                svm.bindTableToStorageVolume(sv.getId(), table.getId());
+                if (!svm.bindTableToStorageVolume(sv.getId(), table.getId())) {
+                    throw new DdlException(String.format("Storage volume with id %s not exists", storageVolumeId));
+                }
                 table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
