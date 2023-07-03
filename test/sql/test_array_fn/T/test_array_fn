@@ -140,6 +140,7 @@ select array_agg(NULL) from array_test;
 select array_agg([1.0,2.1,3.2,4.3]) from array_test;
 select array_agg(['a', 'b', 'c']) from array_test;
 select array_agg([[1,2,3], [2,3,4]]) from array_test;
+select array_agg(if (s_1 is not null, map_from_arrays(['a', 'b'], [1, 2]), null)) from array_test group by pk order by pk;
 select reverse(s_1) from array_test order by pk;
 select reverse(i_1) from array_test order by pk;
 select reverse(f_1) from array_test order by pk;

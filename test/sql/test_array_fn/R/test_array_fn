@@ -744,6 +744,13 @@ select array_agg([[1,2,3], [2,3,4]]) from array_test;
 -- result:
 [[[1,2,3],[2,3,4]],[[1,2,3],[2,3,4]],[[1,2,3],[2,3,4]],[[1,2,3],[2,3,4]]]
 -- !result
+select array_agg(if (s_1 is not null, map_from_arrays(['a', 'b'], [1, 2]), null)) from array_test group by pk order by pk;
+-- result:
+[{"a":1,"b":2}]
+[{"a":1,"b":2}]
+[null]
+[{"a":1,"b":2}]
+-- !result
 select reverse(s_1) from array_test order by pk;
 -- result:
 ["c","b","a"]
