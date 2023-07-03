@@ -201,7 +201,6 @@ TEST_F(HyperLogLogFunctionsTest, hllSerializeTest) {
         ASSERT_TRUE(v->is_numeric());
         auto expect = ColumnHelper::cast_to<TYPE_BIGINT>(v);
 
-
         v = HyperloglogFunction::hll_serialize(ctx, {col1});
         ASSERT_TRUE(v->is_binary());
         v = HyperloglogFunction::hll_deserialize(ctx, {v});

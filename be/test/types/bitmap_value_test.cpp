@@ -13,9 +13,10 @@
 // limitations under the License.
 
 #include "types/bitmap_value.h"
-#include "util/phmap/phmap.h"
 
 #include <gtest/gtest.h>
+
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

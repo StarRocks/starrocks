@@ -11,6 +11,7 @@
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_or_predicate.h"
 #include "utils.h"
 
 namespace starrocks::parquet {
@@ -286,18 +287,6 @@ bool GroupReader::_can_using_dict_filter(const SlotDescriptor* slot, const SlotI
         return false;
     }
 
-    // check is null or is not null
-    // is null or is not null conjunct should not eval dict value, this will always return empty set
-    for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
-        const Expr* root_expr = ctx->root();
-        if (root_expr->node_type() == TExprNodeType::FUNCTION_CALL) {
-            std::string is_null_str;
-            if (root_expr->is_null_scalar_function(is_null_str)) {
-                return false;
-            }
-        }
-    }
-
     // check all data pages dict encoded
     if (!_column_all_pages_dict_encoded(column_metadata)) {
         return false;
@@ -368,11 +357,17 @@ Status GroupReader::_rewrite_dict_column_predicates() {
     for (int col_idx : _dict_filter_column_indices) {
         const auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
-        vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
-        std::shared_ptr<vectorized::BinaryColumn> dict_value_column = vectorized::BinaryColumn::create();
-        dict_value_chunk->append_column(dict_value_column, slot_id);
 
+        // --------
+        // create dict value chunk for evaluation.
+        vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
+        vectorized::ColumnPtr dict_value_column =
+                vectorized::ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        dict_value_chunk->append_column(dict_value_column, slot_id);
         RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(dict_value_column.get()));
+        // append a null value to check if null is ok or not.
+        dict_value_column->append_default();
+
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_dict_filter_conjunct_ctxs[slot_id], dict_value_chunk.get()));
         dict_value_chunk->check_or_die();
 
@@ -382,25 +377,51 @@ Status GroupReader::_rewrite_dict_column_predicates() {
             return Status::OK();
         }
 
-        // get dict codes
+        // ---------
+        // get dict codes according to dict values.
+        auto* dict_nullable_column = down_cast<vectorized::NullableColumn*>(dict_value_column.get());
+        auto* dict_value_binary_column =
+                down_cast<vectorized::BinaryColumn*>(dict_nullable_column->data_column().get());
         std::vector<int32_t> dict_codes;
-        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_codes(dict_value_column->get_data(), &dict_codes));
+        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_codes(dict_value_binary_column->get_data(),
+                                                                 *dict_nullable_column, &dict_codes));
 
         // eq predicate is faster than in predicate
         // TODO: improve not eq and not in
-        if (dict_codes.size() == 1) {
-            _dict_filter_preds[slot_id] = vectorized::new_column_eq_predicate(get_type_info(kDictCodeFieldType),
-                                                                              slot_id, std::to_string(dict_codes[0]));
+        if (dict_codes.size() == 0) {
+            _dict_filter_preds[slot_id] = nullptr;
+        } else if (dict_codes.size() == 1) {
+            _dict_filter_preds[slot_id] = _obj_pool.add(vectorized::new_column_eq_predicate(
+                    get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0])));
         } else {
             std::vector<std::string> str_codes;
             str_codes.reserve(dict_codes.size());
             for (int code : dict_codes) {
                 str_codes.emplace_back(std::to_string(code));
             }
-            _dict_filter_preds[slot_id] =
-                    vectorized::new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes);
+            _dict_filter_preds[slot_id] = _obj_pool.add(
+                    vectorized::new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes));
         }
-        _obj_pool.add(_dict_filter_preds[slot_id]);
+
+        // check if NULL works or not.
+        if (dict_value_column->has_null()) {
+            vectorized::ColumnPredicate* old = _dict_filter_preds[slot_id];
+            // new = old or (is_null);
+            vectorized::ColumnPredicate* result = nullptr;
+            vectorized::ColumnPredicate* is_null_pred = _obj_pool.add(
+                    vectorized::new_column_null_predicate(get_type_info(kDictCodeFieldType), slot_id, true));
+
+            if (old != nullptr) {
+                vectorized::ColumnOrPredicate* or_pred =
+                        _obj_pool.add(new vectorized::ColumnOrPredicate(get_type_info(kDictCodeFieldType), slot_id));
+                or_pred->add_child(old);
+                or_pred->add_child(is_null_pred);
+                result = or_pred;
+            } else {
+                result = is_null_pred;
+            }
+            _dict_filter_preds[slot_id] = result;
+        }
     }
 
     return Status::OK();
@@ -519,12 +540,15 @@ Status GroupReader::_dict_decode(vectorized::ChunkPtr* chunk) {
         vectorized::ColumnPtr& dict_values = (*chunk)->get_column_by_slot_id(slot_id);
         dict_values->resize(0);
 
+        // decode dict code to dict values.
+        // note that in dict code, there could be null value.
         auto* codes_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(dict_codes);
         auto* codes_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int32_t>>(
                 codes_nullable_column->data_column());
-        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(codes_column->get_data(), dict_values.get()));
-
+        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(codes_column->get_data(), *codes_nullable_column,
+                                                                  dict_values.get()));
         DCHECK_EQ(dict_codes->size(), dict_values->size());
+
         if (slots[chunk_index]->is_nullable()) {
             auto* nullable_codes = down_cast<vectorized::NullableColumn*>(dict_codes.get());
             auto* nullable_values = down_cast<vectorized::NullableColumn*>(dict_values.get());
