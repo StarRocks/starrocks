@@ -603,7 +603,7 @@ public class SchemaChangeHandler extends AlterHandler {
             Type t = oneCol.get().getType();
             if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
                     t.isDatetime())) {
-                throw new DdlException("Sort key column[" + colName + "] type not supported: " + t.toSql());
+                throw new DdlException("Sort key column[" + colName + "] type not supported: " + t);
             }
         }
     }
