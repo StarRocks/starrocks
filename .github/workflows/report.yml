@@ -60,8 +60,8 @@ jobs:
         uses: mikepenz/action-junit-report@v3
         if: steps.download-ut-xml.outputs.size != '0'
         env:
-          github_token: ${{ secrets.PAT }}
-          token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
         with:
           check_name: 'FE UT Report'
           detailed_summary: true
@@ -95,7 +95,7 @@ jobs:
               exit 1
             fi
             timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover ${{ github.workspace }}/fe-result/ --github-token ${{ secrets.PAT }} \
+              --cover ${{ github.workspace }}/fe-result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
             pull_status=$?
             time_count=`expr $time_count + 1`
@@ -148,7 +148,7 @@ jobs:
           check_name: 'SQL-Tester Report'
           fail_on_failure: true
           detailed_summary: true
-          token: ${{ secrets.PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'sql-tester-result/*.xml'
 
   Admit-REPORT:
@@ -198,5 +198,5 @@ jobs:
           check_name: 'Admit Report'
           fail_on_failure: true
           detailed_summary: true
-          token: ${{ secrets.PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'admit-result/*.xml'
