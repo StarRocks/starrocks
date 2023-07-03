@@ -157,7 +157,6 @@ protected:
     // The number of morsels picked up by this scan operator.
     // A tablet may be divided into multiple morsels.
     RuntimeProfile::Counter* _morsels_counter = nullptr;
-    RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
     RuntimeProfile::Counter* _submit_task_counter = nullptr;
 
     int64_t _op_pull_chunks = 0;
