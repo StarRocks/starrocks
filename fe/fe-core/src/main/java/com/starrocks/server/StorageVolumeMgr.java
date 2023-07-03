@@ -178,12 +178,16 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         return enabled;
     }
 
-    public void bindDbToStorageVolume(String svId, long dbId) {
+    public boolean bindDbToStorageVolume(String svId, long dbId) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            if (!storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
+                return false;
+            }
             Set<Long> dbs = storageVolumeToDbs.getOrDefault(svId, new HashSet<>());
             dbs.add(dbId);
             storageVolumeToDbs.put(svId, dbs);
             dbToStorageVolume.put(dbId, svId);
+            return true;
         }
     }
 
@@ -201,12 +205,16 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void bindTableToStorageVolume(String svId, long tableId) {
+    public boolean bindTableToStorageVolume(String svId, long tableId) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            if (!storageVolumeToTables.containsKey(svId) && getStorageVolume(svId) == null) {
+                return false;
+            }
             Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
             tables.add(tableId);
             storageVolumeToTables.put(svId, tables);
             tableToStorageVolume.put(tableId, svId);
+            return true;
         }
     }
 
