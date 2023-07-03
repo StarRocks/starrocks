@@ -288,13 +288,32 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals(sv.getId(), sdsvm.getDefaultStorageVolumeId());
         Assert.assertEquals("region", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getRegion());
         Assert.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getEndpoint());
+        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
+        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasSimpleCredential());
 
         Config.aws_s3_region = "region1";
         Config.aws_s3_endpoint = "endpoint1";
         sdsvm.createOrUpdateBuiltinStorageVolume();
         sv = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
         Assert.assertEquals("region1", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getRegion());
         Assert.assertEquals("endpoint1", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getEndpoint());
+        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
+        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasSimpleCredential());
+
+        Config.aws_s3_use_instance_profile = true;
+        Config.aws_s3_use_aws_sdk_default_behavior = false;
+        sdsvm.createOrUpdateBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
+        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasProfileCredential());
+
+        Config.aws_s3_iam_role_arn = "role_arn";
+        Config.aws_s3_external_id = "external_id";
+        sdsvm.createOrUpdateBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
+        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasAssumeRoleCredential());
 
         String svKey = "test";
         List<String> locations = Arrays.asList("s3://abc");
@@ -304,6 +323,13 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         sdsvm.createStorageVolume(svKey, "S3", locations, storageParams, Optional.empty(), "");
         sdsvm.setDefaultStorageVolume(svKey);
+
+        Config.cloud_native_storage_type = "hdfs";
+        Config.cloud_native_hdfs_url = "hdfs://url";
+        sdsvm.removeStorageVolume(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        sdsvm.createOrUpdateBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().hasHdfsFsInfo());
 
         Config.cloud_native_storage_type = "azblob";
         Config.azure_blob_shared_key = "shared_key";

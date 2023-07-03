@@ -150,6 +150,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 params.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, Config.aws_s3_endpoint);
                 params.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, Config.aws_s3_external_id);
                 params.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, Config.aws_s3_iam_role_arn);
+                params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
+                        String.valueOf(Config.aws_s3_use_aws_sdk_default_behavior));
+                params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
+                        String.valueOf(Config.aws_s3_use_instance_profile));
                 break;
             case "hdfs":
                 // TODO
