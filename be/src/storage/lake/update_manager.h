@@ -63,12 +63,10 @@ public:
                                       Tablet* tablet, MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
-    Status get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
-                                   const std::vector<ColumnUniquePtr>& upserts, int64_t base_version,
-                                   const MetaFileBuilder* builder, std::vector<std::vector<uint64_t>*>* rss_rowids);
-    Status get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
-                                   const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
-                                   const MetaFileBuilder* builder, std::vector<std::vector<uint64_t>>* rss_rowids);
+    Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
+                                   std::vector<std::vector<uint64_t>*>* rss_rowids);
+    Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
+                                   std::vector<std::vector<uint64_t>>* rss_rowids);
 
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
@@ -133,8 +131,7 @@ private:
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
-    Status _handle_index_op(Tablet* tablet, const TabletMetadata& metadata, const int64_t base_version,
-                            const MetaFileBuilder* builder, const std::function<void(LakePrimaryIndex&)>& op);
+    Status _handle_index_op(Tablet* tablet, int64_t base_version, const std::function<void(LakePrimaryIndex&)>& op);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:
