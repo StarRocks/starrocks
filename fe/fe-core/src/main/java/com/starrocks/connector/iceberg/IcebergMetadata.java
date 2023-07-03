@@ -34,6 +34,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.cost.IcebergAnalyzedStatisticProvider;
 import com.starrocks.connector.iceberg.cost.IcebergFileBasedStatisticProvider;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
+import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -98,10 +99,14 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<IcebergFilter, List<FileScanTask>> tasks = new ConcurrentHashMap<>();
 
     public IcebergMetadata(String catalogName, IcebergCatalog icebergCatalog) {
+        this(catalogName, icebergCatalog, false);
+    }
+
+    public IcebergMetadata(String catalogName, IcebergCatalog icebergCatalog, boolean enableAnalyzedStatistic) {
         this.catalogName = catalogName;
         this.icebergCatalog = icebergCatalog;
         new IcebergMetricsReporter().setThreadLocalReporter();
-        if (icebergCatalog instanceof CachingIcebergCatalog) {
+        if (icebergCatalog instanceof CachingIcebergCatalog && enableAnalyzedStatistic) {
             this.statisticProvider = new IcebergAnalyzedStatisticProvider(icebergCatalog);
         } else {
             this.statisticProvider = new IcebergFileBasedStatisticProvider();

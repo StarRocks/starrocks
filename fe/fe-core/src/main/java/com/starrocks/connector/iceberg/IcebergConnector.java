@@ -103,10 +103,14 @@ public class IcebergConnector implements Connector {
         }
         return IcebergCatalogType.fromString(nativeCatalogTypeStr);
     }
+    private boolean enableAnalyzedStatistic() {
+        return Boolean.parseBoolean(properties.getOrDefault("enable_iceberg_analyzed_statistics",
+                "false"));
+    }
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new IcebergMetadata(catalogName, getNativeCatalog());
+        return new IcebergMetadata(catalogName, getNativeCatalog(), enableAnalyzedStatistic());
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
