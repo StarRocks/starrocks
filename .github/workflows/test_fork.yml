@@ -133,7 +133,7 @@ jobs:
   clang-format:
     runs-on: [self-hosted, normal]
     needs: be-checker
-    name: Clang-Format
+    name: Clang-Format 2
     env:
       PR_NUMBER: ${{ github.event.number }}
     if: ${{ needs.be-checker.outputs.output1 == 'true' }}
@@ -214,7 +214,7 @@ jobs:
     runs-on: [self-hosted, normal]
     needs: [ be-checker, thirdparty-update ]
     timeout-minutes: 90
-    name: BE UT
+    name: BE UT 2
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
@@ -349,7 +349,7 @@ jobs:
   fe-ut:
     runs-on: [self-hosted, normal]
     needs: fe-codestyle-check
-    name: FE UT
+    name: FE UT 2
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
@@ -447,7 +447,7 @@ jobs:
   build:
     runs-on: [self-hosted, normal]
     needs: [be-checker, fe-checker, be-ut, fe-ut, thirdparty-update]
-    name: BUILD
+    name: BUILD 2
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
@@ -498,7 +498,7 @@ jobs:
     runs-on: [self-hosted, normal]
     if: always() && needs.build.result == 'success'
     needs: build
-    name: DEPLOY SR
+    name: DEPLOY SR 2
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: ci-admit
@@ -537,7 +537,7 @@ jobs:
 
   SQL-Tester:
     runs-on: [self-hosted, normal]
-    name: SQL-Tester
+    name: SQL-Tester 2
     needs: [ build, deploy ]
     if: always() && needs.deploy.result == 'success'
     timeout-minutes: 30
@@ -592,7 +592,7 @@ jobs:
 
   admit:
     runs-on: [self-hosted, normal]
-    name: ADMIT TEST
+    name: ADMIT TEST 2
     needs: [ deploy, SQL-Tester ]
     if: always() && needs.deploy.result == 'success' && needs.SQL-Tester.result == 'success'
     timeout-minutes: 40
