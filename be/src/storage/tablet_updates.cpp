@@ -164,8 +164,8 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
                 auto rowset_meta = std::make_shared<RowsetMeta>(rowset_meta_data, &parse_ok);
                 CHECK(parse_ok) << "Corrupted rowset meta";
                 RowsetSharedPtr rowset;
-                st = RowsetFactory::create_rowset(_tablet.thread_safe_get_tablet_schema(), _tablet.schema_hash_path(), rowset_meta,
-                                                  &rowset);
+                st = RowsetFactory::create_rowset(_tablet.thread_safe_get_tablet_schema(), _tablet.schema_hash_path(),
+                                                  rowset_meta, &rowset);
                 if (st.ok()) {
                     _pending_commits.emplace(version, rowset);
                 } else {
@@ -187,8 +187,8 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     RETURN_IF_ERROR(TabletMetaManager::rowset_iterate(
             _tablet.data_dir(), _tablet.tablet_id(), [&](const RowsetMetaSharedPtr& rowset_meta) -> bool {
                 RowsetSharedPtr rowset;
-                st = RowsetFactory::create_rowset(_tablet.thread_safe_get_tablet_schema(), _tablet.schema_hash_path(), rowset_meta,
-                                                  &rowset);
+                st = RowsetFactory::create_rowset(_tablet.thread_safe_get_tablet_schema(), _tablet.schema_hash_path(),
+                                                  rowset_meta, &rowset);
                 if (st.ok()) {
                     _rowsets[rowset_meta->get_rowset_seg_id()] = std::move(rowset);
                 } else {
