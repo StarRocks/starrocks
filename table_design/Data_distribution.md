@@ -383,9 +383,12 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
     AGGREGATE KEY(site_id, city_code, user_name)
     DISTRIBUTED BY HASH(site_id,city_code); --无需手动设置分桶数量
     ```
+    
+    如果需要开启该功能，则您需要确保 FE 动态参数 `enable_auto_tablet_distribution` 为 `true`。
+    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) 来查看 StarRock 为分区自动设置的分桶数量。
 
-  - 手动设置分桶数量
-  
+  - 方式二：手动设置分桶数量
+
     自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分桶数量的设置。简化后，确定分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分桶数量。
 
     > **注意**
