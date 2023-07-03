@@ -23,7 +23,7 @@ Before you dive into the details of designing and managing data distribution, fa
 
 ## Partitioning methods
 
-Modern distributed database systems generally use four basic distribution methods: round-robin, range, list, and hash.
+Modern distributed database systems generally use the following basic distribution methods: round-robin, range, list, hash, and random.
 
 ![Data distribution method](../assets/3.3.2-1.png)
 
