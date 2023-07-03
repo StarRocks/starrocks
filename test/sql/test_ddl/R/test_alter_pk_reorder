@@ -54,10 +54,6 @@ select * from tab1;
 700	700	700	700	700
 -- !result
 
-
-
-
-
 -- name: test_alter_pk_reorder_column_type
 CREATE TABLE `test_alter_pk_reorder_column_type` (
   `k1` date NOT NULL COMMENT "",
