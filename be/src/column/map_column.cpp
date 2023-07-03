@@ -451,8 +451,7 @@ int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq
         bool real_eq = false;
         bool null_eq = false;
         uint32_t eq_id = 0;
-        for (auto it = right_index.begin(); it != right_index.end(); it++) {
-            uint32_t j = *it;
+        for (unsigned int j : right_index) {
             int key_res = _keys->equals(i, *(rhs_map._keys.get()), j, safe_eq);
             if (key_res == EQUALS_FALSE) {
                 continue;
@@ -467,6 +466,7 @@ int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq
                 } else if (val_res == EQUALS_NULL) {
                     null_eq = true;
                 } else if (val_res == EQUALS_TRUE) {
+                    null_eq = false;
                     real_eq = true;
                 }
                 eq_id = j;
@@ -480,13 +480,13 @@ int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq
         }
         if (null_eq || real_eq) {
             right_index.erase(eq_id);
-            has_null_eq |= null_eq;
+            has_null_eq |= (!real_eq && null_eq);
         } else {
             return EQUALS_FALSE;
         }
     }
 
-    DCHECK(right_index.empty()); // all matched null or true
+    DCHECK(right_index.empty()); // all matched return null or true
 
     // unsafe eq && has null eq, should return NULL
     // unsafe eq && none null eq, should return TRUE

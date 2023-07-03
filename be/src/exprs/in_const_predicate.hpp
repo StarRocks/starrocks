@@ -415,6 +415,7 @@ public:
         RETURN_IF_ERROR(Expr::open(state, context, scope));
         _const_input.resize(_children.size());
         for (auto i = 0; i < _children.size(); ++i) {
+            _children[i]->is_constant();
             if (dynamic_cast<VectorizedLiteral*>(_children[i])) {
                 ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
             } else {

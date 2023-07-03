@@ -254,8 +254,8 @@ select s0 in (select s0 from struct_test s) from struct_test;
 -- result:
 1
 1
-1
 None
+1
 1
 -- !result
 select s0 in (select s1 from struct_test s) from struct_test;
@@ -269,17 +269,17 @@ None
 select s5 in (select s5 from struct_test s) from struct_test;
 -- result:
 1
-1
-1
-1
 None
+1
+1
+1
 -- !result
 select s0 not in (select s0 from struct_test s) from struct_test;
 -- result:
 0
 0
-None
 0
+None
 0
 -- !result
 select s0 not in (select s2 from struct_test s) from struct_test;

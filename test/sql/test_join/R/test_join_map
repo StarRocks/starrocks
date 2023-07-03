@@ -178,10 +178,10 @@ E: (1064, 'Getting analyzing error from line 1, column 73 to line 1, column 84. 
 -- !result
 select map3 from map_test t where exists (select 1 from map_test s where t.map3 = s.map3);
 -- result:
-{"1":{1:"abc"}}
-{"3":{3:"a33c"},null:null}
-{null:{null:null}}
 {"11":{1:"abc"},"":{2:null}}
+{"3":{3:"a33c"},null:null}
+{"1":{1:"abc"}}
+{null:{null:null}}
 -- !result
 select map5 from map_test t where exists (select 1 from map_test s where t.map5 < s.map3);
 -- result:
@@ -193,8 +193,8 @@ None
 -- !result
 select map1 from map_test t where not exists (select 1 from map_test s where t.map1 = s.map0);
 -- result:
-{null:""}
 None
+{null:""}
 -- !result
 select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map5);
 -- result:
@@ -207,8 +207,8 @@ E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. 
 select map3 from map_test t where map3 in (select map3 from map_test s);
 -- result:
 {null:{null:null}}
-{"1":{1:"abc"}}
 {"11":{1:"abc"},"":{2:null}}
+{"1":{1:"abc"}}
 {"3":{3:"a33c"},null:null}
 -- !result
 select map4 from map_test t where map4 in (select map5 from map_test s);
@@ -217,10 +217,10 @@ E: (1064, 'Getting analyzing error from line 1, column 39 to line 1, column 70. 
 -- !result
 select map5 from map_test t where map5 in (select map5 from map_test s);
 -- result:
-{null:{"c":null,"b":null}}
-{null:{"c":null,"b":null}}
-{0:{"c":1,"b":"a"}}
 {null:null,3:{"c":3,"b":"a"}}
+{0:{"c":1,"b":"a"}}
+{null:{"c":null,"b":null}}
+{null:{"c":null,"b":null}}
 -- !result
 select map3 from map_test t where map3 not in (select map2 from map_test s);
 -- result:
@@ -244,9 +244,9 @@ E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 43. 
 select map5 in (select map5 from map_test s) from map_test;
 -- result:
 1
-1
-1
 None
+1
+1
 1
 -- !result
 select map0 not in (select map0 from map_test s) from map_test;
@@ -260,10 +260,10 @@ None
 select map1 not in (select map0 from map_test s) from map_test;
 -- result:
 0
-None
-0
 0
 None
+None
+0
 -- !result
 select map4 not in (select map5 from map_test s) from map_test;
 -- result:
