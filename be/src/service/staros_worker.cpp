@@ -59,7 +59,29 @@ StarOSWorker::~StarOSWorker() = default;
 
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     std::unique_lock l(_mtx);
-    _shards.try_emplace(shard.id, ShardInfoDetails(shard));
+    auto it = _shards.find(shard.id);
+    if (it != _shards.end() && it->second.shard_info.path_info.has_fs_info() && shard.path_info.has_fs_info() &&
+        it->second.shard_info.path_info.fs_info().version() < shard.path_info.fs_info().version()) {
+        auto st = invalidate_fs(it->second.shard_info);
+        if (!st.ok()) {
+            return st;
+        }
+    }
+    _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
+    return absl::OkStatus();
+}
+
+absl::Status StarOSWorker::invalidate_fs(const ShardInfo& info) {
+    auto scheme = build_scheme_from_shard_info(info);
+    if (!scheme.ok()) {
+        return scheme.status();
+    }
+    auto conf = build_conf_from_shard_info(info);
+    if (!conf.ok()) {
+        return conf.status();
+    }
+    auto key = get_cache_key(*scheme, *conf);
+    _fs_cache->erase(key);
     return absl::OkStatus();
 }
 
@@ -159,113 +181,134 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
 
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_from_shard_info(
         const ShardInfo& info, const Configuration& conf) {
-    fslib::Configuration localconf;
+    auto localconf = build_conf_from_shard_info(info);
+    if (!localconf.ok()) {
+        return localconf.status();
+    }
+    auto scheme = build_scheme_from_shard_info(info);
+    if (!scheme.ok()) {
+        return scheme.status();
+    }
 
-    // FIXME: currently the cache root dir is set from be.conf, could be changed in future
-    std::string cache_dir = config::starlet_cache_dir;
+    if (need_enable_cache(info)) {
+        // set environ variable to cachefs directory
+        setenv(fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 0 /*overwrite*/);
+    }
+    return new_shared_filesystem(*scheme, *localconf);
+}
+
+bool StarOSWorker::need_enable_cache(const ShardInfo& info) {
     auto cache_info = info.cache_info;
-    bool cache_enabled = cache_info.enable_cache() && !cache_dir.empty();
+    return cache_info.enable_cache() && !config::starlet_cache_dir.empty();
+}
+
+absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const ShardInfo& info) {
+    if (need_enable_cache(info)) {
+        return "cachefs://";
+    }
 
     std::string scheme = "file://";
     switch (info.path_info.fs_info().fs_type()) {
     case staros::FileStoreType::S3:
         scheme = "s3://";
-        {
-            auto& s3_info = info.path_info.fs_info().s3_fs_info();
-            if (!info.path_info.full_path().empty()) {
-                localconf[fslib::kSysRoot] = info.path_info.full_path();
-            }
-            if (!s3_info.bucket().empty()) {
-                localconf[fslib::kS3Bucket] = s3_info.bucket();
-            }
-            if (!s3_info.region().empty()) {
-                localconf[fslib::kS3Region] = s3_info.region();
-            }
-            if (!s3_info.endpoint().empty()) {
-                localconf[fslib::kS3OverrideEndpoint] = s3_info.endpoint();
-            }
-            if (s3_info.has_credential()) {
-                auto credential = s3_info.credential();
-                if (credential.has_default_credential()) {
-                    localconf[fslib::kS3CredentialType] = "default";
-                } else if (credential.has_simple_credential()) {
-                    localconf[fslib::kS3CredentialType] = "simple";
-                    auto& simple_credential = credential.simple_credential();
-                    localconf[fslib::kS3CredentialSimpleAccessKeyId] = simple_credential.access_key();
-                    localconf[fslib::kS3CredentialSimpleAccessKeySecret] = simple_credential.access_key_secret();
-                } else if (credential.has_profile_credential()) {
-                    localconf[fslib::kS3CredentialType] = "instance_profile";
-                } else if (credential.has_assume_role_credential()) {
-                    localconf[fslib::kS3CredentialType] = "assume_role";
-                    auto& role_credential = credential.assume_role_credential();
-                    localconf[fslib::kS3CredentialAssumeRoleArn] = role_credential.iam_role_arn();
-                    localconf[fslib::kS3CredentialAssumeRoleExternalId] = role_credential.external_id();
-                } else {
-                    localconf[fslib::kS3CredentialType] = "default";
-                }
-            }
-        }
         break;
     case staros::FileStoreType::HDFS:
         scheme = "hdfs://";
-        localconf[fslib::kSysRoot] = info.path_info.full_path();
         break;
     case staros::FileStoreType::AZBLOB:
         scheme = "azblob://";
-        {
-            localconf[fslib::kSysRoot] = info.path_info.full_path();
-            localconf[fslib::kAzBlobEndpoint] = info.path_info.fs_info().azblob_fs_info().endpoint();
-            auto& credential = info.path_info.fs_info().azblob_fs_info().credential();
-            localconf[fslib::kAzBlobSharedKey] = credential.shared_key();
-            localconf[fslib::kAzBlobSASToken] = credential.sas_token();
-            localconf[fslib::kAzBlobTenantId] = credential.tenant_id();
-            localconf[fslib::kAzBlobClientId] = credential.client_id();
-            localconf[fslib::kAzBlobClientSecret] = credential.client_secret();
-            localconf[fslib::kAzBlobClientCertificatePath] = credential.client_certificate_path();
-            localconf[fslib::kAzBlobAuthorityHost] = credential.authority_host();
-        }
         break;
     default:
         return absl::InvalidArgumentError("Unknown shard storage scheme!");
     }
+    return scheme;
+}
 
-    if (cache_enabled) {
+absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(const ShardInfo& info) {
+    fslib::Configuration conf;
+
+    switch (info.path_info.fs_info().fs_type()) {
+    case staros::FileStoreType::S3: {
+        auto& s3_info = info.path_info.fs_info().s3_fs_info();
+        if (!info.path_info.full_path().empty()) {
+            conf[fslib::kSysRoot] = info.path_info.full_path();
+        }
+        if (!s3_info.bucket().empty()) {
+            conf[fslib::kS3Bucket] = s3_info.bucket();
+        }
+        if (!s3_info.region().empty()) {
+            conf[fslib::kS3Region] = s3_info.region();
+        }
+        if (!s3_info.endpoint().empty()) {
+            conf[fslib::kS3OverrideEndpoint] = s3_info.endpoint();
+        }
+        if (s3_info.has_credential()) {
+            auto credential = s3_info.credential();
+            if (credential.has_default_credential()) {
+                conf[fslib::kS3CredentialType] = "default";
+            } else if (credential.has_simple_credential()) {
+                conf[fslib::kS3CredentialType] = "simple";
+                auto simple_credential = credential.simple_credential();
+                conf[fslib::kS3CredentialSimpleAccessKeyId] = simple_credential.access_key();
+                conf[fslib::kS3CredentialSimpleAccessKeySecret] = simple_credential.access_key_secret();
+            } else if (credential.has_profile_credential()) {
+                conf[fslib::kS3CredentialType] = "instance_profile";
+            } else if (credential.has_assume_role_credential()) {
+                conf[fslib::kS3CredentialType] = "assume_role";
+                auto role_credential = credential.assume_role_credential();
+                conf[fslib::kS3CredentialAssumeRoleArn] = role_credential.iam_role_arn();
+                conf[fslib::kS3CredentialAssumeRoleExternalId] = role_credential.external_id();
+            } else {
+                conf[fslib::kS3CredentialType] = "default";
+            }
+        }
+    } break;
+    case staros::FileStoreType::HDFS: {
+        conf[fslib::kSysRoot] = info.path_info.full_path();
+        break;
+    }
+    case staros::FileStoreType::AZBLOB: {
+        conf[fslib::kSysRoot] = info.path_info.full_path();
+        conf[fslib::kAzBlobEndpoint] = info.path_info.fs_info().azblob_fs_info().endpoint();
+        auto& credential = info.path_info.fs_info().azblob_fs_info().credential();
+        conf[fslib::kAzBlobSharedKey] = credential.shared_key();
+        conf[fslib::kAzBlobSASToken] = credential.sas_token();
+        conf[fslib::kAzBlobTenantId] = credential.tenant_id();
+        conf[fslib::kAzBlobClientId] = credential.client_id();
+        conf[fslib::kAzBlobClientSecret] = credential.client_secret();
+        conf[fslib::kAzBlobClientCertificatePath] = credential.client_certificate_path();
+        conf[fslib::kAzBlobAuthorityHost] = credential.authority_host();
+    } break;
+    default:
+        return absl::InvalidArgumentError("Unknown shard storage scheme!");
+    }
+
+    if (need_enable_cache(info)) {
+        auto cache_info = info.cache_info;
         const static std::string conf_prefix("cachefs.");
 
-        scheme = "cachefs://";
         // rebuild configuration for cachefs
         Configuration tmp;
-        tmp.swap(localconf);
+        tmp.swap(conf);
         for (auto& iter : tmp) {
-            localconf[conf_prefix + iter.first] = iter.second;
+            conf[conf_prefix + iter.first] = iter.second;
         }
-        localconf[fslib::kSysRoot] = "/";
+        conf[fslib::kSysRoot] = "/";
         // original fs sys.root as cachefs persistent uri
-        localconf[fslib::kCacheFsPersistUri] = tmp[fslib::kSysRoot];
+        conf[fslib::kCacheFsPersistUri] = tmp[fslib::kSysRoot];
         // use persistent uri as identifier to maximize sharing of cache data
-        localconf[fslib::kCacheFsIdentifier] = tmp[fslib::kSysRoot];
-        localconf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_info.ttl_seconds());
+        conf[fslib::kCacheFsIdentifier] = tmp[fslib::kSysRoot];
+        conf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_info.ttl_seconds());
         if (cache_info.async_write_back()) {
-            localconf[fslib::kCacheFsAsyncWriteBack] = "true";
+            conf[fslib::kCacheFsAsyncWriteBack] = "true";
         }
-
-        // set environ variable to cachefs directory
-        setenv(fslib::kFslibCacheDir.c_str(), cache_dir.c_str(), 0 /*overwrite*/);
     }
-    return new_shared_filesystem(scheme, localconf);
+    return conf;
 }
 
 absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shared_filesystem(
         std::string_view scheme, const Configuration& conf) {
-    // Take the SHA-256 hash value as the cache key
-    SHA256Digest sha256;
-    sha256.update(scheme.data(), scheme.size());
-    for (const auto& [k, v] : conf) {
-        sha256.update(k.data(), k.size());
-        sha256.update(v.data(), v.size());
-    }
-    sha256.digest();
-    CacheKey key(sha256.hex());
+    auto key = get_cache_key(scheme, conf);
 
     // Lookup LRU cache
     std::shared_ptr<fslib::FileSystem> fs;
@@ -299,6 +342,19 @@ absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shar
     }
 
     return std::move(fs);
+}
+
+CacheKey StarOSWorker::get_cache_key(std::string_view scheme, const Configuration& conf) {
+    // Take the SHA-256 hash value as the cache key
+    SHA256Digest sha256;
+    sha256.update(scheme.data(), scheme.size());
+    for (const auto& [k, v] : conf) {
+        sha256.update(k.data(), k.size());
+        sha256.update(v.data(), v.size());
+    }
+    sha256.digest();
+    CacheKey key(sha256.hex());
+    return key;
 }
 
 Status to_status(const absl::Status& absl_status) {
