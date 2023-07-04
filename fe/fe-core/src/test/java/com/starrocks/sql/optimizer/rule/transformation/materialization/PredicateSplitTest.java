@@ -23,7 +23,10 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.junit.Assert;
 import org.junit.Test;
@@ -59,5 +62,85 @@ public class PredicateSplitTest {
         Assert.assertEquals(binaryPredicate, result.getEqualPredicates());
         Assert.assertEquals(binaryPredicate2, result.getRangePredicates());
         Assert.assertEquals(binaryPredicate3, result.getResidualPredicates());
+    }
+
+    @Test
+    public void testSplitPredicateWithMultiRange() {
+        ColumnRefOperator a = new ColumnRefOperator(0, Type.INT, "a", false);
+        ColumnRefOperator b = new ColumnRefOperator(1, Type.INT, "b", false);
+        ColumnRefOperator c = new ColumnRefOperator(2, Type.INT, "c", false);
+        ColumnRefOperator d = new ColumnRefOperator(3, Type.INT, "d", false);
+
+        ScalarOperator rangePredicate = CompoundPredicateOperator.or(
+                CompoundPredicateOperator.and(
+                    BinaryPredicateOperator.ge(a, ConstantOperator.createInt(0)),
+                    BinaryPredicateOperator.lt(a, ConstantOperator.createInt(3))
+                ),
+                CompoundPredicateOperator.and(
+                    BinaryPredicateOperator.ge(a, ConstantOperator.createInt(4)),
+                    BinaryPredicateOperator.lt(a, ConstantOperator.createInt(7))
+                )
+        );
+        BinaryPredicateOperator equalPredicate = BinaryPredicateOperator.eq(c, d);
+        InPredicateOperator inPredicate = new InPredicateOperator(
+                b,
+                ConstantOperator.createInt(0), ConstantOperator.createInt(1));
+        ScalarOperator otherPredicate = CompoundPredicateOperator.and(
+                BinaryPredicateOperator.ne(b, ConstantOperator.createInt(1)),
+                inPredicate
+        );
+
+        {
+            ScalarOperator predicate = CompoundPredicateOperator.and(rangePredicate, equalPredicate, otherPredicate);
+
+            PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
+            Assert.assertEquals(equalPredicate, predicateSplit.getEqualPredicates());
+            ScalarOperator expectRange = CompoundPredicateOperator.and(
+                    rangePredicate,
+                    CompoundPredicateOperator.or(
+                        BinaryPredicateOperator.lt(b, ConstantOperator.createInt(1)),
+                        BinaryPredicateOperator.gt(b, ConstantOperator.createInt(1)))
+            );
+            Assert.assertEquals(expectRange, predicateSplit.getRangePredicates());
+            Assert.assertEquals(inPredicate, predicateSplit.getResidualPredicates());
+        }
+        {
+            ScalarOperator residual = CompoundPredicateOperator.or(equalPredicate, otherPredicate);
+            ScalarOperator predicate = CompoundPredicateOperator.and(residual, rangePredicate);
+            PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
+            Assert.assertNull(predicateSplit.getEqualPredicates());
+            Assert.assertEquals(rangePredicate, predicateSplit.getRangePredicates());
+            Assert.assertEquals(residual, predicateSplit.getResidualPredicates());
+        }
+
+        {
+            ScalarOperator predicate = CompoundPredicateOperator.and(
+                    CompoundPredicateOperator.or(
+                        BinaryPredicateOperator.eq(a, ConstantOperator.createInt(0)),
+                        BinaryPredicateOperator.eq(b, ConstantOperator.createInt(3))
+                    ),
+                    CompoundPredicateOperator.or(
+                        BinaryPredicateOperator.eq(a, ConstantOperator.createInt(4)),
+                        BinaryPredicateOperator.eq(b, ConstantOperator.createInt(7))
+                    )
+            );
+            PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
+            Assert.assertEquals(predicate, predicateSplit.getResidualPredicates());
+        }
+
+        {
+            IsNullPredicateOperator predicate = new IsNullPredicateOperator(a);
+            PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
+            Assert.assertEquals(predicate, predicateSplit.getResidualPredicates());
+        }
+
+        {
+            ScalarOperator predicate = CompoundPredicateOperator.or(
+                    BinaryPredicateOperator.ge(a, ConstantOperator.createInt(2000)),
+                    new IsNullPredicateOperator(a)
+            );
+            PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
+            Assert.assertEquals(predicate, predicateSplit.getResidualPredicates());
+        }
     }
 }
