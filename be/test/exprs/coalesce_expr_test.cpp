@@ -187,4 +187,57 @@ TEST_F(VectorizedCoalesceExprTest, coalesceSameNull) {
     }
 }
 
+TEST_F(VectorizedCoalesceExprTest, coalesceConstNULL) {
+    for (auto desc : tttype_desc) {
+        expr_node.type = desc;
+        auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
+
+        MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10, true); // only null
+        MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20, true); // only null
+
+        expr->_children.push_back(&col1);
+        expr->_children.push_back(&col2);
+        {
+            Chunk chunk;
+            ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+            ASSERT_TRUE(ptr->is_nullable());
+            ASSERT_FALSE(ptr->is_numeric());
+
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_TRUE(ptr->is_null(j));
+            }
+        }
+    }
+}
+
+TEST_F(VectorizedCoalesceExprTest, coalesceConst) {
+    for (auto desc : tttype_desc) {
+        expr_node.type = desc;
+        auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
+
+        MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
+        MockConstVectorizedExpr<TYPE_BIGINT> col2(expr_node, 20); // const
+
+        expr->_children.push_back(&col1);
+        expr->_children.push_back(&col2);
+        {
+            Chunk chunk;
+            ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+            if (ptr->is_nullable()) {
+                ptr = down_cast<NullableColumn*>(ptr.get())->data_column();
+            }
+            ASSERT_TRUE(ptr->is_numeric());
+
+            auto v = ColumnHelper::cast_to_raw<TYPE_BIGINT>(ptr);
+            for (int j = 0; j < ptr->size(); ++j) {
+                if (j % 2 == 0) {
+                    ASSERT_EQ(10, v->get_data()[j]);
+                } else {
+                    ASSERT_EQ(20, v->get_data()[j]);
+                }
+            }
+        }
+    }
+}
+
 } // namespace starrocks

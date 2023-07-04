@@ -383,7 +383,7 @@ TEST_F(VectorizedCompoundPredicateTest, testOnlyNullAndZeroRow) {
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 0, 0);
     col1.only_null = true;
-    ASSERT_EQ(1, col1.evaluate(nullptr, nullptr)->size());
+    ASSERT_EQ(0, col1.evaluate(nullptr, nullptr)->size());
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 0, 0);
     ASSERT_EQ(0, col2.evaluate(nullptr, nullptr)->size());
