@@ -15,7 +15,6 @@
 package com.starrocks.server;
 
 import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
@@ -46,7 +45,7 @@ public class SharedNothingStorageVolumeMgrTest {
     private EditLog editLog;
 
     @Test
-    public void testStorageVolumeCRUD() throws AnalysisException, AlreadyExistsException, DdlException {
+    public void testStorageVolumeCRUD() throws AlreadyExistsException, DdlException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public EditLog getEditLog() {
@@ -69,6 +68,11 @@ public class SharedNothingStorageVolumeMgrTest {
         StorageVolumeMgr svm = new SharedNothingStorageVolumeMgr();
         List<String> locations = Arrays.asList("s3://abc");
         Map<String, String> storageParams = new HashMap<>();
+        storageParams.put("aaa", "bbb");
+        storageParams.put(AWS_S3_REGION, "region");
+        Assert.assertThrows(DdlException.class,
+                () -> svm.createStorageVolume(svKey, "S3", locations, storageParams, Optional.empty(), ""));
+        storageParams.remove("aaa");
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
@@ -98,6 +102,10 @@ public class SharedNothingStorageVolumeMgrTest {
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
+        storageParams.put("aaa", "bbb");
+        Assert.assertThrows(DdlException.class, () ->
+                svm.updateStorageVolume(svKey, storageParams, Optional.of(true), "test update"));
+        storageParams.remove("aaa");
         svm.updateStorageVolume(svKey, storageParams, Optional.of(true), "test update");
         sv = svm.getStorageVolumeByName(svKey);
         cloudConfiguration = sv.getCloudConfiguration();
