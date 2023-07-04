@@ -427,7 +427,6 @@ public class InvertedCaseWhen {
             }
             InvertedCaseWhen invertedCaseWhen = maybeInvertedCaseWhen.get();
             if (predicate.isNotNull()) {
-
                 return Optional.of(
                         invertedCaseWhen.getBranchToNull().map(NegateFilterShuttle.getInstance()::negateFilter)
                                 .orElse(ConstantOperator.TRUE));
