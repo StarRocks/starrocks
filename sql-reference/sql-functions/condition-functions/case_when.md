@@ -46,7 +46,7 @@ END
 
 ## 参数说明
 
-- `expressionN`：要进行对比的表达式。多个表达式必须在数据类型上兼容。
+- `expressionN`：要进行对比的表达式。多个表达式必须在数据类型上兼容。支持的数据类型为 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DATETIME、DATE、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128、VARCHAR、BITMAP、PERCENTILE、HLL、TIME、JSON。
 
 - `conditionN`：要进行判断的条件。
 
