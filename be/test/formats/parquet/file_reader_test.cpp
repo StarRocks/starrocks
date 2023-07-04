@@ -2452,4 +2452,49 @@ TEST_F(FileReaderTest, CheckDictOutofBouds) {
     EXPECT_EQ(0, total_row_nums);
 }
 
+TEST_F(FileReaderTest, CheckLargeParquetHeader) {
+    const std::string filepath = "./be/test/formats/parquet/test_data/large_page_header.parquet";
+    auto file = _create_file(filepath);
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    TypeDescriptor type_string = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+
+    Utils::SlotDesc slot_descs[] = {
+            {"myString", type_string},
+            {"myInteger", type_int},
+            {""},
+    };
+
+    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        if (!status.ok()) {
+            std::cout << status.get_error_msg() << std::endl;
+            break;
+        }
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+    }
+    EXPECT_EQ(5, total_row_nums);
+}
+
 } // namespace starrocks::parquet
