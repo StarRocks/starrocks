@@ -212,9 +212,9 @@ public:
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
 
-    void set_custom_coredump_msg(const std::string custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
+    void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
-    const std::string get_custom_coredump_msg() const { return _custom_coredump_msg; }
+    const std::string& get_custom_coredump_msg() const { return _custom_coredump_msg; }
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
