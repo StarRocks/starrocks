@@ -745,8 +745,7 @@ void TabletUpdates::_check_for_apply() {
     if (!st.ok()) {
         std::string msg =
                 strings::Substitute("submit apply task failed: $0 $1", st.to_string(), _debug_string(false, false));
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        LOG(FATAL) << msg;
     }
 }
 
