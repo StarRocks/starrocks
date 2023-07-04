@@ -393,7 +393,7 @@ public class FileSystemManager {
                     conf.set(DFS_NAMESERVICES_KEY, dfsNameServices);
                     logger.info("dfs.name.services:" + dfsNameServices);
                     String[] dfsNameServiceArray = dfsNameServices.split("\\s*,\\s*");
-                    for (String dfsNameService: dfsNameServiceArray) {
+                    for (String dfsNameService : dfsNameServiceArray) {
                         // ha hdfs arguments
                         dfsNameService = dfsNameService.trim();
                         final String dfsHaNameNodesKey = DFS_HA_NAMENODES_PREFIX + dfsNameService;
