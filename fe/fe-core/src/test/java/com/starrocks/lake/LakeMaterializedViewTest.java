@@ -140,6 +140,11 @@ public class LakeMaterializedViewTest {
                         .setS3FsInfo(s3FileStoreInfo).build();
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
+
+            @Mock
+            public boolean bindTableToStorageVolume(String svId, long tableId) {
+                return true;
+            }
         };
 
         starRocksAssert.withTable("CREATE TABLE base_table\n" +

@@ -85,6 +85,11 @@ public class CreateLakeTableTest {
                         .setS3FsInfo(s3FileStoreInfo).build();
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
+
+            @Mock
+            public boolean bindTableToStorageVolume(String svId, long tableId) {
+                return true;
+            }
         };
     }
 

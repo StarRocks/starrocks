@@ -207,7 +207,9 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     public boolean bindTableToStorageVolume(String svId, long tableId) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (!storageVolumeToTables.containsKey(svId) && getStorageVolume(svId) == null) {
+            if (!storageVolumeToDbs.containsKey(svId) &&
+                    !storageVolumeToTables.containsKey(svId) &&
+                    getStorageVolume(svId) == null) {
                 return false;
             }
             Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
