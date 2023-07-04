@@ -155,7 +155,7 @@ class SelectStmtWithCaseWhenTest {
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'USA' then 1 when 'UK' then 2 when 'China' then 2 end) = 2",
-                        "Predicates: 1: region IN ('UK', 'China')",
+                        "Predicates: CASE 1: region WHEN",
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when NULL then 2 when 'China' then 1 else 3 end) <> 1",
@@ -171,11 +171,11 @@ class SelectStmtWithCaseWhenTest {
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'USA' then 1 when 'UK' then 2 when 'China' then 2 end) <> 2",
-                        "[1: region, VARCHAR, false] = 'USA'",
+                        "Predicates: CASE 1: region WHEN 'USA'",
                 },
                 {"select * from test.t0 where \n" +
                         "((case region when 'USA' then 1 when 'UK' then 2 when 'China' then 2 end) <> 2) IS NULL",
-                        "1: region = 'USA' IS NULL"
+                        "Predicates: CASE 1: region WHEN"
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (1)",
@@ -227,10 +227,10 @@ class SelectStmtWithCaseWhenTest {
                         "Predicates: [1: region, VARCHAR, false] != 'Japan', 1: region IN ('China', 'Japan')",
                 },
                 {"select * from test.t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  = 'b'",
-                        "[5: ship_code, INT, true] = 2"
+                        "CASE 5: ship_code WHEN"
                 },
                 {"select * from test.t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  != 'b'",
-                        "5: ship_code IN (1, 3)"
+                        "Predicates: CASE 5: ship_code WHEN"
                 },
                 {"select * from test.t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  " +
                         "in ('a', 'b', 'c', 'd')", "5: ship_code IN (1, 2, 3)"

@@ -365,9 +365,7 @@ public class InvertedCaseWhen {
             // case-when with case clause and when branch are all consts can be decomposed into several simple
             // non-overlapping branches, in practice it is apt to yields simple and efficient simplified predicates.
             if (invertedCaseWhen.isWithCaseAndConstWhen) {
-                if (branchToNull.isPresent() && branchToNull.get().equals(invertedCaseWhen.getElseBranch())) {
-                    result = or(selected);
-                } else if (!branchToNull.isPresent()) {
+                if (!branchToNull.isPresent()) {
                     boolean isHitElseBranch = hitElseBranch(selectedMaxOrdinal, unSelectedMaxOrdinal);
                     // take care to process when branch predicate can be null
                     if (invertedCaseWhen.caseWhen.getCaseClause().isNullable()) {
