@@ -130,7 +130,16 @@ private:
             if (null == nullptr || !null->get_data()[row]) { // not null
                 res->append(*columns[0], row, 1);
             } else {
-                res->append(*columns[1], row, 1);
+                if (columns[1]->is_constant()) {
+                    if (columns[1]->is_nullable()) {
+                        res->append_nulls(1);
+                    } else {
+                        auto& data = down_cast<ConstColumn*>(columns[1].get())->data_column();
+                        res->append(*data, 0, 1);
+                    }
+                } else {
+                    res->append(*columns[1], row, 1);
+                }
             }
         }
         return res;
@@ -342,14 +351,24 @@ private:
         if constexpr (check_null) {
             for (int row = 0; row < num_rows; ++row) {
                 if (bhs_viewer.is_null(row) || !bhs_viewer.value(row)) {
-                    if (columns[2]->is_null(row)) {
-                        res->append_nulls(1);
+                    if (columns[2]->is_constant()) {
+                        if (columns[2]->is_nullable()) {
+                            res->append_nulls(1);
+                        } else {
+                            auto& data = down_cast<ConstColumn*>(columns[2].get())->data_column();
+                            res->append(*data, 0, 1);
+                        }
                     } else {
                         res->append(*columns[2], row, 1);
                     }
                 } else {
-                    if (columns[1]->is_null(row)) {
-                        res->append_nulls(1);
+                    if (columns[1]->is_constant()) {
+                        if (columns[1]->is_nullable()) {
+                            res->append_nulls(1);
+                        } else {
+                            auto& data = down_cast<ConstColumn*>(columns[1].get())->data_column();
+                            res->append(*data, 0, 1);
+                        }
                     } else {
                         res->append(*columns[1], row, 1);
                     }
@@ -358,14 +377,24 @@ private:
         } else {
             for (int row = 0; row < num_rows; ++row) {
                 if (!bhs_viewer.value(row)) {
-                    if (columns[2]->is_null(row)) {
-                        res->append_nulls(1);
+                    if (columns[2]->is_constant()) {
+                        if (columns[2]->is_nullable()) {
+                            res->append_nulls(1);
+                        } else {
+                            auto& data = down_cast<ConstColumn*>(columns[2].get())->data_column();
+                            res->append(*data, 0, 1);
+                        }
                     } else {
                         res->append(*columns[2], row, 1);
                     }
                 } else {
-                    if (columns[1]->is_null(row)) {
-                        res->append_nulls(1);
+                    if (columns[1]->is_constant()) {
+                        if (columns[1]->is_nullable()) {
+                            res->append_nulls(1);
+                        } else {
+                            auto& data = down_cast<ConstColumn*>(columns[1].get())->data_column();
+                            res->append(*data, 0, 1);
+                        }
                     } else {
                         res->append(*columns[1], row, 1);
                     }
