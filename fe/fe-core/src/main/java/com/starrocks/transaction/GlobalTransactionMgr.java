@@ -629,6 +629,24 @@ public class GlobalTransactionMgr implements Writable {
         return minId;
     }
 
+    /**
+     * Get the smallest transaction ID of active transactions in a database.
+     * If there are no active transactions in the database, return the transaction ID that will be assigned to the
+     * next transaction.
+     *
+     * @param dbId the ID the database
+     * @return the min txn id of running transactions in the database. If there are no running transactions, return
+     * the next transaction id that will be assigned.
+     */
+    public long getMinActiveTxnIdOfDatabase(long dbId) {
+        long minId = idGenerator.peekNextTransactionId();
+        DatabaseTransactionMgr dbTxnMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (dbTxnMgr != null) {
+            minId = Math.min(minId, dbTxnMgr.getMinActiveTxnId().orElse(Long.MAX_VALUE));
+        }
+        return minId;
+    }
+
     public TransactionState getTransactionState(long dbId, long transactionId) {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);

@@ -122,7 +122,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long visibleVersion;
         long minRetainVersion;
         long startTime = System.currentTimeMillis();
-        long minActiveTxnId = computeMinActiveTxnId();
+        long minActiveTxnId = computeMinActiveTxnId(db, table);
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
 
         db.readLock();
@@ -193,9 +193,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 visibleVersion, minRetainVersion, minActiveTxnId, System.currentTimeMillis() - startTime);
     }
 
-    private static long computeMinActiveTxnId() {
-        long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId();
-        Optional<Long> b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getMinActiveTxnId();
+    private static long computeMinActiveTxnId(Database db, Table table) {
+        long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnIdOfDatabase(db.getId());
+        Optional<Long> b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
         return Math.min(a, b.orElse(Long.MAX_VALUE));
     }
 }
