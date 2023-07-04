@@ -20,7 +20,9 @@
 
 namespace starrocks::parquet {
 
-static constexpr size_t kHeaderInitSize = 1024;
+static constexpr size_t kDefaultPageHeaderSize = 1024;
+// 16MB is borrowed from Arrow
+static constexpr size_t kMaxPageHeaderSize = 16 * 1024 * 1024;
 
 PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length, uint64_t num_values)
         : _stream(stream), _finish_offset(start_offset + length), _num_values_total(num_values) {}
@@ -39,30 +41,30 @@ Status PageReader::next_header() {
         return Status::EndOfFile("");
     }
 
-    std::vector<uint8_t> page_buffer;
-    page_buffer.reserve(config::parquet_header_max_size);
-    uint8_t* page_buf = page_buffer.data();
-
-    size_t nbytes = kHeaderInitSize;
+    size_t allowed_page_size = kDefaultPageHeaderSize;
     size_t remaining = _finish_offset - _offset;
     uint32_t header_length = 0;
 
     do {
-        nbytes = std::min(nbytes, remaining);
-        RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buf, nbytes));
+        allowed_page_size = std::min(allowed_page_size, remaining);
+        if (UNLIKELY((allowed_page_size > kMaxPageHeaderSize) || (_offset + allowed_page_size) > _finish_offset)) {
+            return Status::Corruption("Failed to decode parquet page header, page header's size is out of range");
+        }
 
-        header_length = nbytes;
+        std::vector<uint8_t> page_buffer;
+        page_buffer.reserve(allowed_page_size);
+        uint8_t* page_buf = page_buffer.data();
+        header_length = allowed_page_size;
+
+        RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buf, allowed_page_size));
+
         auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
         if (st.ok()) {
             break;
         }
-
-        if ((nbytes > config::parquet_header_max_size) || (_offset + nbytes) >= _finish_offset) {
-            return Status::Corruption("Failed to decode parquet page header");
-        }
-        nbytes <<= 2;
+        allowed_page_size <<= 2;
     } while (true);
-
+    DCHECK(header_length > 0);
     _offset += header_length;
     _next_header_pos = _offset + _cur_header.compressed_page_size;
     _num_values_read += _cur_header.data_page_header.num_values;
