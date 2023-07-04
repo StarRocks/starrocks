@@ -103,6 +103,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -568,6 +569,10 @@ public class StmtExecutor {
                     } finally {
                         if (!needRetry && context.getSessionVariable().isEnableProfile()) {
                             writeProfile(beginTimeInNanoSecond);
+                            if (parsedStmt.isExplain() &&
+                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile));
+                            }
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                     }
@@ -833,7 +838,14 @@ public class StmtExecutor {
         // Every time set no send flag and clean all data in buffer
         context.getMysqlChannel().reset();
 
-        if (parsedStmt.isExplain()) {
+        boolean isExplainAnalyze = parsedStmt.isExplain()
+                && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
+
+        if (isExplainAnalyze) {
+            context.getSessionVariable().setEnableProfile(true);
+            context.getSessionVariable().setPipelineProfileLevel(1);
+            context.getSessionVariable().setProfileLimitFold(false);
+        } else if (parsedStmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
             return;
         }
@@ -875,10 +887,10 @@ public class StmtExecutor {
             // 2. If this is a query, send the result expr fields first, and send result data back to client.
             MysqlChannel channel = context.getMysqlChannel();
             boolean isSendFields = false;
-            while (true) {
+            do {
                 batch = coord.getNext();
                 // for outfile query, there will be only one empty batch send back with eos flag
-                if (batch.getBatch() != null && !isOutfileQuery) {
+                if (batch.getBatch() != null && !isOutfileQuery && !isExplainAnalyze) {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
                     // so We need to send fields after first batch arrived
                     if (!isSendFields) {
@@ -903,11 +915,8 @@ public class StmtExecutor {
                     }
                     context.updateReturnRows(batch.getBatch().getRows().size());
                 }
-                if (batch.isEos()) {
-                    break;
-                }
-            }
-            if (!isSendFields && !isOutfileQuery) {
+            } while (!batch.isEos());
+            if (!isSendFields && !isOutfileQuery && !isExplainAnalyze) {
                 sendFields(colNames, outputExprs);
             }
         }
