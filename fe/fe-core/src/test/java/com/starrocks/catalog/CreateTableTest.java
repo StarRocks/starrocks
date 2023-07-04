@@ -408,6 +408,25 @@ public class CreateTableTest {
                         "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
                         "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
                         "\"datacache.enable\" = \"true\",\"asd\" = \"true\");"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Unknown properties: {abc=def}",
+                () -> createTable("CREATE TABLE test.lake_table\n" +
+                        "(\n" +
+                        "    k1 DATE,\n" +
+                        "    k2 INT,\n" +
+                        "    k3 SMALLINT,\n" +
+                        "    v1 VARCHAR(2048),\n" +
+                        "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(k1, k2, k3)\n" +
+                        "PARTITION BY RANGE (k1, k2, k3)\n" +
+                        "(\n" +
+                        "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
+                        "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 32\n" +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"abc\" = \"def\");"));
     }
 
     @Test
