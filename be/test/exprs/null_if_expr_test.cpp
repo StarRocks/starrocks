@@ -66,9 +66,9 @@ TEST_F(VectorizedNullIfExprTest, nullIfArray) {
     auto array_expr0 = MockExpr(type_arr_int, array0);
 
     auto array1 = ColumnHelper::create_column(type_arr_int, false);
-    array1->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)});   // [1,4]
-    array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
-    array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});             // [NULL, 1]
+    array1->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
+    array1->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
+    array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});           // [NULL, 1]
     auto array_expr1 = MockExpr(type_arr_int, array1);
 
     expr->_children.push_back(&array_expr0);
