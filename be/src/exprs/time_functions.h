@@ -365,7 +365,7 @@ public:
     static Status datediff_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /*
-     * Called by sha2 to the corresponding part
+     * Called by date_diff to the corresponding part
      */
     DEFINE_VECTORIZED_FN(date_diff_day);
     DEFINE_VECTORIZED_FN(date_diff_hour);
