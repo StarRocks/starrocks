@@ -178,9 +178,11 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         return enabled;
     }
 
-    public boolean bindDbToStorageVolume(String svId, long dbId) {
+    // In replay phase, the check of storage volume existence can be skipped.
+    // Because it has been checked when creating db.
+    private boolean bindDbToStorageVolume(String svId, long dbId, boolean isReplay) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (!storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
+            if (!isReplay && !storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
                 return false;
             }
             Set<Long> dbs = storageVolumeToDbs.getOrDefault(svId, new HashSet<>());
@@ -189,6 +191,14 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
             dbToStorageVolume.put(dbId, svId);
             return true;
         }
+    }
+
+    public boolean bindDbToStorageVolume(String svId, long dbId) {
+        return bindDbToStorageVolume(svId, dbId, false);
+    }
+
+    public void replayBindDbToStorageVolume(String svId, long dbId) {
+        bindDbToStorageVolume(svId, dbId, true);
     }
 
     public void unbindDbToStorageVolume(long dbId) {
@@ -206,18 +216,28 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
     }
 
     public boolean bindTableToStorageVolume(String svId, long tableId) {
+        return bindTableToStorageVolume(svId, tableId, false);
+    }
+
+    public void replayBindTableToStorageVolume(String svId, long tableId) {
+        bindTableToStorageVolume(svId, tableId, true);
+    }
+
+    // In replay phase, the check of storage volume existence can be skipped.
+    // Because it has been checked when creating table.
+    private boolean bindTableToStorageVolume(String svId, long tableId, boolean isReplay) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (!storageVolumeToDbs.containsKey(svId) &&
+            if (!isReplay && !storageVolumeToDbs.containsKey(svId) &&
                     !storageVolumeToTables.containsKey(svId) &&
                     getStorageVolume(svId) == null) {
                 return false;
             }
-            Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
-            tables.add(tableId);
-            storageVolumeToTables.put(svId, tables);
-            tableToStorageVolume.put(tableId, svId);
-            return true;
         }
+        Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
+        tables.add(tableId);
+        storageVolumeToTables.put(svId, tables);
+        tableToStorageVolume.put(tableId, svId);
+        return true;
     }
 
     public void unbindTableToStorageVolume(long tableId) {

@@ -434,7 +434,7 @@ public class LocalMetastore implements ConnectorMetadata {
             Database db = new Database(createDbInfo.getId(), createDbInfo.getDbName());
             unprotectCreateDb(db);
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                stateMgr.getStorageVolumeMgr().bindDbToStorageVolume(createDbInfo.getStorageVolumeId(), db.getId());
+                stateMgr.getStorageVolumeMgr().replayBindDbToStorageVolume(createDbInfo.getStorageVolumeId(), db.getId());
             }
             LOG.info("finish replay create db, name: {}, id: {}", db.getOriginName(), db.getId());
         } finally {
@@ -2061,7 +2061,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isCloudNativeTable()) {
             String storageVolumeId = info.getStorageVolumeId();
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                    .bindTableToStorageVolume(storageVolumeId, table.getId());
+                    .replayBindTableToStorageVolume(storageVolumeId, table.getId());
         }
     }
 
