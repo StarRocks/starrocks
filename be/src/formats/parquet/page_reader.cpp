@@ -65,7 +65,10 @@ Status PageReader::next_header() {
         if (UNLIKELY((allowed_page_size >= kMaxPageHeaderSize) || (_offset + allowed_page_size) >= _finish_offset)) {
             // Notice, here (_offset + allowed_page_size) >= _finish_offset
             // is using '>=' just to prevent loop infinitely.
-            return Status::Corruption("Failed to decode parquet page header, page header's size is out of range");
+            return Status::Corruption(
+                    strings::Substitute("Failed to decode parquet page header, page header's size is out of range.  "
+                                        "allowed_page_size=$0, max_page_size=$1, offset=$2, finish_offset=$3",
+                                        allowed_page_size, kMaxPageHeaderSize, _offset, _finish_offset));
         }
 
         allowed_page_size *= 2;
