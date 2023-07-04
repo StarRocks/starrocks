@@ -3490,7 +3490,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     LOG(INFO) << err_msg_header << "reorder_from finish tablet:" << _tablet.tablet_id()
               << " version:" << this->max_version() << " base tablet:" << base_tablet->tablet_id()
               << " #pending:" << _pending_commits.size() << " time:" << watch.get_elapse_second() << "s"
-              << " #column:" << _tablet.tablet_schema()->num_columns() << " #rowset:" << src_rowsets.size()
+              << " #column:" << _tablet.thread_safe_get_tablet_schema()->num_columns() << " #rowset:" << src_rowsets.size()
               << " #file:" << total_files << " #row:" << total_rows << " bytes:" << total_bytes;
     return Status::OK();
 }

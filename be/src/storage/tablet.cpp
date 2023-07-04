@@ -1643,7 +1643,7 @@ std::string Tablet::debug_string() const {
 }
 
 const TabletSchemaCSPtr Tablet::tablet_schema() const {
-    std::shared_lock wrlock(_meta_lock);
+    std::shared_lock rdlock(_meta_lock);
     return _max_version_schema;
 }
 
