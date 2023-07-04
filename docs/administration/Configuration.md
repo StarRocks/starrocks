@@ -522,9 +522,6 @@ BE static parameters are as follows.
 | jaeger_endpoint | | N/A | |
 | jdbc_connection_pool_size | 8 | N/A | |
 | l0_l1_merge_ratio | 10 | N/A | |
-| lake_gc_metadata_check_interval | 1800 | N/A | |
-| lake_gc_metadata_max_versions | 10 | N/A | |
-| lake_gc_segment_check_interval | 3600 | N/A | |
 | lake_gc_segment_expire_seconds | 259200 | N/A | |
 | lake_metadata_cache_limit | 2147483648 | N/A | |
 | late_materialization_ratio | 10 | N/A | |
