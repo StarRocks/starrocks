@@ -268,11 +268,11 @@ public class InvertedCaseWhen {
         return op.accept(INVERT_CASE_WHEN_VISITOR, null);
     }
 
-    private static ScalarOperator buildIfThen(ScalarOperator p, ConstantOperator first, ConstantOperator Second) {
+    private static ScalarOperator buildIfThen(ScalarOperator p, ConstantOperator first, ConstantOperator second) {
         Function ifFunc = Expr.getBuiltinFunction(FunctionSet.IF, new Type[] {Type.BOOLEAN, Type.BOOLEAN, Type.BOOLEAN},
                 Function.CompareMode.IS_IDENTICAL);
         return new CallOperator(FunctionSet.IF, Type.BOOLEAN,
-                Lists.newArrayList(p, first, Second), ifFunc);
+                Lists.newArrayList(p, first, second), ifFunc);
     }
 
     private static class SimplifyVisitor extends ScalarOperatorVisitor<Optional<ScalarOperator>, Void> {
