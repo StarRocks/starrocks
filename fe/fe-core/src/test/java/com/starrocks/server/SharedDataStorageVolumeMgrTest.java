@@ -16,7 +16,6 @@ package com.starrocks.server;
 
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -124,7 +123,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testStorageVolumeCRUD() throws AnalysisException, AlreadyExistsException, DdlException {
+    public void testStorageVolumeCRUD() throws AlreadyExistsException, DdlException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public EditLog getEditLog() {
@@ -144,7 +143,11 @@ public class SharedDataStorageVolumeMgrTest {
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         List<String> locations = Arrays.asList("s3://abc");
         Map<String, String> storageParams = new HashMap<>();
+        storageParams.put("aaa", "bbb");
         storageParams.put(AWS_S3_REGION, "region");
+        Assert.assertThrows(DdlException.class,
+                () -> svm.createStorageVolume(svKey, "S3", locations, storageParams, Optional.empty(), ""));
+        storageParams.remove("aaa");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         svm.createStorageVolume(svKey, "S3", locations, storageParams, Optional.empty(), "");
@@ -159,6 +162,7 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals(sv1.getId(), sv.getId());
         try {
             svm.createStorageVolume(svKey, "S3", locations, storageParams, Optional.empty(), "");
+            Assert.fail();
         } catch (AlreadyExistsException e) {
             Assert.assertTrue(e.getMessage().contains("Storage volume 'test' already exists"));
         }
@@ -174,6 +178,10 @@ public class SharedDataStorageVolumeMgrTest {
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
+        storageParams.put("aaa", "bbb");
+        Assert.assertThrows(DdlException.class, () ->
+                svm.updateStorageVolume(svKey, storageParams, Optional.of(true), "test update"));
+        storageParams.remove("aaa");
         svm.updateStorageVolume(svKey, storageParams, Optional.of(true), "test update");
         sv = svm.getStorageVolumeByName(svKey);
         cloudConfiguration = sv.getCloudConfiguration();
@@ -240,7 +248,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testParseParamsFromConfig() throws AnalysisException {
+    public void testParseParamsFromConfig() {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         Map<String, String> params = Deencapsulation.invoke(sdsvm, "parseParamsFromConfig");
         Assert.assertEquals("access_key", params.get(AWS_S3_ACCESS_KEY));
@@ -254,7 +262,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testParseLocationsFromConfig() throws AnalysisException {
+    public void testParseLocationsFromConfig() {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         List<String> locations = Deencapsulation.invoke(sdsvm, "parseLocationsFromConfig");
         Assert.assertEquals(1, locations.size());
@@ -268,7 +276,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testCreateOrUpdateBuiltinStorageVolume() throws AnalysisException, DdlException, AlreadyExistsException {
+    public void testCreateOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public EditLog getEditLog() {
@@ -349,7 +357,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testGetDefaultStorageVolume() throws IllegalAccessException, AnalysisException, AlreadyExistsException,
+    public void testGetDefaultStorageVolume() throws IllegalAccessException, AlreadyExistsException,
             DdlException, NoSuchFieldException {
         new MockUp<GlobalStateMgr>() {
             @Mock
