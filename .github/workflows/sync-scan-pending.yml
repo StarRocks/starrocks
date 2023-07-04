@@ -29,6 +29,7 @@ jobs:
   scan-pending-pr:
     name: SCAN PENDING PRS
     runs-on: [self-hosted, sync-normal]
+    if: github.repository == 'CelerData/celerdata-enterprise'
     steps:
 
       - name: scan
