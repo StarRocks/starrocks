@@ -416,6 +416,7 @@ public:
         _const_input.resize(_children.size());
         for (auto i = 0; i < _children.size(); ++i) {
             if (_children[i]->is_constant()) {
+                // _const_input[i] maybe not be of ConstColumn
                 ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
             } else {
                 _const_input[i] = nullptr;
@@ -428,7 +429,7 @@ public:
         auto child_size = _children.size();
         Columns input_data(child_size);
         std::vector<NullColumnPtr> input_null(child_size);
-        std::vector<bool> is_const(child_size);
+        std::vector<bool> is_const(child_size, true);
         Columns columns_ref(child_size);
         ColumnPtr value;
         bool all_const = true;
@@ -436,16 +437,15 @@ public:
             value = _const_input[i];
             if (value == nullptr) {
                 ASSIGN_OR_RETURN(value, _children[i]->evaluate_checked(context, ptr));
+                is_const[i] = false;
+                all_const = false;
             }
             if (i == 0) {
                 RETURN_IF_COLUMNS_ONLY_NULL({value});
             }
             columns_ref[i] = value;
-            is_const[i] = value->is_constant();
             if (value->is_constant()) {
                 value = down_cast<ConstColumn*>(value.get())->data_column();
-            } else {
-                all_const = false;
             }
             if (value->is_nullable()) {
                 auto nullable = down_cast<const NullableColumn*>(value.get());
@@ -466,7 +466,6 @@ public:
         NullColumnPtr res_null = NullColumn::create(dest_size, DATUM_NULL);
         auto& res_data = res->get_data();
         auto& res_null_data = res_null->get_data();
-
         for (auto i = 0; i < dest_size; ++i) {
             auto id_0 = is_const[0] ? 0 : i;
             if (input_null[0] == nullptr || !input_null[0]->get_data()[id_0]) {
