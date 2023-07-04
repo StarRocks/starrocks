@@ -34,7 +34,7 @@ namespace starrocks {
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
     OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsScannerContext& scanner_ctx,
-                       OrcChunkReader* reader);
+                       OrcChunkReader* reader, const std::set<int64_t>& need_skip_rowids);
     bool filterOnOpeningStripe(uint64_t stripeIndex, const orc::proto::StripeInformation* stripeInformation) override;
     bool filterOnPickRowGroup(size_t rowGroupIdx, const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                               const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilters) override;
@@ -65,6 +65,9 @@ private:
     std::map<uint64_t, uint64_t> _scan_ranges;
     OrcChunkReader* _reader;
     int64_t _writer_tzoffset_in_seconds;
+    const std::set<int64_t>& _need_skip_rowids;
+
+    bool _can_use_any_column() const;
 };
 
 void OrcRowReaderFilter::onStartingPickRowGroups() {}
@@ -81,12 +84,12 @@ void OrcRowReaderFilter::setWriterTimezone(const std::string& tz) {
 }
 
 OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsScannerContext& scanner_ctx,
-                                       OrcChunkReader* reader)
+                                       OrcChunkReader* reader, const std::set<int64_t>& need_skip_rowids)
         : _scanner_params(scanner_params),
           _scanner_ctx(scanner_ctx),
-
           _reader(reader),
-          _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()) {
+          _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()),
+          _need_skip_rowids(need_skip_rowids) {
     if (_scanner_params.min_max_tuple_desc != nullptr) {
         VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_params.min_max_tuple_desc->debug_string();
         for (ExprContext* ctx : _scanner_params.min_max_conjunct_ctxs) {
@@ -96,6 +99,10 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params, 
     for (const auto& r : _scanner_params.scan_ranges) {
         _scan_ranges.insert(std::make_pair(r->offset + r->length, r->offset));
     }
+}
+
+bool OrcRowReaderFilter::_can_use_any_column() const {
+    return _scanner_params.can_use_any_column && _need_skip_rowids.empty();
 }
 
 bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
