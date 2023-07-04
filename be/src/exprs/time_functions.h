@@ -361,6 +361,22 @@ public:
      * @return  BigIntColumn Difference in times between the two timestamps. It can be negative.
      */
     DEFINE_VECTORIZED_FN(datediff);
+    static Status datediff_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status datediff_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /*
+     * Called by sha2 to the corresponding part
+     */
+    DEFINE_VECTORIZED_FN(date_diff_day);
+    DEFINE_VECTORIZED_FN(date_diff_hour);
+    DEFINE_VECTORIZED_FN(date_diff_minute);
+    DEFINE_VECTORIZED_FN(date_diff_second);
+    DEFINE_VECTORIZED_FN(date_diff_millisecond);
+
+    // function for datediff
+    struct DateDiffCtx {
+        ScalarFunction function;
+    };
 
     /**
      * @param: [timestmap, year]
