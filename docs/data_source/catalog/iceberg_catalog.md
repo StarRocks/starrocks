@@ -6,7 +6,7 @@ An Iceberg catalog is a kind of external catalog, which is supported by StarRock
 - Use StarRocks to operate Iceberg tables. These operations include [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md), [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md), [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP%20DATABASE.md), and [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP%20TABLE.md).
 - Use [INSERT](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) or materialized views (available in v2.5 and later) to process and load data stored in Iceberg into StarRocks.
 
-From v3.1 onwards, StarRocks allows you to sink data in Parquet format from StarRocks tables to Iceberg tables by using [INSERT](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md).
+From v3.1 onwards, StarRocks allows you to sink data to Parquet-formatted Iceberg tables by using [INSERT](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md).
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -26,7 +26,7 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
 
 - In addition to v1 tables, Iceberg catalogs support querying ORC-formatted v2 tables from StarRocks v3.0 onwards and support querying Parquet-formatted v2 tables from StarRocks v3.1 onwards. Note that only position deletes are supported in queries against v2 tables while equality deletes are not supported.
-- Iceberg catalogs support sinking data only in Parquet format from StarRocks tables to Iceberg tables (this feature is supported from StarRocks v3.1 onwards).
+- Iceberg catalogs support sinking data only to Iceberg tables in Parquet format (this feature is supported from StarRocks v3.1 onwards).
 
 ## Integration preparations
 
@@ -805,9 +805,9 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM iceberg_table
 ```
 
-## Sink data into Iceberg tables
+## Sink data to Iceberg tables
 
-You can use [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) to sink data in Parquet format from StarRocks tables to Iceberg tables. This feature is supported from v3.1 onwards.
+You can use [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) to sink data to a Parquet-formatted Iceberg table. This feature is supported from v3.1 onwards.
 
 ```SQL
 INSERT {INTO | OVERWRITE} <table_name>
