@@ -1586,6 +1586,11 @@ public class SchemaChangeHandler extends AlterHandler {
             if (metaValue == olapTable.enableReplicatedStorage()) {
                 return;
             }
+        } else if (metaType == TTabletMetaType.BUCKET_SIZE) {
+            long bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
+            if (bucketSize == olapTable.getAutomaticBucketSize()) {
+                return;
+            }
         } else {
             LOG.warn("meta type: {} does not support", metaType);
             return;

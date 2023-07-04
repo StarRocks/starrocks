@@ -40,7 +40,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
@@ -103,7 +103,7 @@ public class RowCountAction extends RestBaseAction {
             }
 
             OlapTable olapTable = (OlapTable) table;
-            for (Partition partition : olapTable.getAllPartitions()) {
+            for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
                 long version = partition.getVisibleVersion();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     long indexRowCount = 0L;

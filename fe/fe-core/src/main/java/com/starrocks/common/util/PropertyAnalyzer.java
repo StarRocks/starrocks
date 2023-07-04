@@ -137,6 +137,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
 
+    public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -321,6 +323,23 @@ public class PropertyAnalyzer {
             }
         }
         return partitionLiveNumber;
+    }
+
+    public static long analyzeBucketSize(Map<String, String> properties) throws AnalysisException {
+        long bucketSize = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_BUCKET_SIZE)) {
+            try {
+                bucketSize = Long.parseLong(properties.get(PROPERTIES_BUCKET_SIZE));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Bucket size: " + e.getMessage());
+            }
+            if (bucketSize <= 0) {
+                throw new AnalysisException("Illegal Partition Bucket size: " + bucketSize);
+            }
+            return bucketSize;
+        } else {
+            throw new AnalysisException("Bucket size is not set");
+        }
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {

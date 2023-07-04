@@ -61,6 +61,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -213,6 +214,8 @@ import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
 import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
+import com.starrocks.thrift.TImmutablePartitionRequest;
+import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListPipeFilesInfo;
@@ -296,6 +299,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -1937,6 +1941,177 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
 
         return result;
+    }
+
+    @Override
+    public TImmutablePartitionResult updateImmutablePartition(TImmutablePartitionRequest request) throws TException {
+        LOG.info("Receive update immutable partition: {}", request);
+
+        TImmutablePartitionResult result;
+        try {
+            result = updateImmutablePartitionInternal(request);
+        } catch (Throwable t) {
+            LOG.warn(t);
+            result = new TImmutablePartitionResult();
+            TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
+                    request.getTxn_id(), t.getMessage())));
+            result.setStatus(errorStatus);
+        }
+
+        LOG.info("Finish update immutable partition: {}", result);
+
+        return result;
+    }
+
+    public synchronized TImmutablePartitionResult updateImmutablePartitionInternal(TImmutablePartitionRequest request) 
+            throws UserException {
+        long dbId = request.getDb_id();
+        long tableId = request.getTable_id();
+        TImmutablePartitionResult result = new TImmutablePartitionResult();
+        TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            errorStatus.setError_msgs(
+                    Lists.newArrayList(String.format("dbId=%d is not exists", dbId)));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            errorStatus.setError_msgs(
+                    Lists.newArrayList(String.format("dbId=%d tableId=%d is not exists", dbId, tableId)));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        if (!(table instanceof OlapTable)) {
+            errorStatus.setError_msgs(
+                    Lists.newArrayList(String.format("dbId=%d tableId=%d is not olap table", dbId, tableId)));
+            result.setStatus(errorStatus);
+            return result;
+        }
+        OlapTable olapTable = (OlapTable) table;
+
+        if (request.partition_ids == null) {
+            errorStatus.setError_msgs(Lists.newArrayList("partition_ids should not null."));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+        List<TOlapTablePartition> partitions = Lists.newArrayList();
+        List<TTabletLocation> tablets = Lists.newArrayList();
+        Set<Long> updatePartitionIds = Sets.newHashSet();
+
+        // immute partitions and create new sub partitions
+        for (Long id : request.partition_ids) {
+            PhysicalPartition p = table.getPhysicalPartition(id);
+            if (p == null) {
+                LOG.warn("physical partition id {} does not exist", id);
+                continue;
+            }
+            Partition partition = olapTable.getPartition(p.getParentId());
+            if (partition == null) {
+                LOG.warn("partition id {} does not exist", p.getParentId());
+                continue;
+            }
+            updatePartitionIds.add(p.getParentId());
+
+            List<PhysicalPartition> mutablePartitions = Lists.newArrayList();
+            try {
+                db.readLock();
+                mutablePartitions = partition.getSubPartitions().stream()
+                        .filter(physicalPartition -> !physicalPartition.isImmutable())
+                        .collect(Collectors.toList());
+            } finally {
+                db.readUnlock();
+            }
+            if (mutablePartitions.size() <= 1) {
+                GlobalStateMgr.getCurrentState().addSubPartitions(db, olapTable.getName(), partition, 1);
+            }
+            p.setImmutable(true);
+        }
+
+        // return all mutable partitions
+        for (Long id : updatePartitionIds) {
+            Partition partition = olapTable.getPartition(id);
+            if (partition == null) {
+                LOG.warn("partition id {} does not exist", id);
+                continue;
+            }
+
+            try {
+                db.readLock();
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    if (physicalPartition.isImmutable()) {
+                        continue;
+                    }
+
+                    TOlapTablePartition tPartition = new TOlapTablePartition();
+                    tPartition.setId(physicalPartition.getId());
+                    buildPartitions(physicalPartition, partitions, tPartition);
+                    buildTablets(physicalPartition, tablets, olapTable);
+                }
+            } finally {
+                db.readUnlock();
+            }
+        }
+        result.setPartitions(partitions);
+        result.setTablets(tablets);
+
+        // build nodes
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(olapTable.getClusterId());
+        result.setNodes(nodesInfo.nodes);
+        result.setStatus(new TStatus(OK));
+        return result;
+    }
+
+    private static void buildPartitions(PhysicalPartition physicalPartition,
+                                        List<TOlapTablePartition> partitions, TOlapTablePartition tPartition) {
+        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
+                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+            tPartition.setNum_buckets(index.getTablets().size());
+        }
+        partitions.add(tPartition);
+    }
+
+    private static void buildTablets(PhysicalPartition physicalPartition, List<TTabletLocation> tablets,
+                                     OlapTable olapTable) throws UserException {
+        int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
+        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
+                MaterializedIndex.IndexExtState.ALL)) {
+            if (olapTable.isCloudNativeTable()) {
+                for (Tablet tablet : index.getTablets()) {
+                    try {
+                        // use default warehouse nodes
+                        long primaryId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
+                        tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(primaryId)));
+                    } catch (UserException exception) {
+                        throw new UserException("Check if any backend is down or not. tablet_id: " + tablet.getId());
+                    }
+                }
+            } else {
+                for (Tablet tablet : index.getTablets()) {
+                    // we should ensure the replica backend is alive
+                    // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
+                    LocalTablet localTablet = (LocalTablet) tablet;
+                    Multimap<Replica, Long> bePathsMap =
+                            localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
+                    if (bePathsMap.keySet().size() < quorum) {
+                        throw new UserException(
+                                "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                + tablet.getId() + ", backends: " + Joiner.on(",").join(localTablet.getBackends()));
+                    }
+                    // replicas[0] will be the primary replica
+                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
+                    List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
+                    tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                            .collect(Collectors.toList())));
+                }
+            }
+        }
+
     }
 
     @Override

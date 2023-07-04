@@ -175,6 +175,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default disable replicated storage
     private boolean enableReplicatedStorage = false;
 
+    // the default automatic bucket size
+    private long bucketSize = 0;
+
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
@@ -250,6 +253,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
+                break;
+            case OperationType.OP_MODIFY_BUCKET_SIZE:
+                buildBucketSize();
                 break;
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 buildBinlogConfig();
@@ -460,6 +466,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildBucketSize() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE) != null) {
+            bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
+        }
+        return this;
+    }
+
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
@@ -620,6 +633,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enableReplicatedStorage;
     }
 
+    public long getBucketSize() {
+        return bucketSize;
+    }
+
     public String getStorageVolume() {
         return storageVolume;
     }
@@ -731,6 +748,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildExcludedTriggerTables();
         buildReplicatedStorage();
         buildQueryRewrite();
+        buildBucketSize();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
         buildConstraint();

@@ -186,8 +186,8 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -344,8 +344,8 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         for (int j = 0; j < i + 1; ++j) {
             ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -519,8 +519,8 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -661,8 +661,8 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());

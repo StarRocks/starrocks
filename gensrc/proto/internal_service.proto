@@ -178,11 +178,16 @@ message PTabletWriterOpenRequest {
     optional int32 sender_id = 30;
     optional PartialUpdateMode partial_update_mode = 31;
     optional int64 table_id = 32;
+
+    // tablet's data size larger than this will mark as inmutable
+    optional int64 min_immutable_tablet_size = 33 [default = 0];
 };
 
 message PTabletWriterOpenResult {
     required StatusPB status = 1;
     optional bool is_repeated_chunk = 2 [default = false];
+    repeated int64 immutable_tablet_ids = 3;
+    repeated int64 immutable_partition_ids = 4;
 };
 
 // Add batch to tablet writer.
@@ -240,6 +245,9 @@ message PTabletWriterAddBatchResult {
     optional int64 wait_lock_time_us = 4;
     repeated PTabletInfo failed_tablet_vec = 5;
     optional int64 wait_memtable_flush_time_us = 6;
+
+    repeated int64 immutable_tablet_ids = 7;
+    repeated int64 immutable_partition_ids = 8;
 };
 
 message PTabletWriterAddSegmentRequest {

@@ -31,6 +31,11 @@ public interface PhysicalPartition {
     // physical partition id
     public long getId();
 
+    public long getShardGroupId();
+
+    public void setImmutable(boolean isImmutable);
+    public boolean isImmutable();
+
     // version interface
 
     public void updateVersionForRestore(long visibleVersion);
@@ -45,6 +50,7 @@ public interface PhysicalPartition {
     public long getNextVersion();
     public void setNextVersion(long nextVersion);
     public long getCommittedVersion();
+    public long getVisibleTxnId();
 
     // materialized index interface
 

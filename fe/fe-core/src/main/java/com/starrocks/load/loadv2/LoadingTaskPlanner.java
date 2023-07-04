@@ -249,6 +249,9 @@ public class LoadingTaskPlanner {
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
                 table.writeQuorum(), forceReplicatedStorage ? true : table.enableReplicatedStorage(),
                 checkNullExprInAutoIncrement(), enableAutomaticPartition);
+        if (table.getAutomaticBucketSize() > 0) {
+            olapTableSink.setAutomaticBucketSize(table.getAutomaticBucketSize());
+        }
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.setPartialUpdateMode(partialUpdateMode);
@@ -331,6 +334,9 @@ public class LoadingTaskPlanner {
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
                 table.writeQuorum(), table.enableReplicatedStorage(),
                 checkNullExprInAutoIncrement(), enableAutomaticPartition);
+        if (table.getAutomaticBucketSize() > 0) {
+            olapTableSink.setAutomaticBucketSize(table.getAutomaticBucketSize());
+        }
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.setPartialUpdateMode(partialUpdateMode);

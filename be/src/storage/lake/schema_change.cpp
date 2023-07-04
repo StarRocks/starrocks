@@ -224,7 +224,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(reader->open(_read_params));
 
     // create writer
-    auto writer = DeltaWriter::create(_tablet_manager, _new_tablet->id(), _txn_id, _max_buffer_size,
+    auto writer = DeltaWriter::create(_tablet_manager, _new_tablet->id(), _txn_id, _max_buffer_size, 0,
                                       CurrentThread::mem_tracker());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
