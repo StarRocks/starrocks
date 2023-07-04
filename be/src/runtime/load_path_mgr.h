@@ -86,7 +86,6 @@ private:
     std::future<bool> _stop_future;
     int _idx;
     pthread_t _cleaner_id = 0;
-    std::string _error_log_dir;
     uint32_t _next_shard;
 };
 

@@ -42,7 +42,7 @@ public:
                                                                const int64_t id,
                                                                const TUniqueId& fragment_instance_id) = 0;
 
-private:
+protected:
     std::string _error_log_dir;
 };
 
