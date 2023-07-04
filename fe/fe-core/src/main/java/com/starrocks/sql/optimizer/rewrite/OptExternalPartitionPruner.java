@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
@@ -36,6 +35,7 @@ import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -58,7 +58,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
@@ -67,7 +68,16 @@ import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 public class OptExternalPartitionPruner {
     private static final Logger LOG = LogManager.getLogger(OptExternalPartitionPruner.class);
 
-    public static LogicalScanOperator prunePartitions(OptimizerContext context, LogicalScanOperator logicalScanOperator) {
+    public static LogicalScanOperator prunePartitions(OptimizerContext context,
+                                                      LogicalScanOperator logicalScanOperator) {
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(
+                "RuleBaseOptimize.RewriteTreeTask.ExternalTablePartitionPrune")) {
+            return prunePartitionsImpl(context, logicalScanOperator);
+        }
+    }
+
+    public static LogicalScanOperator prunePartitionsImpl(OptimizerContext context,
+                                                          LogicalScanOperator logicalScanOperator) {
         if (logicalScanOperator instanceof LogicalEsScanOperator) {
             LogicalEsScanOperator operator = (LogicalEsScanOperator) logicalScanOperator;
             EsTablePartitions esTablePartitions = operator.getEsTablePartitions();
@@ -101,10 +111,11 @@ public class OptExternalPartitionPruner {
         } else {
             // partitionColumnName -> (LiteralExpr -> partition ids)
             // no null partitions in this map, used by ListPartitionPruner
-            Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
+                    Maps.newConcurrentMap();
             // Store partitions with null partition values separately, used by ListPartitionPruner
             // partitionColumnName -> null partitionIds
-            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newConcurrentMap();
 
             try {
                 initPartitionInfo(logicalScanOperator, context, columnToPartitionValuesMap, columnToNullPartitions);
@@ -182,10 +193,9 @@ public class OptExternalPartitionPruner {
         return partitionValues;
     }
 
-
     private static void initPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
-                                          Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-                                          Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
             throws AnalysisException {
         Table table = operator.getTable();
         // RemoteScanPartitionPruneRule may be run multiple times, such like after MaterializedViewRewriter rewrite，
@@ -197,8 +207,8 @@ public class OptExternalPartitionPruner {
             List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
             for (Column column : partitionColumns) {
                 ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
-                columnToPartitionValuesMap.put(partitionColumnRefOperator, new TreeMap<>());
-                columnToNullPartitions.put(partitionColumnRefOperator, Sets.newHashSet());
+                columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
+                columnToNullPartitions.put(partitionColumnRefOperator, Sets.newConcurrentHashSet());
                 partitionColumnRefOperators.add(partitionColumnRefOperator);
             }
 
@@ -231,7 +241,7 @@ public class OptExternalPartitionPruner {
                 partitionKeys.put(new PartitionKey(), 0L);
             }
 
-            for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
+            partitionKeys.entrySet().stream().parallel().forEach(entry -> {
                 PartitionKey key = entry.getKey();
                 long partitionId = entry.getValue();
                 List<LiteralExpr> literals = key.getKeys();
@@ -244,9 +254,14 @@ public class OptExternalPartitionPruner {
                     }
 
                     Set<Long> partitions = columnToPartitionValuesMap.get(columnRefOperator)
-                            .computeIfAbsent(literal, k -> Sets.newHashSet());
+                            .computeIfAbsent(literal, k -> Sets.newConcurrentHashSet());
                     partitions.add(partitionId);
                 }
+            });
+
+            for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
+                PartitionKey key = entry.getKey();
+                long partitionId = entry.getValue();
                 operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
             }
         }
@@ -255,7 +270,7 @@ public class OptExternalPartitionPruner {
     }
 
     private static void classifyConjuncts(LogicalScanOperator operator,
-                                          Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
             throws AnalysisException {
         for (ScalarOperator scalarOperator : Utils.extractConjuncts(operator.getPredicate())) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(scalarOperator);
@@ -268,8 +283,9 @@ public class OptExternalPartitionPruner {
     }
 
     private static void computePartitionInfo(LogicalScanOperator operator,
-                                             Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-                                             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
+            throws AnalysisException {
         Table table = operator.getTable();
         if (table instanceof HiveMetaStoreTable) {
             ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
@@ -295,7 +311,8 @@ public class OptExternalPartitionPruner {
      * @throws AnalysisException
      */
     private static Collection<Long> partitionPrune(PartitionInfo partitionInfo,
-                                                   Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
+                                                   Map<String, PartitionColumnFilter> columnFilters)
+            throws AnalysisException {
         if (partitionInfo == null) {
             return null;
         }
