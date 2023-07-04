@@ -744,6 +744,14 @@ select date_diff("2010-11-30 23:59:59", "2010-11-30 20:59:59", "second");
 -- result:
 10800
 -- !result
+select date_diff('2010-11-30 23:59:59.000001', '2010-11-30 20:58:59.000001', 'hour');
+-- result:
+3
+-- !result
+select date_diff('2010-11-30 23:59:59.000001', '2010-11-30 20:58:59.000001', 'day');
+-- result:
+0
+-- !result
 
 -- name: test_makedate
 CREATE TABLE IF NOT EXISTS `makedate_test` (

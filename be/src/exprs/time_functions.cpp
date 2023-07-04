@@ -2381,6 +2381,9 @@ StatusOr<ColumnPtr> TimeFunctions::make_date(FunctionContext* context, const Col
 // date_diff
 StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (!context->is_notnull_constant_column(2)) {
+        throw std::runtime_error("type column in date_diff should be a const value");
+    }
     ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
     ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
     ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
@@ -2399,6 +2402,10 @@ StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Colu
             result.append(l.diff_microsecond(r) / USECS_PER_MINUTE);
         } else if (type_str == "millisecond") {
             result.append(l.diff_microsecond(r) / USECS_PER_MILLIS);
+        } else if (type_str == "day") {
+            result.append(l.diff_microsecond(r) / USECS_PER_DAY);
+        } else {
+            throw std::runtime_error("type column should be one of day/hour/minute/second/millisecond");
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
