@@ -21,6 +21,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/time.h"
 
@@ -124,7 +125,7 @@ PARALLEL_TEST(MultiLevelFeedScanTaskQueueTest, test_take_close) {
 
 TEST(ScanExecutorTest, test_executor_token) {
     std::unique_ptr<ThreadPool> thread_pool;
-    ThreadPoolBuilder("pool").set_min_threads(1).set_max_threads(10).build(&thread_pool);
+    ASSERT_OK(ThreadPoolBuilder("pool").set_min_threads(1).set_max_threads(10).build(&thread_pool));
     auto scan_task_queue = create_scan_task_queue();
     ScanExecutor scan_executor(std::move(thread_pool), std::move(scan_task_queue));
     scan_executor.initialize(4);
@@ -183,7 +184,7 @@ TEST(ScanExecutorTest, test_executor_token) {
 
 TEST(ScanExecutorTest, test_executor_token_livelock) {
     std::unique_ptr<ThreadPool> thread_pool;
-    ThreadPoolBuilder("pool").set_min_threads(1).set_max_threads(10).build(&thread_pool);
+    ASSERT_OK(ThreadPoolBuilder("pool").set_min_threads(1).set_max_threads(10).build(&thread_pool));
     ScanExecutor scan_executor(std::move(thread_pool), create_scan_task_queue());
     scan_executor.initialize(5);
 
