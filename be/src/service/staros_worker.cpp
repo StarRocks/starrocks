@@ -25,6 +25,7 @@
 #include "fmt/format.h"
 #include "gflags/gflags.h"
 #include "gutil/strings/fastmem.h"
+#include "util/await.h"
 #include "util/debug_util.h"
 #include "util/lru_cache.h"
 #include "util/sha.h"
@@ -147,9 +148,18 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
                                                                                             const Configuration& conf) {
-    // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
-    auto info_or = g_starlet->get_shard_info(id);
-    if (!info_or.ok()) {
+    static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
+    static const int64_t kCheckInterval = 10 * 1000;             // 10ms
+    Awaitility wait;
+    absl::StatusOr<ShardInfo> info_or = absl::UnavailableError("starmgr address is still unknown");
+    auto cond = [&]() {
+        // get_shard_info call will probably trigger an add_shard() call to worker itself.
+        // Be sure there is no dead lock.
+        info_or = g_starlet->get_shard_info(id);
+        return !absl::IsUnavailable(info_or.status());
+    };
+    auto ret = wait.timeout(kGetShardInfoTimeout).interval(kCheckInterval).until(cond);
+    if (!ret || !info_or.ok()) {
         return info_or.status();
     }
     return build_filesystem_from_shard_info(info_or.value(), conf);
