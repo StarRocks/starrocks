@@ -20,6 +20,7 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -36,6 +37,7 @@ import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -69,6 +71,21 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     protected Map<Long, String> tableToStorageVolume = new HashMap<>();
 
+    protected static final Set<String> PARAM_NAMES = new HashSet<>();
+
+    static {
+        Field[] fields = CloudConfigurationConstants.class.getFields();
+        for (int i = 0; i < fields.length; ++i) {
+            try {
+                Object obj = CloudConfigurationConstants.class.newInstance();
+                Object value = fields[i].get(obj);
+                PARAM_NAMES.add((String) value);
+            } catch (InstantiationException | IllegalAccessException e) {
+                // do nothing
+            }
+        }
+    }
+
     public String createStorageVolume(CreateStorageVolumeStmt stmt)
             throws AlreadyExistsException, DdlException {
         Map<String, String> params = new HashMap<>();
@@ -81,6 +98,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
                                       Optional<Boolean> enabled, String comment)
             throws DdlException, AlreadyExistsException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            validateParams(params);
             if (exists(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
             }
@@ -117,6 +135,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
     public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
             throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            validateParams(params);
             StorageVolume sv = getStorageVolumeByName(name);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
             StorageVolume copied = new StorageVolume(sv);
@@ -285,6 +304,14 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
     }
 
     public void replayDropStorageVolume(DropStorageVolumeLog log) {
+    }
+
+    protected void validateParams(Map<String, String> params) throws DdlException {
+        for (String key : params.keySet()) {
+            if (!PARAM_NAMES.contains(key)) {
+                throw new DdlException("Invalid properties " + key);
+            }
+        }
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
