@@ -48,7 +48,7 @@ END
 
 ## Parameters
 
-- `expressionN`: the expression to compare. Multiple expressions must be compatible in data types.
+- `expressionN`: the expression to compare. Multiple expressions must be compatible in data types. This expression must evaluate to any of the following data types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DATETIME, DATE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128, VARCHAR, BITMAP, PERCENTILE, HLL, TIME, and JSON.
 
 - `conditionN`: the condition that can evaluate to a BOOLEAN value.
 
