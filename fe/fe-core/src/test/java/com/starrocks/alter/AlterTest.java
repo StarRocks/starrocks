@@ -1054,6 +1054,11 @@ public class AlterTest {
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
+
+            @Mock
+            public boolean bindTableToStorageVolume(String svId, long tableId) {
+                return true;
+            }
         };
 
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
@@ -1153,6 +1158,11 @@ public class AlterTest {
             @Mock
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public boolean bindTableToStorageVolume(String svId, long tableId) {
+                return true;
             }
         };
 
@@ -2109,6 +2119,11 @@ public class AlterTest {
             @Mock
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public boolean bindTableToStorageVolume(String svId, long tableId) {
+                return true;
             }
         };
 
