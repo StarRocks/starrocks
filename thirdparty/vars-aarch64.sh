@@ -10,10 +10,10 @@
 #####################################################
 
 # HADOOP
-HADOOP_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0-aarch64.tar.gz"
-HADOOP_NAME="hadoop-3.3.0-aarch64.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.0-aarch64"
-HADOOP_MD5SUM="c84cfa985175341d3df0b2b57521eec9"
+HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.3.6/hadoop-3.3.6-aarch64.tar.gz"
+HADOOP_NAME="hadoop-3.3.6-aarch64.tar.gz"
+HADOOP_SOURCE="hadoop-3.3.6"
+HADOOP_MD5SUM="369f899194a920e0d1c3c3bc1718b3b5"
 
 # OPEN JDK FOR aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/devkit/compiler)
 JDK_DOWNLOAD="https://mirror.iscas.ac.cn/kunpeng/archive/compiler/bisheng_jdk/bisheng-jdk-8u262-linux-aarch64.tar.gz"
