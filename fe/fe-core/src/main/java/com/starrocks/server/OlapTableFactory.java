@@ -222,7 +222,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
                 String storageVolumeId = sv.getId();
                 metastore.setLakeStorageInfo(table, storageVolumeId, properties);
-                svm.bindTableToStorageVolume(sv.getId(), table.getId());
+                if (!svm.bindTableToStorageVolume(sv.getId(), table.getId())) {
+                    throw new DdlException(String.format("Storage volume with id %s not exists", storageVolumeId));
+                }
                 table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
@@ -232,328 +234,335 @@ public class OlapTableFactory implements AbstractTableFactory {
             throw new DdlException("Unrecognized engine \"" + stmt.getEngineName() + "\"");
         }
 
-        table.setComment(stmt.getComment());
-
-        // set base index id
-        long baseIndexId = metastore.getNextId();
-        table.setBaseIndexId(baseIndexId);
-
-        // analyze bloom filter columns
-        Set<String> bfColumns = null;
-        double bfFpp = 0;
         try {
-            bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
-                    table.getKeysType() == KeysType.PRIMARY_KEYS);
-            if (bfColumns != null && bfColumns.isEmpty()) {
-                bfColumns = null;
-            }
+            table.setComment(stmt.getComment());
 
-            bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(properties);
-            if (bfColumns != null && bfFpp == 0) {
-                bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
-            } else if (bfColumns == null) {
-                bfFpp = 0;
-            }
+            // set base index id
+            long baseIndexId = metastore.getNextId();
+            table.setBaseIndexId(baseIndexId);
 
-            table.setBloomFilterInfo(bfColumns, bfFpp);
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
-        }
-
-        // analyze replication_num
-        short replicationNum = RunMode.defaultReplicationNum();
-        try {
-            boolean isReplicationNumSet =
-                    properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
-            replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
-            if (isReplicationNumSet) {
-                table.setReplicationNum(replicationNum);
-            }
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
-        }
-
-        // set in memory
-        boolean isInMemory =
-                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
-        table.setIsInMemory(isInMemory);
-
-        boolean enablePersistentIndex =
-                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
-                        false);
-        if (enablePersistentIndex && table.isCloudNativeTable()) {
-            throw new DdlException("Cannot create cloud native table with persistent index yet");
-        }
-
-        table.setEnablePersistentIndex(enablePersistentIndex);
-
-        if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
-                properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
-                properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL))) {
+            // analyze bloom filter columns
+            Set<String> bfColumns = null;
+            double bfFpp = 0;
             try {
-                boolean enableBinlog = PropertyAnalyzer.analyzeBooleanProp(properties,
-                        PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, false);
-                long binlogTtl = PropertyAnalyzer.analyzeLongProp(properties,
-                        PropertyAnalyzer.PROPERTIES_BINLOG_TTL, Config.binlog_ttl_second);
-                long binlogMaxSize = PropertyAnalyzer.analyzeLongProp(properties,
-                        PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE, Config.binlog_max_size);
-                BinlogConfig binlogConfig = new BinlogConfig(0, enableBinlog,
-                        binlogTtl, binlogMaxSize);
-                table.setCurBinlogConfig(binlogConfig);
-                LOG.info("create table {} set binlog config, enable_binlog = {}, binlogTtl = {}, binlog_max_size = {}",
-                        tableName, enableBinlog, binlogTtl, binlogMaxSize);
+                bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
+                        table.getKeysType() == KeysType.PRIMARY_KEYS);
+                if (bfColumns != null && bfColumns.isEmpty()) {
+                    bfColumns = null;
+                }
+
+                bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(properties);
+                if (bfColumns != null && bfFpp == 0) {
+                    bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+                } else if (bfColumns == null) {
+                    bfFpp = 0;
+                }
+
+                table.setBloomFilterInfo(bfColumns, bfFpp);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
-        }
 
-        // write quorum
-        try {
-            table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
-        }
-
-        // replicated storage
-        table.setEnableReplicatedStorage(
-                PropertyAnalyzer.analyzeBooleanProp(
-                        properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                        Config.enable_replicated_storage_as_default_engine));
-
-        if (table.enableReplicatedStorage().equals(false)) {
-            for (Column col : baseSchema) {
-                if (col.isAutoIncrement()) {
-                    throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage");
-                }
-            }
-        }
-
-        TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
-        try {
-            tabletType = PropertyAnalyzer.analyzeTabletType(properties);
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
-        }
-
-        if (table.isCloudNativeTable() && properties != null) {
+            // analyze replication_num
+            short replicationNum = RunMode.defaultReplicationNum();
             try {
-                PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
-                if (duration != null) {
-                    table.setDataCachePartitionDuration(duration);
+                boolean isReplicationNumSet =
+                        properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                if (isReplicationNumSet) {
+                    table.setReplicationNum(replicationNum);
                 }
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
-        }
 
-        if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-            // if this is an unpartitioned table, we should analyze data property and replication num here.
-            // if this is a partitioned table, there properties are already analyzed in RangePartitionDesc analyze phase.
+            // set in memory
+            boolean isInMemory =
+                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
+            table.setIsInMemory(isInMemory);
 
-            // use table name as this single partition name
-            long partitionId = partitionNameToId.get(tableName);
-            DataProperty dataProperty = null;
-            try {
-                boolean hasMedium = false;
-                if (properties != null) {
-                    hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
-                }
-                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                        DataProperty.getInferredDefaultDataProperty(), false);
-                if (hasMedium) {
-                    table.setStorageMedium(dataProperty.getStorageMedium());
-                }
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
+            boolean enablePersistentIndex =
+                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
+                            false);
+            if (enablePersistentIndex && table.isCloudNativeTable()) {
+                throw new DdlException("Cannot create cloud native table with persistent index yet");
             }
-            Preconditions.checkNotNull(dataProperty);
-            partitionInfo.setDataProperty(partitionId, dataProperty);
-            partitionInfo.setReplicationNum(partitionId, replicationNum);
-            partitionInfo.setIsInMemory(partitionId, isInMemory);
-            partitionInfo.setTabletType(partitionId, tabletType);
-            StorageInfo storageInfo = table.getTableProperty().getStorageInfo();
-            DataCacheInfo dataCacheInfo = storageInfo == null ? null : storageInfo.getDataCacheInfo();
-            partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
-        }
 
-        // check colocation properties
-        String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-        boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
-                colocateGroup, false /* expectLakeTable */);
-        if (!(table instanceof ExternalOlapTable) && addedToColocateGroup) {
-            // Colocate table should keep the same bucket number across the partitions
-            DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
-            if (defaultDistributionInfo.getBucketNum() == 0) {
-                int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-                defaultDistributionInfo.setBucketNum(bucketNum);
-            }
-        }
+            table.setEnablePersistentIndex(enablePersistentIndex);
 
-        // get base index storage type. default is COLUMN
-        TStorageType baseIndexStorageType = null;
-        try {
-            baseIndexStorageType = PropertyAnalyzer.analyzeStorageType(properties);
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
-        }
-        Preconditions.checkNotNull(baseIndexStorageType);
-        // set base index meta
-        int schemaVersion = 0;
-        try {
-            schemaVersion = PropertyAnalyzer.analyzeSchemaVersion(properties);
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
-        }
-        int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
-
-        if (stmt.getSortKeys() != null) {
-            table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
-                    shortKeyColumnCount, baseIndexStorageType, keysType, null, sortKeyIdxes);
-        } else {
-            table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
-                    shortKeyColumnCount, baseIndexStorageType, keysType, null);
-        }
-
-        for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
-            AddRollupClause addRollupClause = (AddRollupClause) alterClause;
-
-            Long baseRollupIndex = table.getIndexIdByName(tableName);
-
-            // get storage type for rollup index
-            TStorageType rollupIndexStorageType = null;
-            try {
-                rollupIndexStorageType = PropertyAnalyzer.analyzeStorageType(addRollupClause.getProperties());
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
-            }
-            Preconditions.checkNotNull(rollupIndexStorageType);
-            // set rollup index meta to olap table
-            List<Column> rollupColumns = stateMgr.getRollupHandler().checkAndPrepareMaterializedView(addRollupClause,
-                    table, baseRollupIndex);
-            short rollupShortKeyColumnCount =
-                    GlobalStateMgr.calcShortKeyColumnCount(rollupColumns, alterClause.getProperties());
-            int rollupSchemaHash = Util.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
-            long rollupIndexId = metastore.getNextId();
-            table.setIndexMeta(rollupIndexId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
-                    rollupSchemaHash, rollupShortKeyColumnCount, rollupIndexStorageType, keysType);
-        }
-
-        // analyze version info
-        Long version = null;
-        try {
-            version = PropertyAnalyzer.analyzeVersionInfo(properties);
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
-        }
-        Preconditions.checkNotNull(version);
-
-        // storage_format is not necessary, remove storage_format if exist.
-        if (properties != null) {
-            properties.remove("storage_format");
-        }
-
-        // get compression type
-        TCompressionType compressionType = TCompressionType.LZ4_FRAME;
-        try {
-            compressionType = PropertyAnalyzer.analyzeCompressionType(properties);
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
-        }
-        table.setCompressionType(compressionType);
-
-        // partition live number
-        int partitionLiveNumber;
-        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-            try {
-                partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
-            }
-            table.setPartitionLiveNumber(partitionLiveNumber);
-        }
-
-        try {
-            processConstraint(db, table, properties);
-        } catch (AnalysisException e) {
-            throw new DdlException(
-                    String.format("processing constraint failed when creating table:%s. exception msg:%s",
-                            table.getName(), e.getMessage()), e);
-        }
-
-        // a set to record every new tablet created when create table
-        // if failed in any step, use this set to do clear things
-        Set<Long> tabletIdSet = new HashSet<Long>();
-
-        // do not create partition for external table
-        if (table.isOlapOrCloudNativeTable()) {
-            if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                if (properties != null && !properties.isEmpty()) {
-                    // here, all properties should be checked
-                    throw new DdlException("Unknown properties: " + properties);
-                }
-
-                // this is a 1-level partitioned table, use table name as partition name
-                long partitionId = partitionNameToId.get(tableName);
-                Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet);
-                metastore.buildPartitions(db, table, Collections.singletonList(partition));
-                table.addPartition(partition);
-            } else if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+            if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL))) {
                 try {
-                    // just for remove entries in stmt.getProperties(),
-                    // and then check if there still has unknown properties
-                    boolean hasMedium = false;
-                    if (properties != null) {
-                        hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                    boolean enableBinlog = PropertyAnalyzer.analyzeBooleanProp(properties,
+                            PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, false);
+                    long binlogTtl = PropertyAnalyzer.analyzeLongProp(properties,
+                            PropertyAnalyzer.PROPERTIES_BINLOG_TTL, Config.binlog_ttl_second);
+                    long binlogMaxSize = PropertyAnalyzer.analyzeLongProp(properties,
+                            PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE, Config.binlog_max_size);
+                    BinlogConfig binlogConfig = new BinlogConfig(0, enableBinlog,
+                            binlogTtl, binlogMaxSize);
+                    table.setCurBinlogConfig(binlogConfig);
+                    LOG.info("create table {} set binlog config, enable_binlog = {}, binlogTtl = {}, binlog_max_size = {}",
+                            tableName, enableBinlog, binlogTtl, binlogMaxSize);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+            }
+
+            // write quorum
+            try {
+                table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+
+            // replicated storage
+            table.setEnableReplicatedStorage(
+                    PropertyAnalyzer.analyzeBooleanProp(
+                            properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                            Config.enable_replicated_storage_as_default_engine));
+
+            if (table.enableReplicatedStorage().equals(false)) {
+                for (Column col : baseSchema) {
+                    if (col.isAutoIncrement()) {
+                        throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage");
                     }
-                    DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                            DataProperty.getInferredDefaultDataProperty(), false);
-                    DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(table, properties);
-                    if (table.dynamicPartitionExists() && table.getColocateGroup() != null) {
-                        HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-                        if (info.getBucketNum() !=
-                                table.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
-                            throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
-                                    + " if creating a colocate table");
-                        }
-                    }
-                    if (hasMedium) {
-                        table.setStorageMedium(dataProperty.getStorageMedium());
-                    }
-                    if (properties != null && !properties.isEmpty()) {
-                        // here, all properties should be checked
-                        throw new DdlException("Unknown properties: " + properties);
+                }
+            }
+
+            TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
+            try {
+                tabletType = PropertyAnalyzer.analyzeTabletType(properties);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+
+            if (table.isCloudNativeTable() && properties != null) {
+                try {
+                    PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                    if (duration != null) {
+                        table.setDataCachePartitionDuration(duration);
                     }
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
+            }
 
-                // this is a 2-level partitioned tables
-                List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
-                for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
-                    Partition partition = metastore.createPartition(db, table, entry.getValue(), entry.getKey(), version,
-                            tabletIdSet);
-                    partitions.add(partition);
+            if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                // if this is an unpartitioned table, we should analyze data property and replication num here.
+                // if this is a partitioned table, there properties are already analyzed in RangePartitionDesc analyze phase.
+
+                // use table name as this single partition name
+                long partitionId = partitionNameToId.get(tableName);
+                DataProperty dataProperty = null;
+                try {
+                    boolean hasMedium = false;
+                    if (properties != null) {
+                        hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                    }
+                    dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                            DataProperty.getInferredDefaultDataProperty(), false);
+                    if (hasMedium) {
+                        table.setStorageMedium(dataProperty.getStorageMedium());
+                    }
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
                 }
-                // It's ok if partitions is empty.
-                metastore.buildPartitions(db, table, partitions);
-                for (Partition partition : partitions) {
-                    table.addPartition(partition);
+                Preconditions.checkNotNull(dataProperty);
+                partitionInfo.setDataProperty(partitionId, dataProperty);
+                partitionInfo.setReplicationNum(partitionId, replicationNum);
+                partitionInfo.setIsInMemory(partitionId, isInMemory);
+                partitionInfo.setTabletType(partitionId, tabletType);
+                StorageInfo storageInfo = table.getTableProperty().getStorageInfo();
+                DataCacheInfo dataCacheInfo = storageInfo == null ? null : storageInfo.getDataCacheInfo();
+                partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
+            }
+
+            // check colocation properties
+            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+            boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
+                    colocateGroup, false /* expectLakeTable */);
+            if (!(table instanceof ExternalOlapTable) && addedToColocateGroup) {
+                // Colocate table should keep the same bucket number across the partitions
+                DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
+                if (defaultDistributionInfo.getBucketNum() == 0) {
+                    int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                    defaultDistributionInfo.setBucketNum(bucketNum);
                 }
+            }
+
+            // get base index storage type. default is COLUMN
+            TStorageType baseIndexStorageType = null;
+            try {
+                baseIndexStorageType = PropertyAnalyzer.analyzeStorageType(properties);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+            Preconditions.checkNotNull(baseIndexStorageType);
+            // set base index meta
+            int schemaVersion = 0;
+            try {
+                schemaVersion = PropertyAnalyzer.analyzeSchemaVersion(properties);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+            int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
+
+            if (stmt.getSortKeys() != null) {
+                table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+                        shortKeyColumnCount, baseIndexStorageType, keysType, null, sortKeyIdxes);
             } else {
-                throw new DdlException("Unsupported partition method: " + partitionInfo.getType().name());
+                table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+                        shortKeyColumnCount, baseIndexStorageType, keysType, null);
             }
-            // if binlog_enable is true when creating table,
-            // then set binlogAvailableVersion without statistics through reportHandler
-            if (table.isBinlogEnabled()) {
-                Map<String, String> binlogAvailableVersion = table.buildBinlogAvailableVersion();
-                table.setBinlogAvailableVersion(binlogAvailableVersion);
-                LOG.info("set binlog available version when create table, tableName : {}, partitions : {}",
-                        tableName, binlogAvailableVersion.toString());
-            }
-        }
 
-        // process lake table colocation properties, after partition and tablet creation
-        colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* expectLakeTable */);
+            for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
+                AddRollupClause addRollupClause = (AddRollupClause) alterClause;
+
+                Long baseRollupIndex = table.getIndexIdByName(tableName);
+
+                // get storage type for rollup index
+                TStorageType rollupIndexStorageType = null;
+                try {
+                    rollupIndexStorageType = PropertyAnalyzer.analyzeStorageType(addRollupClause.getProperties());
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+                Preconditions.checkNotNull(rollupIndexStorageType);
+                // set rollup index meta to olap table
+                List<Column> rollupColumns = stateMgr.getRollupHandler().checkAndPrepareMaterializedView(addRollupClause,
+                        table, baseRollupIndex);
+                short rollupShortKeyColumnCount =
+                        GlobalStateMgr.calcShortKeyColumnCount(rollupColumns, alterClause.getProperties());
+                int rollupSchemaHash = Util.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
+                long rollupIndexId = metastore.getNextId();
+                table.setIndexMeta(rollupIndexId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
+                        rollupSchemaHash, rollupShortKeyColumnCount, rollupIndexStorageType, keysType);
+            }
+
+            // analyze version info
+            Long version = null;
+            try {
+                version = PropertyAnalyzer.analyzeVersionInfo(properties);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+            Preconditions.checkNotNull(version);
+
+            // storage_format is not necessary, remove storage_format if exist.
+            if (properties != null) {
+                properties.remove("storage_format");
+            }
+
+            // get compression type
+            TCompressionType compressionType = TCompressionType.LZ4_FRAME;
+            try {
+                compressionType = PropertyAnalyzer.analyzeCompressionType(properties);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+            table.setCompressionType(compressionType);
+
+            // partition live number
+            int partitionLiveNumber;
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                try {
+                    partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+                table.setPartitionLiveNumber(partitionLiveNumber);
+            }
+
+            try {
+                processConstraint(db, table, properties);
+            } catch (AnalysisException e) {
+                throw new DdlException(
+                        String.format("processing constraint failed when creating table:%s. exception msg:%s",
+                                table.getName(), e.getMessage()), e);
+            }
+
+            // a set to record every new tablet created when create table
+            // if failed in any step, use this set to do clear things
+            Set<Long> tabletIdSet = new HashSet<Long>();
+
+            // do not create partition for external table
+            if (table.isOlapOrCloudNativeTable()) {
+                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                    if (properties != null && !properties.isEmpty()) {
+                        // here, all properties should be checked
+                        throw new DdlException("Unknown properties: " + properties);
+                    }
+
+                    // this is a 1-level partitioned table, use table name as partition name
+                    long partitionId = partitionNameToId.get(tableName);
+                    Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet);
+                    metastore.buildPartitions(db, table, Collections.singletonList(partition));
+                    table.addPartition(partition);
+                } else if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+                    try {
+                        // just for remove entries in stmt.getProperties(),
+                        // and then check if there still has unknown properties
+                        boolean hasMedium = false;
+                        if (properties != null) {
+                            hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                        }
+                        DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                                DataProperty.getInferredDefaultDataProperty(), false);
+                        DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(table, properties);
+                        if (table.dynamicPartitionExists() && table.getColocateGroup() != null) {
+                            HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
+                            if (info.getBucketNum() !=
+                                    table.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
+                                throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
+                                        + " if creating a colocate table");
+                            }
+                        }
+                        if (hasMedium) {
+                            table.setStorageMedium(dataProperty.getStorageMedium());
+                        }
+                        if (properties != null && !properties.isEmpty()) {
+                            // here, all properties should be checked
+                            throw new DdlException("Unknown properties: " + properties);
+                        }
+                    } catch (AnalysisException e) {
+                        throw new DdlException(e.getMessage());
+                    }
+
+                    // this is a 2-level partitioned tables
+                    List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
+                    for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
+                        Partition partition = metastore.createPartition(db, table, entry.getValue(), entry.getKey(), version,
+                                tabletIdSet);
+                        partitions.add(partition);
+                    }
+                    // It's ok if partitions is empty.
+                    metastore.buildPartitions(db, table, partitions);
+                    for (Partition partition : partitions) {
+                        table.addPartition(partition);
+                    }
+                } else {
+                    throw new DdlException("Unsupported partition method: " + partitionInfo.getType().name());
+                }
+                // if binlog_enable is true when creating table,
+                // then set binlogAvailableVersion without statistics through reportHandler
+                if (table.isBinlogEnabled()) {
+                    Map<String, String> binlogAvailableVersion = table.buildBinlogAvailableVersion();
+                    table.setBinlogAvailableVersion(binlogAvailableVersion);
+                    LOG.info("set binlog available version when create table, tableName : {}, partitions : {}",
+                            tableName, binlogAvailableVersion.toString());
+                }
+            }
+
+            // process lake table colocation properties, after partition and tablet creation
+            colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* expectLakeTable */);
+        } catch (DdlException e) {
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(tableId);
+            }
+            throw e;
+        }
 
         // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
         LOG.info("Successfully create table[{};{}]", tableName, tableId);

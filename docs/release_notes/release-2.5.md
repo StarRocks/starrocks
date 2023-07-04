@@ -1,5 +1,24 @@
 # StarRocks version 2.5
 
+## 2.5.8
+
+Release date: June 30, 2023
+
+### Improvements
+
+- Optimized the error message reported when partitions are added to a non-partitioned table. [#25266](https://github.com/StarRocks/starrocks/pull/25266)
+- Optimized the [auto tablet distribution policy](../table_design/Data_distribution.md#determine-the-number-of-buckets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- Optimized the default comments in the CREATE TABLE statement. [#24803](https://github.com/StarRocks/starrocks/pull/24803)
+- You can initiate synchronous manual refresh tasks for asynchronous materialized views using REFRESH MATERIALIZED VIEW WITH SYNC MODE. [#25910](https://github.com/StarRocks/starrocks/pull/25910pr)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The COUNT result of an asynchronous materialized view may be inaccurate if the materialized view is built on Union results. [#24460](https://github.com/StarRocks/starrocks/issues/24460)
+- "Unknown error" is reported when users attempt to forcibly reset the root password. [#25492](https://github.com/StarRocks/starrocks/pull/25492)
+- Inaccurate error message is displayed when INSERT OVERWRITE is executed on a cluster with less than three alive BEs. [#25314](https://github.com/StarRocks/starrocks/pull/25314)
+
 ## 2.5.7
 
 Release date: June 14, 2023

@@ -383,15 +383,19 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 id = getNextId();
                 Database db = new Database(id, dbName);
-                unprotectCreateDb(db);
                 String storageVolumeId = "";
-                if (RunMode.allowCreateLakeTable()) {
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    // In shared data mode, storage volume needs to be bound to db before creating db.
                     String volume = StorageVolumeMgr.DEFAULT;
                     if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
                         volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
                     }
-                    storageVolumeId = bindStorageVolumeToDb(id, volume);
+                    storageVolumeId = getStorageVolumeId(volume);
+                    if (!GlobalStateMgr.getCurrentState().getStorageVolumeMgr().bindDbToStorageVolume(storageVolumeId, id)) {
+                        throw new DdlException(String.format("Storage volume with id %s not exists", storageVolumeId));
+                    }
                 }
+                unprotectCreateDb(db);
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db, storageVolumeId);
             }
         } finally {
@@ -798,7 +802,14 @@ public class LocalMetastore implements ConnectorMetadata {
         String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                 .getStorageVolumeIdOfTable(table.getId());
 
-        onCreate(db, table, storageVolumeId, stmt.isSetIfNotExists());
+        try {
+            onCreate(db, table, storageVolumeId, stmt.isSetIfNotExists());
+        } catch (DdlException e) {
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
+            }
+            throw e;
+        }
         return true;
     }
 
@@ -1986,6 +1997,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                 "table already exists");
                     } else {
                         LOG.info("Create table[{}] which already exists", table.getName());
+                        return;
                     }
                 }
 
@@ -2658,6 +2670,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // create partition info
         PartitionInfo partitionInfo = buildPartitionInfo(stmt);
+        if (partitionInfo instanceof ListPartitionInfo && ((ListPartitionInfo) partitionInfo).getPartitionColumns()
+                .stream().anyMatch(Column::isAllowNull)) {
+            throw new DdlException("List partition columns must not be nullable in Materialized view for now.");
+        }
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
@@ -2957,7 +2973,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         Collections.singletonList(stmt.getPartitionColumn()),
                         Maps.newHashMap(), false);
         } else {
-            return  new SinglePartitionInfo();
+            return new SinglePartitionInfo();
         }
     }
 
@@ -4593,7 +4609,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private String bindStorageVolumeToDb(long dbId, String volume) throws DdlException {
+    private String getStorageVolumeId(String volume) throws DdlException {
         StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         StorageVolume sv = null;
         if (volume.equals(StorageVolumeMgr.DEFAULT)) {
@@ -4604,9 +4620,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (sv == null) {
             throw new DdlException("Unknown storage volume \"" + volume + "\"");
         }
-        String storageVolumeId = sv.getId();
-        svm.bindDbToStorageVolume(storageVolumeId, dbId);
-        return storageVolumeId;
+        return sv.getId();
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {

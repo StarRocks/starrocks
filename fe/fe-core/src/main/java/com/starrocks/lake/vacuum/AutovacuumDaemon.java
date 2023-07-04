@@ -32,7 +32,6 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.HeartbeatMgr;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -122,7 +122,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long visibleVersion;
         long minRetainVersion;
         long startTime = System.currentTimeMillis();
-        long minActiveTxnId = HeartbeatMgr.computeMinActiveTxnId();
+        long minActiveTxnId = computeMinActiveTxnId();
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
 
         db.readLock();
@@ -191,5 +191,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getName(), hasError, vacuumedFiles, vacuumedFileSize,
                 visibleVersion, minRetainVersion, minActiveTxnId, System.currentTimeMillis() - startTime);
+    }
+
+    private static long computeMinActiveTxnId() {
+        long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId();
+        Optional<Long> b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getMinActiveTxnId();
+        return Math.min(a, b.orElse(Long.MAX_VALUE));
     }
 }
