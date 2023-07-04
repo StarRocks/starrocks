@@ -41,7 +41,7 @@ jobs:
         id: pr_num_reader
         uses: juliangruber/read-file-action@v1.0.0
         with:
-          path: ./pr_num/pr_num.txt
+          path: ./pr_num.txt
 
       - name: PR DETAILS
         id: pr_details
