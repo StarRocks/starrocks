@@ -251,7 +251,7 @@ For multi-table join queries, the optimizer usually selects the optimal join exe
 
 - Shuffle Join
 
-  If you need to shuffle the data rows with the same bucket key values from tables A and B onto the same machine before a Join operation is performed, you can hint the join execution method as Shuffle Join.
+  If you need to shuffle the data rows with the same bucketing key values from tables A and B onto the same machine before a Join operation is performed, you can hint the join execution method as Shuffle Join.
 
   ~~~SQL
   select k1 from t1 join [SHUFFLE] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -259,7 +259,7 @@ For multi-table join queries, the optimizer usually selects the optimal join exe
 
 - Broadcast Join
   
-  If table A is a large table and table B is a small table, you can hint the join execution method as Broadcast Join. The data of the small table B is fully broadcasted to the machines on which the data of table A resides, and then the Join operation is performed. Compared to Shuffle Join, Broadcast Join saves the cost of shuffling the data of table A.
+  If table A is a large table and table B is a small table, you can hint the join execution method as Broadcast Join. The data of the table B is fully broadcasted to the machines on which the data of table A resides, and then the Join operation is performed. Compared to Shuffle Join, Broadcast Join saves the cost of shuffling the data of table A.
 
   ~~~SQL
   select k1 from t1 join [BROADCAST] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -267,7 +267,7 @@ For multi-table join queries, the optimizer usually selects the optimal join exe
 
 - Bucket Shuffle Join
   
-  If the Join equijoin expression in the join query contains the bucketing key of table A, especially when both tables A and B are large tables, you can hint the join execution method as Bucket Shuffle Join. The data of table B is shuffled to the machines on which the data of table A resides, according to the data distribution of table A, and then the Join operation is performed. Compared to Broadcast Join, Bucket Shuffle Join significantly reduces data transferring because the data of table B is shuffled only once globally. 
+  If the Join equijoin expression in the join query contains the bucketing key of table A, especially when both tables A and B are large tables, you can hint the join execution method as Bucket Shuffle Join. The data of table B is shuffled to the machines on which the data of table A resides, according to the data distribution of table A, and then the Join operation is performed. Compared to Broadcast Join, Bucket Shuffle Join significantly reduces data transferring because the data of table B is shuffled only once globally.
 
   ~~~SQL
   select k1 from t1 join [BUCKET] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -275,7 +275,7 @@ For multi-table join queries, the optimizer usually selects the optimal join exe
 
 - Colocate Join
   
-  If tables A and B belong to the same Colocation Group which is specified during table creation, the data rows with the same bucket key values from tables A and B are distributed on the same BE node. When the Join equijoin expression contains the bucketing key of tables A and B in the join query, you can hint the join execution method as Colocate Join. Data with the same key values are directly joined locally, reducing the time spent on data transmission between nodes and improving query performance.
+  If tables A and B belong to the same Colocation Group which is specified during table creation, the data rows with the same bucketing key values from tables A and B are distributed on the same BE node. When the Join equijoin expression contains the bucketing key of tables A and B in the join query, you can hint the join execution method as Colocate Join. Data with the same key values are directly joined locally, reducing the time spent on data transmission between nodes and improving query performance.
 
   ~~~SQL
   select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -283,7 +283,7 @@ For multi-table join queries, the optimizer usually selects the optimal join exe
 
 ### View join execution method
 
-Use the `EXPLAIN` command to view the actual join execution method**.** If the returned result shows that the join execution method matches the join hint, it means that the join hint is effective.
+Use the `EXPLAIN` command to view the actual join execution method. If the returned result shows that the join execution method matches the join hint, it means that the join hint is effective.
 
 ~~~SQL
 EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
