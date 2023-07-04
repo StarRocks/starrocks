@@ -22,7 +22,7 @@ namespace starrocks::parquet {
 
 // Reference for:
 // https://github.com/apache/arrow/blob/7ebc88c8fae62ed97bc30865c845c8061132af7e/cpp/src/parquet/column_reader.h#L54-L57
-static constexpr size_t kDefaultPageHeaderSize = 1024;
+static constexpr size_t kDefaultPageHeaderSize = 16 * 1024;
 // 16MB is borrowed from Arrow
 static constexpr size_t kMaxPageHeaderSize = 16 * 1024 * 1024;
 
@@ -73,7 +73,7 @@ Status PageReader::next_header() {
                     "Failed to decode parquet page header, offset=$0, finish_offset=$1", _offset, _finish_offset));
         }
 
-        allowed_page_size <<= 2;
+        allowed_page_size *= 2;
     } while (true);
     DCHECK(header_length > 0);
     _offset += header_length;
