@@ -106,7 +106,7 @@ public class Replica implements Writable {
     // The last version reported from BE, this version should be increased monotonically.
     // Use this version to detect data lose on BE.
     // This version is only accessed by ReportHandler, so lock is unnecessary when updating.
-    private volatile int lastReportVersion = 0;
+    private volatile long lastReportVersion = 0;
 
     private int schemaHash = -1;
     @SerializedName(value = "dataSize")
@@ -653,11 +653,11 @@ public class Replica implements Writable {
         return watermarkTxnId;
     }
 
-    public void setLastReportVersion(int lastReportVersion) {
+    public void setLastReportVersion(long lastReportVersion) {
         this.lastReportVersion = lastReportVersion;
     }
 
-    public int getLastReportVersion() {
+    public long getLastReportVersion() {
         return this.lastReportVersion;
     }
 }
