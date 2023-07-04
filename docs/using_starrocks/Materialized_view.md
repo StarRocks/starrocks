@@ -299,6 +299,28 @@ The following table shows the correspondence between the aggregate functions in 
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                                    |
 | percentile_approx, percentile_union                    | percentile_union                                             |
 
+
+Distinct aggregates cannot be rewritten with Aggregate Rollup. Since StarRocks v3.1, if distinct aggregates with rollup have the missing group by columns' equal predicates, it can also be rewritten by the MV because we can convert the equal predicates into group by const exprs.
+
+```SQL
+CREATE MATERIALIZED VIEW order_agg_mv
+DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
+REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+AS
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list 
+GROUP BY order_date;
+
+
+-- query
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list where order_date='2023-07-03';
+```
+
 ### Rewrite queries in View Delta Join scenarios
 
 StarRocks now supports rewriting queries based on asynchronous materialized views with Delta Join, which means that the queried tables are a subset of the materialized view's base tables. For example, queries of the form `table_a INNER JOIN table_b` can be rewritten by materialized views of the form `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c`, where `table_b INNER JOIN/LEFT OUTER JOIN table_c` is the Delta Join. This feature allows transparent acceleration for such queries, thereby preserving the flexibility of the query and avoiding the huge cost of building wide tables.
