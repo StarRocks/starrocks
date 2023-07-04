@@ -1610,6 +1610,20 @@ public class CreateTableTest {
                 ));
     }
 
-
-
+    @Test
+    public void testColumnWithRowException() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE test.dwd_site_scan_dtl_test (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(ship_id, sub_ship_id) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_type\" = \"column_with_row\"" +
+                ");";
+        ExceptionChecker.expectThrows(DdlException.class, () -> starRocksAssert.withTable(sql1));
+    }
 }

@@ -106,7 +106,7 @@ public:
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
                TTabletType::type tabletType, TCompressionType::type compression_type,
-               int32_t primary_index_cache_expire_sec);
+               int32_t primary_index_cache_expire_sec, TStorageType::type storage_type);
 
     virtual ~TabletMeta();
 
@@ -194,6 +194,8 @@ public:
         return _updatesPB.release();
     }
 
+    std::string get_storage_type() const { return _storage_type; }
+
     bool get_enable_persistent_index() const { return _enable_persistent_index; }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
@@ -280,6 +282,8 @@ private:
     BinlogLsn _binlog_min_lsn;
 
     bool _enable_shortcut_compaction = true;
+
+    std::string _storage_type;
 
     std::shared_mutex _meta_lock;
 };
