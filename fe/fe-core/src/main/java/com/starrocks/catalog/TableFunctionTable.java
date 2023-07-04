@@ -41,7 +41,6 @@ import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetFileSchemaRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
@@ -56,8 +55,9 @@ import java.util.concurrent.Future;
 
 public class TableFunctionTable extends Table {
 
-    private static final String PROPERTY_PATH = "path";
-    private static final String PROPERTY_FORMAT = "format";
+    public static final String FAKE_PATH = "fake://";
+    public static final String PROPERTY_PATH = "path";
+    public static final String PROPERTY_FORMAT = "format";
 
     private String path;
     private String format;
@@ -70,11 +70,18 @@ public class TableFunctionTable extends Table {
         super.setId(-1);
         super.setName("table_function_table");
         this.properties = properties;
-        parseProperties();
 
+        parseProperties();
         parseFiles();
 
-        super.setNewFullSchema(getFileSchema());
+        if (path.startsWith(FAKE_PATH)) {
+            List<Column> columns = new ArrayList<>();
+            columns.add(new Column("col_int", Type.INT));
+            columns.add(new Column("col_string", Type.VARCHAR));
+            setNewFullSchema(columns);
+        } else {
+            setNewFullSchema(getFileSchema());
+        }
     }
 
     public List<TBrokerFileStatus> fileList() {
@@ -127,13 +134,17 @@ public class TableFunctionTable extends Table {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
         }
 
-        if (!format.equalsIgnoreCase("parquet")) {
+        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
             throw new DdlException("not supported format: " + format);
         }
     }
 
     private void parseFiles() throws DdlException {
         try {
+            // fake:// is a faked path, for testing purpose
+            if (path.startsWith("fake://")) {
+                return;
+            }
             HdfsUtil.parseFile(path, new BrokerDesc(properties), fileStatuses);
         } catch (UserException e) {
             throw new DdlException("failed to parse files: " + e.getMessage());
@@ -162,10 +173,22 @@ public class TableFunctionTable extends Table {
         brokerScanRange.setParams(params);
         brokerScanRange.setBroker_addresses(Lists.newArrayList());
 
+        TFileFormatType fileFormat;
+        switch (format.toLowerCase()) {
+            case "parquet":
+                fileFormat = TFileFormatType.FORMAT_PARQUET;
+                break;
+            case "orc":
+                fileFormat = TFileFormatType.FORMAT_ORC;
+                break;
+            default:
+                throw new TException("unsupported format: " + format);
+        }
+
         for (int i = 0; i < filelist.size(); ++i) {
             TBrokerRangeDesc rangeDesc = new TBrokerRangeDesc();
             rangeDesc.setFile_type(TFileType.FILE_BROKER);
-            rangeDesc.setFormat_type(TFileFormatType.FORMAT_PARQUET);
+            rangeDesc.setFormat_type(fileFormat);
             rangeDesc.setPath(filelist.get(i).path);
             rangeDesc.setSplittable(filelist.get(i).isSplitable);
             rangeDesc.setStart_offset(0);
@@ -188,6 +211,9 @@ public class TableFunctionTable extends Table {
     }
 
     private List<Column> getFileSchema() throws DdlException {
+        if (fileStatuses.isEmpty()) {
+            return Lists.newArrayList();
+        }
         TNetworkAddress address;
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
         if (backendIds.isEmpty()) {
@@ -219,10 +245,7 @@ public class TableFunctionTable extends Table {
                 throw new DdlException("non-scalar type is not supported: " + slot.colName);
             }
             PScalarType scalarType = slot.slotType.types.get(0).scalarType;
-
-            TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(scalarType.type);
-
-            columns.add(new Column(slot.colName, ScalarType.createType(PrimitiveType.fromThrift(tPrimitiveType)), true));
+            columns.add(new Column(slot.colName, ScalarType.createType(scalarType), true));
         }
         return columns;
     }
@@ -234,6 +257,11 @@ public class TableFunctionTable extends Table {
             exprs.add(new ImportColumnDesc(column.getName()));
         }
         return exprs;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("TABLE('path'='%s', 'format'='%s')", path, format);
     }
 
     @Override

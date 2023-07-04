@@ -42,6 +42,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -783,7 +784,7 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Materialized view does not support explain query", e.getMessage());
+            Assert.assertEquals("Creating materialized view does not support explain query", e.getMessage());
         } finally {
             starRocksAssert.useDatabase("test");
         }
@@ -1725,7 +1726,7 @@ public class CreateMaterializedViewTest {
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage()
-                    .contains("No viable statement for input '('."));
+                    .contains("No viable statement for input 'distributed by hash(date_trunc('."));
         }
     }
 
@@ -2563,6 +2564,27 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testCreateMVWithDifferentDB2() {
+        try {
+            ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
+            StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
+            newStarRocksAssert.withDatabase("test_mv_different_db")
+                    .useDatabase("test_mv_different_db");
+
+            Assert.assertThrows(AnalysisException.class, () -> {
+                String sql = "create materialized view test_mv_different_db.test_mv_use_different_tbl " +
+                        "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
+                CreateMaterializedViewStmt stmt =
+                        (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+
+            });
+            newStarRocksAssert.dropDatabase("test_mv_different_db");
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
     public void testCreateAsyncMVWithDifferentDB() {
         try {
             ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
@@ -2587,6 +2609,33 @@ public class CreateMaterializedViewTest {
         }
     }
 
+    @Test
+    public void testCreateAsyncMVWithDifferentDB2() {
+        try {
+            ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
+            StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
+            newStarRocksAssert.withDatabase("test_mv_different_db")
+                    .useDatabase("test_mv_different_db");
+            String sql = "create materialized view test_mv_different_db.test_mv_use_different_tbl " +
+                    "distributed by hash(k1) " +
+                    "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            newStarRocksAssert.getCtx());
+            Assert.assertEquals(stmt.getTableName().getDb(), "test_mv_different_db");
+            Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+
+            currentState.createMaterializedView(stmt);
+
+            Database differentDb = currentState.getDb("test_mv_different_db");
+            Table mv1 = differentDb.getTable("test_mv_use_different_tbl");
+            Assert.assertTrue(mv1 instanceof MaterializedView);
+            
+            newStarRocksAssert.dropDatabase("test_mv_different_db");
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
     @Test
     public void testCreateImmediateDeferred() throws Exception {
         UtFrameUtils.parseStmtWithNewParser(
@@ -2683,7 +2732,6 @@ public class CreateMaterializedViewTest {
             MaterializedView mv = getMv("test", "mv_nullable");
             Assert.assertFalse(mv.getColumn("empid").isAllowNull());
             Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
-            Assert.assertTrue(mv.getColumn("name").isAllowNull());
             starRocksAssert.dropMaterializedView("mv_nullable");
         }
 
@@ -2707,7 +2755,6 @@ public class CreateMaterializedViewTest {
             MaterializedView mv = getMv("test", "mv_nullable");
             Assert.assertTrue(mv.getColumn("empid").isAllowNull());
             Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
-            Assert.assertTrue(mv.getColumn("name").isAllowNull());
             starRocksAssert.dropMaterializedView("mv_nullable");
         }
 
@@ -2976,6 +3023,24 @@ public class CreateMaterializedViewTest {
         MaterializedView mv = (MaterializedView) db.getTable("customer_mv");
         Assert.assertTrue(mv.getColumn("total").getType().isDecimalOfAnyVersion());
         Assert.assertFalse(mv.getColumn("segment").isAllowNull());
+    }
+
+    @Test
+    public void testCreateMvWithTypes() throws Exception {
+        String sql = "create materialized view mv_test_types \n" +
+                "distributed by hash(k1) buckets 10\n" +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'" +
+                ")\n" +
+                "as " +
+                "select tb1.k1, k2, " +
+                "array<int>[1,2,3] as type_array, " +
+                "map<int, int>{1:2} as type_map, " +
+                "parse_json('{\"a\": 1}') as type_json, " +
+                "row('c') as type_struct, " +
+                "array<json>[parse_json('{}')] as type_array_json " +
+                "from tbl1 tb1;";
+        starRocksAssert.withMaterializedView(sql);
     }
 }
 

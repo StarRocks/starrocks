@@ -65,6 +65,8 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.LambdaArgument;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -78,6 +80,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
@@ -123,6 +126,11 @@ import io.trino.sql.tree.Join;
 import io.trino.sql.tree.JoinCriteria;
 import io.trino.sql.tree.JoinOn;
 import io.trino.sql.tree.JoinUsing;
+import io.trino.sql.tree.JsonArray;
+import io.trino.sql.tree.JsonArrayElement;
+import io.trino.sql.tree.JsonQuery;
+import io.trino.sql.tree.LambdaArgumentDeclaration;
+import io.trino.sql.tree.LambdaExpression;
 import io.trino.sql.tree.LikePredicate;
 import io.trino.sql.tree.Limit;
 import io.trino.sql.tree.LogicalExpression;
@@ -150,6 +158,7 @@ import io.trino.sql.tree.TimestampLiteral;
 import io.trino.sql.tree.Trim;
 import io.trino.sql.tree.TryExpression;
 import io.trino.sql.tree.Union;
+import io.trino.sql.tree.Values;
 import io.trino.sql.tree.WhenClause;
 import io.trino.sql.tree.Window;
 import io.trino.sql.tree.WindowFrame;
@@ -224,6 +233,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     private ParseNode processOptional(Optional<? extends Node> node, ParseTreeContext context) {
         return node.map(value -> process(value, context)).orElse(null);
+    }
+
+    @Override
+    protected ParseNode visitNode(Node node, ParseTreeContext context) {
+        if (node instanceof JsonArrayElement) {
+            return visit(((JsonArrayElement) node).getValue(), context);
+        }
+        return null;
     }
 
     @Override
@@ -331,7 +348,50 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitAliasedRelation(AliasedRelation node, ParseTreeContext context) {
         Relation relation = (Relation) visit(node.getRelation(), context);
         relation.setAlias(new TableName(null, node.getAlias().getValue()));
+        List<String> columnNames = getColumnNames(Optional.ofNullable(node.getColumnNames()));
+        if (columnNames != null && !columnNames.isEmpty()) {
+            relation.setColumnOutputNames(columnNames);
+
+            if (relation instanceof SubqueryRelation) {
+                // set value relation alias name here, otherwise sr optimizer will lose the alias name
+                SubqueryRelation subqueryRelation = (SubqueryRelation) relation;
+                if (subqueryRelation.getQueryStatement().getQueryRelation() instanceof ValuesRelation) {
+                    ValuesRelation valuesRelation = (ValuesRelation) subqueryRelation.getQueryStatement().getQueryRelation();
+                    valuesRelation.setColumnOutputNames(columnNames);
+                }
+            }
+        }
         return relation;
+    }
+
+    @Override
+    protected ParseNode visitValues(Values node, ParseTreeContext context) {
+        if (node.getRows().isEmpty()) {
+            return null;
+        } else {
+            List<Expr> rows = visit(node.getRows(), context, Expr.class);
+            List<ValueList> valueLists = Lists.newArrayList();
+
+            if (node.getRows().get(0) instanceof Row) {
+                // (values (1,2),(3,4),(5,6)), has three rows, each row is row function call
+                for (Expr rowFnCall : rows) {
+                    valueLists.add(new ValueList(rowFnCall.getChildren()));
+                }
+            } else {
+                // (values 1,2,3,4,5,6), has six rows, each row has one int value
+                for (Expr value : rows) {
+                    valueLists.add(new ValueList(Lists.newArrayList(value)));
+                }
+            }
+            List<List<Expr>> records = valueLists.stream().map(ValueList::getRow).collect(toList());
+
+            List<String> colNames = Lists.newArrayList();
+            for (int i = 0; i < records.get(0).size(); ++i) {
+                colNames.add("column_" + i);
+            }
+
+            return new ValuesRelation(records, colNames);
+        }
     }
 
     @Override
@@ -693,6 +753,21 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return visit(node.getInnerExpression(), context);
     }
 
+    @Override
+    protected ParseNode visitJsonQuery(JsonQuery jsonQuery, ParseTreeContext context) {
+        Expr inputExpr = (Expr) visit(jsonQuery.getJsonPathInvocation().getInputExpression(), context);
+        String jsonPath = jsonQuery.getJsonPathInvocation().getJsonPath().getValue();
+        com.starrocks.analysis.StringLiteral jsonPathLiteral =
+                new com.starrocks.analysis.StringLiteral(jsonPath.substring(jsonPath.indexOf('$')));
+        return new FunctionCallExpr("json_query", ImmutableList.of(inputExpr, jsonPathLiteral));
+    }
+
+    @Override
+    protected ParseNode visitJsonArray(JsonArray jsonArray, ParseTreeContext context) {
+        List<Expr> children = visit(jsonArray.getElements(), context, Expr.class);
+        return new FunctionCallExpr("json_array", children);
+    }
+
     private static final BigInteger LONG_MAX = new BigInteger("9223372036854775807");
 
     private static final BigInteger LARGEINT_MAX_ABS =
@@ -762,6 +837,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         } else if (node.getType().equalsIgnoreCase("json")) {
             return new com.starrocks.analysis.StringLiteral(node.getValue());
+        } else if (node.getType().equalsIgnoreCase("real")) {
+            try {
+                return new FloatLiteral(node.getValue());
+            } catch (AnalysisException e) {
+                throw new RuntimeException(e);
+            }
         }
         throw new ParsingException("Parse Error : unknown type " + node.getType());
     }
@@ -973,6 +1054,26 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitLambdaExpression(LambdaExpression node, ParseTreeContext context) {
+        List<String> names = Lists.newArrayList();
+        for (LambdaArgumentDeclaration argumentDeclaration : node.getArguments()) {
+            names.add(argumentDeclaration.getName().getValue());
+        }
+
+        List<Expr> arguments = Lists.newArrayList();
+        Expr expr = null;
+        if (node.getBody() != null) {
+            expr = (Expr) visit(node.getBody(), context);
+        }
+        // put lambda body to the first argument
+        arguments.add(expr);
+        for (String name : names) {
+            arguments.add(new LambdaArgument(name));
+        }
+        return new LambdaFunctionExpr(arguments);
+    }
+
+    @Override
     protected ParseNode visitTrim(Trim node, ParseTreeContext context) {
         Expr trimSource = (Expr) visit(node.getTrimSource(), context);
         Expr trimCharacter = (Expr) processOptional(node.getTrimCharacter(), context);
@@ -1044,6 +1145,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             return ScalarType.createUnifiedDecimalType(38, 0);
         } else if (typeName.contains("decimal")) {
             throw new SemanticException("Unknown type: %s", typeName);
+        } else if (typeName.equals("real")) {
+            return ScalarType.createType(PrimitiveType.FLOAT);
         } else {
             // this contains datetime/date/numeric type
             return ScalarType.createType(typeName);

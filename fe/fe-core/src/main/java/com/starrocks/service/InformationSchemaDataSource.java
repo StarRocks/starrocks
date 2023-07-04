@@ -130,8 +130,6 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
-
-                        // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
                         if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                             continue;
                         }
@@ -193,13 +191,10 @@ public class InformationSchemaDataSource {
         // in memory
         propsMap.put(PropertyAnalyzer.PROPERTIES_INMEMORY, String.valueOf(olapTable.isInMemory()));
 
-        // enable storage cache && cache ttl
         if (table.isCloudNativeTable()) {
             Map<String, String> storageProperties = olapTable.getProperties();
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
-                    storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE));
-            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
-                    storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL));
+            propsMap.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                    storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE));
             propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK));
         }
@@ -299,8 +294,6 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
-
-                        // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
                         if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                             continue;
                         }

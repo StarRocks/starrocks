@@ -14,18 +14,17 @@
 
 package com.starrocks.server;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseProcDir;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -34,6 +33,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,12 +52,6 @@ public class WarehouseManager implements Writable {
     private Map<String, Warehouse> fullNameToWh = new HashMap<>();
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-    private final WarehouseProcNode procNode = new WarehouseProcNode();
-    public static final ImmutableList<String> WAREHOUSE_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("Warehouse")
-            .add("State")
-            .add("ClusterCount")
-            .build();
 
     public WarehouseManager() {
     }
@@ -83,10 +77,30 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    public Warehouse getWarehouse(long warehouseId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return idToWh.get(warehouseId);
+        }
+    }
+
+    public List<Long> getWarehouseIds() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            return new ArrayList<>(idToWh.keySet());
+        }
+    }
+
     public boolean warehouseExists(String warehouseName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return fullNameToWh.containsKey(warehouseName);
         }
+    }
+
+    public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        Warehouse warehouse = getDefaultWarehouse();
+        warehouse.getAnyAvailableCluster().getComputeNodeIds().forEach(
+                nodeId -> builder.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId)));
+        return builder.build();
     }
 
     // warehouse meta persistence api
@@ -101,10 +115,7 @@ public class WarehouseManager implements Writable {
         try {
             String s = Text.readString(dis);
             WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
-            if (data != null) {
-                if (data.fullNameToWh != null) {
-                    // do nothing
-                }
+            if (data != null && data.fullNameToWh != null) {
                 warehouseCount = data.fullNameToWh.size();
             }
             checksum ^= warehouseCount;
@@ -116,31 +127,12 @@ public class WarehouseManager implements Writable {
     }
 
     public List<List<String>> getWarehousesInfo() {
-        return procNode.fetchResult().getRows();
+        return new WarehouseProcDir(this).fetchResult().getRows();
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
-    }
-
-    public class WarehouseProcNode implements ProcNodeInterface {
-
-        @Override
-        public ProcResult fetchResult() {
-            BaseProcResult result = new BaseProcResult();
-            result.setNames(WAREHOUSE_PROC_NODE_TITLE_NAMES);
-            try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-                for (Map.Entry<String, Warehouse> entry : fullNameToWh.entrySet()) {
-                    Warehouse warehouse = entry.getValue();
-                    if (warehouse == null) {
-                        continue;
-                    }
-                    warehouse.getProcNodeData(result);
-                }
-            }
-            return result;
-        }
     }
 }

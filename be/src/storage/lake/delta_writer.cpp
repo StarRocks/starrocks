@@ -449,13 +449,11 @@ Status DeltaWriterImpl::_fill_auto_increment_id(const Chunk& chunk) {
     auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
     std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(tablet, metadata);
 
-    tablet.update_mgr()->get_rowids_from_pkindex(&tablet, *metadata.get(), upserts, metadata->version(), builder.get(),
-                                                 &rss_rowids);
+    RETURN_IF_ERROR(tablet.update_mgr()->get_rowids_from_pkindex(&tablet, metadata->version(), upserts, &rss_rowids));
 
     std::vector<uint8_t> filter;
     uint32_t gen_num = 0;
-    for (uint32_t i = 0; i < rss_rowid_map.size(); i++) {
-        uint64_t v = rss_rowid_map[i];
+    for (unsigned long v : rss_rowid_map) {
         uint32_t rssid = v >> 32;
         if (rssid == (uint32_t)-1) {
             filter.emplace_back(1);

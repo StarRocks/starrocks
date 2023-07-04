@@ -6,7 +6,8 @@ Routine Load is an asynchronous loading method based on the MySQL protocol. It c
 
 > **NOTE**
 >
-> For information about the application scenarios, principles, and basic operations of Routine Load, see [Continuously load data from Apache Kafka®](../../../loading/RoutineLoad.md).
+> - For information about the application scenarios, principles, and basic operations of Routine Load, see [Continuously load data from Apache Kafka®](../../../loading/RoutineLoad.md).
+> - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 
 ## Syntax
 
@@ -135,8 +136,9 @@ The properties of the data source.
 | ----------------- | -------- | ------------------------------------------------------------ |
 | kafka_broker_list | Yes      | Kafka's broker connection information. The format is `<kafka_broker_ip>:<broker_ port>`. Multiple brokers are separated by commas (,). The default port used by Kafka brokers is `9092`. Example:`"kafka_broker_list" = ""xxx.xx.xxx.xx:9092,xxx.xx.xxx.xx:9092"`. |
 | kafka_topic       | Yes      | The  Kafka topic to be consumed. A Routine Load job can only consume messages from one topic. |
-| kafka_partitions  | No       | The Kafka partitions to be consumed. If this property is not specified, all partitions are consumed by default. |
-| kafka_offsets     | No       | The starting point from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets for partitions in `kafka_partitions`. Valid values:<ul><li>A specific offset: consumes data starting from a specific offset.</li><li>`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.</li><li>`OFFSET_END`:  consumes data starting from the latest offset.</li></ul> |
+| kafka_partitions  | No       | The Kafka partitions to be consumed, for example, `"kafka_partitions" = "0, 1, 2, 3"`. If this property is not specified, all partitions are consumed by default. |
+| kafka_offsets     | No       | The starting offset from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets in `kafka_partitions`. Valid values:<ul><li>A specific offset: consumes data starting from a specific offset.</li><li>`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.</li><li>`OFFSET_END`: consumes data starting from the latest offset.</li></ul> Multiple starting offsets are separated by commas (,), for example, `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`.|
+| property.kafka_default_offsets| No| The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property.|
 | confluent.schema.registry.url|No |The URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is as follows:<br>`confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname or ip address>[:<port>]`|
 
 **More data source-related properties**
@@ -267,7 +269,7 @@ CREATE TABLE example_db.example_tbl1 (
     `gender` varchar(26) NULL COMMENT "Gender", 
     `price` double NULL COMMENT "Price") 
 DUPLICATE KEY (order_id,pay_dt) 
-DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`order_id`); 
 ```
 
 #### **Consume data starting from** **specified offsets for** **specified** **partitions**
@@ -341,7 +343,7 @@ CREATE TABLE example_db.example_tbl2 (
     `price` double NULL COMMENT "Price"
 ) 
 DUPLICATE KEY (order_id,pay_dt) 
-DISTRIBUTED BY HASH(order_id) BUCKETS 5; 
+DISTRIBUTED BY HASH(order_id); 
 ```
 
 **Routine Load job**
@@ -503,7 +505,7 @@ CREATE TABLE example_db.example_tbl3 (
     pay_time bigint(20) NULL, 
     price double SUM NULL COMMENT "Price") 
 AGGREGATE KEY(commodity_id,customer_name,country,pay_time)
-DISTRIBUTED BY HASH(commodity_id) BUCKETS 5; 
+DISTRIBUTED BY HASH(commodity_id); 
 ```
 
 **Routine Load job**
@@ -553,7 +555,7 @@ CREATE TABLE example_db.example_tbl4 (
     `pay_dt` date NULL, 
     `price` double SUM NULL) 
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
-DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`commodity_id`); 
 ```
 
 **Routine Load job**
@@ -609,7 +611,7 @@ CREATE TABLE example_db.example_tbl3 (
     price double SUM NULL) 
 AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 ENGINE=OLAP
-DISTRIBUTED BY HASH(commodity_id) BUCKETS 5; 
+DISTRIBUTED BY HASH(commodity_id); 
 ```
 
 **Routine Load job**
@@ -679,7 +681,7 @@ CREATE TABLE sensor.sensor_log1 (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
-DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`id`); 
 ```
 
 **Routine Load job**
@@ -757,7 +759,7 @@ CREATE TABLE sensor.sensor_log2 (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
-DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`id`); 
 ```
 
 **Routine Load job**
@@ -837,7 +839,7 @@ CREATE TABLE sensor.sensor_log3 (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
-DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`id`); 
 ```
 
 **Routine Load job**

@@ -48,10 +48,17 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 
 public class AuthorizationMgrTest {
     private ConnectContext ctx;
@@ -929,8 +936,12 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1, role2 to test_role_user;", ctx), ctx);
 
-        Assert.assertEquals("[role1, role2]", manager.getRoleNamesByUser(
-                UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%")).toString());
+        List<String> expected = Arrays.asList("role1", "role2");
+        expected.sort(null);
+        List<String> result = manager.getRoleNamesByUser(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%"));
+        result.sort(null);
+        Assert.assertEquals(expected, result);
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke role1, role2 from test_role_user;", ctx), ctx);
@@ -1038,7 +1049,7 @@ public class AuthorizationMgrTest {
         oldValue = Config.privilege_max_total_roles_per_user;
         Config.privilege_max_total_roles_per_user = 3;
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_role_inheritance", "%");
-        UserPrivilegeCollection collection = manager.getUserPrivilegeCollectionUnlocked(user);
+        UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to user_test_role_inheritance", ctx), ctx);
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
@@ -1137,7 +1148,7 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("create user user_test_drop_role_inheritance"), ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_drop_role_inheritance", "%");
-        UserPrivilegeCollection collection = manager.getUserPrivilegeCollectionUnlocked(user);
+        UserPrivilegeCollectionV2 collection = manager.getUserPrivilegeCollectionUnlocked(user);
 
         // role0 -> role1[user] -> role2
         // role3[user]
@@ -1564,5 +1575,22 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         setCurrentUserAndRoles(ctx, new UserIdentity("u2", "%"));
         Assert.assertTrue(PrivilegeActions.checkSystemAction(ctx, PrivilegeType.OPERATE));
+    }
+
+    @Test
+    public void testGrantStorageVolumeUsageToPublicRole() throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create user u1", ctx), ctx);
+
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        String storageVolumeId = ctx.getGlobalStateMgr().getStorageVolumeMgr()
+                .createStorageVolume("test", "S3", locations, storageParams, Optional.empty(), "");
+        manager.grantStorageVolumeUsageToPublicRole(storageVolumeId);
+        setCurrentUserAndRoles(ctx, new UserIdentity("u1", "%"));
+        Assert.assertTrue(PrivilegeActions.checkStorageVolumeAction(ctx, "test", PrivilegeType.USAGE));
     }
 }

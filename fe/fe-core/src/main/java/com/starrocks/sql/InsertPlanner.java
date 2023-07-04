@@ -29,6 +29,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -48,7 +49,6 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
@@ -86,6 +86,7 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
@@ -103,6 +104,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
 public class InsertPlanner {
     // Only for unit test
@@ -210,17 +212,45 @@ public class InsertPlanner {
             DataSink dataSink;
             if (targetTable instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) targetTable;
-
                 boolean enableAutomaticPartition;
-                if (!insertStmt.isOverwrite() && insertStmt.isSpecifyPartition()) {
+                List<Long> targetPartitionIds = insertStmt.getTargetPartitionIds();
+                if (insertStmt.isSystem() && insertStmt.isPartitionNotSpecifiedInOverwrite()) {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+                } else if (insertStmt.isSpecifyPartitionNames()) {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = false;
+                } else if (insertStmt.isStaticKeyPartitionInsert()) {
                     enableAutomaticPartition = false;
                 } else {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 }
-                dataSink = new OlapTableSink(olapTable, tupleDesc, insertStmt.getTargetPartitionIds(),
+                boolean nullExprInAutoIncrement = false;
+                // In INSERT INTO SELECT, if AUTO_INCREMENT column
+                // is specified, the column values must not be NULL
+                if (!(queryRelation instanceof ValuesRelation) &&
+                        !(targetTable instanceof MaterializedView)) {
+                    boolean specifyAutoIncrementColumn = false;
+                    if (insertStmt.getTargetColumnNames() != null) {
+                        for (String colName : insertStmt.getTargetColumnNames()) {
+                            for (Column col : olapTable.getBaseSchema()) {
+                                if (col.isAutoIncrement() && col.getName().equals(colName)) {
+                                    specifyAutoIncrementColumn = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (insertStmt.getTargetColumnNames() == null || specifyAutoIncrementColumn) {
+                        nullExprInAutoIncrement = true;
+                    }
+
+                }
+                dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
                         canUsePipeline, olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
-                        false, enableAutomaticPartition);
+                        nullExprInAutoIncrement, enableAutomaticPartition);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
             } else if (targetTable instanceof IcebergTable) {
@@ -289,8 +319,9 @@ public class InsertPlanner {
             if (insertStatement.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
                     if (isAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
-                        throw new SemanticException("AUTO_INCREMENT column: " + targetColumn.getName() +
-                                                    " must not be NULL");
+                        throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
+                                                     targetColumn.getName() + " You can use `default` for an" +
+                                                     " AUTO INCREMENT column");
                     }
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
                         if (isAutoIncrement) {
@@ -307,8 +338,9 @@ public class InsertPlanner {
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (isAutoIncrement && row.get(idx).getType() == Type.NULL) {
-                            throw new SemanticException("AUTO_INCREMENT column: " + targetColumn.getName() +
-                                                        " must not be NULL");
+                            throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
+                                                        targetColumn.getName() + " You can use `default` for an" +
+                                                        " AUTO INCREMENT column");
                         }
                         if (row.get(idx) instanceof DefaultValueExpr) {
                             if (isAutoIncrement) {
@@ -464,15 +496,8 @@ public class InsertPlanner {
 
             // Target column which starts with "mv" should not be treated as materialized view column when this column exists in base schema,
             // this could be created by user.
-            if (targetColumn.isNameWithPrefix(CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX) &&
+            if (targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX) &&
                     !baseSchema.contains(targetColumn)) {
-                String originName = targetColumn.getRefColumn().getColumnName();
-                Optional<Column> optOriginColumn = fullSchema.stream()
-                        .filter(c -> c.nameEquals(originName, false)).findFirst();
-                Preconditions.checkState(optOriginColumn.isPresent());
-                Column originColumn = optOriginColumn.get();
-                ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
-
                 ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
                         new Scope(RelationId.anonymous(),
                                 new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
@@ -483,7 +508,18 @@ public class InsertPlanner {
                 ExpressionMapping expressionMapping =
                         new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                                 Lists.newArrayList());
-                expressionMapping.put(targetColumn.getRefColumn(), originColRefOp);
+
+                List<SlotRef> slots = targetColumn.getRefColumns();
+                for (SlotRef slot : slots) {
+                    String originName = slot.getColumnName();
+                    Optional<Column> optOriginColumn = fullSchema.stream()
+                            .filter(c -> c.nameEquals(originName, false)).findFirst();
+                    Preconditions.checkState(optOriginColumn.isPresent());
+                    Column originColumn = optOriginColumn.get();
+                    ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
+                    expressionMapping.put(slot, originColRefOp);
+                }
+
                 ScalarOperator scalarOperator =
                         SqlToScalarOperatorTranslator.translate(targetColumn.getDefineExpr(), expressionMapping,
                                 columnRefFactory);

@@ -17,7 +17,6 @@ package com.starrocks.server;
 import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.credential.CloudConfigurationConstants;
@@ -35,10 +34,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
 
     @Override
-    public StorageVolume getStorageVolumeByName(String svKey) {
+    public StorageVolume getStorageVolumeByName(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             try {
-                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStoreByName(svKey);
+                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStoreByName(svName);
                 if (fileStoreInfo == null) {
                     return null;
                 }
@@ -75,7 +74,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected String createInternalNoLock(String name, String svType, List<String> locations,
                                           Map<String, String> params, Optional<Boolean> enabled, String comment)
-            throws AnalysisException, DdlException {
+            throws DdlException {
         FileStoreInfo fileStoreInfo = StorageVolume.createFileStoreInfo(name, svType,
                 locations, params, enabled.orElse(true), comment);
         return GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(fileStoreInfo);
@@ -91,7 +90,17 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         GlobalStateMgr.getCurrentState().getStarOSAgent().removeFileStoreByName(sv.getName());
     }
 
-    public void createOrUpdateBuiltinStorageVolume() throws DdlException, AnalysisException, AlreadyExistsException {
+    @Override
+    public StorageVolume getDefaultStorageVolume() {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            if (defaultStorageVolumeId.isEmpty()) {
+                return getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
+            }
+            return getStorageVolume(getDefaultStorageVolumeId());
+        }
+    }
+
+    public void createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
         if (Config.cloud_native_storage_type.isEmpty()) {
             return;
         }
@@ -119,10 +128,11 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 locations.add("s3://" + Config.aws_s3_path);
                 break;
             case "hdfs":
-                locations.add("hdfs://" + Config.cloud_native_hdfs_url);
+                locations.add(Config.cloud_native_hdfs_url);
                 break;
             case "azblob":
-                // TODO
+                locations.add("azblob://" + Config.azure_blob_path);
+                break;
             default:
                 return locations;
         }
@@ -139,11 +149,18 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 params.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, Config.aws_s3_endpoint);
                 params.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, Config.aws_s3_external_id);
                 params.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, Config.aws_s3_iam_role_arn);
+                params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
+                        String.valueOf(Config.aws_s3_use_aws_sdk_default_behavior));
+                params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
+                        String.valueOf(Config.aws_s3_use_instance_profile));
                 break;
             case "hdfs":
                 // TODO
             case "azblob":
-                // TODO
+                params.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, Config.azure_blob_shared_key);
+                params.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, Config.azure_blob_sas_token);
+                params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, Config.azure_blob_endpoint);
+                break;
             default:
                 return params;
         }

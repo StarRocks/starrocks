@@ -16,6 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner.h"
 
 namespace starrocks::connector {
@@ -55,6 +56,9 @@ public:
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
     const std::string get_custom_coredump_msg() const override;
+    std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
+        return _provider->_scan_node->get_lazy_column_coalesce_counter();
+    }
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -77,6 +81,7 @@ private:
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
     HdfsScanner* _create_hudi_jni_scanner();
+    HdfsScanner* _create_paimon_jni_scanner();
     Status _check_all_slots_nullable();
 
     // =====================================

@@ -102,7 +102,6 @@ public class LoadingTaskPlannerTest {
 
     // config
     private int loadParallelInstanceNum;
-    private int maxBrokerConcurrency;
 
     // backends
     private ImmutableMap<Long, Backend> idToBackend;
@@ -122,7 +121,6 @@ public class LoadingTaskPlannerTest {
         brokerDesc = new BrokerDesc("broker0", null);
 
         loadParallelInstanceNum = Config.load_parallel_instance_num;
-        maxBrokerConcurrency = Config.max_broker_concurrency;
         Config.eliminate_shuffle_load_by_replicated_storage = false;
 
         // backends
@@ -140,7 +138,6 @@ public class LoadingTaskPlannerTest {
     @After
     public void tearDown() {
         Config.load_parallel_instance_num = loadParallelInstanceNum;
-        Config.max_broker_concurrency = maxBrokerConcurrency;
         Config.eliminate_shuffle_load_by_replicated_storage = true;
     }
 
@@ -217,16 +214,15 @@ public class LoadingTaskPlannerTest {
         locationsList = scanNode.getScanRangeLocations(0);
         Assert.assertEquals(4, locationsList.size());
 
-        // load_parallel_instance_num: 2, max_broker_concurrency: 3
+        // load_parallel_instance_num: 2
         Config.load_parallel_instance_num = 2;
-        Config.max_broker_concurrency = 3;
         planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
                 false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap(), "", 
                 TPartialUpdateMode.UNKNOWN_MODE);
         planner.plan(loadId, fileStatusesList, 2);
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(3, locationsList.size());
+        Assert.assertEquals(4, locationsList.size());
     }
 
     @Test

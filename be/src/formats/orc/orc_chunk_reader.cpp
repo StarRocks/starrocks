@@ -31,6 +31,7 @@
 #include "exprs/literal.h"
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_mapping.h"
+#include "formats/orc/orc_memory_pool.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
@@ -70,8 +71,23 @@ OrcChunkReader::OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_
     }
 }
 
+OrcChunkReader::OrcChunkReader()
+        : _read_chunk_size(4096),
+          _tzinfo(cctz::utc_time_zone()),
+          _tzoffset_in_seconds(0),
+          _drop_nanoseconds_in_datetime(false),
+          _broker_load_mode(true),
+          _strict_mode(true),
+          _broker_load_filter(nullptr),
+          _num_rows_filtered(0),
+          _error_message_counter(0),
+          _lazy_load_ctx(nullptr) {
+    _row_reader_options.useWriterTimezone();
+}
+
 Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
     try {
+        _reader_options.setMemoryPool(*getOrcMemoryPool());
         auto reader = orc::createReader(std::move(input_stream), _reader_options);
         return init(std::move(reader));
     } catch (std::exception& e) {
@@ -373,7 +389,7 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
     return Status::OK();
 }
 
-static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
+void OrcChunkReader::_try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
     auto is_integer_type = [](LogicalType t) { return g_starrocks_int_type.count(t) > 0; };
     auto is_decimal_type = [](LogicalType t) { return g_starrocks_decimal_type.count(t) > 0; };
 
@@ -406,6 +422,11 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
         } else {
             from->type = LogicalType::TYPE_DECIMAL32;
         }
+    } else if (_broker_load_mode && !_strict_mode && is_string_type(t1) && is_string_type(t2)) {
+        // For broker load, the orc field length is larger than the maximum length of the starrocks field
+        // will cause load failure in non-strict mode. Here we keep the maximum length of the orc field
+        // the same as the maximum length of the starrocks field.
+        from->len = to.len;
     } else {
         // nothing to do.
     }
@@ -560,7 +581,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        _fill_functions[src_index](cvb, col, 0, _batch->numElements, slot_desc->type(),
+        _fill_functions[src_index](cvb, col, 0, _batch->numElements, _src_types[src_index],
                                    _root_selected_mapping->get_column_id_or_child_mapping(src_index).orc_mapping, this);
     }
 
@@ -879,6 +900,18 @@ static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::Predicate
 Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     TExprNodeType::type node_type = conjunct->node_type();
     TExprOpcode::type op_type = conjunct->op();
+
+    // If conjunct is slot ref, like SELECT * FROM tbl where col;
+    // We build SearchArgument about col=true directly.
+    if (node_type == TExprNodeType::type::SLOT_REF) {
+        auto* ref = down_cast<const ColumnRef*>(conjunct);
+        DCHECK(conjunct->type().type == LogicalType::TYPE_BOOLEAN);
+        SlotId slot_id = ref->slot_id();
+        std::string name = _slot_id_to_desc[slot_id]->col_name();
+        builder->equals(name, orc::PredicateDataType::BOOLEAN, true);
+        return Status::OK();
+    }
+
     if (node_type == TExprNodeType::type::COMPOUND_PRED) {
         if (op_type == TExprOpcode::COMPOUND_AND) {
             builder->startAnd();
@@ -1234,6 +1267,89 @@ bool OrcChunkReader::is_implicit_castable(TypeDescriptor& starrocks_type, const 
         return true;
     }
     return false;
+}
+
+Status OrcChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
+    auto const& root = _reader->getType();
+
+    auto cnt = root.getSubtypeCount();
+    for (uint64_t i = 0; i < cnt; i++) {
+        TypeDescriptor tp;
+        auto name = root.getFieldName(i);
+
+        auto subtype = root.getSubtype(i);
+        switch (subtype->getKind()) {
+        case orc::TypeKind::BOOLEAN:
+            tp = TypeDescriptor(TYPE_BOOLEAN);
+            break;
+
+        case orc::TypeKind::BYTE:
+            tp = TypeDescriptor(TYPE_TINYINT);
+            break;
+
+        case orc::TypeKind::SHORT:
+            tp = TypeDescriptor(TYPE_SMALLINT);
+            break;
+
+        case orc::TypeKind::INT:
+            tp = TypeDescriptor(TYPE_INT);
+            break;
+
+        case orc::TypeKind::LONG:
+            tp = TypeDescriptor(TYPE_BIGINT);
+            break;
+
+        case orc::TypeKind::FLOAT:
+            tp = TypeDescriptor(TYPE_FLOAT);
+            break;
+
+        case orc::TypeKind::DOUBLE:
+            tp = TypeDescriptor(TYPE_DOUBLE);
+            break;
+
+        case orc::TypeKind::STRING:
+            tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            break;
+
+        case orc::TypeKind::BINARY:
+            tp = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            break;
+
+        case orc::TypeKind::TIMESTAMP:
+            tp = TypeDescriptor(TYPE_DATETIME);
+            break;
+
+        case orc::TypeKind::LIST:
+        case orc::TypeKind::MAP:
+        case orc::TypeKind::STRUCT:
+        case orc::TypeKind::UNION:
+            //TODO: nested types
+            return Status::NotSupported(
+                    fmt::format("Unkown supported orc type: {}, column name: {}", subtype->getKind(), name));
+
+        case orc::TypeKind::DECIMAL:
+            tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, subtype->getPrecision(), subtype->getScale());
+            break;
+
+        case orc::TypeKind::DATE:
+            tp = TypeDescriptor(TYPE_DATE);
+            break;
+
+        case orc::TypeKind::VARCHAR:
+            tp = TypeDescriptor::create_varchar_type(subtype->getMaximumLength());
+            break;
+
+        case orc::TypeKind::CHAR:
+            tp = TypeDescriptor::create_char_type(subtype->getMaximumLength());
+            break;
+
+        default:
+            return Status::NotSupported(
+                    fmt::format("Unkown supported orc type: {}, column name: {}", subtype->getKind(), name));
+        }
+        schema->emplace_back(i, name, tp);
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

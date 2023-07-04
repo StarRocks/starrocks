@@ -474,6 +474,13 @@ DEFINE_UNARY_FN_WITH_IMPL(day_of_weekImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(day_of_week, TYPE_DATETIME, TYPE_INT);
 
+// day_of_week_iso
+DEFINE_UNARY_FN_WITH_IMPL(day_of_week_isoImpl, v) {
+    int day = ((DateValue)v).weekday();
+    return (day + 6) % 7 + 1;
+}
+DEFINE_TIME_UNARY_FN(day_of_week_iso, TYPE_DATETIME, TYPE_INT);
+
 DEFINE_UNARY_FN_WITH_IMPL(time_to_secImpl, v) {
     return static_cast<int64_t>(v);
 }
@@ -661,6 +668,10 @@ TimestampValue timestamp_add(TimestampValue tsv, int count) {
 // years_sub
 DEFINE_TIME_ADD_AND_SUB_FN(years, TimeUnit::YEAR);
 
+// quarters_add
+// quarters_sub
+DEFINE_TIME_ADD_AND_SUB_FN(quarters, TimeUnit::QUARTER);
+
 // months_add
 // months_sub
 DEFINE_TIME_ADD_AND_SUB_FN(months, TimeUnit::MONTH);
@@ -684,6 +695,10 @@ DEFINE_TIME_ADD_AND_SUB_FN(minutes, TimeUnit::MINUTE);
 // seconds_add
 // seconds_sub
 DEFINE_TIME_ADD_AND_SUB_FN(seconds, TimeUnit::SECOND);
+
+// millis_add
+// millis_sub
+DEFINE_TIME_ADD_AND_SUB_FN(millis, TimeUnit::MILLISECOND);
 
 // micros_add
 // micros_sub
@@ -1694,7 +1709,7 @@ std::string format_for_yyyyMMdd(const DateValue& date_value) {
     to[5] = m % 10 + '0';
     to[6] = d / 10 + '0';
     to[7] = d % 10 + '0';
-    return std::string(to, 8);
+    return {to, 8};
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyMMddImpl, v) {
@@ -1733,7 +1748,7 @@ std::string format_for_yyyy_MMImpl(const DateValue& date_value) {
     to[4] = '-';
     to[5] = m / 10 + '0';
     to[6] = m % 10 + '0';
-    return std::string(to, 7);
+    return {to, 7};
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyy_MMImpl, v) {
@@ -1754,7 +1769,7 @@ std::string format_for_yyyyMMImpl(const DateValue& date_value) {
 
     to[4] = m / 10 + '0';
     to[5] = m % 10 + '0';
-    return std::string(to, 6);
+    return {to, 6};
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyMMImpl, v) {
@@ -1772,7 +1787,7 @@ std::string format_for_yyyyImpl(const DateValue& date_value) {
     t = y % 100;
     to[2] = t / 10 + '0';
     to[3] = t % 10 + '0';
-    return std::string(to, 4);
+    return {to, 4};
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyImpl, v) {

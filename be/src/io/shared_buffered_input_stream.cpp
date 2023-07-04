@@ -14,13 +14,14 @@
 
 #include "io/shared_buffered_input_stream.h"
 
+#include "common/config.h"
 #include "gutil/strings/fastmem.h"
 #include "util/runtime_profile.h"
 namespace starrocks::io {
 
-SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream,
-                                                     const std::string& filename, size_t file_size)
-        : _stream(std::move(stream)), _filename(filename), _file_size(file_size) {}
+SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, std::string filename,
+                                                     size_t file_size)
+        : _stream(std::move(stream)), _filename(std::move(filename)), _file_size(file_size) {}
 
 void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t file_size) {
     if (align_size != 0) {
@@ -33,15 +34,10 @@ void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t 
     }
 }
 
-Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
-    if (ranges.size() == 0) {
-        return Status::OK();
-    }
-
+Status SharedBufferedInputStream::_sort_and_check_overlap(std::vector<IORange>& ranges) {
     // specify compare function is important. suppose we have zero range like [351,351],[351,356].
     // If we don't specify compare function, we may have [351,356],[351,351] which is bad order.
-    std::vector<IORange> check(ranges);
-    std::sort(check.begin(), check.end(), [](const IORange& a, const IORange& b) {
+    std::sort(ranges.begin(), ranges.end(), [](const IORange& a, const IORange& b) {
         if (a.offset != b.offset) {
             return a.offset < b.offset;
         }
@@ -49,23 +45,16 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     });
 
     // check io range is not overlapped.
-    for (size_t i = 1; i < check.size(); i++) {
-        if (check[i].offset < (check[i - 1].offset + check[i - 1].size)) {
+    for (size_t i = 1; i < ranges.size(); i++) {
+        if (ranges[i].offset < (ranges[i - 1].offset + ranges[i - 1].size)) {
             return Status::RuntimeError("io ranges are overalpped");
         }
     }
 
-    std::vector<IORange> small_ranges;
-    for (const IORange& r : check) {
-        if (r.size > _options.max_buffer_size) {
-            SharedBuffer sb = SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1};
-            sb.align(_align_size, _file_size);
-            _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
-        } else {
-            small_ranges.emplace_back(r);
-        }
-    }
+    return Status::OK();
+}
 
+void SharedBufferedInputStream::_merge_small_ranges(const std::vector<IORange>& small_ranges) {
     if (small_ranges.size() > 0) {
         auto update_map = [&](size_t from, size_t to) {
             // merge from [unmerge, i-1]
@@ -94,8 +83,103 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
         }
         update_map(unmerge, small_ranges.size() - 1);
     }
+}
+
+Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
+    if (ranges.size() == 0) {
+        return Status::OK();
+    }
+
+    std::vector<IORange> check(ranges);
+    RETURN_IF_ERROR(_sort_and_check_overlap(check));
+
+    std::vector<IORange> small_ranges;
+    for (const IORange& r : check) {
+        if (r.size > _options.max_buffer_size) {
+            SharedBuffer sb = SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1};
+            sb.align(_align_size, _file_size);
+            _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
+        } else {
+            small_ranges.emplace_back(r);
+        }
+    }
+
+    _merge_small_ranges(small_ranges);
     _update_estimated_mem_usage();
     return Status::OK();
+}
+
+Status SharedBufferedInputStream::_set_io_ranges_separately(const std::vector<IORange>& ranges) {
+    if (ranges.size() == 0) {
+        return Status::OK();
+    }
+
+    // specify compare function is important. suppose we have zero range like [351,351],[351,356].
+    // If we don't specify compare function, we may have [351,356],[351,351] which is bad order.
+    std::vector<IORange> check(ranges);
+    RETURN_IF_ERROR(_sort_and_check_overlap(check));
+
+    std::vector<IORange> small_active_ranges;
+    std::vector<bool> small_lazy_flag(ranges.size());
+    small_lazy_flag.assign(ranges.size(), false);
+    for (auto index = 0; index < check.size(); ++index) {
+        const IORange& r = check[index];
+        if (r.size > _options.max_buffer_size) {
+            SharedBuffer sb = SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1};
+            sb.align(_align_size, _file_size);
+            _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
+        } else {
+            if (r.active) {
+                small_active_ranges.emplace_back(r);
+            } else {
+                small_lazy_flag[index] = true;
+            }
+        }
+    }
+
+    if (small_active_ranges.size() > 0) {
+        _merge_small_ranges(small_active_ranges);
+    }
+
+    std::vector<IORange> small_lazy_batch_ranges;
+    for (auto index = 0; index < small_lazy_flag.size(); ++index) {
+        if (!small_lazy_flag[index]) {
+            // active column or big column
+            continue;
+        } else {
+            // 1. there may be lazy_column locate in the middle of two active_columns,
+            // such as active_column, lazy_column, active_column,
+            // that two active_columns have merged and the lazy_column had be contained.
+            const IORange& r = check[index];
+            auto iter = _map.upper_bound(r.offset);
+            if (iter != _map.end()) {
+                SharedBuffer& sb = iter->second;
+                if (sb.offset <= r.offset && sb.offset + sb.size >= r.offset + r.size) {
+                    sb.ref_count++;
+                    continue;
+                }
+            }
+            small_lazy_batch_ranges.emplace_back(r);
+            // 2. there also may be active_column locate in the middle of two lazy_columns,
+            // in this case active_column may be contained in two shared_buffer，
+            // we should prevent that
+            if (index + 1 >= small_lazy_flag.size() || !small_lazy_flag[index + 1]) {
+                _merge_small_ranges(small_lazy_batch_ranges);
+                small_lazy_batch_ranges.clear();
+            }
+        }
+    }
+
+    _update_estimated_mem_usage();
+    return Status::OK();
+}
+
+Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_together) {
+    if (coalesce_together || !config::io_coalesce_adaptive_lazy_active) {
+        return set_io_ranges(ranges);
+    } else {
+        return _set_io_ranges_separately(ranges);
+    }
 }
 
 StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::_find_shared_buffer(size_t offset,

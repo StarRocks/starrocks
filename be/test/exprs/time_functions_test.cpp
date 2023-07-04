@@ -137,6 +137,49 @@ TEST_F(TimeFunctionsTest, yearAddTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, quarterAddTest) {
+    Columns columns;
+
+    auto tc = TimestampColumn::create();
+    auto quarter = Int32Column::create();
+
+    tc->append(TimestampValue::create(2000, 1, 1, 0, 30, 30));
+    quarter->append(2);
+
+    columns.emplace_back(tc);
+    columns.emplace_back(quarter);
+
+    ColumnPtr result = TimeFunctions::quarters_add(_utils->get_fn_ctx(), columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    auto v = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+    ASSERT_EQ(TimestampValue::create(2000, 7, 1, 0, 30, 30), v->get_data()[0]);
+    ASSERT_FALSE(result->is_null(0));
+}
+
+TEST_F(TimeFunctionsTest, millisAddTest) {
+    Columns columns;
+
+    auto tc = TimestampColumn::create();
+    auto millis = Int32Column::create();
+
+    tc->append(TimestampValue::create(2000, 1, 1, 0, 30, 30));
+    millis->append(200);
+
+    columns.emplace_back(tc);
+    columns.emplace_back(millis);
+
+    ColumnPtr result = TimeFunctions::millis_add(_utils->get_fn_ctx(), columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    auto v = ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+
+    TimestampValue check_ts;
+    check_ts.from_timestamp(2000, 1, 1, 0, 30, 30, 200 * 1000);
+
+    ASSERT_EQ(check_ts, v->get_data()[0]);
+    ASSERT_FALSE(result->is_null(0));
+}
+
 TEST_F(TimeFunctionsTest, yearOverflowTest) {
     Columns columns;
 
@@ -303,6 +346,25 @@ TEST_F(TimeFunctionsTest, weekWithDefaultModeTest) {
     auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
     for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
         ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
+    }
+}
+
+TEST_F(TimeFunctionsTest, dayofweekisoTest) {
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2023, 1, 1, 0, 5, 0));
+    tc->append(TimestampValue::create(2023, 1, 2, 0, 9, 0));
+    tc->append(TimestampValue::create(2023, 1, 3, 0, 2, 0));
+
+    int days[] = {7, 1, 2};
+
+    Columns columns;
+    columns.emplace_back(tc);
+
+    ColumnPtr result = TimeFunctions::day_of_week_iso(_utils->get_fn_ctx(), columns).value();
+
+    auto ret = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(days) / sizeof(days[0]); ++i) {
+        ASSERT_EQ(days[i], ret->get_data()[i]);
     }
 }
 

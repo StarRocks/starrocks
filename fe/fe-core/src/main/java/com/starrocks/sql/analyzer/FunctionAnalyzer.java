@@ -239,7 +239,7 @@ public class FunctionAnalyzer {
 
             Type sortKeyType = functionCallExpr.getChild(1).getType();
             if (!sortKeyType.canApplyToNumeric()) {
-                throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                throw new SemanticException(Type.NOT_SUPPORT_ORDER_ERROR_MSG);
             }
 
             return;
@@ -262,7 +262,7 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equals(FunctionSet.NDV)
                 || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
-            throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+            throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
         }
 
         if ((fnName.getFunction().equals(FunctionSet.BITMAP_UNION_INT) && !arg.getType().isIntegerType())) {

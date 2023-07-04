@@ -18,8 +18,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
 
-namespace starrocks {
-namespace lake {
+namespace starrocks::lake {
 
 Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
@@ -33,6 +32,11 @@ Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadat
         LOG(WARNING) << "load LakePrimaryIndex error: " << _status << " tablet:" << _tablet_id;
     }
     return _status;
+}
+
+bool LakePrimaryIndex::is_load(int64_t base_version) {
+    std::lock_guard<std::mutex> lg(_lock);
+    return _loaded && _data_version >= base_version;
 }
 
 Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
@@ -113,6 +117,4 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     return Status::OK();
 }
 
-} // namespace lake
-
-} // namespace starrocks
+} // namespace starrocks::lake

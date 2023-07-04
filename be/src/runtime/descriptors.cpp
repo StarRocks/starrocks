@@ -59,12 +59,12 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
     return os;
 }
 
-SlotDescriptor::SlotDescriptor(SlotId id, const std::string& name, const TypeDescriptor& type)
+SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
         : _id(id),
-          _type(type),
+          _type(std::move(type)),
           _parent(0),
           _null_indicator_offset(0, 0),
-          _col_name(name),
+          _col_name(std::move(name)),
           _slot_idx(0),
           _slot_size(_type.get_slot_size()),
           _is_materialized(false) {}
@@ -171,7 +171,7 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
 }
 
 std::vector<int32_t> IcebergTableDescriptor::partition_index_in_schema() {
-    std::vector<std::int32_t> indexes;
+    std::vector<int32_t> indexes;
     for (int i = 0; i < _columns.size(); i++) {
         std::string& name = _columns[i].column_name;
         if (std::find(_partition_column_names.begin(), _partition_column_names.end(), name) !=
@@ -212,16 +212,11 @@ HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
         auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.hudiTable, entry.second));
         _partition_id_to_desc_map[entry.first] = partition;
     }
-    _is_mor_table = tdesc.hudiTable.is_mor_table;
     _hudi_instant_time = tdesc.hudiTable.instant_time;
     _hive_column_names = tdesc.hudiTable.hive_column_names;
     _hive_column_types = tdesc.hudiTable.hive_column_types;
     _input_format = tdesc.hudiTable.input_format;
     _serde_lib = tdesc.hudiTable.serde_lib;
-}
-
-const bool& HudiTableDescriptor::is_mor_table() const {
-    return _is_mor_table;
 }
 
 const std::string& HudiTableDescriptor::get_base_path() const {
@@ -246,6 +241,35 @@ const std::string& HudiTableDescriptor::get_input_format() const {
 
 const std::string& HudiTableDescriptor::get_serde_lib() const {
     return _serde_lib;
+}
+
+PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _catalog_type = tdesc.paimonTable.catalog_type;
+    _metastore_uri = tdesc.paimonTable.metastore_uri;
+    _warehouse_path = tdesc.paimonTable.warehouse_path;
+    _database_name = tdesc.dbName;
+    _table_name = tdesc.tableName;
+}
+
+const std::string& PaimonTableDescriptor::get_catalog_type() const {
+    return _catalog_type;
+}
+
+const std::string& PaimonTableDescriptor::get_metastore_uri() const {
+    return _metastore_uri;
+}
+
+const std::string& PaimonTableDescriptor::get_warehouse_path() const {
+    return _warehouse_path;
+}
+
+const std::string& PaimonTableDescriptor::get_database_name() const {
+    return _database_name;
+}
+
+const std::string& PaimonTableDescriptor::get_table_name() const {
+    return _table_name;
 }
 
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
@@ -558,6 +582,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             auto* hudi_desc = pool->add(new HudiTableDescriptor(tdesc, pool));
             RETURN_IF_ERROR(hudi_desc->create_key_exprs(state, pool, chunk_size));
             desc = hudi_desc;
+            break;
+        }
+        case TTableType::PAIMON_TABLE: {
+            desc = pool->add(new PaimonTableDescriptor(tdesc, pool));
             break;
         }
         case TTableType::JDBC_TABLE: {

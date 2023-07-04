@@ -88,11 +88,11 @@ public:
     }
 
     void SetUp() override {
-        _tablet_mgr->delete_tablet(_tablet_id);
+        ASSERT_OK(_tablet_mgr->delete_tablet(_tablet_id));
         create_tablet();
     }
 
-    void TearDown() override { _tablet_mgr->delete_tablet(_tablet_id); }
+    void TearDown() override { (void)_tablet_mgr->delete_tablet(_tablet_id); }
 
 protected:
     constexpr static const char* const kRootLocation = "./lake_service_test";
@@ -262,8 +262,8 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         ASSERT_EQ(0, response.compaction_scores_size());
     }
     // Delete old version metadata then send publish version again
-    tablet.delete_metadata(1);
-    tablet.delete_metadata(2);
+    ASSERT_OK(tablet.delete_metadata(1));
+    ASSERT_OK(tablet.delete_metadata(2));
     {
         lake::PublishVersionRequest request;
         lake::PublishVersionResponse response;
@@ -370,9 +370,7 @@ TEST_F(LakeServiceTest, test_delete_tablet) {
     _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
     ASSERT_EQ(0, response.failed_tablets_size());
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
-    ASSERT_TRUE(tablet.get_schema().status().is_not_found()) << tablet.get_schema().status();
-    ASSERT_TRUE(tablet.get_metadata(1).status().is_not_found()) << tablet.get_metadata(1).status();
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
 }
 
 // NOLINTNEXTLINE
@@ -385,6 +383,7 @@ TEST_F(LakeServiceTest, test_delete_tablet_dir_not_exit) {
     _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
     ASSERT_EQ(0, response.failed_tablets_size());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     // restore test directory
     ASSERT_OK(fs::create_directories(kRootLocation));
 }

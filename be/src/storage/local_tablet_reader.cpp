@@ -27,7 +27,7 @@
 
 namespace starrocks {
 
-LocalTabletReader::LocalTabletReader() {}
+LocalTabletReader::LocalTabletReader() = default;
 
 Status LocalTabletReader::init(TabletSharedPtr& tablet, int64_t version) {
     if (tablet->updates() == nullptr) {
@@ -123,8 +123,7 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     // search pks in pk index to get rowids
     EditVersion edit_version;
     std::vector<uint64_t> rowids(n);
-    RETURN_IF_ERROR(
-            _tablet->updates()->prepare_partial_update_states(_tablet.get(), pk_column, &edit_version, &rowids));
+    RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *pk_column, &edit_version, &rowids));
     if (edit_version.major() != _version) {
         return Status::InternalError(
                 strings::Substitute("multi_get version not match tablet:$0 current_version:$1 read_version:$2",
@@ -145,8 +144,8 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
         read_columns[i] = ChunkHelper::column_from_field(*read_column_schema.field(i).get())->clone_empty();
     }
-    RETURN_IF_ERROR(
-            _tablet->updates()->get_column_values(value_column_ids, false, rowids_by_rssid, &read_columns, nullptr));
+    RETURN_IF_ERROR(_tablet->updates()->get_column_values(value_column_ids, _version, false, rowids_by_rssid,
+                                                          &read_columns, nullptr));
 
     // reorder read values to input keys' order and put into values output parameter
     values.reset();

@@ -352,8 +352,8 @@ Status ColumnReader::_load_ordinal_index(bool skip_fill_local_cache) {
     IndexReadOptions opts;
     opts.fs = file_system();
     opts.file_name = file_name();
-    opts.use_page_cache = !config::disable_storage_page_cache;
-    opts.kept_in_memory = keep_in_memory();
+    opts.use_page_cache = config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache;
+    opts.kept_in_memory = config::enable_ordinal_index_memory_page_cache;
     opts.skip_fill_local_cache = skip_fill_local_cache;
     auto meta = _ordinal_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(opts, *meta, num_rows()));
@@ -371,8 +371,8 @@ Status ColumnReader::_load_zonemap_index(bool skip_fill_local_cache) {
     IndexReadOptions opts;
     opts.fs = file_system();
     opts.file_name = file_name();
-    opts.use_page_cache = !config::disable_storage_page_cache;
-    opts.kept_in_memory = keep_in_memory();
+    opts.use_page_cache = config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache;
+    opts.kept_in_memory = config::enable_zonemap_index_memory_page_cache;
     opts.skip_fill_local_cache = skip_fill_local_cache;
     auto meta = _zonemap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(opts, *meta));
@@ -452,7 +452,7 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
     for (int32_t i = 0; i < page_size; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
-        _parse_zone_map(zm, &detail);
+        RETURN_IF_ERROR(_parse_zone_map(zm, &detail));
         bool matched = true;
         for (const auto* predicate : predicates) {
             if (!predicate->zone_map_filter(detail)) {
@@ -477,7 +477,8 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
         return true;
     }
     ZoneMapDetail detail;
-    _parse_zone_map(*_segment_zone_map, &detail);
+    auto st = _parse_zone_map(*_segment_zone_map, &detail);
+    CHECK(st.ok()) << st;
     auto filter = [&](const ColumnPredicate* pred) { return pred->zone_map_filter(detail); };
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }

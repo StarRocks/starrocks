@@ -241,7 +241,7 @@ private:
 
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
-    bool _skip_fill_local_cache() const { return _opts.reader_type != READER_QUERY; }
+    bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
 
     // search delta column group by column uniqueid, if this column exist in delta column group,
     // then return column iterator and delta column's fillname.
@@ -464,7 +464,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
     iter_opts.use_page_cache = _opts.use_page_cache;
-    RandomAccessFileOptions opts{.skip_fill_local_cache = _skip_fill_local_cache()};
+    RandomAccessFileOptions opts{.skip_fill_local_cache = _skip_fill_data_cache()};
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
 
@@ -591,17 +591,17 @@ Status SegmentIterator::_get_row_ranges_by_key_ranges() {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_segment->load_index(_skip_fill_local_cache()));
+    RETURN_IF_ERROR(_segment->load_index(_skip_fill_data_cache()));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
 
         if (!range.upper().empty()) {
-            _init_column_iterators<false>(range.upper().schema());
+            RETURN_IF_ERROR(_init_column_iterators<false>(range.upper().schema()));
             RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
         }
         if (!range.lower().empty() && upper_rowid > 0) {
-            _init_column_iterators<false>(range.lower().schema());
+            RETURN_IF_ERROR(_init_column_iterators<false>(range.lower().schema()));
             RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
         }
         if (lower_rowid <= upper_rowid) {
@@ -622,17 +622,17 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_segment->load_index(_skip_fill_local_cache()));
+    RETURN_IF_ERROR(_segment->load_index(_skip_fill_data_cache()));
     for (const auto& short_key_range : _opts.short_key_ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
 
         const auto& upper = short_key_range->upper;
         if (upper->tuple_key != nullptr) {
-            _init_column_iterators<false>(upper->tuple_key->schema());
+            RETURN_IF_ERROR(_init_column_iterators<false>(upper->tuple_key->schema()));
             RETURN_IF_ERROR(_lookup_ordinal(*(upper->tuple_key), !upper->inclusive, num_rows(), &upper_rowid));
         } else if (!upper->short_key.empty()) {
-            _init_column_iterators<false>(*(upper->short_key_schema));
+            RETURN_IF_ERROR(_init_column_iterators<false>(*(upper->short_key_schema)));
             RETURN_IF_ERROR(_lookup_ordinal(upper->short_key, *(upper->short_key_schema), !upper->inclusive, num_rows(),
                                             &upper_rowid));
         }
@@ -640,10 +640,10 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         if (upper_rowid > 0) {
             const auto& lower = short_key_range->lower;
             if (lower->tuple_key != nullptr) {
-                _init_column_iterators<false>(lower->tuple_key->schema());
+                RETURN_IF_ERROR(_init_column_iterators<false>(lower->tuple_key->schema()));
                 RETURN_IF_ERROR(_lookup_ordinal(*(lower->tuple_key), lower->inclusive, upper_rowid, &lower_rowid));
             } else if (!lower->short_key.empty()) {
-                _init_column_iterators<false>(*(lower->short_key_schema));
+                RETURN_IF_ERROR(_init_column_iterators<false>(*(lower->short_key_schema)));
                 RETURN_IF_ERROR(_lookup_ordinal(lower->short_key, *(lower->short_key_schema), lower->inclusive,
                                                 upper_rowid, &lower_rowid));
             }
@@ -1524,9 +1524,10 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
             IndexReadOptions options;
             options.fs = segment_ptr->file_system();
             options.file_name = segment_ptr->file_name();
-            options.use_page_cache = config::enable_bitmap_memory_page_cache || !config::disable_storage_page_cache;
-            options.kept_in_memory = config::enable_bitmap_memory_page_cache;
-            options.skip_fill_local_cache = _skip_fill_local_cache();
+            options.use_page_cache =
+                    config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
+            options.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
+            options.skip_fill_local_cache = _skip_fill_data_cache();
             options.stats = _opts.stats;
 
             RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(col_index, options, &_bitmap_index_iterators[cid]));

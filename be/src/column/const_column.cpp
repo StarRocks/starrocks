@@ -88,6 +88,11 @@ int ConstColumn::compare_at(size_t left, size_t right, const Column& rhs, int na
     return _data->compare_at(0, 0, *rhs_data, nan_direction_hint);
 }
 
+int ConstColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
+    const auto& rhs_data = static_cast<const ConstColumn&>(rhs)._data;
+    return _data->equals(0, *rhs_data, right, safe_eq);
+}
+
 void ConstColumn::check_or_die() const {
     if (_size > 0) {
         CHECK_GE(_data->size(), 1);

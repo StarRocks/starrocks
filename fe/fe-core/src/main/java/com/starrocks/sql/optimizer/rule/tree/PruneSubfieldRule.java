@@ -25,7 +25,9 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -47,6 +49,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PruneSubfieldRule implements TreeRewriteRule {
+    private static final List<String> SUPPORT_FUNCTIONS = ImmutableList.<String>builder()
+            .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE)
+            .build();
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
@@ -58,10 +63,6 @@ public class PruneSubfieldRule implements TreeRewriteRule {
      * collect all complex expressions, such as: MAP_KEYS, MAP_VALUES, map['key'], struct.a.b.c ...
      */
     private static class ComplexExpressionCollector extends ScalarOperatorVisitor<Void, Void> {
-        private static final List<String> SUPPORT_FUNCTIONS = ImmutableList.<String>builder()
-                .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE, FunctionSet.MAP_VALUES)
-                .build();
-
         private final List<ScalarOperator> complexExpressions = Lists.newArrayList();
 
         @Override
@@ -194,6 +195,32 @@ public class PruneSubfieldRule implements TreeRewriteRule {
         }
 
         @Override
+        public OptExpression visitLogicalJoin(OptExpression optExpression, Void context) {
+            visitPredicate(optExpression);
+            LogicalJoinOperator join = optExpression.getOp().cast();
+            if (join.getOnPredicate() != null) {
+                ComplexExpressionCollector collector = new ComplexExpressionCollector();
+                join.getOnPredicate().accept(collector, null);
+                for (ScalarOperator expr : collector.complexExpressions) {
+                    allComplexColumns.put(expr, expr.getUsedColumns());
+                }
+            }
+            return visitChildren(optExpression, context);
+        }
+
+        @Override
+        public OptExpression visitLogicalAggregate(OptExpression optExpression, Void context) {
+            visitPredicate(optExpression);
+            LogicalAggregationOperator agg = optExpression.getOp().cast();
+            ComplexExpressionCollector collector = new ComplexExpressionCollector();
+            agg.getGroupingKeys().forEach(s -> s.accept(collector, null));
+            for (ScalarOperator expr : collector.complexExpressions) {
+                allComplexColumns.put(expr, expr.getUsedColumns());
+            }
+            return visitChildren(optExpression, context);
+        }
+
+        @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
             visitPredicate(optExpression);
 
@@ -278,9 +305,6 @@ public class PruneSubfieldRule implements TreeRewriteRule {
      * normalize expression to ColumnAccessPath
      */
     private static class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Void> {
-        private static final List<String> NORMALIZE_FUNCTIONS =
-                ImmutableList.of(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE, FunctionSet.MAP_VALUES);
-
         private final Deque<AccessPath> allAccessPaths = Lists.newLinkedList();
 
         private AccessPath currentPath = null;
@@ -350,7 +374,7 @@ public class PruneSubfieldRule implements TreeRewriteRule {
 
         @Override
         public Void visitCall(CallOperator call, Void context) {
-            if (!NORMALIZE_FUNCTIONS.contains(call.getFnName())) {
+            if (!SUPPORT_FUNCTIONS.contains(call.getFnName())) {
                 return visit(call, context);
             }
 

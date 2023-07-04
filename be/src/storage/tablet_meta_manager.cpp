@@ -456,7 +456,7 @@ std::string json_to_string(const rapidjson::Value& val_obj) {
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
     val_obj.Accept(writer);
-    return std::string(buf.GetString());
+    return {buf.GetString()};
 }
 
 Status TabletMetaManager::build_primary_meta(DataDir* store, rapidjson::Document& doc, rocksdb::ColumnFamilyHandle* cf,
@@ -1179,7 +1179,7 @@ Status TabletMetaManager::delete_delta_column_group(KVStore* meta, TTabletId tab
     return meta->write_batch(&batch);
 }
 
-Status TabletMetaManager::delete_delta_column_group(KVStore* meta, WriteBatch* batch, TabletSegmentId tsid,
+Status TabletMetaManager::delete_delta_column_group(KVStore* meta, WriteBatch* batch, const TabletSegmentId& tsid,
                                                     int64_t version) {
     std::string key = encode_delta_column_group_key(tsid.tablet_id, tsid.segment_id, version);
     auto h = meta->handle(META_COLUMN_FAMILY_INDEX);

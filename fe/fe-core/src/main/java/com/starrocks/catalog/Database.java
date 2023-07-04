@@ -55,10 +55,10 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
-import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -128,8 +128,6 @@ public class Database extends MetaObject implements Writable {
 
     // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
     private String location;
-
-    private String storageVolumeId = "";
 
     public Database() {
         this(0, null);
@@ -242,6 +240,10 @@ public class Database extends MetaObject implements Writable {
         this.rwLock.readLock().unlock();
     }
 
+    public boolean isReadLockHeldByCurrentThread() {
+        return this.rwLock.getReadHoldCount() > 0;
+    }
+
     public void writeLock() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         String threadDump = getOwnerInfo(rwLock.getOwner());
@@ -343,14 +345,6 @@ public class Database extends MetaObject implements Writable {
     public Database setLocation(String location) {
         this.location = location;
         return this;
-    }
-
-    public String getStorageVolumeId() {
-        return storageVolumeId;
-    }
-
-    public void setStorageVolumeId(String storageVolumeId) {
-        this.storageVolumeId = storageVolumeId;
     }
 
     public void setNameWithLock(String newName) {
@@ -466,40 +460,18 @@ public class Database extends MetaObject implements Writable {
         checkReplicaQuota();
     }
 
-    // return false if table already exists
-    public boolean createTableWithLock(Table table, boolean isReplay) {
-        writeLock();
-        try {
-            String tableName = table.getName();
-            if (nameToTable.containsKey(tableName)) {
-                return false;
-            } else {
-                idToTable.put(table.getId(), table);
-                nameToTable.put(table.getName(), table);
-
-                table.onCreate();
-                if (!isReplay) {
-                    // Write edit log
-                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
-                    GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
-                }
-            }
-            return true;
-        } finally {
-            writeUnlock();
+    public boolean registerTableUnlocked(Table table) {
+        if (table == null) {
+            return false;
         }
-    }
-
-    public boolean createTable(Table table) {
-        boolean result = true;
         String tableName = table.getName();
         if (nameToTable.containsKey(tableName)) {
-            result = false;
+            return false;
         } else {
             idToTable.put(table.getId(), table);
             nameToTable.put(table.getName(), table);
+            return true;
         }
-        return result;
     }
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
@@ -583,29 +555,9 @@ public class Database extends MetaObject implements Writable {
         if (table != null) {
             this.nameToTable.remove(tableName);
             this.idToTable.remove(table.getId());
-        }
-    }
-
-    public boolean createMaterializedWithLock(MaterializedView materializedView, boolean isReplay) {
-        writeLock();
-        try {
-            String mvName = materializedView.getName();
-            if (nameToTable.containsKey(mvName)) {
-                return false;
-            } else {
-                idToTable.put(materializedView.getId(), materializedView);
-                nameToTable.put(materializedView.getName(), materializedView);
-                // There are many checks in onCreate. If these checks fail, the log should not be written,
-                // so it should be placed in front of the log
-                materializedView.onCreate();
-                if (!isReplay) {
-                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, materializedView);
-                    GlobalStateMgr.getCurrentState().getEditLog().logCreateMaterializedView(info);
-                }
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isCloudNativeTable()) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
             }
-            return true;
-        } finally {
-            writeUnlock();
         }
     }
 

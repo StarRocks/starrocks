@@ -54,14 +54,17 @@ public class CreateTableInfo implements Writable {
     private String dbName;
     @SerializedName(value = "t")
     private Table table;
+    @SerializedName(value = "svId")
+    private String storageVolumeId;
 
     public CreateTableInfo() {
         // for persist
     }
 
-    public CreateTableInfo(String dbName, Table table) {
+    public CreateTableInfo(String dbName, Table table, String storageVolumeId) {
         this.dbName = dbName;
         this.table = table;
+        this.storageVolumeId = storageVolumeId;
     }
 
     public String getDbName() {
@@ -70,6 +73,10 @@ public class CreateTableInfo implements Writable {
 
     public Table getTable() {
         return table;
+    }
+
+    public String getStorageVolumeId() {
+        return storageVolumeId;
     }
 
     public void write(DataOutput out) throws IOException {

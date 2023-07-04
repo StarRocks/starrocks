@@ -63,13 +63,12 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
-    _unique_metrics->add_info_string("BufferUnplugThreshold", std::to_string(_buffer_unplug_threshold()));
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakChunkBufferSize", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_ALL),
             RuntimeProfile::ROOT_COUNTER);
+
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
-    _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
     _peak_scan_task_queue_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakScanTaskQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
@@ -145,7 +144,6 @@ bool ScanOperator::has_output() const {
         _unpluging = false;
     }
     if (chunk_number >= _buffer_unplug_threshold()) {
-        COUNTER_UPDATE(_buffer_unplug_counter, 1);
         _unpluging = true;
         return true;
     }
@@ -281,6 +279,9 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         if (_is_io_task_running[i]) {
             total_cnt -= 1;
             continue;
+        }
+        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
+            return Status::OK();
         }
         if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
             RETURN_IF_ERROR(_trigger_next_scan(state, i));
@@ -498,21 +499,20 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     auto query_ctx = _query_ctx.lock();
     // _query_ctx uses lazy initialization, maybe it is not initialized
-    // under certian circumstance
+    // under certain circumstance
     if (query_ctx == nullptr) {
         query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
         DCHECK(query_ctx != nullptr);
     }
-    if (!query_ctx->is_report_profile()) {
+    if (!query_ctx->enable_profile()) {
         return;
     }
     std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
     for (auto i = 0; i < _chunk_source_profiles.size(); i++) {
         profiles[i] = _chunk_source_profiles[i].get();
     }
-    RuntimeProfile::merge_isomorphic_profiles(profiles);
 
-    RuntimeProfile* merged_profile = profiles[0];
+    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), profiles);
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
@@ -558,14 +558,14 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
 
     ops.emplace_back(std::move(scan_operator));
 
-    if ((!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) && !ops.back()->has_topn_filter()) {
-        ExecNode::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
-    }
-
     size_t limit = scan_node->limit();
     if (limit != -1) {
         ops.emplace_back(
                 std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), scan_node->id(), limit));
+    }
+
+    if ((!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) && !ops.back()->has_topn_filter()) {
+        ExecNode::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
     }
 
     ops = context->maybe_interpolate_collect_stats(context->runtime_state(), ops);

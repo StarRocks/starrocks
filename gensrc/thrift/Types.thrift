@@ -386,6 +386,7 @@ enum TTableType {
     ICEBERG_TABLE,
     HUDI_TABLE,
     JDBC_TABLE,
+    PAIMON_TABLE,
     VIEW = 20,
     MATERIALIZED_VIEW,
     FILE_TABLE,
@@ -512,6 +513,12 @@ enum TPartialUpdateMode {
     ROW_MODE = 1;
     COLUMN_MODE = 2;
     AUTO_MODE = 3;
+}
+
+enum TRunMode {
+    SHARED_NOTHING = 0;
+    SHARED_DATA = 1;
+    HYBRID = 2;
 }
 
 struct TIcebergColumnStats {

@@ -59,6 +59,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
@@ -211,6 +212,29 @@ public class PartitionUtil {
         return partitionNames;
     }
 
+    // use partitionValues to filter partitionNames
+    // eg. partitionNames: [p1=1/p2=2, p1=1/p2=3, p1=2/p2=2, p1=2/p2=3]
+    //     partitionValues: [empty, 2]
+    // return [p1=1/p2=2, p1=2/p2=2]
+    public static List<String> getFilteredPartitionKeys(List<String> partitionNames, List<Optional<String>> partitionValues) {
+        List<String> filteredPartitionName = Lists.newArrayList();
+        for (String partitionName : partitionNames) {
+            List<String> values = toPartitionValues(partitionName);
+            int index = 0;
+            for (; index < values.size(); ++index) {
+                if (partitionValues.get(index).isPresent()) {
+                    if (!values.get(index).equals(partitionValues.get(index).get())) {
+                        break;
+                    }
+                }
+            }
+            if (index == values.size()) {
+                filteredPartitionName.add(partitionName);
+            }
+        }
+        return filteredPartitionName;
+    }
+
     public static List<Column> getPartitionColumns(Table table) {
         List<Column> partitionColumns = null;
         if (table.isHiveTable() || table.isHudiTable()) {
@@ -234,6 +258,17 @@ public class PartitionUtil {
             return PartitionUtil.getMVPartitionNameWithRange(table, partitionColumn, getPartitionNames(table));
         } else {
             throw new DmlException("Can not get partition range from table with type : %s", table.getType());
+        }
+    }
+
+    public static Map<String, List<List<String>>> getPartitionList(Table table, Column partitionColumn)
+            throws UserException {
+        if (table.isNativeTableOrMaterializedView()) {
+            return ((OlapTable) table).getListPartitionMap();
+        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
+            return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames(table));
+        } else {
+            throw new DmlException("Can not get partition list from table with type : %s", table.getType());
         }
     }
 
@@ -282,11 +317,16 @@ public class PartitionUtil {
     // Get partition name generated for mv from hive/hudi/iceberg partition name,
     // external table partition name like this :
     // col_date=2023-01-01,
-    // it need to generate a legal partition name for mv like 'p20230101' when mv
+    // it needs to generate a legal partition name for mv like 'p20230101' when mv
     // based on partitioned external table.
-    public static Set<String> getMVPartitionName(Table table, Column partitionColumn, List<String> partitionNames)
+    public static Set<String> getMVPartitionName(Table table, Column partitionColumn,
+                                                 List<String> partitionNames, boolean isListPartition)
             throws AnalysisException {
-        return Sets.newHashSet(getMVPartitionNameWithRange(table, partitionColumn, partitionNames).keySet());
+        if (isListPartition) {
+            return Sets.newHashSet(getMVPartitionNameWithList(table, partitionColumn, partitionNames).keySet());
+        } else {
+            return Sets.newHashSet(getMVPartitionNameWithRange(table, partitionColumn, partitionNames).keySet());
+        }
     }
 
     // Map partition values to partition ranges, eg
@@ -347,6 +387,43 @@ public class PartitionUtil {
             partitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, endKey));
         }
         return partitionRangeMap;
+    }
+
+    public static Map<String, List<List<String>>> getMVPartitionNameWithList(Table table,
+                                                                 Column partitionColumn,
+                                                                 List<String> partitionNames)
+            throws AnalysisException {
+        Map<String, List<List<String>>> partitionListMap = new LinkedHashMap<>();
+        List<Column> partitionColumns = getPartitionColumns(table);
+
+        // Get the index of partitionColumn when table has multi partition columns.
+        int partitionColumnIndex = checkAndGetPartitionColumnIndex(partitionColumns, partitionColumn);
+
+        List<PartitionKey> partitionKeys = new ArrayList<>();
+        for (String partitionName : partitionNames) {
+            PartitionKey partitionKey = createPartitionKey(
+                    ImmutableList.of(toPartitionValues(partitionName).get(partitionColumnIndex)),
+                    ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
+                    table.getType());
+            partitionKeys.add(partitionKey);
+        }
+
+        for (PartitionKey partitionKey : partitionKeys) {
+            String partitionName = generateMVPartitionName(partitionKey);
+            List<List<String>> partitionKeyList = generateMVPartitionList(partitionKey);
+            partitionListMap.put(partitionName, partitionKeyList);
+        }
+        return partitionListMap;
+    }
+
+    private static List<List<String>> generateMVPartitionList(PartitionKey partitionKey) {
+        List<List<String>> partitionKeyList = Lists.newArrayList();
+        List<String> partitionItem = Lists.newArrayList();
+        for (LiteralExpr key : partitionKey.getKeys()) {
+            partitionItem.add(key.getStringValue());
+        }
+        partitionKeyList.add(partitionItem);
+        return partitionKeyList;
     }
 
     public static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {

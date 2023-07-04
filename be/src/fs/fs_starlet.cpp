@@ -15,11 +15,7 @@
 #ifdef USE_STAROS
 #include "fs/fs_starlet.h"
 
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
-DIAGNOSTIC_POP
-
 #include <fmt/core.h>
 #include <fslib/configuration.h>
 #include <fslib/file.h>
@@ -98,7 +94,7 @@ StatusOr<std::pair<std::string, int64_t>> parse_starlet_uri(std::string_view uri
 class StarletInputStream : public starrocks::io::SeekableInputStream {
 public:
     explicit StarletInputStream(ReadOnlyFilePtr file_ptr) : _file_ptr(std::move(file_ptr)){};
-    ~StarletInputStream() = default;
+    ~StarletInputStream() override = default;
     StarletInputStream(const StarletInputStream&) = delete;
     void operator=(const StarletInputStream&) = delete;
     StarletInputStream(StarletInputStream&&) = delete;
@@ -179,7 +175,7 @@ private:
 class StarletOutputStream : public starrocks::io::OutputStream {
 public:
     explicit StarletOutputStream(WritableFilePtr file_ptr) : _file_ptr(std::move(file_ptr)){};
-    ~StarletOutputStream() = default;
+    ~StarletOutputStream() override = default;
     StarletOutputStream(const StarletOutputStream&) = delete;
     void operator=(const StarletOutputStream&) = delete;
     StarletOutputStream(StarletOutputStream&&) = delete;
@@ -281,7 +277,7 @@ public:
         return std::make_unique<SequentialFile>(std::move(istream), path);
     }
 
-    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) {
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
         return new_writable_file(WritableFileOptions(), path);
     }
 

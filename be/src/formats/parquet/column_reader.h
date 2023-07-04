@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+
 #include "formats/parquet/column_converter.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
@@ -52,6 +53,16 @@ public:
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                          const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output);
 
+    // for struct type without schema change
+    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
+                                                  bool case_sensitive, std::vector<int32_t>& pos);
+
+    // for schema changed
+    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
+                                                  bool case_sensitive, const TIcebergSchemaField* iceberg_schema_field,
+                                                  std::vector<int32_t>& pos,
+                                                  std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield);
+
     virtual ~ColumnReader() = default;
 
     virtual Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* column) = 0;
@@ -68,11 +79,13 @@ public:
 
     virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) {
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
+                                   Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
     }
 
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
+    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, const NullableColumn& nulls,
+                                  std::vector<int32_t>* dict_codes) {
         return Status::NotSupported("get_dict_codes is not supported");
     }
 

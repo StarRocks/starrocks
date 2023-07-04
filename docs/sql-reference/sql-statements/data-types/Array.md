@@ -17,7 +17,7 @@ ARRAY<ARRAY<type>>
 ARRAY<type> NOT NULL
 ~~~
 
-`type` specifies the data types of elements in an array. StarRocks supports the following element types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, and DATE.
+`type` specifies the data types of elements in an array. StarRocks supports the following element types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, DATE, JSON, ARRAY (since v3.1), MAP (since v3.1), and STRUCT (since v3.1).
 
 Elements in an array are nullable by default, for example, `[null, 1 ,2]`. You cannot specify elements in an array as NOT NULL. However, you can specify an ARRAY column as NOT NULL when you create a table, such as the third example in the following code snippet.
 
@@ -30,7 +30,7 @@ create table t0(
   c1 ARRAY<INT>
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 
 -- Define c1 as an nested array whose element type is VARCHAR.
 create table t1(
@@ -38,7 +38,7 @@ create table t1(
   c1 ARRAY<ARRAY<VARCHAR(10)>>
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 
 -- Define c1 as a NOT NULL array column.
 create table t2(
@@ -46,7 +46,7 @@ create table t2(
   c1 ARRAY<INT> NOT NULL
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 ~~~
 
 ## Limits
@@ -186,7 +186,7 @@ create table t0(
   c1 ARRAY<INT>
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 
 INSERT INTO t0 VALUES(1, [1,2,3]);
 ~~~

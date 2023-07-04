@@ -130,7 +130,7 @@ public class LakeMaterializedViewTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
-            public StorageVolume getStorageVolume(String fsKey) throws AnalysisException {
+            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
                         .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
                         .setCredential(AwsCredentialInfo.newBuilder()
@@ -139,6 +139,11 @@ public class LakeMaterializedViewTest {
                         .setFsKey("1").setFsType(FileStoreType.S3)
                         .setS3FsInfo(s3FileStoreInfo).build();
                 return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public boolean bindTableToStorageVolume(String svId, long tableId) {
+                return true;
             }
         };
 
@@ -227,7 +232,7 @@ public class LakeMaterializedViewTest {
         builder.setFsInfo(fsInfo);
         builder.setFullPath("s3://test-bucket/1/");
         FilePathInfo pathInfo = builder.build();
-        mv.setStorageInfo(pathInfo, new StorageCacheInfo(true, 3600, true));
+        mv.setStorageInfo(pathInfo, new DataCacheInfo(true, true));
 
         // Test serialize and deserialize
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
@@ -250,7 +255,7 @@ public class LakeMaterializedViewTest {
         Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
         FileCacheInfo cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(3600, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         Partition p1 = newMv.getPartition(partitionId);
@@ -270,15 +275,14 @@ public class LakeMaterializedViewTest {
         Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
         cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(3600, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         // Test appendUniqueProperties
         StringBuilder sb = new StringBuilder();
         Deencapsulation.invoke(newMv2, "appendUniqueProperties", sb);
         String baseProperties = sb.toString();
-        Assert.assertTrue(baseProperties.contains("\"enable_storage_cache\" = \"true\""));
-        Assert.assertTrue(baseProperties.contains("\"storage_cache_ttl\" = \"3600\""));
+        Assert.assertTrue(baseProperties.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(baseProperties.contains("\"enable_async_write_back\" = \"true\""));
 
         Assert.assertNull(mv.delete(true));
@@ -290,8 +294,7 @@ public class LakeMaterializedViewTest {
         starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "PROPERTIES(\n" +
-                        "   'enable_storage_cache' = 'true',\n" +
-                        "   'storage_cache_ttl' = '3600',\n" +
+                        "   'datacache.enable' = 'true',\n" +
                         "   'enable_async_write_back' = 'true'\n" +
                         ")\n" +
                         "refresh async\n" +
@@ -308,7 +311,7 @@ public class LakeMaterializedViewTest {
         // check table default cache info
         FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(0L);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(3600, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         // replication num
@@ -318,8 +321,7 @@ public class LakeMaterializedViewTest {
         String ddlStmt = lakeMv.getMaterializedViewDdlStmt(true);
         System.out.println(ddlStmt);
         Assert.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
-        Assert.assertTrue(ddlStmt.contains("\"enable_storage_cache\" = \"true\""));
-        Assert.assertTrue(ddlStmt.contains("\"storage_cache_ttl\" = \"3600\""));
+        Assert.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"true\""));
 
         // check task

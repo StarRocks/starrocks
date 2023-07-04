@@ -353,7 +353,7 @@ void JoinHashTable::create(const HashTableParam& param) {
     }
 }
 
-int64_t JoinHashTable::mem_usage() {
+int64_t JoinHashTable::mem_usage() const {
     int64_t usage = 0;
     if (_table_items->build_chunk != nullptr) {
         usage += _table_items->build_chunk->memory_usage();
@@ -512,7 +512,10 @@ StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk)
     //
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         SlotDescriptor* slot = _table_items->build_slots[i].slot;
-        const ColumnPtr& column = chunk->get_column_by_slot_id(slot->id());
+        ColumnPtr& column = chunk->get_column_by_slot_id(slot->id());
+        if (slot->is_nullable()) {
+            column = ColumnHelper::cast_to_nullable_column(column);
+        }
         output->append_column(column, slot->id());
     }
 

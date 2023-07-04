@@ -113,7 +113,7 @@ Status DeltaWriter::_init() {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
             auto msg = strings::Substitute(
-                    "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
+                    "primary key memory usage exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
                     " Memory stats of top five tablets: $3",
                     _opt.tablet_id, tracker->consumption(), tracker->limit(),
                     _storage_engine->update_manager()->topn_memory_stats(5));
@@ -301,7 +301,7 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
     if (_tablet->updates() != nullptr && _partial_schema_with_sort_key && _opt.slots != nullptr &&
         _opt.slots->back()->col_name() == "__op") {
         size_t op_column_id = chunk.num_columns() - 1;
-        auto op_column = chunk.get_column_by_index(op_column_id);
+        const auto& op_column = chunk.get_column_by_index(op_column_id);
         auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
         for (size_t i = 0; i < chunk.num_rows(); i++) {
             if (ops[i] == TOpType::UPSERT) {
@@ -622,12 +622,11 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
     rss_rowids.resize(upserts->size());
 
     // 2. probe index
-    _tablet->updates()->prepare_partial_update_states(_tablet.get(), upserts, nullptr, &rss_rowids);
+    RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *upserts, nullptr, &rss_rowids));
 
     std::vector<uint8_t> filter;
     uint32_t gen_num = 0;
-    for (uint32_t i = 0; i < rss_rowids.size(); i++) {
-        uint64_t v = rss_rowids[i];
+    for (unsigned long v : rss_rowids) {
         uint32_t rssid = v >> 32;
         if (rssid == (uint32_t)-1) {
             filter.emplace_back(1);

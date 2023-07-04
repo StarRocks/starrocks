@@ -153,6 +153,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     public void prepare() throws UserException {
         super.prepare();
+        checkCustomPartition(customKafkaPartitions);
         // should reset converted properties each time the job being prepared.
         // because the file info can be changed anytime.
         convertCustomProperties(true);
@@ -213,7 +214,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
                     KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(), id,
                             taskSchedIntervalS * 1000,
-                            timeToExecuteMs, taskKafkaProgress);
+                            timeToExecuteMs, taskKafkaProgress, taskTimeoutSecond * 1000);
                     routineLoadTaskInfoList.add(kafkaTaskInfo);
                     result.add(kafkaTaskInfo);
                 }
@@ -436,7 +437,6 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 db.getId(), tableId, stmt.getKafkaBrokerList(), stmt.getKafkaTopic());
         kafkaRoutineLoadJob.setOptional(stmt);
         kafkaRoutineLoadJob.checkCustomProperties();
-        kafkaRoutineLoadJob.checkCustomPartition(kafkaRoutineLoadJob.customKafkaPartitions);
 
         return kafkaRoutineLoadJob;
     }

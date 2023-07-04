@@ -28,6 +28,7 @@ public:
     struct IORange {
         int64_t offset;
         int64_t size;
+        bool active = true;
         bool operator<(const IORange& x) const { return offset < x.offset; }
     };
     struct CoalesceOptions {
@@ -36,8 +37,7 @@ public:
         int64_t max_buffer_size = 8 * MB;
     };
 
-    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
-                              size_t file_size);
+    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, std::string filename, size_t file_size);
     ~SharedBufferedInputStream() override = default;
 
     Status seek(int64_t position) override {
@@ -58,6 +58,7 @@ public:
     }
 
     Status set_io_ranges(const std::vector<IORange>& ranges);
+    Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_together);
     void release_to_offset(int64_t offset);
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
@@ -89,6 +90,9 @@ private:
 
     void _update_estimated_mem_usage();
     Status _get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes);
+    Status _sort_and_check_overlap(std::vector<IORange>& ranges);
+    void _merge_small_ranges(const std::vector<IORange>& ranges);
+    Status _set_io_ranges_separately(const std::vector<IORange>& ranges);
     StatusOr<SharedBuffer*> _find_shared_buffer(size_t offset, size_t count);
     const std::shared_ptr<SeekableInputStream> _stream;
     const std::string _filename;

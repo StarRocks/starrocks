@@ -44,12 +44,9 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Deque;
-import java.util.Iterator;
-import java.util.LinkedList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
@@ -78,27 +75,20 @@ public class ProfileManager {
     public static final String VARIABLES = "Variables";
     public static final String PROFILE_TIME = "Collect Profile Time";
 
-    public static final ArrayList<String> PROFILE_HEADERS = new ArrayList(
+    public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
 
-    private class ProfileElement {
+    private static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public byte[] profileContent;
     }
 
-    // Only protect profileDeque; profileMap is concurrent, no need to protect
-    private ReentrantReadWriteLock lock;
-    private ReadLock readLock;
-    private WriteLock writeLock;
+    private final ReadLock readLock;
+    private final WriteLock writeLock;
 
-    private Deque<ProfileElement> profileDeque;
-
-    // The frequency of load may be relatively high,
-    // so do not use the same deque and map of the query to reduce the impact on the query
-    private Deque<ProfileElement> loadProfileDeque;
-    private Map<String, ProfileElement> profileMap; // from QueryId to RuntimeProfile
-    private Map<String, ProfileElement> loadProfileMap; // from LoadId to RuntimeProfile
+    private final LinkedHashMap<String, ProfileElement> profileMap; // from QueryId to RuntimeProfile
+    private final LinkedHashMap<String, ProfileElement> loadProfileMap; // from LoadId to RuntimeProfile
 
     public static ProfileManager getInstance() {
         if (INSTANCE == null) {
@@ -108,13 +98,11 @@ public class ProfileManager {
     }
 
     private ProfileManager() {
-        lock = new ReentrantReadWriteLock(true);
+        ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
         readLock = lock.readLock();
         writeLock = lock.writeLock();
-        profileDeque = new LinkedList<ProfileElement>();
-        profileMap = new ConcurrentHashMap<String, ProfileElement>();
-        loadProfileDeque = new LinkedList<ProfileElement>();
-        loadProfileMap = new ConcurrentHashMap<String, ProfileElement>();
+        profileMap = new LinkedHashMap<>();
+        loadProfileMap = new LinkedHashMap<>();
     }
 
     public ProfileElement createElement(RuntimeProfile summaryProfile, String profileString) {
@@ -163,14 +151,12 @@ public class ProfileManager {
                     + "may be forget to insert 'QUERY_ID' column into infoStrings");
         }
 
-        profileMap.put(queryId, element);
         writeLock.lock();
         try {
-            if (profileDeque.size() >= Config.profile_info_reserved_num) {
-                profileMap.remove(profileDeque.getFirst().infoStrings.get(QUERY_ID));
-                profileDeque.removeFirst();
+            profileMap.put(queryId, element);
+            if (profileMap.size() >= Config.profile_info_reserved_num) {
+                profileMap.remove(profileMap.keySet().iterator().next());
             }
-            profileDeque.addLast(element);
         } finally {
             writeLock.unlock();
         }
@@ -190,14 +176,12 @@ public class ProfileManager {
                     + "may be forget to insert 'QUERY_ID' column into infoStrings");
         }
 
-        loadProfileMap.put(loadId, element);
         writeLock.lock();
         try {
-            if (loadProfileDeque.size() >= Config.load_profile_info_reserved_num) {
-                loadProfileMap.remove(profileDeque.getFirst().infoStrings.get(loadId));
-                loadProfileDeque.removeFirst();
+            loadProfileMap.put(loadId, element);
+            if (loadProfileMap.size() >= Config.load_profile_info_reserved_num) {
+                loadProfileMap.remove(loadProfileMap.keySet().iterator().next());
             }
-            loadProfileDeque.addLast(element);
         } finally {
             writeLock.unlock();
         }
@@ -205,21 +189,17 @@ public class ProfileManager {
         return profileString;
     }
 
-
     public List<List<String>> getAllQueries() {
-        List<List<String>> result = Lists.newArrayList();
+        List<List<String>> result = Lists.newLinkedList();
         readLock.lock();
         try {
-            Iterator reverse = profileDeque.descendingIterator();
-            while (reverse.hasNext()) {
-                ProfileElement element = (ProfileElement) reverse.next();
+            for (ProfileElement element : profileMap.values()) {
                 Map<String, String> infoStrings = element.infoStrings;
-
                 List<String> row = Lists.newArrayList();
                 for (String str : PROFILE_HEADERS) {
                     row.add(infoStrings.get(str));
                 }
-                result.add(row);
+                result.add(0, row);
             }
         } finally {
             readLock.unlock();

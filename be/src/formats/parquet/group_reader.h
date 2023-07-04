@@ -71,15 +71,21 @@ struct GroupReaderParam {
     FileMetaData* file_metadata = nullptr;
 
     bool case_sensitive = false;
+
+    // used to identify io coalesce
+    std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
 };
 
 class GroupReader {
 public:
-    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<std::int64_t>* need_skip_rowids,
+    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
                 int64_t row_group_first_row);
     ~GroupReader() = default;
 
+    // init used to init column reader, init dict_filter_ctx and devide active/lazy
     Status init();
+    // we need load dict for dict_filter, so prepare should be after collec_io_range
+    Status prepare();
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
@@ -133,14 +139,17 @@ private:
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-    void _collect_field_io_range(const ParquetField& field, std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                 int64_t* end_offset);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type, bool active,
+                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                 const TIcebergSchemaField* iceberg_schema_field, bool active,
+                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
 
     // row group meta
     std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
-    std::int64_t _row_group_first_row = 0;
-    const std::set<std::int64_t>* _need_skip_rowids;
-    std::int64_t _raw_rows_read = 0;
+    int64_t _row_group_first_row = 0;
+    const std::set<int64_t>* _need_skip_rowids;
+    int64_t _raw_rows_read = 0;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
@@ -152,6 +161,8 @@ private:
     std::vector<int> _active_column_indices;
     // lazy conlumns that hold read_col index
     std::vector<int> _lazy_column_indices;
+    // load lazy column or not
+    bool _lazy_column_needed = false;
 
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;

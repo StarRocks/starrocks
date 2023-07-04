@@ -47,7 +47,7 @@ class FileReader {
 public:
     FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                io::SharedBufferedInputStream* sb_stream = nullptr,
-               const std::set<std::int64_t>* _need_skip_rowids = nullptr);
+               const std::set<int64_t>* _need_skip_rowids = nullptr);
     ~FileReader();
 
     Status init(HdfsScannerContext* scanner_ctx);
@@ -92,6 +92,8 @@ private:
     // Validate the magic bytes and get the length of metadata
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
+    Status _prepare_cur_row_group();
+
     // decode min/max value from row group stats
     static Status _decode_min_max_column(const ParquetField& field, const std::string& timezone,
                                          const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
@@ -126,7 +128,7 @@ private:
     io::SharedBufferedInputStream* _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
-    const std::set<std::int64_t>* _need_skip_rowids;
+    const std::set<int64_t>* _need_skip_rowids;
 };
 
 } // namespace starrocks::parquet

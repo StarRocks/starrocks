@@ -1,5 +1,6 @@
 set(EXEC_FILES
         ./test_main.cpp
+        ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
         ./column/binary_column_test.cpp
         ./column/chunk_test.cpp
@@ -197,7 +198,7 @@ set(EXEC_FILES
         ./storage/lake/async_delta_writer_test.cpp
         ./storage/lake/compaction_policy_test.cpp
         ./storage/lake/delta_writer_test.cpp
-        ./storage/lake/gc_test.cpp
+        ./storage/lake/vacuum_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/compaction_task_test.cpp
         ./storage/lake/schema_change_test.cpp
@@ -278,6 +279,7 @@ set(EXEC_FILES
         ./storage/binlog_reader_test.cpp
         ./storage/tablet_binlog_test.cpp
         ./storage/publish_version_task_test.cpp
+        ./storage/get_use_pk_index_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
@@ -364,6 +366,9 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
+        ./util/timezone_utils_test.cpp
+        ./util/concurrent_limiter_test.cpp
+        ./util/stack_trace_mutex_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp

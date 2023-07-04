@@ -33,6 +33,7 @@ import mockit.Expectations;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -107,8 +108,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=3.0\n"));
     }
 
     @Test
@@ -284,8 +284,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=4.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=4.0\n"));
 
         sql = "insert into test.mysql_table(k1) select v1 from t0";
         explainString = getInsertExecPlan(sql);
@@ -308,8 +307,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=3.0\n"));
     }
 
     @Test
@@ -833,6 +831,10 @@ public class InsertPlanTest extends PlanTestBase {
 
                 nativeTable.properties();
                 result = new HashMap<String, String>();
+                minTimes = 0;
+
+                nativeTable.io();
+                result = new HadoopFileIO();
                 minTimes = 0;
             }
         };

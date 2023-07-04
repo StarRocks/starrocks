@@ -61,8 +61,13 @@ struct HdfsScanStats {
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
+    // iceberg pos-delete filter
+    int64_t build_iceberg_pos_filter_ns = 0;
     // late materialization
     int64_t skip_read_rows = 0;
+    // io coalesce
+    int64_t group_active_lazy_coalesce_together = 0;
+    int64_t group_active_lazy_coalesce_seperately = 0;
 
     // ORC only!
     int64_t delete_build_ns = 0;
@@ -165,6 +170,8 @@ struct HdfsScannerParams {
 
     bool use_block_cache = false;
     bool enable_populate_block_cache = false;
+
+    std::atomic<int32_t>* lazy_column_coalesce_counter;
 };
 
 struct HdfsScannerContext {
@@ -211,6 +218,8 @@ struct HdfsScannerContext {
     const TIcebergSchema* iceberg_schema = nullptr;
 
     HdfsScanStats* stats = nullptr;
+
+    std::atomic<int32_t>* lazy_column_coalesce_counter;
 
     // set column names from file.
     // and to update not_existed slots and conjuncts.

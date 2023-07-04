@@ -886,7 +886,7 @@ public class AggregateTest extends PlanTestBase {
                 + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
                 + "as __col_18 from lineorder_flat_for_mv group by 1,2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
+        assertContains(plan, "window_funnel(42: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -903,7 +903,7 @@ public class AggregateTest extends PlanTestBase {
                 + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
                 + "as __col_18 from lineorder_flat_for_mv";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(41: window_funnel, 900, 0)");
+        assertContains(plan, "window_funnel(40: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -922,7 +922,7 @@ public class AggregateTest extends PlanTestBase {
                 "by date_trunc('year',lo_orderdate)," +
                 "left(c_name,1) ) t;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
+        assertContains(plan, "window_funnel(42: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -1102,8 +1102,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select v1, sum(v2) from t0";
         plan = getFragmentPlan(sql);
@@ -1125,8 +1124,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select max(v2) from t0 having v1 = 1";
         plan = getFragmentPlan(sql);
@@ -1152,8 +1150,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select v1, max(v2) from t0 having v1 = 1";
         plan = getFragmentPlan(sql);
@@ -1176,8 +1173,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select v1 from t0 group by v2 order by v3";
         plan = getFragmentPlan(sql);
@@ -1220,8 +1216,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0\n"));
+                "     avgRowSize=3.0\n"));
 
         sql = "select v1,abs(v1) + 1 from t0 group by v2 order by v3";
         plan = getFragmentPlan(sql);
@@ -1266,8 +1261,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=3.0\n"));
 
         sql = "select lead(v2) over(partition by v1) from t0 group by v1";
         plan = getFragmentPlan(sql);
@@ -1315,9 +1309,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0\n" +
-                ""));
+                "     avgRowSize=3.0\n"));
 
         connectContext.getSessionVariable().setSqlMode(sqlmode);
     }

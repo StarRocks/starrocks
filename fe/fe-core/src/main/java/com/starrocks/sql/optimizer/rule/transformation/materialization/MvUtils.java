@@ -95,13 +95,13 @@ import java.util.stream.Collectors;
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
-    public static Set<MaterializedView> getRelatedMvs(int maxLevel, List<Table> tablesToCheck) {
+    public static Set<MaterializedView> getRelatedMvs(int maxLevel, Set<Table> tablesToCheck) {
         Set<MaterializedView> mvs = Sets.newHashSet();
         getRelatedMvs(maxLevel, 0, tablesToCheck, mvs);
         return mvs;
     }
 
-    public static void getRelatedMvs(int maxLevel, int currentLevel, List<Table> tablesToCheck, Set<MaterializedView> mvs) {
+    public static void getRelatedMvs(int maxLevel, int currentLevel, Set<Table> tablesToCheck, Set<MaterializedView> mvs) {
         if (currentLevel >= maxLevel) {
             return;
         }
@@ -115,7 +115,7 @@ public class MvUtils {
         if (newMvIds.isEmpty()) {
             return;
         }
-        List<Table> newMvs = Lists.newArrayList();
+        Set<Table> newMvs = Sets.newHashSet();
         for (MvId mvId : newMvIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
             if (db == null) {
@@ -183,8 +183,8 @@ public class MvUtils {
                         Table table = scanOperator.getTable();
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
                         LogicalJoinOperator joinOperator = optExpression.getOp().cast();
-                        TableScanDesc tableScanDesc =
-                                new TableScanDesc(table, id, scanOperator, joinOperator.getJoinType(), i == 0);
+                        TableScanDesc tableScanDesc = new TableScanDesc(
+                                table, id, scanOperator, joinOperator.getJoinType(), i == 0);
                         context.getTableScanDescs().add(tableScanDesc);
                         scanContext.getTableIdMap().put(table, ++id);
                     } else {
@@ -316,7 +316,8 @@ public class MvUtils {
         return true;
     }
 
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(String sql,
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(MaterializedView mv,
+                                                                               String sql,
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext) {
         StatementBase mvStmt;
@@ -339,6 +340,10 @@ public class MvUtils {
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
         optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
+        // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
+        if (mv.getRefreshScheme().isSync()) {
+            optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
+        }
         optimizerConfig.setMVRewritePlan(true);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
@@ -681,6 +686,15 @@ public class MvUtils {
         return rangeParts;
     }
 
+    public static List<Expr> convertList(Expr slotRef, List<LiteralExpr> values) {
+        List<Expr> listPart = Lists.newArrayList();
+        for (LiteralExpr value : values) {
+            BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, slotRef, value);
+            listPart.add(predicate);
+        }
+        return listPart;
+    }
+
     public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
         ranges.sort(RangeUtils.RANGE_COMPARATOR);
         List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
@@ -873,5 +887,12 @@ public class MvUtils {
             return partitionMap.entrySet().stream().filter(entry -> !modifiedPartitionNames.contains(entry.getKey())).
                     map(Map.Entry::getValue).collect(Collectors.toList());
         }
+    }
+
+    public static String toString(Object o) {
+        if (o == null) {
+            return "";
+        }
+        return o.toString();
     }
 }

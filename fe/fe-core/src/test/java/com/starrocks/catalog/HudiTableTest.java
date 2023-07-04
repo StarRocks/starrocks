@@ -109,7 +109,7 @@ public class HudiTableTest {
             }
         };
 
-        String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
+        String createTableSql = "create external table if not exists db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
                 "(\"resource\"=\"hudi0\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
         com.starrocks.catalog.Table table = createTable(createTableStmt);

@@ -36,7 +36,7 @@ Returns a PERCENTILE value.
   ) ENGINE=OLAP
   AGGREGATE KEY(`site_id`, `date`, `city_code`)
   COMMENT "OLAP"
-  DISTRIBUTED BY HASH(`site_id`) BUCKETS 8
+  DISTRIBUTED BY HASH(`site_id`)
   PROPERTIES ("replication_num" = "1");
   ```
 
@@ -60,10 +60,3 @@ Calculate the value corresponding to percentile 0.5.
   +-------------------------------------+
   1 row in set (0.03 sec)
   ```
-
-
-insert into aggregate_tbl values
-(5, '2020-02-23', 'city_code', 555, percentile_hash(1)),
-(5, '2020-02-23', 'city_code', 555, percentile_hash(2)),
-(5, '2020-02-23', 'city_code', 555, percentile_hash(3)),
-(5, '2020-02-23', 'city_code', 555, percentile_hash(4));

@@ -233,7 +233,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
 
-    int connector_num_io_threads = config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores();
+    int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
@@ -243,11 +243,11 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&connector_scan_worker_thread_pool_with_workgroup));
-    _connector_scan_executor_with_workgroup =
+    _connector_scan_executor =
             new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
                                         std::make_unique<workgroup::WorkGroupScanTaskQueue>(
                                                 workgroup::WorkGroupScanTaskQueue::SchedEntityType::CONNECTOR));
-    _connector_scan_executor_with_workgroup->initialize(connector_num_io_threads);
+    _connector_scan_executor->initialize(connector_num_io_threads);
 
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
@@ -283,11 +283,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&scan_worker_thread_pool_with_workgroup));
-    _scan_executor_with_workgroup =
-            new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
-                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>(
-                                                workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
-    _scan_executor_with_workgroup->initialize(num_io_threads);
+    _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
+                                                 std::make_unique<workgroup::WorkGroupScanTaskQueue>(
+                                                         workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
+    _scan_executor->initialize(num_io_threads);
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     if (!store_paths.empty()) {
         Status status = _load_path_mgr->init();
@@ -304,7 +303,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     if (config::starlet_cache_dir.empty()) {
         std::vector<std::string> starlet_cache_paths;
-        std::for_each(store_paths.begin(), store_paths.end(), [&](StorePath root_path) {
+        std::for_each(store_paths.begin(), store_paths.end(), [&](const StorePath& root_path) {
             std::string starlet_cache_path = root_path.path + "/starlet_cache";
             starlet_cache_paths.emplace_back(starlet_cache_path);
         });
@@ -333,9 +332,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init());
 
-#if defined(USE_STAROS) && !defined(BE_TEST)
-    _lake_tablet_manager->start_gc();
-#endif
     return Status::OK();
 }
 
@@ -498,8 +494,8 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
-    SAFE_DELETE(_scan_executor_with_workgroup);
-    SAFE_DELETE(_connector_scan_executor_with_workgroup);
+    SAFE_DELETE(_scan_executor);
+    SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);
 
     if (_lake_tablet_manager != nullptr) {

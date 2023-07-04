@@ -84,11 +84,12 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
           _task_queue_count(config::compact_threads),
           _task_queues(new TaskQueue[_task_queue_count]) {
     CHECK_GT(_task_queue_count, 0);
-    ThreadPoolBuilder("clound_native_compact")
-            .set_min_threads(_task_queue_count)
-            .set_max_threads(_task_queue_count)
-            .set_max_queue_size(_task_queue_count)
-            .build(&_threads);
+    auto st = ThreadPoolBuilder("clound_native_compact")
+                      .set_min_threads(_task_queue_count)
+                      .set_max_threads(_task_queue_count)
+                      .set_max_queue_size(_task_queue_count)
+                      .build(&_threads);
+    CHECK(st.ok()) << st;
 
     for (int i = 0; i < _task_queue_count; i++) {
         CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());
@@ -216,8 +217,8 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
 
     // Task failure due to memory limitations allows for retries. more threads allow for more retries.
     if (status.is_mem_limit_exceeded() && context->runs.load(std::memory_order_relaxed) < _task_queue_count + 1) {
-        VLOG(3) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
-                << " txn_id=" << txn_id << " cost=" << cost << "s";
+        LOG(WARNING) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
+                     << " txn_id=" << txn_id << " cost=" << cost << "s";
         context->progress.update(0);
         auto idx = choose_task_queue_by_txn_id(context->txn_id);
         // re-schedule the compaction task

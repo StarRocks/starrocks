@@ -132,8 +132,13 @@ public class DropPartitionTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
-            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public boolean bindTableToStorageVolume(String svId, long tableId) {
+                return true;
             }
         };
 
@@ -146,7 +151,7 @@ public class DropPartitionTest {
                 + " (PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),"
                 + " PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\")))"
                 + " DISTRIBUTED BY HASH(k2) BUCKETS 3"
-                + " PROPERTIES ( \"enable_storage_cache\" = \"true\", \"storage_cache_ttl\" = \"3600\")";
+                + " PROPERTIES ( \"datacache.enable\" = \"true\")";
         createTable(createLakeTableStr);
     }
 

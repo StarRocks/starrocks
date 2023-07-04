@@ -20,7 +20,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
@@ -36,7 +36,7 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     private TTabletType tabletType;
     private Long versionInfo;
     private boolean isInMemory;
-    private StorageCacheInfo storageCacheInfo;
+    private DataCacheInfo dataCacheInfo;
 
     protected boolean isAnalyzed;
 
@@ -50,7 +50,7 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         this.tabletType = TTabletType.TABLET_TYPE_DISK;
         this.versionInfo = null;
         this.isInMemory = false;
-        this.storageCacheInfo = null;
+        this.dataCacheInfo = null;
         this.isAnalyzed = false;
     }
 
@@ -95,8 +95,8 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public StorageCacheInfo getStorageCacheInfo() {
-        return storageCacheInfo;
+    public DataCacheInfo getDataCacheInfo() {
+        return dataCacheInfo;
     }
 
     public boolean isAnalyzed() {
@@ -115,7 +115,7 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
 
         // analyze data property
         partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(partitionAndTableProperties,
-                DataProperty.getInferredDefaultDataProperty());
+                DataProperty.getInferredDefaultDataProperty(), false);
         Preconditions.checkNotNull(partitionDataProperty);
 
         // analyze replication num
@@ -134,7 +134,7 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
 
         tabletType = PropertyAnalyzer.analyzeTabletType(partitionAndTableProperties);
 
-        storageCacheInfo = PropertyAnalyzer.analyzeStorageCacheInfo(partitionAndTableProperties);
+        dataCacheInfo = PropertyAnalyzer.analyzeDataCacheInfo(partitionAndTableProperties);
 
         if (properties != null) {
             // check unknown properties

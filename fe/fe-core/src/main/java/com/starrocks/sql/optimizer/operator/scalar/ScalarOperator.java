@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -157,6 +158,18 @@ public abstract class ScalarOperator implements Cloneable {
      */
     public abstract ColumnRefSet getUsedColumns();
 
+    public List<ColumnRefOperator> getColumnRefs() {
+        List<ColumnRefOperator> columns = Lists.newArrayList();
+        getColumnRefs(columns);
+        return columns;
+    }
+
+    public void getColumnRefs(List<ColumnRefOperator> columns) {
+        for (ScalarOperator child : getChildren()) {
+            child.getColumnRefs(columns);
+        }
+    }
+
     public String debugString() {
         return toString();
     }
@@ -200,5 +213,40 @@ public abstract class ScalarOperator implements Cloneable {
 
     public void setRedundant(boolean redundant) {
         isRedundant = redundant;
+    }
+
+    // whether ScalarOperator are equals without id
+    public static boolean isEqual(ScalarOperator left, ScalarOperator right) {
+        if (!left.getOpType().equals(right.getOpType())) {
+            return false;
+        }
+        if (left.getOpType().equals(OperatorType.VARIABLE)) {
+            ColumnRefOperator leftColumn = (ColumnRefOperator) left;
+            ColumnRefOperator rightColumn = (ColumnRefOperator) right;
+            return leftColumn.getName().equals(rightColumn.getName())
+                    && leftColumn.getType().equals(rightColumn.getType())
+                    && leftColumn.isNullable() == rightColumn.isNullable();
+        } else {
+            boolean ret = left.equals(right);
+            if (!ret) {
+                return false;
+            }
+            Preconditions.checkState(left.getChildren().size() == right.getChildren().size());
+            for (int i = 0; i < left.getChildren().size(); i++) {
+                if (!isEqual(left.getChild(i), right.getChild(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    public static boolean isColumnEqualBinaryPredicate(ScalarOperator predicate) {
+        if (predicate instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
+            return binaryPredicate.getBinaryType().isEquivalence()
+                    && binaryPredicate.getChild(0).isColumnRef() && binaryPredicate.getChild(1).isColumnRef();
+        }
+        return false;
     }
 }

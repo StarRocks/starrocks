@@ -4,6 +4,10 @@ StarRocks supports real-time data synchronization from MySQL within seconds, del
 
 This tutorial helps you learn how you can bring real-time analytics to your business and users. It demonstrates how to synchronize data from MySQL to StarRocks in real time by using the following tools: StarRocks Migration Tools (SMT), Flink, Flink CDC Connector, and flink-starrocks-connector.
 
+> **NOTICE**
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+
 ## How it works
 
 The following figure illustrates the entire synchronization process.
@@ -258,11 +262,15 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     `sales_cnt` BIGINT NOT NULL COMMENT ""
     ) ENGINE=olap
     PRIMARY KEY(`product_id`)
-    DISTRIBUTED BY HASH(`product_id`) BUCKETS 1
+    DISTRIBUTED BY HASH(`product_id`)
     PROPERTIES (
     "replication_num" = "3"
     );
     ```
+
+    > **NOTICE**
+    >
+    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ## Synchronize data
 

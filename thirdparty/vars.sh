@@ -75,6 +75,13 @@ if [ ! -f ${TP_DIR}/${VARS_TARGET} ]; then
 fi
 . ${TP_DIR}/${VARS_TARGET}
 
+if [ -f /etc/lsb-release ]; then
+    source /etc/lsb-release
+    if [[ $DISTRIB_ID = "Ubuntu" && $DISTRIB_RELEASE =~ 22.* && -f ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh ]]; then
+        . ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh
+    fi
+fi
+
 # libevent
 # the last release version of libevent is 2.1.8, which was released on 26 Jan 2017, that is too old.
 # so we use the master version of libevent, which is downloaded on 22 Jun 2018, with commit 24236aed01798303745470e6c498bf606e88724a
@@ -258,10 +265,10 @@ CROARINGBITMAP_SOURCE=CRoaring-1.1.3
 CROARINGBITMAP_MD5SUM="605924d21c14c760e66466799215868f"
 
 # jemalloc
-JEMALLOC_DOWNLOAD="https://github.com/jemalloc/jemalloc/releases/download/5.2.1/jemalloc-5.2.1.tar.bz2"
-JEMALLOC_NAME="jemalloc-5.2.1.tar.bz2"
-JEMALLOC_SOURCE="jemalloc-5.2.1"
-JEMALLOC_MD5SUM="3d41fbf006e6ebffd489bdb304d009ae"
+JEMALLOC_DOWNLOAD="https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2"
+JEMALLOC_NAME="jemalloc-5.3.0.tar.bz2"
+JEMALLOC_SOURCE="jemalloc-5.3.0"
+JEMALLOC_MD5SUM="09a8328574dab22a7df848eae6dbbf53"
 
 # CCTZ
 CCTZ_DOWNLOAD="https://github.com/google/cctz/archive/v2.3.tar.gz"
@@ -270,10 +277,10 @@ CCTZ_SOURCE="cctz-2.3"
 CCTZ_MD5SUM="209348e50b24dbbdec6d961059c2fc92"
 
 # FMT
-FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/7.0.3/fmt-7.0.3.zip"
-FMT_NAME="fmt-7.0.3.zip"
-FMT_SOURCE="fmt-7.0.3"
-FMT_MD5SUM="60c8803eb36a6ff81a4afde33c0f621a"
+FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/8.1.1/fmt-8.1.1.zip"
+FMT_NAME="fmt-8.1.1.zip"
+FMT_SOURCE="fmt-8.1.1"
+FMT_MD5SUM="16dcd48ecc166f10162450bb28aabc87"
 
 # RYU
 RYU_DOWNLOAD="https://github.com/ulfjack/ryu/archive/aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
@@ -299,12 +306,6 @@ MARIADB_DOWNLOAD="https://github.com/mariadb-corporation/mariadb-connector-c/arc
 MARIADB_NAME="mariadb-connector-c-3.1.14.tar.gz"
 MARIADB_SOURCE="mariadb-connector-c-3.1.14"
 MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
-
-# jindosdk for Aliyun OSS
-JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.2.tar.gz"
-JINDOSDK_NAME="jindosdk-4.6.2.tar.gz"
-JINDOSDK_SOURCE="jindosdk-4.6.2"
-JINDOSDK_MD5SUM="7288ffb8f2fbdde6b907d15041a0f79c"
 
 # Google Cloud Storage, gcs-connector
 GCS_CONNECTOR_DOWNLOAD="https://cdn-thirdparty.starrocks.com/gcs-connector-hadoop3-2.2.11-shaded.zip"

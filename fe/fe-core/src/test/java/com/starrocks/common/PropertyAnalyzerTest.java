@@ -158,10 +158,26 @@ public class PropertyAnalyzerTest {
         properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
         properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME, tomorrowTimeStr);
         DataProperty dataProperty =
-                PropertyAnalyzer.analyzeDataProperty(properties, new DataProperty(TStorageMedium.SSD));
+                PropertyAnalyzer.analyzeDataProperty(properties, new DataProperty(TStorageMedium.SSD), false);
         // avoid UT fail because time zone different
         DateLiteral dateLiteral = new DateLiteral(tomorrowTimeStr, Type.DATETIME);
         Assert.assertEquals(dateLiteral.unixTimestamp(TimeUtils.getTimeZone()), dataProperty.getCooldownTimeMs());
+
+        Map<String, String> properties1 = Maps.newHashMap();
+        properties1.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "HDD");
+        Config.tablet_sched_storage_cooldown_second = 60;
+        dataProperty =
+                PropertyAnalyzer.analyzeDataProperty(properties1, new DataProperty(TStorageMedium.SSD), false);
+        // Use specified storage medium even if SSD is inferred.
+        Assert.assertEquals(TStorageMedium.HDD, dataProperty.getStorageMedium());
+
+        Map<String, String> properties2 = Maps.newHashMap();
+        Config.tablet_sched_storage_cooldown_second = 60;
+        DataProperty defaultDP = new DataProperty(TStorageMedium.SSD, DataProperty.getSsdCooldownTimeMs());
+        dataProperty =
+                PropertyAnalyzer.analyzeDataProperty(properties2, defaultDP, false);
+        // If not specified, the default value should be used
+        Assert.assertEquals(dataProperty, defaultDP);
     }
 
     @Test
@@ -169,7 +185,7 @@ public class PropertyAnalyzerTest {
         Map<String, String> properties1 = Maps.newHashMap();
         properties1.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
         DataProperty dataProperty =
-                PropertyAnalyzer.analyzeDataProperty(properties1, new DataProperty(TStorageMedium.SSD));
+                PropertyAnalyzer.analyzeDataProperty(properties1, new DataProperty(TStorageMedium.SSD), false);
         // Cooldown is disabled(with maximum cooldown timestamp) by default
         Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
 
@@ -177,14 +193,14 @@ public class PropertyAnalyzerTest {
         Map<String, String> properties2 = Maps.newHashMap();
         properties2.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
         dataProperty =
-                PropertyAnalyzer.analyzeDataProperty(properties2, new DataProperty(TStorageMedium.SSD));
+                PropertyAnalyzer.analyzeDataProperty(properties2, new DataProperty(TStorageMedium.SSD), false);
         Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
 
         Config.tablet_sched_storage_cooldown_second = 253402271999L;
         Map<String, String> properties3 = Maps.newHashMap();
         properties3.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
         dataProperty =
-                PropertyAnalyzer.analyzeDataProperty(properties3, new DataProperty(TStorageMedium.SSD));
+                PropertyAnalyzer.analyzeDataProperty(properties3, new DataProperty(TStorageMedium.SSD), false);
         Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
 
         Map<String, String> properties4 = Maps.newHashMap();
@@ -192,7 +208,7 @@ public class PropertyAnalyzerTest {
         Config.tablet_sched_storage_cooldown_second = 600;
         long start = System.currentTimeMillis();
         dataProperty =
-                PropertyAnalyzer.analyzeDataProperty(properties4, new DataProperty(TStorageMedium.SSD));
+                PropertyAnalyzer.analyzeDataProperty(properties4, new DataProperty(TStorageMedium.SSD), false);
         long end = System.currentTimeMillis();
         Assert.assertTrue(dataProperty.getCooldownTimeMs() >= start + 600 * 1000L &&
                 dataProperty.getCooldownTimeMs() <= end + 600 * 1000L);

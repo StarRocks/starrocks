@@ -15,7 +15,7 @@ CREATE TABLE dateDemo (
 ) ENGINE=OLAP 
 DUPLICATE KEY(pk)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(pk) BUCKETS 4;
+DISTRIBUTED BY HASH(pk)
 ```
 
 Example 2: Convert a DATETIME value into a DATE value.

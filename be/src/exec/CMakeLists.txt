@@ -31,6 +31,9 @@ set(EXEC_FILES
     olap_common.cpp
     tablet_info.cpp
     tablet_sink.cpp
+    tablet_sink_colocate_sender.cpp
+    tablet_sink_index_channel.cpp
+    tablet_sink_sender.cpp
     mysql_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
@@ -135,6 +138,8 @@ set(EXEC_FILES
     schema_scanner/starrocks_role_edges_scanner.cpp
     schema_scanner/starrocks_grants_to_scanner.cpp
     schema_scanner/schema_helper.cpp
+    schema_scanner/schema_routine_load_jobs_scanner.cpp
+    schema_scanner/schema_stream_loads_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -210,19 +215,7 @@ set(EXEC_FILES
     pipeline/query_context.cpp
     pipeline/stream_epoch_manager.cpp
     pipeline/stream_pipeline_driver.cpp
-    pipeline/aggregate/aggregate_blocking_sink_operator.cpp
-    pipeline/aggregate/aggregate_blocking_source_operator.cpp
-    pipeline/aggregate/aggregate_streaming_sink_operator.cpp
-    pipeline/aggregate/aggregate_streaming_source_operator.cpp
-    pipeline/aggregate/aggregate_distinct_blocking_sink_operator.cpp
-    pipeline/aggregate/aggregate_distinct_blocking_source_operator.cpp
-    pipeline/aggregate/aggregate_distinct_streaming_sink_operator.cpp
-    pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
-    pipeline/aggregate/sorted_aggregate_streaming_sink_operator.cpp
-    pipeline/aggregate/sorted_aggregate_streaming_source_operator.cpp
-    pipeline/aggregate/spillable_aggregate_blocking_sink_operator.cpp
-    pipeline/aggregate/spillable_aggregate_blocking_source_operator.cpp
-    pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.cpp
+    pipeline/aggregate/aggregate_operators.cpp
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp

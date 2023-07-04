@@ -27,7 +27,7 @@ class ScanNode;
 
 namespace pipeline {
 
-class ConnectorScanOperatorIOTasksMemLimiter;
+struct ConnectorScanOperatorIOTasksMemLimiter;
 
 class ConnectorScanOperatorFactory : public ScanOperatorFactory {
 public:
@@ -61,7 +61,7 @@ public:
     ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter;
 };
 
-class ConnectorScanOperatorAdaptiveProcessor;
+struct ConnectorScanOperatorAdaptiveProcessor;
 class ConnectorScanOperator : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
@@ -108,6 +108,8 @@ public:
     void close(RuntimeState* state) override;
     const std::string get_custom_coredump_msg() const override;
 
+    bool reach_limit() override { return _limit != -1 && _reach_limit.load(); }
+
 protected:
     virtual bool _reach_eof() const { return _limit != -1 && _rows_read >= _limit; }
     Status _open_data_source(RuntimeState* state);
@@ -135,7 +137,6 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
-    ConnectorScanOperator* _op = nullptr;
 };
 
 } // namespace pipeline

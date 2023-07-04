@@ -43,7 +43,7 @@ public class IcebergConnector implements Connector {
     @Deprecated
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
-    public static final String ICEBERG_REST_CATALOG_PREFIX = "iceberg.rest-catalog.";
+    public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
     private final HdfsEnvironment hdfsEnvironment;
@@ -85,7 +85,8 @@ public class IcebergConnector implements Connector {
             nativeCatalogTypeStr = properties.get(ICEBERG_CATALOG_LEGACY);
         }
         if (Strings.isNullOrEmpty(nativeCatalogTypeStr)) {
-            throw new StarRocksConnectorException("Can't find iceberg native catalog type");
+            throw new StarRocksConnectorException("Can't find iceberg native catalog type. You must specify the" +
+                    " 'iceberg.catalog.type' property when creating an iceberg catalog in the catalog properties");
         }
         return IcebergCatalogType.fromString(nativeCatalogTypeStr);
     }

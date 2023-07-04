@@ -89,6 +89,8 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
 #define SCOPED_RAW_TIMER(c) ScopedRawTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_RAW_TIMER, __COUNTER__)(c)
 #define COUNTER_UPDATE(c, v) (c)->update(v)
 #define COUNTER_SET(c, v) (c)->set(v)
+// this is only used for HighWaterMarkCounter
+#define COUNTER_ADD(c, v) (c)->add(v)
 #define ADD_THREAD_COUNTERS(profile, prefix) (profile)->add_thread_counters(prefix)
 #define SCOPED_THREAD_COUNTER_MEASUREMENT(c) \
     /*ThreadCounterMeasurement                                        \
@@ -100,6 +102,7 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
 #define SCOPED_RAW_TIMER(c)
 #define COUNTER_UPDATE(c, v)
 #define COUNTER_SET(c, v)
+#define COUNTER_ADD(c, v)
 #define ADD_THREADCOUNTERS(profile, prefix) NULL
 #define SCOPED_THREAD_COUNTER_MEASUREMENT(c)
 #endif
@@ -583,7 +586,7 @@ public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile
-    static void merge_isomorphic_profiles(std::vector<RuntimeProfile*>& profiles);
+    static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles);
 
 private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;

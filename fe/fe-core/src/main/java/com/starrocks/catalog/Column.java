@@ -109,7 +109,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
-
     @SerializedName(value = "materializedColumnExpr")
     private GsonUtils.ExpressionSerializedObject generatedColumnExprSerialized;
     private Expr materializedColumnExpr;
@@ -200,14 +199,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public String getName() {
         return this.name;
-    }
-
-    public String getDisplayName() {
-        if (defineExpr == null) {
-            return name;
-        } else {
-            return defineExpr.toSql();
-        }
     }
 
     public String getNameWithoutPrefix(String prefix) {
@@ -467,14 +458,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         materializedColumnExpr = expr;
     }
 
-    public SlotRef getRefColumn() {
-        List<Expr> slots = new ArrayList<>();
+    public List<SlotRef> getRefColumns() {
+        List<SlotRef> slots = new ArrayList<>();
         if (defineExpr == null) {
             return null;
         } else {
             defineExpr.collect(SlotRef.class, slots);
-            Preconditions.checkArgument(slots.size() == 1);
-            return (SlotRef) slots.get(0);
+            return slots;
         }
     }
 

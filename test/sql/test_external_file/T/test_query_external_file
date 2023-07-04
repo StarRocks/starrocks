@@ -1,0 +1,23 @@
+-- name: testQueryExternalFile
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/dict_two_page >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_two_page.parquet oss://${oss_bucket}/test_external_file/dict_two_page/dict_two_page.parquet | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE dict_two_page
+(
+    seq bigint,
+    f00 string,
+    f01 string,
+    id string,
+    f03 string,
+    f04 string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_external_file/dict_two_page/", 
+    "format" = "parquet"
+);
+
+select count(*) from dict_two_page;
+

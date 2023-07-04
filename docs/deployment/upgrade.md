@@ -46,7 +46,7 @@ During preparation, you must perform the compatibility configuration if you are 
 
 If you want to upgrade your StarRocks cluster to a later minor or major version, you must perform the compatibility configuration. In addition to the universal compatibility configuration, detailed configurations vary depending on the version of the StarRocks cluster you upgrade from.
 
-#### Universal compatibility configuration
+- **Universal compatibility configuration**
 
 Before upgrading your StarRocks cluster, you must disable tablet clone.
 
@@ -66,7 +66,7 @@ ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```
 
-#### From v2.0
+- **If you upgrade from v2.0 to later versions**
 
 Before upgrading your StarRocks v2.0 cluster, you must set the following BE configuration and system variable.
 
@@ -143,7 +143,7 @@ Follow these steps to perform the BE/CN upgrade availability test:
 
 Follow these steps to perform the FE upgrade availability test:
 
-1. In your development environment, deploy a test FE node of the new version. See [Deploy StarRocks - Start FE service](../deployment/deploy_manually.md#step-1-start-the-fe-service) for detailed instructions.
+1. In your development environment, deploy a test FE node of the new version. See [Deploy StarRocks - Start the Leader FE node](../deployment/deploy_manually.md#step-1-start-the-leader-fe-node) for detailed instructions.
 2. Modify the FE configuration file **fe.conf** of the test FE node:
 
    - Assign different `http_port`, `rpc_port`, `query_port`, and `edit_log_port` from those of the production cluster.

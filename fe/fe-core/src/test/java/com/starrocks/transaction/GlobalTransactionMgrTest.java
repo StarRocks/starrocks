@@ -57,7 +57,6 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
@@ -353,7 +352,7 @@ public class GlobalTransactionMgrTest {
         partitionIdToOffset.put(1, 0L);
         KafkaTaskInfo routineLoadTaskInfo =
                 new KafkaTaskInfo(UUID.randomUUID(), 1L, 20000, System.currentTimeMillis(),
-                        partitionIdToOffset);
+                        partitionIdToOffset, Config.routine_load_task_timeout_second);
         Deencapsulation.setField(routineLoadTaskInfo, "txnId", 1L);
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
         TransactionState transactionState = new TransactionState(1L, Lists.newArrayList(1L), 1L, "label", null,
@@ -426,7 +425,7 @@ public class GlobalTransactionMgrTest {
         partitionIdToOffset.put(1, 0L);
         KafkaTaskInfo routineLoadTaskInfo =
                 new KafkaTaskInfo(UUID.randomUUID(), 1L, 20000, System.currentTimeMillis(),
-                        partitionIdToOffset);
+                        partitionIdToOffset, Config.routine_load_task_timeout_second);
         Deencapsulation.setField(routineLoadTaskInfo, "txnId", 1L);
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
         TransactionState transactionState = new TransactionState(1L, Lists.newArrayList(1L), 1L, "label", null,
@@ -794,8 +793,7 @@ public class GlobalTransactionMgrTest {
 
         GlobalTransactionMgr followerTransMgr = new GlobalTransactionMgr(masterGlobalStateMgr);
         followerTransMgr.addDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
-        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream(),
-                SRMetaBlockID.GLOBAL_TRANSACTION_MGR);
+        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream());
         followerTransMgr.loadTransactionStateV2(reader);
         reader.close();
 

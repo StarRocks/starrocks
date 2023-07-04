@@ -55,6 +55,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 public interface ConnectorMetadata {
     /**
@@ -87,6 +88,18 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Return partial partition names of the table using partitionValues to filter.
+     * @param databaseName the name of the database
+     * @param tableName the name of the table
+     * @param partitionValues the partition value to filter
+     * @return a list of partition names
+     */
+    default List<String> listPartitionNamesByValue(String databaseName, String tableName,
+                                                   List<Optional<String>> partitionValues) {
+        return Lists.newArrayList();
+    }
+
+    /**
      * Get Table descriptor for the table specific by `dbName`.`tblName`
      *
      * @param dbName  - the string represents the database name
@@ -114,14 +127,15 @@ public interface ConnectorMetadata {
      * 1. Get the remote files information from hdfs or s3 according to table or partition.
      * 2. Get file scan tasks for iceberg metadata by query predicate.
      * @param table
-     * @param partitionKeys selected columns
-     * @param predicate used to filter metadata for iceberg, etc
+     * @param partitionKeys selected partition columns
      * @param snapshotId selected snapshot id
+     * @param predicate used to filter metadata for iceberg, etc
+     * @param fieldNames all selected columns (including partition columns)
      *
      * @return the remote file information of the query to scan.
      */
     default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                    long snapshotId, ScalarOperator predicate) {
+                                                    long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
         return Lists.newArrayList();
     }
 

@@ -521,9 +521,8 @@ Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<Statu
         auto chunk_with_st = chunk_provider();
         if (chunk_with_st.ok()) {
             if (!chunk_with_st.value()->is_empty()) {
-                RETURN_IF_ERROR(spiller->spill(
-                        state, chunk_with_st.value(), *io_executor,
-                        spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
+                RETURN_IF_ERROR(spiller->spill(state, chunk_with_st.value(), *io_executor,
+                                               RESOURCE_TLS_MEMTRACER_GUARD(state)));
             }
         } else if (chunk_with_st.status().is_end_of_file()) {
             // chunk_provider return eos means provider has output all data from hash_map/hash_set.
@@ -1093,6 +1092,9 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs, 
             size += 1; // 1 bytes for  null flag.
         }
         LogicalType ltype = ctx->root()->type().type;
+        if (ctx->root()->type().is_complex_type()) {
+            return false;
+        }
         size_t byte_size = get_size_of_fixed_length_type(ltype);
         if (byte_size == 0) return false;
         size += byte_size;

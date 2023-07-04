@@ -39,6 +39,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -52,11 +54,14 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+
+import static java.util.function.Function.identity;
 
 public class Utils {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
@@ -553,5 +558,25 @@ public class Utils {
         num |= (num >>> 8);
         num |= (num >>> 16);
         return num < 0 ? 1 : num + 1;
+    }
+
+    public static boolean canEliminateNull(Set<ColumnRefOperator> nullOutputColumnOps, ScalarOperator expression) {
+        Map<ColumnRefOperator, ScalarOperator> m = nullOutputColumnOps.stream()
+                .map(op -> new ColumnRefOperator(op.getId(), op.getType(), op.getName(), true))
+                .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
+
+        for (ScalarOperator e : Utils.extractConjuncts(expression)) {
+            ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(e);
+
+            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+            // Call the ScalarOperatorRewriter function to perform constant folding
+            nullEval = scalarRewriter.rewrite(nullEval, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            if (nullEval.isConstantRef() && ((ConstantOperator) nullEval).isNull()) {
+                return true;
+            } else if (nullEval.equals(ConstantOperator.createBoolean(false))) {
+                return true;
+            }
+        }
+        return false;
     }
 }

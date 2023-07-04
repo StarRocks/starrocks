@@ -294,6 +294,11 @@ public class FunctionSet {
     public static final String ARRAY_APPEND = "array_append";
     public static final String ARRAY_AVG = "array_avg";
     public static final String ARRAY_CONTAINS = "array_contains";
+    public static final String ARRAY_CONTAINS_ALL = "array_contains_all";
+    public static final String ARRAY_CUM_SUM = "array_cum_sum";
+
+
+
     public static final String ARRAY_JOIN = "array_join";
     public static final String ARRAY_DISTINCT = "array_distinct";
     public static final String ARRAY_LENGTH = "array_length";
@@ -309,6 +314,8 @@ public class FunctionSet {
     public static final String ALL_MATCH = "all_match";
 
     public static final String ARRAY_GENERATE = "array_generate";
+
+    public static final String ARRAY_TO_BITMAP = "array_to_bitmap";
 
     // Bit functions:
     public static final String BITAND = "bitand";
@@ -397,6 +404,7 @@ public class FunctionSet {
     public static final String DENSE_RANK = "dense_rank";
     public static final String RANK = "rank";
     public static final String CUME_DIST = "cume_dist";
+    public static final String PERCENT_RANK = "percent_rank";
     public static final String NTILE = "ntile";
     public static final String ROW_NUMBER = "row_number";
 
@@ -485,7 +493,7 @@ public class FunctionSet {
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, PERCENTILE_HASH,
-                    HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW);
+                    HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT);
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -539,6 +547,7 @@ public class FunctionSet {
             .add(FunctionSet.DENSE_RANK)
             .add(FunctionSet.RANK)
             .add(FunctionSet.CUME_DIST)
+            .add(FunctionSet.PERCENT_RANK)
             .add(FunctionSet.NTILE)
             .add(FunctionSet.ROW_NUMBER)
             .add(FunctionSet.FIRST_VALUE)
@@ -950,6 +959,9 @@ public class FunctionSet {
                 Collections.emptyList(), Type.BIGINT, Type.BIGINT));
         // Cume dist
         addBuiltin(AggregateFunction.createAnalyticBuiltin(CUME_DIST,
+                Collections.emptyList(), Type.DOUBLE, Type.VARBINARY));
+        // Percent rank
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(PERCENT_RANK,
                 Collections.emptyList(), Type.DOUBLE, Type.VARBINARY));
         // Ntile
         addBuiltin(AggregateFunction.createAnalyticBuiltin(NTILE,

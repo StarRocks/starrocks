@@ -258,7 +258,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             LakeTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
-            numTablets = partitionIndexMap.values().stream().map(MaterializedIndex::getTablets).count();
+            numTablets = partitionIndexMap.values().stream().map(MaterializedIndex::getTablets).mapToLong(List::size).sum();
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
@@ -376,6 +376,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         getOrCreateSchemaChangeBatchTask().addTask(alterTask);
                     }
                 }
+
+                partition.setMinRetainVersion(visibleVersion);
+
             } // end for partitions
         }
 
@@ -418,6 +421,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = table.getPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
+                partition.setMinRetainVersion(0);
                 long commitVersion = partition.getNextVersion();
                 commitVersionMap.put(partitionId, commitVersion);
                 LOG.debug("commit version of partition {} is {}. jobId={}", partitionId, commitVersion, jobId);
@@ -702,6 +706,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             Preconditions.checkNotNull(partition, partitionId);
+            partition.setMinRetainVersion(0);
             for (MaterializedIndex shadowIdx : partitionIndexMap.row(partitionId).values()) {
                 partition.deleteRollupIndex(shadowIdx.getId());
             }

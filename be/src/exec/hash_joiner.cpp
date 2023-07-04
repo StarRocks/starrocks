@@ -179,10 +179,7 @@ Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
     update_build_rows(chunk->num_rows());
     auto io_executor = spill_channel()->io_executor();
-    RETURN_IF_ERROR(
-            spiller()->spill(state, chunk, *io_executor,
-                             spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
-
+    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
     return Status::OK();
 }
 
@@ -191,9 +188,8 @@ Status HashJoiner::append_spill_task(RuntimeState* state, std::function<StatusOr
     while (!spiller()->is_full()) {
         auto chunk_st = spill_task();
         if (chunk_st.ok()) {
-            RETURN_IF_ERROR(spiller()->spill(
-                    state, chunk_st.value(), io_executor(),
-                    spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
+            RETURN_IF_ERROR(
+                    spiller()->spill(state, chunk_st.value(), io_executor(), RESOURCE_TLS_MEMTRACER_GUARD(state)));
         } else if (chunk_st.status().is_end_of_file()) {
             return Status::OK();
         } else {

@@ -36,6 +36,8 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
@@ -49,6 +51,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadChannel;
+import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -70,8 +73,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Writable {
-    private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
+public class StreamLoadTask extends AbstractTxnStateChangeCallback
+        implements Writable, GsonPostProcessable, GsonPreProcessable {
+    private static final Logger LOG = LogManager.getLogger(StreamLoadTask.class);
 
     public enum State {
         BEGIN,
@@ -93,6 +97,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     @SerializedName(value = "id")
     private long id;
     private TUniqueId loadId;
+    @SerializedName("loadIdHi")
+    private long loadIdHi;
+    @SerializedName("loadIdLo")
+    private long loadIdLo;
     @SerializedName(value = "label")
     private String label;
     @SerializedName(value = "dbId")
@@ -888,7 +896,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                 txnId, commitInfos, failInfos, txnCommitAttachment);
     }
 
-    public boolean checkNeedRemove(long currentMs) {
+    public boolean checkNeedRemove(long currentMs, boolean isForce) {
         readLock();
         try {
             if (!isFinalState()) {
@@ -898,7 +906,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             readUnlock();
         }
         Preconditions.checkState(endTimeMs != -1, endTimeMs);
-        if ((currentMs - endTimeMs) > Config.label_keep_max_second * 1000) {
+        if (isForce || ((currentMs - endTimeMs) > Config.stream_load_task_keep_max_second * 1000L)) {
             return true;
         }
         return false;
@@ -984,7 +992,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         }
 
         // sync stream load collect profile
-        if (isSyncStreamLoad() && coord.isEnableLoadProfile()) {
+        if (isSyncStreamLoad() && coord.isProfileAlreadyReported()) {
             collectProfile();
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
@@ -1038,15 +1046,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
 
         profile.addChild(summaryProfile);
         if (coord.getQueryProfile() != null) {
-            profile.addChild(coord.getQueryProfile());
             if (!isSyncStreamLoad()) {
                 coord.endProfile();
-                coord.mergeIsomorphicProfiles(null);
+                profile.addChild(coord.buildMergedQueryProfile(null));
+            } else {
+                profile.addChild(coord.getQueryProfile());
             }
         }
 
         ProfileManager.getInstance().pushLoadProfile(profile);
-        return;
     }
 
     public void setLoadState(long loadBytes, long loadRows, long filteredRows, long unselectedRows,
@@ -1315,7 +1323,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             List<String> row = Lists.newArrayList();
             row.add(label);
             row.add(String.valueOf(id));
-            row.add(loadId.toString());
+            row.add(DebugUtil.printId(loadId));
             row.add(String.valueOf(txnId));
             row.add(dbName);
             row.add(tableName);
@@ -1347,6 +1355,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             }
             row.add(channelStateBuilder.toString());
             row.add(getStringByType());
+            // tracking url
+            if (trackingUrl != null) {
+                row.add("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            } else {
+                row.add("");
+            }
             return row;
         } finally {
             readUnlock();
@@ -1387,5 +1401,66 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         // just set type to PARALLEL
         task.setType(Type.PARALLEL_STREAM_LOAD);
         return task;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        loadId = new TUniqueId(loadIdHi, loadIdLo);
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        loadIdHi = loadId.getHi();
+        loadIdLo = loadId.getLo();
+    }
+
+    public TStreamLoadInfo toThrift() {
+        readLock();
+        try {
+            TStreamLoadInfo info = new TStreamLoadInfo();
+            info.setLabel(label);
+            info.setId(id);
+            info.setLoad_id(DebugUtil.printId(loadId));
+            info.setTxn_id(txnId);
+            info.setDb_name(dbName);
+            info.setTable_name(tableName);
+            info.setState(state.name());
+            info.setError_msg(errorMsg);
+
+            // tracking url
+            if (trackingUrl != null) {
+                info.setTracking_url(trackingUrl);
+                info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+
+            info.setChannel_num(channelNum);
+            info.setPrepared_channel_num(preparedChannelNum);
+
+            info.setNum_rows_normal(numRowsNormal);
+            info.setNum_rows_ab_normal(numRowsAbnormal);
+            info.setNum_load_bytes(numLoadBytesTotal);
+            info.setNum_rows_unselected(numRowsUnselected);
+
+            info.setTimeout_second(timeoutMs / 1000);
+            info.setCreate_time_ms(TimeUtils.longToTimeString(createTimeMs));
+            info.setBefore_load_time_ms(TimeUtils.longToTimeString(beforeLoadTimeMs));
+            info.setStart_loading_time_ms(TimeUtils.longToTimeString(startLoadingTimeMs));
+            info.setStart_preparing_time_ms(TimeUtils.longToTimeString(startPreparingTimeMs));
+            info.setFinish_preparing_time_ms(TimeUtils.longToTimeString(finishPreparingTimeMs));
+            info.setEnd_time_ms(TimeUtils.longToTimeString(endTimeMs));
+
+            StringBuilder channelStateBuilder = new StringBuilder();
+            for (int i = 0; i < channels.size(); i++) {
+                if (i > 0) {
+                    channelStateBuilder.append(" | ");
+                }
+                channelStateBuilder.append(channels.get(i).name());
+            }
+            info.setChannel_state(channelStateBuilder.toString());
+            info.setType(getStringByType());
+            return info;
+        } finally {
+            readUnlock();
+        }
     }
 }

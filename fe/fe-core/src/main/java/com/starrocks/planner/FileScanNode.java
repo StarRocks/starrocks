@@ -500,11 +500,9 @@ public class FileScanNode extends LoadScanNode {
 
         // numInstances:
         // min(totalBytes / min_bytes_per_broker_scanner,
-        //     backends_size * parallelInstanceNum,
-        //     max_broker_concurrency)
+        //     backends_size * parallelInstanceNum)
         numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
         numInstances = Math.min(nodes.size() * parallelInstanceNum, numInstances);
-        numInstances = Math.min(numInstances, Config.max_broker_concurrency);
         numInstances = Math.max(1, numInstances);
 
         bytesPerInstance = (totalBytes + numInstances - 1) / (numInstances != 0 ? numInstances : 1);
@@ -646,6 +644,8 @@ public class FileScanNode extends LoadScanNode {
             totalBytes += fileStatus.size;
         }
         long numInstances = bytesPerInstance == 0 ? 1 : (totalBytes + bytesPerInstance - 1) / bytesPerInstance;
+        // totalBytes may be 0, so numInstances may be 0
+        numInstances = Math.max(numInstances, (long) 1);
 
         for (int i = 0; i < numInstances; ++i) {
             locationsHeap.add(Pair.create(newLocations(context.params, brokerDesc.getName(), brokerDesc.hasBroker()), 0L));

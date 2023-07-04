@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
@@ -40,6 +41,8 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Predicate
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
 
     protected BaseMaterializedViewRewriteRule(RuleType type, Pattern pattern) {
@@ -50,6 +53,11 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         if (input.getOp() instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator scan = input.getOp().cast();
             if (scan.hasTableHints()) {
+                return false;
+            }
+            // Avoid rewrite the query repeat, add a shortcut.
+            Table table = scan.getTable();
+            if ((table instanceof MaterializedView) && ((MaterializedView) (table)).getRefreshScheme().isSync()) {
                 return false;
             }
         }
@@ -89,6 +97,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         final ScalarOperator queryPartitionPredicate =
                 MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
         if (queryPartitionPredicate == null) {
+            logMVRewrite(context, this, "Query partition compensate from partition prune failed.");
             return Lists.newArrayList();
         }
         ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
@@ -100,8 +109,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         onPredicates = onPredicates.stream().map(MvUtils::canonizePredicate).collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
-            MvRewriteContext mvRewriteContext = new MvRewriteContext(
-                    mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit, onPredicates);
+            MvRewriteContext mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
+                    queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
             OptExpression candidate = mvRewriter.rewrite();
             if (candidate == null) {
@@ -116,6 +125,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             results.add(candidate);
             mvContext.updateMVUsedCount();
         }
+        logMVRewrite(context, this, "Generate %d candidate plans after this rule rewrite", results.size());
 
         return results;
     }

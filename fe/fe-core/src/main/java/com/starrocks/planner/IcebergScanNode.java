@@ -15,9 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableCollection;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
@@ -31,7 +28,6 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.RemoteFileDesc;
@@ -39,6 +35,8 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -47,7 +45,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
@@ -93,7 +90,6 @@ public class IcebergScanNode extends ScanNode {
 
     private Set<String> equalityDeleteColumns = new HashSet<>();
 
-    private final HashMultimap<String, Long> hostToBeId = HashMultimap.create();
     private long totalBytes = 0;
 
     private boolean isFinalized = false;
@@ -122,21 +118,6 @@ public class IcebergScanNode extends ScanNode {
     @Override
     public void init(Analyzer analyzer) throws UserException {
         super.init(analyzer);
-        getAliveBackends();
-    }
-
-    private void getAliveBackends() throws UserException {
-        ImmutableCollection<ComputeNode> computeNodes =
-                ImmutableList.copyOf(GlobalStateMgr.getCurrentSystemInfo().getComputeNodes());
-
-        for (ComputeNode computeNode : computeNodes) {
-            if (computeNode.isAlive()) {
-                hostToBeId.put(computeNode.getHost(), computeNode.getId());
-            }
-        }
-        if (hostToBeId.isEmpty()) {
-            throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
-        }
     }
 
     public void preProcessIcebergPredicate(ScalarOperator predicate) {
@@ -221,7 +202,7 @@ public class IcebergScanNode extends ScanNode {
         long snapshotId = snapshot.get().snapshotId();
 
         List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, srIcebergTable, null, snapshotId, predicate);
+                catalogName, srIcebergTable, null, snapshotId, predicate, null);
 
         if (splits.isEmpty()) {
             LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",
@@ -324,9 +305,6 @@ public class IcebergScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
-
         if (detailLevel == TExplainLevel.VERBOSE) {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
@@ -362,11 +340,7 @@ public class IcebergScanNode extends ScanNode {
             if (hasLimit()) {
                 cardinality = Math.min(cardinality, limit);
             }
-
-            numNodes = Math.min(hostToBeId.size(), result.size());
         }
-        // even current node scan has no data, at least one backend will be assigned when the fragment actually execute
-        numNodes = numNodes <= 0 ? 1 : numNodes;
         // when node scan has no data, cardinality should be 0 instead of a invalid value after computeStats()
         cardinality = cardinality == -1 ? 0 : cardinality;
     }
@@ -391,11 +365,17 @@ public class IcebergScanNode extends ScanNode {
             msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
         }
 
-        if (srIcebergTable != null) {
-            msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
-        }
+        msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
 
-        if (cloudConfiguration != null) {
+        // Try to get tabular signed temporary credential
+        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForTabular(srIcebergTable.getNativeTable().io().properties());
+        if (tabularTempCloudConfiguration.getCloudType() == CloudType.AWS) {
+            // If we build CloudConfiguration succeed, means we can use tabular signed temp credentials
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            tabularTempCloudConfiguration.toThrift(tCloudConfiguration);
+            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
+        } else if (cloudConfiguration != null) {
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);

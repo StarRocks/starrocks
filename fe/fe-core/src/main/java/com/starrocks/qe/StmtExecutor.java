@@ -241,9 +241,8 @@ public class StmtExecutor {
         return this.coord;
     }
 
-    // At the end of query execution, we begin to add up profile
-    public void initProfile(long beginTimeInNanoSecond) {
-        profile = new RuntimeProfile("Query");
+    private RuntimeProfile buildTopLevelProfile() {
+        RuntimeProfile profile = new RuntimeProfile("Query");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
         summaryProfile.addInfoString(ProfileManager.START_TIME, TimeUtils.longToTimeString(context.getStartTime()));
@@ -254,7 +253,7 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
-        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toString());
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toProfileString());
         summaryProfile.addInfoString("StarRocks Version",
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
@@ -276,6 +275,9 @@ public class StmtExecutor {
             sb.append(SessionVariable.ENABLE_RUNTIME_ADAPTIVE_DOP).append("=")
                     .append(variables.isEnableRuntimeAdaptiveDop())
                     .append(",");
+            sb.append(SessionVariable.RUNTIME_PROFILE_REPORT_INTERVAL).append("=")
+                    .append(variables.getRuntimeProfileReportInterval())
+                    .append(",");
             if (context.getResourceGroup() != null) {
                 sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
                         .append(",");
@@ -289,13 +291,17 @@ public class StmtExecutor {
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
         profile.addChild(plannerProfile);
         context.getPlannerProfile().build(plannerProfile);
+        return profile;
+    }
 
+    // At the end of query execution, we begin to add up profile
+    private void initProfile(long beginTimeInNanoSecond) {
+        profile = buildTopLevelProfile();
         if (coord != null) {
             if (coord.getQueryProfile() != null) {
                 coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 coord.endProfile();
-                coord.mergeIsomorphicProfiles(getQueryStatisticsForAuditLog());
-                profile.addChild(coord.getQueryProfile());
+                profile.addChild(coord.buildMergedQueryProfile(getQueryStatisticsForAuditLog()));
             }
             coord = null;
         }
@@ -564,17 +570,7 @@ public class StmtExecutor {
                     throw new AnalysisException("old planner does not support CTAS statement");
                 }
             } else if (parsedStmt instanceof DmlStmt) {
-                try {
-                    handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
-                    if (context.getSessionVariable().isEnableProfile()) {
-                        writeProfile(beginTimeInNanoSecond);
-                    }
-                } catch (Throwable t) {
-                    LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
-                    throw t;
-                } finally {
-                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
-                }
+                handleDMLStmtWithProfile(execPlan, (DmlStmt) parsedStmt, beginTimeInNanoSecond);
             } else if (parsedStmt instanceof DdlStmt) {
                 handleDdlStmt();
             } else if (parsedStmt instanceof ShowStmt) {
@@ -662,10 +658,8 @@ public class StmtExecutor {
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
-            handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
-            if (context.getSessionVariable().isEnableProfile()) {
-                writeProfile(beginTimeInNanoSecond);
-            }
+            handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt(),
+                    beginTimeInNanoSecond);
             if (context.getState().getStateType() == MysqlStateType.ERR) {
                 ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
             }
@@ -673,8 +667,6 @@ public class StmtExecutor {
             LOG.warn("handle create table as select stmt fail", t);
             ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
             throw t;
-        } finally {
-            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
     }
 
@@ -843,6 +835,7 @@ public class StmtExecutor {
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
 
         coord.exec();
+        coord.setTopProfileSupplier(this::buildTopLevelProfile);
 
         // send result
         // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
@@ -1007,6 +1000,7 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setThreadLocalInfo();
+        statsConnectCtx.setStatisticsConnection(true);
         executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
     }
 
@@ -1391,6 +1385,30 @@ public class StmtExecutor {
         manager.executeJob(context, this, job);
     }
 
+    /**
+     * `handleDMLStmtWithProfile` executes DML statement and write profile at the end.
+     * NOTE: `writeProfile` can only be called once, otherwise the profile detail will be lost.
+     */
+    public void handleDMLStmtWithProfile(ExecPlan execPlan,
+                                         DmlStmt stmt,
+                                         long beginTimeInNanoSecond) throws Exception {
+        try {
+            handleDMLStmt(execPlan, stmt);
+            // TODO: Support write profile even dml aborted.
+            if (context.getSessionVariable().isEnableProfile()) {
+                writeProfile(beginTimeInNanoSecond);
+            }
+        } catch (Throwable t) {
+            LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
+            throw t;
+        } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+        }
+    }
+
+    /**
+     * `handleDMLStmt` only executes DML statement and no write profile at the end.
+     */
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
@@ -1419,7 +1437,12 @@ public class StmtExecutor {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-        Table targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Table targetTable;
+        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
+            targetTable = ((InsertStmt) stmt).getTargetTable();
+        } else {
+            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        }
 
         if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
                 !((InsertStmt) parsedStmt).hasOverwriteJob() &&
@@ -1549,7 +1572,8 @@ public class StmtExecutor {
             coord.setJobId(jobId);
             trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
 
-            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+            QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord);
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
             coord.exec();
 
             coord.join(context.getSessionVariable().getQueryTimeoutS());
@@ -1665,8 +1689,9 @@ public class StmtExecutor {
                         coord.getCommitInfos())) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+                } else {
+                    txnStatus = TransactionStatus.COMMITTED;
                 }
-                // TODO: wait remote txn finished
             } else if (targetTable instanceof SystemTable) {
                 // schema table does not need txn
                 txnStatus = TransactionStatus.VISIBLE;

@@ -77,7 +77,15 @@ public class CacheUpdateProcessor {
         this.isRecursive = isRecursive;
         this.partitionUpdatedTimes = Maps.newHashMap();
         if (enableHmsEventsIncrementalSync) {
+            trySyncEventId();
+        }
+    }
+
+    private void trySyncEventId() {
+        try {
             setLastSyncedEventId(metastore.getCurrentEventId());
+        } catch (MetastoreNotificationFetchException e) {
+            LOG.error("Sync event id on init get exception when pulling events on catalog [{}]", catalogName);
         }
     }
 
@@ -167,7 +175,8 @@ public class CacheUpdateProcessor {
             String path = metastore.getPartition(dbName, tblName, Lists.newArrayList()).getFullPath();
             existPaths = Lists.newArrayList(path.endsWith("/") ? path : path + "/");
         } else {
-            List<String> partitionNames = metastore.getPartitionKeys(dbName, tblName);
+            List<String> partitionNames = metastore.getPartitionKeysByValue(dbName, tblName,
+                    HivePartitionValue.ALL_PARTITION_VALUES);
             existPaths = metastore.getPartitionsByNames(dbName, tblName, partitionNames)
                     .values().stream()
                     .map(Partition::getFullPath)

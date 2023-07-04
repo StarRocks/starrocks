@@ -77,6 +77,21 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+    public void testArrayFnWithLambdaExpr() throws Exception {
+        String sql = "select filter(array[], x -> true);";
+        assertPlanContains(sql, "array_filter([], array_map(<slot 2> -> TRUE, []))");
+
+        sql = "select filter(array[5, -6, NULL, 7], x -> x > 0);";
+        assertPlanContains(sql, " array_filter([5,-6,NULL,7], array_map(<slot 2> -> <slot 2> > 0, [5,-6,NULL,7]))");
+
+        sql = "select filter(array[5, NULL, 7, NULL], x -> x IS NOT NULL);";
+        assertPlanContains(sql, "array_filter([5,NULL,7,NULL], array_map(<slot 2> -> <slot 2> IS NOT NULL, [5,NULL,7,NULL]))");
+
+        sql = "select array_sort(array[1, 2, 3])";
+        assertPlanContains(sql, "array_sort([1,2,3])");
+    }
+
+    @Test
     public void testDateFnTransform() throws Exception {
         String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
         assertPlanContains(sql, "1682092800");
@@ -161,6 +176,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select date_add('year', 2, th) from tall;";
         assertPlanContains(sql, "years_add(8: th, 2)");
+
+        sql = "select date_add('quarter', 2, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', 2)");
+
+        sql = "select date_add('quarter', -1, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', -1)");
+
+        sql = "select date_add('millisecond', 20, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', 20)");
+
+        sql = "select date_add('millisecond', -100, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', -100)");
     }
 
     @Test
@@ -176,6 +203,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select strpos('bccaab', 'aa');";
         assertPlanContains(sql, "locate('aa', 'bccaab')");
+
+        sql = "select length('aaa');";
+        assertPlanContains(sql, "char_length('aaa')");
     }
 
     @Test

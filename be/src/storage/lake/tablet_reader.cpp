@@ -25,6 +25,7 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/empty_iterator.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/utils.h"
 #include "storage/merge_iterator.h"
 #include "storage/predicate_parser.h"
 #include "storage/row_source_mask.h"
@@ -72,7 +73,7 @@ TabletReader::~TabletReader() {
 Status TabletReader::prepare() {
     ASSIGN_OR_RETURN(_tablet_schema, _tablet.get_schema());
     if (!_rowsets_inited) {
-        ASSIGN_OR_RETURN(_rowsets, _tablet.get_rowsets(_version));
+        ASSIGN_OR_RETURN(_rowsets, enhance_error_prompt(_tablet.get_rowsets(_version)));
         _rowsets_inited = true;
     }
     _stats.rowsets_read_count += _rowsets.size();
@@ -135,6 +136,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
+    rs_opts.fill_data_cache = params.fill_data_cache;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version;
@@ -142,7 +144,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
-        ASSIGN_OR_RETURN(auto seg_iters, rowset->read(schema(), rs_opts));
+        ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
         iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
     }
     return Status::OK();
@@ -157,7 +159,7 @@ Status TabletReader::init_predicates(const TabletReaderParams& params) {
 
 Status TabletReader::init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
     PredicateParser pred_parser(*_tablet_schema);
-    ASSIGN_OR_RETURN(auto tablet_metadata, _tablet.get_metadata(_version));
+    ASSIGN_OR_RETURN(auto tablet_metadata, enhance_error_prompt(_tablet.get_metadata(_version)));
 
     for (int index = 0, size = tablet_metadata->rowsets_size(); index < size; ++index) {
         const auto& rowset_metadata = tablet_metadata->rowsets(index);
@@ -393,10 +395,20 @@ Status TabletReader::to_seek_tuple(const TabletSchema& tablet_schema, const Olap
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
+    const auto& sort_key_idxes = tablet_schema.sort_key_idxes();
+    DCHECK(sort_key_idxes.empty() || sort_key_idxes.size() >= input.size());
+
+    if (sort_key_idxes.size() > 0) {
+        for (auto idx : sort_key_idxes) {
+            schema.append_sort_key_idx(idx);
+        }
+    }
+
     for (size_t i = 0; i < input.size(); i++) {
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field(i, tablet_schema.column(i)));
+        int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
+        auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema.column(idx)));
         schema.append(f);
-        values.emplace_back(Datum());
+        values.emplace_back();
         if (input.is_null(i)) {
             continue;
         }

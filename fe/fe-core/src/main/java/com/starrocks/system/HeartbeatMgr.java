@@ -69,7 +69,6 @@ import org.json.JSONObject;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -85,19 +84,11 @@ public class HeartbeatMgr extends FrontendDaemon {
     private static final AtomicReference<TMasterInfo> MASTER_INFO = new AtomicReference<>();
 
     private final ExecutorService executor;
-    private final HeartbeatFlags heartbeatFlags;
 
     public HeartbeatMgr(boolean needRegisterMetric) {
         super("heartbeat mgr", Config.heartbeat_timeout_second * 1000L);
         this.executor = ThreadPoolManager.newDaemonFixedThreadPool(Config.heartbeat_mgr_threads_num,
                 Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
-        this.heartbeatFlags = new HeartbeatFlags();
-    }
-
-    private long computeMinActiveTxnId() {
-        long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId();
-        Optional<Long> b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getMinActiveTxnId();
-        return Math.min(a, b.orElse(Long.MAX_VALUE));
     }
 
     public void setLeader(int clusterId, String token, long epoch) {
@@ -105,9 +96,8 @@ public class HeartbeatMgr extends FrontendDaemon {
                 new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port), clusterId, epoch);
         tMasterInfo.setToken(token);
         tMasterInfo.setHttp_port(Config.http_port);
-        long flags = heartbeatFlags.getHeartbeatFlags();
+        long flags = HeartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
-        tMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
         MASTER_INFO.set(tMasterInfo);
     }
 
@@ -272,7 +262,7 @@ public class HeartbeatMgr extends FrontendDaemon {
     }
 
     // backend heartbeat
-    private class BackendHeartbeatHandler implements Callable<HeartbeatResponse> {
+    public static class BackendHeartbeatHandler implements Callable<HeartbeatResponse> {
         private ComputeNode computeNode;
 
         public BackendHeartbeatHandler(ComputeNode computeNode) {
@@ -290,10 +280,10 @@ public class HeartbeatMgr extends FrontendDaemon {
 
                 TMasterInfo copiedMasterInfo = new TMasterInfo(MASTER_INFO.get());
                 copiedMasterInfo.setBackend_ip(computeNode.getHost());
-                long flags = heartbeatFlags.getHeartbeatFlags();
+                long flags = HeartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
-                copiedMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
+                copiedMasterInfo.setRun_mode(RunMode.toTRunMode(RunMode.getCurrentRunMode()));
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
                 ok = true;
@@ -314,7 +304,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                         version = tBackendInfo.getVersion();
                     }
 
-                    // Update number of hardare of cores of corresponding backend.
+                    // Update number of hardware of cores of corresponding backend.
                     int cpuCores = tBackendInfo.isSetNum_hardware_cores() ? tBackendInfo.getNum_hardware_cores() : 0;
                     if (tBackendInfo.isSetNum_hardware_cores()) {
                         BackendCoreStat.setNumOfHardwareCoresOfBe(computeNodeId, cpuCores);

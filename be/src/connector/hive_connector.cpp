@@ -55,7 +55,9 @@ Status HiveDataSource::_check_all_slots_nullable() {
     for (const auto* slot : _tuple_desc->slots()) {
         if (!slot->is_nullable()) {
             return Status::RuntimeError(fmt::format(
-                    "All columns must be nullable for external table. Column '{}' is not nullable", slot->col_name()));
+                    "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild the"
+                    "external table and We strongly recommend that you use catalog to access external data.",
+                    slot->col_name()));
         }
     }
     return Status::OK();
@@ -79,7 +81,8 @@ Status HiveDataSource::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
     _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
     if (_hive_table == nullptr) {
-        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake/file table are supported");
+        return Status::RuntimeError(
+                "Invalid table type. Only hive/iceberg/hudi/delta lake/file/paimon table are supported");
     }
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
@@ -105,9 +108,6 @@ Status HiveDataSource::open(RuntimeState* state) {
 
 void HiveDataSource::_update_has_any_predicate() {
     auto f = [&]() {
-        if (_conjunct_ctxs.size() > 0) return true;
-        if (_min_max_conjunct_ctxs.size() > 0) return true;
-        if (_partition_conjunct_ctxs.size() > 0) return true;
         if (_runtime_filters != nullptr && _runtime_filters->size() > 0) return true;
         return false;
     };
@@ -396,12 +396,32 @@ HdfsScanner* HiveDataSource::_create_hudi_jni_scanner() {
     jni_scanner_params["serde"] = hudi_table->get_serde_lib();
     jni_scanner_params["input_format"] = hudi_table->get_input_format();
 
-#ifndef NDEBUG
-    for (const auto& it : jni_scanner_params) {
-        VLOG_FILE << "jni scanner params. key = " << it.first << ", value = " << it.second;
-    }
-#endif
     std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
+    return scanner;
+}
+
+HdfsScanner* HiveDataSource::_create_paimon_jni_scanner() {
+    const auto* paimon_table = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
+
+    std::string required_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        required_fields.append(slot->col_name());
+        required_fields.append(",");
+    }
+    required_fields = required_fields.substr(0, required_fields.size() - 1);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["catalog_type"] = paimon_table->get_catalog_type();
+    jni_scanner_params["metastore_uri"] = paimon_table->get_metastore_uri();
+    jni_scanner_params["warehouse_path"] = paimon_table->get_warehouse_path();
+    jni_scanner_params["database_name"] = paimon_table->get_database_name();
+    jni_scanner_params["table_name"] = paimon_table->get_table_name();
+    jni_scanner_params["required_fields"] = required_fields;
+    jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
+    jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
+
+    std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
     return scanner;
 }
@@ -425,7 +445,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
-    FSOptions fsOptions =
+    auto fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
@@ -453,6 +473,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
+    scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
     }
@@ -470,8 +491,14 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_hudi_jni_reader) {
         use_hudi_jni_reader = scan_range.use_hudi_jni_reader;
     }
+    bool use_paimon_jni_reader = false;
+    if (scan_range.__isset.use_paimon_jni_reader) {
+        use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
+    }
 
-    if (use_hudi_jni_reader) {
+    if (use_paimon_jni_reader) {
+        scanner = _create_paimon_jni_scanner();
+    } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner();
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool.add(new HdfsParquetScanner());

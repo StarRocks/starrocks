@@ -263,7 +263,7 @@ public class MaterializedViewAnalyzer {
             if (statement.getPartitionExpDesc() != null) {
                 // check partition expression all in column list and
                 // write the expr into partitionExpDesc if partition expression exists
-                checkExpInColumn(statement, columnExprMap);
+                checkExpInColumn(statement);
                 // check partition expression is supported
                 checkPartitionColumnExprs(statement, columnExprMap, context, aliasTableMap);
                 // check whether partition expression functions are allowed if it exists
@@ -356,7 +356,7 @@ public class MaterializedViewAnalyzer {
 
             List<Column> mvColumns = Lists.newArrayList();
             for (int i = 0; i < relationFields.size(); ++i) {
-                Type type = AnalyzerUtils.transformTypeForMv(relationFields.get(i).getType());
+                Type type = AnalyzerUtils.transformTableColumnType(relationFields.get(i).getType(), false);
                 Column column = new Column(columnNames.get(i), type, relationFields.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
@@ -427,7 +427,8 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Sort key should be a ordered prefix of select cols.");
                 }
 
-                if (!column.getType().canBeMVKey()) {
+                Type keyColType = column.getType();
+                if (!keyColType.canBeMVKey()) {
                     throw new SemanticException("This col(%s) can't be mv sort key", keyCols.get(i));
                 }
                 column.setIsKey(true);
@@ -436,8 +437,7 @@ public class MaterializedViewAnalyzer {
             return mvColumns;
         }
 
-        private void checkExpInColumn(CreateMaterializedViewStatement statement,
-                                      Map<Column, Expr> columnExprMap) {
+        private void checkExpInColumn(CreateMaterializedViewStatement statement) {
             ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
             List<Column> columns = statement.getMvColumnItems();
             SlotRef slotRef = getSlotRef(expressionPartitionDesc.getExpr());
@@ -452,6 +452,8 @@ public class MaterializedViewAnalyzer {
                     SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(columnId), slotRef.getColumnName(),
                             column.getType(), column.isAllowNull());
                     slotRef.setDesc(slotDescriptor);
+                    slotRef.setType(column.getType());
+                    slotRef.setNullable(column.isAllowNull());
                     break;
                 }
                 columnId++;
@@ -767,7 +769,7 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnType(Column partitionColumn) {
             PrimitiveType type = partitionColumn.getPrimitiveType();
-            if (!type.isFixedPointType() && !type.isDateType()) {
+            if (!type.isFixedPointType() && !type.isDateType() && type != PrimitiveType.VARCHAR) {
                 throw new SemanticException("Materialized view partition exp column:"
                         + partitionColumn.getName() + " with type " + type + " not supported");
             }

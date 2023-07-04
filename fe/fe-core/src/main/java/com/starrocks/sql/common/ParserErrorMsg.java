@@ -28,11 +28,11 @@ public interface ParserErrorMsg {
     @BaseMessage("No viable statement for input ''{0}''")
     String noViableStatement(String a0);
 
-    @BaseMessage("Input ''{0}'' is not valid at this position")
-    String inputMismatch(String a0);
-
     @BaseMessage("Input ''{0}'' is valid only for ''{1}''")
     String failedPredicate(String a0, String a1);
+
+    @BaseMessage("Unexpected input ''{0}'', the most similar input is {1}")
+    String unexpectedInput(String a0, String a1);
 
     @BaseMessage("Statement exceeds maximum length limit, please consider modify ''parse_tokens_limit'' session variable")
     String tokenExceedLimit();
@@ -58,6 +58,9 @@ public interface ParserErrorMsg {
     @BaseMessage("Invalid task name format ''{0}''")
     String invalidTaskFormat(String a0);
 
+    @BaseMessage("Invalid pipe name ''{0}''")
+    String invalidPipeName(String a0);
+
     @BaseMessage("Invalid UDF function name ''{0}''")
     String invalidUDFName(String a0);
 
@@ -66,6 +69,9 @@ public interface ParserErrorMsg {
 
     @BaseMessage("Unsupported type specification: ''{0}'' {1}")
     String unsupportedType(String a0, String a1);
+
+    @BaseMessage("Unsupported statement: '{0}'")
+    String unsupportedStatement(String a0);
 
     @BaseMessage("AUTO_INCREMENT column {0} must be NOT NULL")
     String nullColFoundInPK(String a0);
@@ -161,9 +167,11 @@ public interface ParserErrorMsg {
     @BaseMessage("Unsupported operation on {0}")
     String unsupportedOpWithInfo(String a0);
 
+    @BaseMessage("Unsupported operation {0}")
+    String unsupportedOp(String a0);
+
     @BaseMessage("Unsupported predicates. Where clause can only be ''{0}''")
     String invalidWhereExpr(String a0);
-
 
     @BaseMessage("''{0}'' must be an aggregate expression or appear in GROUP BY clause")
     String shouldBeAggFunc(String a0);

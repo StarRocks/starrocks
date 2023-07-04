@@ -20,9 +20,9 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.sql.analyzer.SemanticException;
 
-import java.util.List;
 import java.util.Map;
 
 // on-premise
@@ -47,7 +47,8 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public void getProcNodeData(BaseProcResult result) {
-        result.addRow(Lists.newArrayList(this.getFullName(),
+        result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
+                this.getFullName(),
                 this.getState().toString(),
                 String.valueOf(1L)));
     }
@@ -68,10 +69,10 @@ public class LocalWarehouse extends Warehouse {
     }
 
     @Override
-    public List<List<String>> getClusterInfo() {
+    public ProcResult getClusterProcData() {
         BaseProcResult result = new BaseProcResult();
         result.setNames(CLUSTER_PROC_NODE_TITLE_NAMES);
         cluster.getProcNodeData(result);
-        return result.getRows();
+        return result;
     }
 }
