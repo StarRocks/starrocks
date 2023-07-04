@@ -1,0 +1,16 @@
+-- name: test_expr_predicate_pushdown
+create table t0 (
+    c0 string
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t0 SELECT concat("s_", generate_series) FROM TABLE(generate_series(0,  80000));
+-- ratio 8/1
+insert into t0 SELECT * FROM t0;
+insert into t0 SELECT * FROM t0;
+insert into t0 SELECT * FROM t0;
+insert into t0 SELECT * FROM t0;
+insert into t0 SELECT * FROM t0;
+create table t1 like t0;
+insert into t1 select * from t0 order by c0;
+
+select count(*) from t1;
+select count(*) from t1 where c0 like 's_%';
