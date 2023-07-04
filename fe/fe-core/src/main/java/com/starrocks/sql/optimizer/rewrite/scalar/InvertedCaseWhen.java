@@ -268,28 +268,11 @@ public class InvertedCaseWhen {
         return op.accept(INVERT_CASE_WHEN_VISITOR, null);
     }
 
-    private static ScalarOperator ifThenNullOrFalse(ScalarOperator p) {
+    private static ScalarOperator buildIfThen(ScalarOperator p, ConstantOperator first, ConstantOperator Second) {
         Function ifFunc = Expr.getBuiltinFunction(FunctionSet.IF, new Type[] {Type.BOOLEAN, Type.BOOLEAN, Type.BOOLEAN},
                 Function.CompareMode.IS_IDENTICAL);
-        Preconditions.checkArgument(ifFunc != null);
         return new CallOperator(FunctionSet.IF, Type.BOOLEAN,
-                Lists.newArrayList(p, ConstantOperator.NULL, ConstantOperator.FALSE), ifFunc);
-    }
-
-    private static ScalarOperator ifThenTrueOrNull(ScalarOperator p) {
-        Function ifFunc = Expr.getBuiltinFunction(FunctionSet.IF, new Type[] {Type.BOOLEAN, Type.BOOLEAN, Type.BOOLEAN},
-                Function.CompareMode.IS_IDENTICAL);
-        Preconditions.checkArgument(ifFunc != null);
-        return new CallOperator(FunctionSet.IF, Type.BOOLEAN,
-                Lists.newArrayList(p, ConstantOperator.TRUE, ConstantOperator.NULL), ifFunc);
-    }
-
-    private static ScalarOperator ifThenTrueOrFalse(ScalarOperator p) {
-        Function ifFunc = Expr.getBuiltinFunction(FunctionSet.IF, new Type[] {Type.BOOLEAN, Type.BOOLEAN, Type.BOOLEAN},
-                Function.CompareMode.IS_IDENTICAL);
-        Preconditions.checkArgument(ifFunc != null);
-        return new CallOperator(FunctionSet.IF, Type.BOOLEAN,
-                Lists.newArrayList(p, ConstantOperator.TRUE, ConstantOperator.FALSE), ifFunc);
+                Lists.newArrayList(p, first, Second), ifFunc);
     }
 
     private static class SimplifyVisitor extends ScalarOperatorVisitor<Optional<ScalarOperator>, Void> {
@@ -341,7 +324,7 @@ public class InvertedCaseWhen {
             // - otherwise return false.
             if (selected.isEmpty()) {
                 if (branchToNull.isPresent()) {
-                    return Optional.of(ifThenNullOrFalse(branchToNull.get()));
+                    return Optional.of(buildIfThen(branchToNull.get(), ConstantOperator.NULL, ConstantOperator.FALSE));
                 } else {
                     return Optional.of(ConstantOperator.FALSE);
                 }
@@ -354,9 +337,8 @@ public class InvertedCaseWhen {
             if (unSelected.isEmpty()) {
                 if (!branchToNull.isPresent()) {
                     return Optional.of(ConstantOperator.TRUE);
-
                 } else if (invertedCaseWhen.isWithCaseAndConstWhen || selected.size() <= 2) {
-                    return or(selected).map(InvertedCaseWhen::ifThenTrueOrNull);
+                    return or(selected).map(e -> buildIfThen(e, ConstantOperator.TRUE, ConstantOperator.NULL));
                 } else {
                     return result;
                 }
@@ -417,7 +399,7 @@ public class InvertedCaseWhen {
             } else {
                 result = or(selected).map(e -> {
                     if (e.isNullable()) {
-                        return ifThenTrueOrFalse(e);
+                        return buildIfThen(e, ConstantOperator.TRUE, ConstantOperator.FALSE);
                     } else {
                         return e;
                     }
