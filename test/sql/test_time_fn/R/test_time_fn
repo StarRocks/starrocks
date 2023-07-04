@@ -762,7 +762,7 @@ PROPERTIES(
 );
 -- result:
 -- !result
-insert into tmp.test_data_diff(d0,d1,t)
+insert into test_data_diff(d0,d1,t)
 values ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'hour'),
        ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'day'),
        ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'second'),
@@ -770,7 +770,7 @@ values ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'hour'),
        ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'millisecond');
 -- result:
 -- !result
-select date_diff(d0,d1,t) from tmp.test_data_diff order by t;
+select date_diff(d0,d1,t) from test_data_diff order by t;
 -- result:
 0
 3
