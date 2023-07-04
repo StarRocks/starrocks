@@ -93,6 +93,7 @@ Status TabletSinkColocateSender::_send_chunks(const OlapTableSchemaParam* schema
         _node_select_idx.reserve(selection_idx.size());
 
         auto* node = it.second;
+        bool has_send_data = false;
         if (_enable_replicated_storage) {
             for (unsigned short selection : selection_idx) {
                 auto choose_tablet_id = tablet_id_selections[selection];
@@ -105,6 +106,7 @@ Status TabletSinkColocateSender::_send_chunks(const OlapTableSchemaParam* schema
                 // NOTE: FE will keep all indexes' primary tablet is in the same node.
                 if (be_ids[0] == node->node_id()) {
                     _node_select_idx.emplace_back(selection);
+                    has_send_data = true;
                 }
             }
         } else {
@@ -113,8 +115,12 @@ Status TabletSinkColocateSender::_send_chunks(const OlapTableSchemaParam* schema
                 auto choose_tablet_id = tablet_id_selections[selection];
                 if (node_tablet_ids.find(choose_tablet_id) != node_tablet_ids.end()) {
                     _node_select_idx.emplace_back(selection);
+                    has_send_data = true;
                 }
             }
+        }
+        if (!has_send_data) {
+            continue;
         }
         auto st = node->add_chunks(chunk, index_tablet_ids, _node_select_idx, 0, _node_select_idx.size());
 
