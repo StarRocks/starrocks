@@ -183,7 +183,7 @@ public class SplitAggregateRule extends TransformationRule {
     // True means good cases for parallel deduplication. It requires group by keys have a relatively high
     // cardinality (number of distinct value > 1000) to distribute data across multiple cores which helps
     // parallel deduplication in the distinct global stage.
-    private boolean isSuitableForParallelization(OptExpression input) {
+    private boolean isSuitableForParallelDeduplication(OptExpression input) {
         Statistics statistics = input.getGroupExpression().getGroup().getStatistics();
         Statistics inputStatistics = input.getGroupExpression().getInputs().get(0).getStatistics();
         Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
@@ -371,7 +371,7 @@ public class SplitAggregateRule extends TransformationRule {
         List<ColumnRefOperator> partitionByCols;
 
         boolean shouldFurtherSplit = false;
-        if (isSuitableForParallelization(input)
+        if (isSuitableForParallelDeduplication(input)
                 || oldAgg.getGroupingKeys().containsAll(distinctGlobal.getGroupingKeys())) {
             partitionByCols = oldAgg.getGroupingKeys();
         } else {
