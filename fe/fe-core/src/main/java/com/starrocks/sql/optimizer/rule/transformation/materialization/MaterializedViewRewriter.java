@@ -2247,8 +2247,8 @@ public class MaterializedViewRewriter {
     }
 
     private ScalarOperator getCompensationRangePredicate(ScalarOperator srcPr, ScalarOperator targetPr) {
-        RangeSimplifier simplifier = new RangeSimplifier(Utils.extractConjuncts(srcPr));
-        return simplifier.simplify(Utils.extractConjuncts(targetPr));
+        RangeSimplifier simplifier = new RangeSimplifier(srcPr);
+        return simplifier.simplify(targetPr);
     }
 
     // compute the compensation equality predicates

@@ -7,65 +7,101 @@ import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.TreeRangeSet;
+import com.starrocks.analysis.BinaryType;
+>>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public class RangeSimplifier {
-    private final List<ScalarOperator> srcPredicates;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit.rangeSetToExpr;
 
-    public RangeSimplifier(List<ScalarOperator> srcPredicates) {
-        this.srcPredicates = srcPredicates;
+@SuppressWarnings("UnstableApiUsage")
+public class RangeSimplifier {
+<<<<<<< HEAD
+    private final List<ScalarOperator> srcPredicates;
+=======
+    protected static final Logger LOG = LogManager.getLogger(RangeSimplifier.class);
+
+    private final ScalarOperator srcPredicate;
+>>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
+
+    public RangeSimplifier(ScalarOperator srcPredicate) {
+        this.srcPredicate = srcPredicate;
     }
 
     // check whether target range predicates are contained in srcPredicates
     // all ScalarOperator should be BinaryPredicateOperator,
     // left is ColumnRefOperator and right is ConstantOperator
-    public ScalarOperator simplify(List<ScalarOperator> targets) {
+    public ScalarOperator simplify(ScalarOperator target) {
         try {
-            Map<Integer, Range<ConstantOperator>> srcColumnIdToRange = extractColumnIdRangeMapping(srcPredicates);
-            if (srcColumnIdToRange == null) {
+
+            Map<ColumnRefOperator, TreeRangeSet<ConstantOperator>> srcColumnToRange =
+                    extractColumnIdRangeMapping(srcPredicate);
+            if (srcColumnToRange == null) {
                 return null;
             }
-            Map<Integer, Range<ConstantOperator>> targetColumnIdToRange = extractColumnIdRangeMapping(targets);
-            if (targetColumnIdToRange == null) {
+            Map<ColumnRefOperator, TreeRangeSet<ConstantOperator>> targetColumnToRange =
+                    extractColumnIdRangeMapping(target);
+            if (targetColumnToRange == null) {
                 return null;
             }
 
-            List<Integer> resultColumnIds = Lists.newArrayList();
-            for (Map.Entry<Integer, Range<ConstantOperator>> targetEntry : targetColumnIdToRange.entrySet()) {
+            Map<Integer, ColumnRefOperator> srcColumnIdMap = srcColumnToRange.keySet()
+                    .stream().collect(Collectors.toMap(ColumnRefOperator::getId, Function.identity()));
+
+            Map<Integer, ColumnRefOperator> targetColumnIdMap = targetColumnToRange.keySet()
+                    .stream().collect(Collectors.toMap(ColumnRefOperator::getId, Function.identity()));
+
+            List<ColumnRefOperator> resultColumns = Lists.newArrayList();
+            for (Map.Entry<Integer, ColumnRefOperator> targetEntry : targetColumnIdMap.entrySet()) {
+                ColumnRefOperator targetColumn = targetEntry.getValue();
+                TreeRangeSet<ConstantOperator> targetRange = targetColumnToRange.get(targetColumn);
+
                 // Source columnId range must contain any target columnId.
+<<<<<<< HEAD
                 if (!srcColumnIdToRange.containsKey(targetEntry.getKey())
                         && !targetEntry.getValue().hasUpperBound()
                         && !targetEntry.getValue().hasLowerBound()) {
                     return  null;
+=======
+                if (!srcColumnToRange.containsKey(targetColumn)
+                        && !targetRange.asRanges().stream().allMatch(Range::hasUpperBound)
+                        && !targetRange.asRanges().stream().allMatch(Range::hasLowerBound)) {
+                    return null;
+>>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
                 }
-                Range<ConstantOperator> srcRange = srcColumnIdToRange.get(targetEntry.getKey());
-                Range<ConstantOperator> targetRange = targetEntry.getValue();
+                TreeRangeSet<ConstantOperator> srcRange = srcColumnToRange.get(targetColumn);
                 if (srcRange.equals(targetRange)) {
                     continue;
-                } else if (targetRange.encloses(srcRange)) {
-                    resultColumnIds.add(targetEntry.getKey());
+                } else if (targetRange.enclosesAll(srcRange)) {
+                    resultColumns.add(targetColumn);
                 } else {
                     // can not be rewritten
                     return null;
                 }
             }
 
-            for (Map.Entry<Integer, Range<ConstantOperator>> srcEntry : srcColumnIdToRange.entrySet()) {
-                if (!targetColumnIdToRange.containsKey(srcEntry.getKey())) {
-                    resultColumnIds.add(srcEntry.getKey());
+            for (Map.Entry<Integer, ColumnRefOperator> srcEntry : srcColumnIdMap.entrySet()) {
+                if (!targetColumnToRange.containsKey(srcEntry.getValue())) {
+                    resultColumns.add(srcEntry.getValue());
                 }
             }
-            if (resultColumnIds.isEmpty()) {
+
+            if (resultColumns.isEmpty()) {
                 return ConstantOperator.createBoolean(true);
             } else {
+<<<<<<< HEAD
                 List<ScalarOperator> rewrittenRangePredicates = Lists.newArrayList();
                 for (int columnId : resultColumnIds) {
                     Range<ConstantOperator> columnRange = srcColumnIdToRange.get(columnId);
@@ -86,10 +122,20 @@ public class RangeSimplifier {
                         columnScalars = filterScalarOperators(columnScalars, columnRange);
                         rewrittenRangePredicates.addAll(columnScalars);
                     }
+=======
+                List<ScalarOperator> result = new ArrayList<>();
+                for (ColumnRefOperator column : resultColumns) {
+                    TreeRangeSet<ConstantOperator> columnRange = srcColumnToRange.get(column);
+                    result.add(rangeSetToExpr(columnRange, column));
+>>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
                 }
-                return Utils.compoundAnd(rewrittenRangePredicates);
+                return Utils.compoundAnd(result);
             }
         } catch (Exception e) {
+<<<<<<< HEAD
+=======
+            LOG.debug("Simplify scalar operator {} failed:", target, e);
+>>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
             return null;
         }
     }
@@ -186,4 +232,11 @@ public class RangeSimplifier {
                 throw new UnsupportedOperationException("unsupported type:" + type);
         }
     }
+
+    private Map<ColumnRefOperator, TreeRangeSet<ConstantOperator>> extractColumnIdRangeMapping(ScalarOperator predicate) {
+        PredicateSplit.RangeExtractor extractor = new PredicateSplit.RangeExtractor();
+        return predicate.accept(extractor, new PredicateSplit.RangeExtractorContext());
+    }
+
+
 }
