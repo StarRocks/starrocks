@@ -724,8 +724,7 @@ void TabletUpdates::_check_for_apply() {
     auto st = StorageEngine::instance()->update_manager()->apply_thread_pool()->submit(std::move(task));
     if (!st.ok()) {
         std::string msg = Substitute("submit apply task failed: $0 $1", st.to_string(), _debug_string(false, false));
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        LOG(FATAL) << msg;
     }
 }
 
