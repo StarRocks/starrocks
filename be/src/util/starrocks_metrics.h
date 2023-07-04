@@ -255,6 +255,8 @@ public:
     METRIC_DEFINE_UINT_GAUGE(segment_flush_queue_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(update_apply_queue_count, MetricUnit::NOUNIT);
 
+    METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
+
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;
         return &instance;
