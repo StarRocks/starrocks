@@ -218,21 +218,16 @@ public class TestFileSystemManager extends TestCase {
         properties.put("username", "user");
         properties.put("password", "passwd");
         properties.put("fs.defaultFS", "hdfs://starrocks");
-        properties.put("dfs.nameservices", "difed,DClusterNmg5");
-        properties.put("dfs.ha.namenodes.difed", "r1,r2,r3,r4,r5,r6,r7");
-        properties.put("dfs.namenode.rpc-address.difed.r1", "10.83.74.67:8888");
-        properties.put("dfs.namenode.rpc-address.difed.r2", "10.83.75.32:8888");
-        properties.put("dfs.namenode.rpc-address.difed.r3", "10.83.76.34:8888");
-        properties.put("dfs.namenode.rpc-address.difed.r4", "10.83.76.36:8888");
-        properties.put("dfs.namenode.rpc-address.difed.r5", "10.83.52.66:8888");
-        properties.put("dfs.namenode.rpc-address.difed.r6", "10.83.185.17:8888");
-        properties.put("dfs.namenode.rpc-address.difed.r7", "10.77.100.34:8888");
-        properties.put("dfs.client.failover.proxy.provider.difed",
+        properties.put("dfs.nameservices", "DClusterNmg1,DClusterNmg2");
+        properties.put("dfs.ha.namenodes.DClusterNmg1", "nn11,nn12");
+        properties.put("dfs.namenode.rpc-address.DClusterNmg1.nn11", "127.0.0.1:8888");
+        properties.put("dfs.namenode.rpc-address.DClusterNmg1.nn12", "127.0.0.1:7777");
+        properties.put("dfs.client.failover.proxy.provider.DClusterNmg1",
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
-        properties.put("dfs.ha.namenodes.DClusterNmg5", "nn41,nn42");
-        properties.put("dfs.namenode.rpc-address.DClusterNmg5.nn41", "10.77.40.13:8020");
-        properties.put("dfs.namenode.rpc-address.DClusterNmg5.nn42", "10.77.43.23:8020");
-        properties.put("dfs.client.failover.proxy.provider.DClusterNmg5",
+        properties.put("dfs.ha.namenodes.DClusterNmg2", "nn21,nn22");
+        properties.put("dfs.namenode.rpc-address.DClusterNmg2.nn21", "127.0.0.1:8020");
+        properties.put("dfs.namenode.rpc-address.DClusterNmg2.nn22", "127.0.0.1:8030");
+        properties.put("dfs.client.failover.proxy.provider.DClusterNmg2",
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
         BrokerFileSystem fs = fileSystemManager.getFileSystem(testHdfsHost + "/user/user/dd_cdm/hive/dd_cdm/", properties);
         assertNotNull(fs);
