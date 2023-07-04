@@ -54,10 +54,10 @@ Status PageReader::next_header() {
         std::vector<uint8_t> page_buffer;
         page_buffer.reserve(allowed_page_size);
         uint8_t* page_buf = page_buffer.data();
-        header_length = allowed_page_size;
 
         RETURN_IF_ERROR(_stream->read_at_fully(_offset, page_buf, allowed_page_size));
 
+        header_length = allowed_page_size;
         auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
         if (st.ok()) {
             break;
