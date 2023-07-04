@@ -26,7 +26,7 @@ jobs:
     if: >
       github.event.workflow_run.event == 'pull_request'
     outputs:
-      PR_NUMBER: ${{ steps.pr_num_reader.outputs.content }}
+      PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       BASE_REF: ${{ steps.pr_details.outputs.base_ref }}
     steps:
       - name: Download workflow artifact
@@ -50,8 +50,10 @@ jobs:
           PR_NUMBER: ${{ steps.pr_num_reader.outputs.content }}
           REPO: ${{ github.repository }}
         run: |
+          PR_NUMBER=`echo ${PR_NUMBER}`
           base_ref=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName -q .baseRefName`
           echo "base_ref=${base_ref}" >> $GITHUB_OUTPUT 
+          echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT 
 
   FE-UT-REPORT:
     runs-on: [ self-hosted, quick ]
