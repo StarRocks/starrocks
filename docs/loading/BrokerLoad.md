@@ -183,6 +183,8 @@ WITH BROKER
 
 In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#aws-s3).
 
+From v3.1 onwards, StarRocks supports directly loading the data of Parquet-formatted or ORC-formatted files from AWS S3 by using the INSERT command and the TABLE keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using TABLE keyword](../sql-reference/sql-statements/data-manipulation/insert.md).
+
 #### Load data from Google GCS
 
 Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your Google GCS bucket `bucket_gcs` into `table1` and `table2`, respectively:
