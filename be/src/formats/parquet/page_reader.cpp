@@ -49,8 +49,10 @@ Status PageReader::next_header() {
 
     do {
         allowed_page_size = std::min(allowed_page_size, remaining);
-        if (UNLIKELY((allowed_page_size > kMaxPageHeaderSize) || (_offset + allowed_page_size) > _finish_offset)) {
-            return Status::Corruption("Failed to decode parquet page header, page header's size is out of range");
+        if (UNLIKELY(allowed_page_size > kMaxPageHeaderSize)) {
+            return Status::Corruption(
+                    strings::Substitute("Failed to decode parquet page header, page header size $0 is out of limit $1",
+                                        allowed_page_size, kMaxPageHeaderSize));
         }
 
         std::vector<uint8_t> page_buffer;
@@ -64,6 +66,13 @@ Status PageReader::next_header() {
         if (st.ok()) {
             break;
         }
+
+        if (UNLIKELY((_offset + allowed_page_size) >= _finish_offset)) {
+            // Notice, here is using >=, just to prevent loop infinitely.
+            return Status::Corruption(strings::Substitute(
+                    "Failed to decode parquet page header, offset=$0, finish_offset=$1", _offset, _finish_offset));
+        }
+
         allowed_page_size <<= 2;
     } while (true);
     DCHECK(header_length > 0);
