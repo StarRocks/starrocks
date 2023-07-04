@@ -224,7 +224,7 @@ public:
     // TODO should we rename the method to remove_files() to be more specific?
     Status remove();
 
-    Status remove_delta_column_group();
+    Status remove_delta_column_group(KVStore* kvstore);
 
     // close to clear the resource owned by rowset
     // including: open files, indexes and so on
@@ -258,7 +258,7 @@ public:
 
     // hard link all files in this rowset to `dir` to form a new rowset with id `new_rowset_id`.
     // `version` is used for link col files, default using INT64_MAX means link all col files
-    Status link_files_to(const std::string& dir, RowsetId new_rowset_id, int64_t version = INT64_MAX);
+    Status link_files_to(KVStore* kvstore, const std::string& dir, RowsetId new_rowset_id, int64_t version = INT64_MAX);
 
     // copy all files to `dir`
     Status copy_files_to(const std::string& dir);
@@ -372,9 +372,9 @@ protected:
 private:
     int64_t _mem_usage() const { return sizeof(Rowset) + _rowset_path.length(); }
 
-    Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs);
+    Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs, KVStore* kvstore);
 
-    Status _link_delta_column_group_files(const std::string& dir, int64_t version);
+    Status _link_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
     std::vector<SegmentSharedPtr> _segments;
 };

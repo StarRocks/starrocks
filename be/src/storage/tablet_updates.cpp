@@ -2873,7 +2873,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, co
     for (int i = 0; i < rowsets.size(); i++) {
         auto& src_rowset = *rowsets[i];
         RowsetId rid = StorageEngine::instance()->next_rowset_id();
-        auto st = src_rowset.link_files_to(_tablet.schema_hash_path(), rid, version.major());
+        auto st = src_rowset.link_files_to(base_tablet->data_dir()->get_meta(), _tablet.schema_hash_path(), rid,
+                                           version.major());
         if (!st.ok()) {
             return st;
         }
@@ -3518,7 +3519,7 @@ void TabletUpdates::_remove_unused_rowsets(bool drop_tablet) {
         _clear_rowset_del_vec_cache(*rowset);
         _clear_rowset_delta_column_group_cache(*rowset);
 
-        Status st = rowset->remove_delta_column_group();
+        Status st = rowset->remove_delta_column_group(_tablet.data_dir()->get_meta());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to delete delta column group. err: " << st.get_error_msg()
                          << ", rowset_id: " << rowset->rowset_id() << ", tablet_id: " << _tablet.tablet_id();
