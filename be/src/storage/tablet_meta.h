@@ -103,7 +103,7 @@ public:
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
-               TTabletType::type tabletType, TCompressionType::type compression_type);
+               TTabletType::type tabletType, TCompressionType::type compression_type, std::string store_type);
 
     virtual ~TabletMeta();
 
@@ -188,6 +188,8 @@ public:
         return _updatesPB.release();
     }
 
+    std::string get_store_type() const { return _store_type; }
+
     bool get_enable_persistent_index() const { return _enable_persistent_index; }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
@@ -227,6 +229,7 @@ private:
     int32_t _shard_id = 0;
     int64_t _creation_time = 0;
     int64_t _cumulative_layer_point = 0;
+    string _store_type;
     bool _enable_persistent_index = false;
     TabletUid _tablet_uid;
     TabletTypePB _tablet_type = TabletTypePB::TABLET_TYPE_DISK;

@@ -305,6 +305,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
                         Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         assert baseTabletId != null;
+                        createReplicaTask.setStoreType(table.storeType());
                         createReplicaTask.setBaseTablet(baseTabletId, 0/*unused*/);
                         batchTask.addTask(createReplicaTask);
                     }

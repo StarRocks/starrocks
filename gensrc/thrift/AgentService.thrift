@@ -102,6 +102,7 @@ struct TCreateTabletReq {
     15: optional bool enable_persistent_index
     16: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
     17: optional TBinlogConfig binlog_config;
+    18: optional string store_type
 }
 
 struct TDropTabletReq {
@@ -332,7 +333,8 @@ enum TTabletMetaType {
     WRITE_QUORUM,
     REPLICATED_STORAGE,
     DISABLE_BINLOG,
-    BINLOG_CONFIG
+    BINLOG_CONFIG,
+    STORE_TYPE
 }
 
 struct TTabletMetaInfo {

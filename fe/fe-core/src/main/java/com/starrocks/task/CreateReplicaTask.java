@@ -41,6 +41,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.thrift.TBinlogConfig;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCompressionType;
@@ -88,6 +89,8 @@ public class CreateReplicaTask extends AgentTask {
     private boolean enablePersistentIndex;
 
     private BinlogConfig binlogConfig;
+
+    private String storeType = PropertyAnalyzer.PROPERTIES_STORE_TYPE_COLUMN;
 
     private TTabletType tabletType;
 
@@ -168,6 +171,10 @@ public class CreateReplicaTask extends AgentTask {
         this.tabletType = tabletType;
 
         this.compressionType = compressionType;
+    }
+
+    public void setStoreType(String storeType) {
+        this.storeType = storeType;
     }
 
     public void setIsRecoverTask(boolean isRecoverTask) {
@@ -257,6 +264,7 @@ public class CreateReplicaTask extends AgentTask {
 
         createTabletReq.setStorage_medium(storageMedium);
         createTabletReq.setEnable_persistent_index(enablePersistentIndex);
+        createTabletReq.setStore_type(storeType);
 
         if (binlogConfig != null) {
             TBinlogConfig tBinlogConfig = binlogConfig.toTBinlogConfig();

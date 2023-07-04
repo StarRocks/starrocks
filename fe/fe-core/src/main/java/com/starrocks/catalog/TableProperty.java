@@ -546,6 +546,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
+    public String storeType() {
+        return properties.get(PropertyAnalyzer.PROPERTIES_STORE_TYPE);
+    }
+
     public TWriteQuorumType writeQuorum() {
         return writeQuorum;
     }

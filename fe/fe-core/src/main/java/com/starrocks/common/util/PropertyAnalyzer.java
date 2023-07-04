@@ -126,6 +126,12 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BINLOG_MAX_SIZE = "binlog_max_size";
 
+    public static final String PROPERTIES_STORE_TYPE = "store_type";
+    public static final String PROPERTIES_STORE_TYPE_COLUMN = "column";
+    public static final String PROPERTIES_STORE_TYPE_COLUMN_WITH_ROW = "column_with_row";
+    public static final String PROPERTIES_STORE_TYPE_ROW = "row";
+    public static final String PROPERTIES_STORE_TYPE_ROW_MVCC = "row_mvcc";
+
     public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
 
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
@@ -805,7 +811,7 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (analyzedTable.isMaterializedView() && analyzedTable.hasUniqueConstraints()) {
             mvUniqueConstraints = analyzedTable.getUniqueConstraints().stream().filter(
-                    uniqueConstraint -> parentTable.getName().equals(uniqueConstraint.getTableName()))
+                            uniqueConstraint -> parentTable.getName().equals(uniqueConstraint.getTableName()))
                     .collect(Collectors.toList());
         }
 

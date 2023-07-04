@@ -28,6 +28,7 @@ class Tablet;
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     std::vector<std::unique_ptr<Column>> write_columns;
+    ChunkPtr partial_update_value_columns; // only used for column_with_row store
     bool inited = false;
     EditVersion read_version;
 

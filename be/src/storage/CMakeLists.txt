@@ -136,6 +136,7 @@ add_library(Storage STATIC
     projection_iterator.cpp
     push_handler.cpp
     row_source_mask.cpp
+    row_store_encoder.cpp
     schema_change.cpp
     schema_change_utils.cpp
     tablet_reader.cpp

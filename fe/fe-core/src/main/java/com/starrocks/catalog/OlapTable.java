@@ -719,9 +719,8 @@ public class OlapTable extends Table {
             List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
                     .seqChooseBackendIds(replicationNum, true, true);
             if (CollectionUtils.isEmpty(beIds)) {
-                return new Status(ErrCode.COMMON_ERROR, "failed to find "
-                        + replicationNum
-                        + " different hosts to create table: " + name);
+                return new Status(ErrCode.COMMON_ERROR,
+                        "failed to find " + replicationNum + " different hosts to create table: " + name);
             }
             for (Long beId : beIds) {
                 long newReplicaId = globalStateMgr.getNextId();
@@ -1904,10 +1903,11 @@ public class OlapTable extends Table {
         long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentState().getTabletScheduler());
         if (unhealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
-            throw new DdlException("Table [" + name + "] is not stable. "
-                    + "Unhealthy (or doing balance) tablet id: " + unhealthyTabletId + ". "
-                    + "Some tablets of this table may not be healthy or are being scheduled. "
-                    + "You need to repair the table first or stop cluster balance.");
+            throw new DdlException(
+                    "Table [" + name + "] is not stable. " + "Unhealthy (or doing balance) tablet id: " + unhealthyTabletId +
+                            ". " +
+                            "Some tablets of this table may not be healthy or are being scheduled. " +
+                            "You need to repair the table first or stop cluster balance.");
         }
     }
 
@@ -2090,6 +2090,23 @@ public class OlapTable extends Table {
             return BinlogConfig.INVALID;
         }
         return tableProperty.getBinlogConfig().getVersion();
+    }
+
+    public String storeType() {
+        if (tableProperty != null) {
+            return tableProperty.storeType();
+        }
+        return PropertyAnalyzer.PROPERTIES_STORE_TYPE_COLUMN;
+    }
+
+    public void setStoreType(String storeType) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        if (storeType == null) {
+            storeType = PropertyAnalyzer.PROPERTIES_STORE_TYPE_COLUMN;
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORE_TYPE, storeType);
     }
 
     public void setEnablePersistentIndex(boolean enablePersistentIndex) {

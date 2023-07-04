@@ -1802,6 +1802,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         table.enablePersistentIndex(),
                         TTabletType.TABLET_TYPE_LAKE,
                         table.getCompressionType(), indexMeta.getSortKeyIdxes());
+                task.setStoreType(table.storeType());
                 tasks.add(task);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {

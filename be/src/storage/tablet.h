@@ -270,6 +270,10 @@ public:
 
     bool enable_compaction();
 
+    std::string get_store_type() const { return _tablet_meta->get_store_type(); }
+
+    const bool is_column_with_row_store() const { return get_store_type() == "column_with_row"; }
+
     [[nodiscard]] bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
 
     void set_enable_persistent_index(bool enable_persistent_index) {

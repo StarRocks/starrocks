@@ -36,16 +36,29 @@ namespace starrocks {
 static const string LOAD_OP_COLUMN = "__op";
 
 Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs) {
-    Schema schema = ChunkHelper::convert_schema(*tablet_schema);
-    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs != nullptr &&
-        slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
-        // load slots have __op field, so add to _vectorized_schema
-        auto op_column =
-                std::make_shared<starrocks::Field>((ColumnId)-1, LOAD_OP_COLUMN, LogicalType::TYPE_TINYINT, false);
-        op_column->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
-        schema.append(op_column);
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        const auto& last_column = tablet_schema->columns().back();
+        // remove last __row column if exists, because it's not used in memtable
+        int ncolumn = tablet_schema->num_columns();
+        if (last_column.name() == "__row") {
+            ncolumn--;
+        }
+        vector<ColumnId> column_idxes;
+        for (ColumnId i = 0; i < ncolumn; i++) {
+            column_idxes.push_back(i);
+        }
+        Schema schema = Schema(tablet_schema->schema(), column_idxes);
+        if (slot_descs != nullptr && slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+            // load slots have __op field, so add to _vectorized_schema
+            auto op_column =
+                    std::make_shared<starrocks::Field>((ColumnId)-1, LOAD_OP_COLUMN, LogicalType::TYPE_TINYINT, false);
+            op_column->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
+            schema.append(op_column);
+        }
+        return schema;
+    } else {
+        return ChunkHelper::convert_schema(*tablet_schema);
     }
-    return schema;
 }
 
 void MemTable::_init_aggregator_if_needed() {

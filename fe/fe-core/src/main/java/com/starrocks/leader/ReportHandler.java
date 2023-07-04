@@ -799,6 +799,7 @@ public class ReportHandler extends Daemon {
                                             olapTable.enablePersistentIndex(),
                                             olapTable.getPartitionInfo().getTabletType(partitionId),
                                             olapTable.getCompressionType(), indexMeta.getSortKeyIdxes());
+                                    createReplicaTask.setStoreType(olapTable.storeType());
                                     createReplicaTask.setIsRecoverTask(true);
                                     createReplicaBatchTask.addTask(createReplicaTask);
                                 } else {

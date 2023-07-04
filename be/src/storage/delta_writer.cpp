@@ -184,9 +184,15 @@ Status DeltaWriter::_init() {
             return _opt.slots->size();
         }
     }();
+    size_t real_num_columns = _tablet->tablet_schema().num_columns();
+    if (_tablet->is_column_with_row_store()) {
+        if (_tablet->tablet_schema().columns().back().name() != "__row") {
+            return Status::InternalError("bad column_with_row schema, not __row column");
+        }
+        real_num_columns -= 1;
+    }
     // maybe partial update, change to partial tablet schema
-    if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
-        partial_cols_num < _tablet->tablet_schema().num_columns()) {
+    if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < real_num_columns) {
         writer_context.referenced_column_ids.reserve(partial_cols_num);
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();

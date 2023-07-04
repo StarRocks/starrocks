@@ -869,6 +869,7 @@ public class RestoreJob extends AbstractJob {
                             localTbl.enablePersistentIndex(),
                             localTbl.getPartitionInfo().getTabletType(restorePart.getId()),
                             localTbl.getCompressionType(), indexMeta.getSortKeyIdxes());
+                    task.setStoreType(localTbl.storeType());
                     task.setInRestoreMode(true);
                     batchTask.addTask(task);
                 }
@@ -925,7 +926,7 @@ public class RestoreJob extends AbstractJob {
 
     // files in repo to files in local
     protected void genFileMapping(OlapTable localTbl, Partition localPartition, Long remoteTblId,
-                                BackupPartitionInfo backupPartInfo, boolean overwrite) {
+                                  BackupPartitionInfo backupPartInfo, boolean overwrite) {
         for (MaterializedIndex localIdx : localPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
             LOG.debug("get index id: {}, index name: {}", localIdx.getId(),
                     localTbl.getIndexNameById(localIdx.getId()));
@@ -1077,7 +1078,7 @@ public class RestoreJob extends AbstractJob {
                             HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
                         } catch (UserException e) {
                             status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
-                            return;    
+                            return;
                         }
                     }
                     // allot tasks
