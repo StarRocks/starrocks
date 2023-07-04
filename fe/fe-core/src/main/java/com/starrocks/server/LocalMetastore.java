@@ -240,6 +240,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -2706,6 +2707,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 randomizeStart =
                         VariableMgr.parseBooleanVariable(
                                 properties.get((PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START)));
+                // remove this transient variable
+                properties.remove(PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START);
             }
             if (asyncRefreshSchemeDesc.isDefineStartTime() || !randomizeStart) {
                 asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
@@ -2716,8 +2719,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 TimeUnit timeUnit =
                         TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
                 long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
-                long currentTimeSecond = System.currentTimeMillis() / 1000;
-                long randomizedStart = currentTimeSecond + ThreadLocalRandom.current().nextLong(intervalSeconds);
+                long currentTimeSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+                long random = ThreadLocalRandom.current().nextLong(Math.min(300, intervalSeconds / 2));
+                long randomizedStart = currentTimeSecond + random;
 
                 asyncRefreshContext.setStartTime(randomizedStart);
             }
