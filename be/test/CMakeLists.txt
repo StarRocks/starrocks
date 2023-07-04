@@ -303,6 +303,7 @@ set(EXEC_FILES
         ./simd/simd_mulselector_test.cpp
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
+        ./util/await_test.cpp
         ./util/bitmap_test.cpp
         ./util/bitmap_value_test.cpp
         ./util/bit_stream_utils_test.cpp
