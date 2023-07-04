@@ -150,7 +150,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();
         if (only_null) {
-            return ColumnHelper::create_const_null_column(1);
+            return ColumnHelper::create_const_null_column(size);
         }
         ColumnPtr col = nullptr;
         if constexpr (lt_is_decimal<Type>) {
