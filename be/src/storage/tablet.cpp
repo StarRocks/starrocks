@@ -1605,6 +1605,15 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     }
 }
 
+int64_t Tablet::data_size() {
+    std::shared_lock rdlock(_meta_lock);
+    if (_updates) {
+        return _updates->data_size();
+    } else {
+        return _tablet_meta->tablet_footprint();
+    }
+}
+
 Status Tablet::verify() {
     int64_t version = max_continuous_version();
     std::vector<RowsetSharedPtr> rowsets;

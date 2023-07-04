@@ -288,6 +288,8 @@ public:
 
     void get_basic_info(TabletBasicInfo& info);
 
+    int64_t data_size();
+
     // verify all rowsets of current(max) version in this tablet
     [[nodiscard]] Status verify();
 

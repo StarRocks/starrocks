@@ -144,6 +144,10 @@ Status DeltaWriter::_init() {
         return st;
     }
 
+    if (_opt.min_immutable_tablet_size > 0 && _tablet->data_size() > _opt.min_immutable_tablet_size) {
+        _is_immutable.store(true, std::memory_order_release);
+    }
+
     // The tablet may have been migrated during delta writer init,
     // and the latest tablet needs to be obtained when loading.
     // Here, the while loop checks whether the obtained tablet has changed
@@ -418,21 +422,36 @@ Status DeltaWriter::_flush_memtable_async(bool eos) {
             // Although there maybe no data, but we still need send eos to seconary replica
             auto replicate_token = _replicate_token.get();
             return _flush_token->submit(std::move(_mem_table), eos,
-                                        [replicate_token](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                        [replicate_token, this](std::unique_ptr<SegmentPB> seg, bool eos) {
                                             auto st = replicate_token->submit(std::move(seg), eos);
                                             if (!st.ok()) {
                                                 LOG(WARNING) << "Failed to submit sync segment err=" << st;
                                                 replicate_token->set_status(st);
                                             }
+
+                                            if (_opt.min_immutable_tablet_size > 0 &&
+                                                _tablet->data_size() > _opt.min_immutable_tablet_size) {
+                                                _is_immutable.store(true, std::memory_order_release);
+                                            }
                                         });
         } else {
             if (_mem_table != nullptr) {
-                return _flush_token->submit(std::move(_mem_table), eos, nullptr);
+                return _flush_token->submit(std::move(_mem_table), eos,
+                                            [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                                if (_opt.min_immutable_tablet_size > 0 &&
+                                                    _tablet->data_size() > _opt.min_immutable_tablet_size) {
+                                                    _is_immutable.store(true, std::memory_order_release);
+                                                }
+                                            });
             }
         }
     } else if (_replica_state == Peer) {
         if (_mem_table != nullptr) {
-            return _flush_token->submit(std::move(_mem_table), eos, nullptr);
+            return _flush_token->submit(std::move(_mem_table), eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                if (_opt.min_immutable_tablet_size > 0 && _tablet->data_size() > _opt.min_immutable_tablet_size) {
+                    _is_immutable.store(true, std::memory_order_release);
+                }
+            });
         }
     }
     return Status::OK();

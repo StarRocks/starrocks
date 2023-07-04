@@ -234,6 +234,8 @@ private:
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
 
     bool _is_incremental;
+
+    std::set<int64_t> _immutable_partition_ids;
 };
 
 class IndexChannel {

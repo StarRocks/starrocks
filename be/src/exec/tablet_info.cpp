@@ -224,10 +224,10 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
 
         if (t_part.__isset.in_keys) {
             for (auto& in_key : part->in_keys) {
-                _partitions_map.emplace(&in_key, part);
+                _partitions_map[&in_key].push_back(part->id);
             }
         } else {
-            _partitions_map.emplace(&part->end_key, part);
+            _partitions_map[&part->end_key].push_back(part->id);
             VLOG(1) << "add partition:" << part->id << " start " << part->start_key.debug_string() << " end "
                     << part->end_key.debug_string();
         }
@@ -397,13 +397,36 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
         _partitions.emplace(part->id, part);
         if (t_part.__isset.in_keys) {
             for (auto& in_key : part->in_keys) {
-                _partitions_map.emplace(&in_key, part);
+                _partitions_map[&in_key].push_back(part->id);
             }
         } else {
-            _partitions_map.emplace(&part->end_key, part);
+            _partitions_map[&part->end_key].push_back(part->id);
             VLOG(1) << "add automatic partition:" << part->id << " start " << part->start_key.debug_string() << " end "
                     << part->end_key.debug_string();
         }
+    }
+
+    return Status::OK();
+}
+
+Status OlapTablePartitionParam::remove_partitions(const std::vector<int64_t>& partition_ids) {
+    for (auto& id : partition_ids) {
+        auto it = _partitions.find(id);
+        if (it == _partitions.end()) {
+            continue;
+        }
+        auto part = it->second;
+        if (part->in_keys.empty()) {
+            auto& part_ids = _partitions_map[&part->end_key];
+            part_ids.erase(std::remove(part_ids.begin(), part_ids.end(), id), part_ids.end());
+        } else {
+            for (auto& in_key : part->in_keys) {
+                auto& part_ids = _partitions_map[&in_key];
+                part_ids.erase(std::remove(part_ids.begin(), part_ids.end(), id), part_ids.end());
+            }
+        }
+
+        _partitions.erase(it);
     }
 
     return Status::OK();
@@ -436,14 +459,17 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
         row.index = 0;
         bool is_list_partition = _t_param.partitions[0].__isset.in_keys;
         for (size_t i = 0; i < num_rows; ++i) {
+            OlapTablePartition* part = nullptr;
             if ((*selection)[i]) {
                 row.index = i;
                 if (is_list_partition) {
                     // list partition
                     auto it = _partitions_map.find(&row);
-                    if (it != _partitions_map.end() && _part_contains(it->second, &row)) {
-                        (*partitions)[i] = it->second;
-                        (*indexes)[i] = (*indexes)[i] % it->second->num_buckets;
+                    if (it != _partitions_map.end() &&
+                        (part = _partitions[it->second[(*indexes)[i] % it->second.size()]]) != nullptr &&
+                        _part_contains(part, &row)) {
+                        (*partitions)[i] = part;
+                        (*indexes)[i] = (*indexes)[i] % part->num_buckets;
                     } else {
                         if (partition_not_exist_row_values) {
                             auto partition_value_items = std::make_unique<std::vector<std::string>>();
@@ -466,9 +492,11 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                 } else {
                     // range partition
                     auto it = _partitions_map.upper_bound(&row);
-                    if (it != _partitions_map.end() && _part_contains(it->second, &row)) {
-                        (*partitions)[i] = it->second;
-                        (*indexes)[i] = (*indexes)[i] % it->second->num_buckets;
+                    if (it != _partitions_map.end() &&
+                        (part = _partitions[it->second[(*indexes)[i] % it->second.size()]]) != nullptr &&
+                        _part_contains(part, &row)) {
+                        (*partitions)[i] = part;
+                        (*indexes)[i] = (*indexes)[i] % part->num_buckets;
                     } else {
                         if (partition_not_exist_row_values) {
                             // only support single column partition for range partition now
@@ -497,12 +525,14 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
             }
         }
     } else {
-        OlapTablePartition* partition = _partitions_map.begin()->second;
-        int64_t num_bucket = partition->num_buckets;
+        if (_partitions_map.empty()) {
+            return Status::InternalError("no physical partitions");
+        }
+        auto& part_ids = _partitions_map.begin()->second;
         for (size_t i = 0; i < num_rows; ++i) {
             if ((*selection)[i]) {
-                (*partitions)[i] = partition;
-                (*indexes)[i] = (*indexes)[i] % num_bucket;
+                (*partitions)[i] = _partitions[part_ids[(*indexes)[i] % _partitions.size()]];
+                (*indexes)[i] = (*indexes)[i] % (*partitions)[i]->num_buckets;
             }
         }
     }

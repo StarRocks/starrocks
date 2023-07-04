@@ -220,6 +220,8 @@ public:
 
     Status add_partitions(const std::vector<TOlapTablePartition>& partitions);
 
+    Status remove_partitions(const std::vector<int64_t>& partition_ids);
+
     bool is_un_partitioned() const { return _partition_columns.empty(); }
 
 private:
@@ -248,7 +250,8 @@ private:
 
     ObjectPool _obj_pool;
     std::map<int64_t, OlapTablePartition*> _partitions;
-    std::map<ChunkRow*, OlapTablePartition*, PartionKeyComparator> _partitions_map;
+    // one partition have multi sub partition
+    std::map<ChunkRow*, std::vector<int64_t>, PartionKeyComparator> _partitions_map;
 
     Random _rand{(uint32_t)time(nullptr)};
 };

@@ -71,8 +71,8 @@ LocalTabletsChannel::~LocalTabletsChannel() {
     _mem_pool.reset();
 }
 
-Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                                 bool is_incremental) {
+Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     _txn_id = params.txn_id();
     _index_id = params.index_id();
@@ -90,6 +90,14 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sh
     }
 
     RETURN_IF_ERROR(_open_all_writers(params));
+
+    for (auto& [id, writer] : _delta_writers) {
+        if (writer->is_immutable()) {
+            result->add_immutable_tablet_ids(id);
+            result->add_immutable_partition_ids(writer->partition_id());
+        }
+    }
+
     return Status::OK();
 }
 
@@ -329,6 +337,13 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
     }
 
+    for (auto& [id, writer] : _delta_writers) {
+        if (writer->is_immutable()) {
+            response->add_immutable_tablet_ids(id);
+            response->add_immutable_partition_ids(writer->partition_id());
+        }
+    }
+
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
 
@@ -534,6 +549,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         }
         options.merge_condition = params.merge_condition();
         options.partial_update_mode = params.partial_update_mode();
+        options.min_immutable_tablet_size = params.min_immutable_tablet_size();
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         if (res.status().ok()) {
@@ -664,7 +680,7 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
     return std::move(context);
 }
 
-Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params,
+Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                              std::shared_ptr<OlapTableSchemaParam> schema) {
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     std::vector<SlotDescriptor*>* index_slots = nullptr;

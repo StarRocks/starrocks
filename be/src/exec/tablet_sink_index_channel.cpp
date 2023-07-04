@@ -648,6 +648,14 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_num++;
     }
 
+    if (closure->result.immutable_partition_ids_size() > 0) {
+        _immutable_partition_ids.insert(closure->result.immutable_partition_ids().begin(),
+                                        closure->result.immutable_partition_ids().end());
+        string partition_ids_str;
+        JoinInts(_immutable_partition_ids, ",", &partition_ids_str);
+        LOG(INFO) << "NodeChannel[" << _load_info << "] immutable partition ids : " << partition_ids_str;
+    }
+
     std::vector<int64_t> tablet_ids;
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
