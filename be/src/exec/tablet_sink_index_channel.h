@@ -157,6 +157,9 @@ public:
 
     bool is_incremental() const { return _is_incremental; }
 
+    std::set<int64_t> immutable_partition_ids() { return _immutable_partition_ids; }
+    bool has_immutable_partition() { return !_immutable_partition_ids.empty(); }
+
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
     Status _wait_all_prev_request();
@@ -234,6 +237,8 @@ private:
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
 
     bool _is_incremental;
+
+    std::set<int64_t> _immutable_partition_ids;
 };
 
 class IndexChannel {

@@ -145,6 +145,7 @@ private:
     }
 
     Status _automatic_create_partition();
+    Status _update_immutable_partition(const std::set<int64_t> partition_ids);
 
     Status _incremental_open_node_channel(const std::vector<TOlapTablePartition>& partitions);
 

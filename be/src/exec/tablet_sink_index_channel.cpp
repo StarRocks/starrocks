@@ -309,6 +309,18 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
         VLOG(2) << "open colocate index failed";
         _enable_colocate_mv_index = false;
     }
+
+    if (open_closure->result.immutable_partition_ids_size() > 0) {
+        auto immutable_partition_ids_size = _immutable_partition_ids.size();
+        _immutable_partition_ids.insert(open_closure->result.immutable_partition_ids().begin(),
+                                        open_closure->result.immutable_partition_ids().end());
+        if (_immutable_partition_ids.size() != immutable_partition_ids_size) {
+            string partition_ids_str;
+            JoinInts(_immutable_partition_ids, ",", &partition_ids_str);
+            LOG(INFO) << "NodeChannel[" << _load_info << "] immutable partition ids : " << partition_ids_str;
+        }
+    }
+
     VLOG(2) << "open colocate index, enable_colocate_mv_index=" << _enable_colocate_mv_index;
 
     return status;
@@ -646,6 +658,17 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_wait_lock_time_us += closure->result.wait_lock_time_us();
         _add_batch_counter.add_batch_wait_memtable_flush_time_us += closure->result.wait_memtable_flush_time_us();
         _add_batch_counter.add_batch_num++;
+    }
+
+    if (closure->result.immutable_partition_ids_size() > 0) {
+        auto immutable_partition_ids_size = _immutable_partition_ids.size();
+        _immutable_partition_ids.insert(closure->result.immutable_partition_ids().begin(),
+                                        closure->result.immutable_partition_ids().end());
+        if (_immutable_partition_ids.size() != immutable_partition_ids_size) {
+            string partition_ids_str;
+            JoinInts(_immutable_partition_ids, ",", &partition_ids_str);
+            LOG(INFO) << "NodeChannel[" << _load_info << "] immutable partition ids : " << partition_ids_str;
+        }
     }
 
     std::vector<int64_t> tablet_ids;

@@ -1196,6 +1196,20 @@ struct TCreatePartitionResult {
     4: optional list<Descriptors.TNodeInfo> nodes
 }
 
+struct TImmutablePartitionRequest {
+    1: optional i64 txn_id
+    2: optional i64 db_id
+    3: optional i64 table_id
+    4: optional list<i64> partition_ids
+}
+
+struct TImmutablePartitionResult {
+    1: optional Status.TStatus status
+    2: optional list<Descriptors.TOlapTablePartition> partitions
+    3: optional list<Descriptors.TTabletLocation> tablets
+    4: optional list<Descriptors.TNodeInfo> nodes
+}
+
 struct TAuthInfo {
     // If not set, match every database
     1: optional string pattern
@@ -1418,6 +1432,7 @@ service FrontendService {
 
     TSetConfigResponse setConfig(1: TSetConfigRequest request)
     TCreatePartitionResult createPartition(1: TCreatePartitionRequest request)
+    TImmutablePartitionResult updateImmutablePartition(1: TImmutablePartitionRequest request)
 
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
     

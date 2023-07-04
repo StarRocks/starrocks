@@ -191,6 +191,8 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TGetTrackingLoadsResult;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
+import com.starrocks.thrift.TImmutablePartitionRequest;
+import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
@@ -1716,6 +1718,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         return result;
+    }
+
+    @Override
+    public TImmutablePartitionResult updateImmutablePartition(TImmutablePartitionRequest request) throws TException {
+        return null;
     }
 
     @NotNull

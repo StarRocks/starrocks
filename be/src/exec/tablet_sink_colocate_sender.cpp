@@ -309,4 +309,15 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
     return status;
 }
 
+bool TabletSinkColocateSender::get_immutable_partition_ids(std::set<int64_t>* partition_ids) {
+    bool has_immutable_partition = false;
+    for_each_node_channel([&has_immutable_partition, partition_ids](NodeChannel* ch) {
+        if (ch->has_immutable_partition()) {
+            has_immutable_partition = true;
+            partition_ids->merge(ch->immutable_partition_ids());
+        }
+    });
+    return has_immutable_partition;
+}
+
 } // namespace starrocks::stream_load

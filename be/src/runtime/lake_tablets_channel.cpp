@@ -63,13 +63,13 @@ public:
 
     const TabletsChannelKey& key() const { return _key; }
 
-    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                bool is_incremental) override;
+    Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
-    Status incremental_open(const PTabletWriterOpenRequest& params,
+    Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
     void cancel() override;
@@ -187,8 +187,8 @@ LakeTabletsChannel::~LakeTabletsChannel() {
     _mem_pool.reset();
 }
 
-Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                                bool is_incremental) {
+Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
     std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
     _txn_id = params.txn_id();
     _index_id = params.index_id();
@@ -508,7 +508,7 @@ StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::
     return std::move(context);
 }
 
-Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params,
+Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                             std::shared_ptr<OlapTableSchemaParam> schema) {
     std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
     RETURN_IF_ERROR(_create_delta_writers(params, true));
