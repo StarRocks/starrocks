@@ -49,7 +49,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -126,17 +125,32 @@ public class OptExternalPartitionPruner {
         return logicalScanOperator;
     }
 
+    private static List<ScalarOperator> getColumnEQConstantPredicates(ScalarOperator predicate) {
+        List<ScalarOperator> predicateList = Utils.extractConjuncts(predicate);
+        List<ScalarOperator> equalPredicates = Lists.newArrayList();
+        for (ScalarOperator scalarOperator : predicateList) {
+            if (scalarOperator instanceof BinaryPredicateOperator) {
+                BinaryPredicateOperator binary = (BinaryPredicateOperator) scalarOperator;
+                ScalarOperator leftChild = scalarOperator.getChild(0);
+                ScalarOperator rightChild = scalarOperator.getChild(1);
+                BinaryType binaryType = binary.getBinaryType();
+                if (binaryType.isEqual() && leftChild.isColumnRef() && rightChild.isConstantRef()) {
+                    equalPredicates.add(scalarOperator);
+                }
+            }
+        }
+        return equalPredicates;
+    }
+
     // get equivalence predicate which column ref is partition column
-    private static List<Optional<ScalarOperator>> getEffectivePartitionPredicate(LogicalScanOperator operator,
+    public static List<Optional<ScalarOperator>> getEffectivePartitionPredicate(LogicalScanOperator operator,
                                                                                  List<Column> partitionColumns,
                                                                                  ScalarOperator predicate) {
         if (partitionColumns.isEmpty()) {
             return Lists.newArrayList();
         }
-        PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-        List<ScalarOperator> equalPredicates = Utils.extractConjuncts(predicateSplit.getRangePredicates()).
-                stream().filter(rangePredicate -> ((BinaryPredicateOperator) rangePredicate).getBinaryType().isEqual()).
-                collect(Collectors.toList());
+
+        List<ScalarOperator> equalPredicates = getColumnEQConstantPredicates(predicate);
         Map<ColumnRefOperator, ScalarOperator> equalPredicateMap = equalPredicates.stream().
                 collect(Collectors.toMap(rangePredicate -> rangePredicate.getChild(0).cast(),
                         rangePredicate -> rangePredicate));
