@@ -1,8 +1,28 @@
 # StarRocks version 3.0
 
+## 3.0.3
+
+发布日期：2023 年 6 月 28 日
+
+### 功能优化
+
+- StarRocks 外表元数据的同步改为数据加载时进行。 [#24739](https://github.com/StarRocks/starrocks/pull/24739)
+- 对于[自动创建分区](../table_design/automatic_partitioning.md)的表，INSERT OVERWRITE 支持指定分区。 [#25005](https://github.com/StarRocks/starrocks/pull/25005)
+- 优化了非分区表增加分区时的报错信息。 [#25266](https://github.com/StarRocks/starrocks/pull/25266)
+
+### 问题修复
+
+修复了如下问题：
+
+- Parquet 文件中如果包括复杂类型，最大最小过滤时会获取列错误。 [#23976](https://github.com/StarRocks/starrocks/pull/23976)
+- 库或者表已经被 Drop，但是写入任务仍然在队列中。 [#24801](https://github.com/StarRocks/starrocks/pull/24801)
+- FE 重启时会小概率导致 BE crash。 [#25037](https://github.com/StarRocks/starrocks/pull/25037)
+- "enable_profile = true" 时导入和查询偶尔会卡住。 [#25060](https://github.com/StarRocks/starrocks/pull/25060)
+- 集群不满足 3 个 Alive BE 时，INSERT OVERWRITE 报错信息不准确。 [#25314](https://github.com/StarRocks/starrocks/pull/25314)
+
 ## 3.0.2
 
-发布日期： 2023 年 6 月 13 日
+发布日期：2023 年 6 月 13 日
 
 ### 功能优化
 
@@ -26,7 +46,7 @@
 
 ## 3.0.1
 
-发布日期： 2023 年 6 月 1 日
+发布日期：2023 年 6 月 1 日
 
 ### 新增特性
 
@@ -55,7 +75,7 @@
 
 ## 3.0.0
 
-发布日期： 2023 年 4 月 28 日
+发布日期：2023 年 4 月 28 日
 
 ### 新增特性
 

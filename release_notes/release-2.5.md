@@ -1,5 +1,24 @@
 # StarRocks version 2.5
 
+## 2.5.8
+
+发布日期：2023 年 6 月 30 日
+
+### 功能优化
+
+- 优化了非分区表增加分区时的报错信息。 [#25266](https://github.com/StarRocks/starrocks/pull/25266)
+- 优化表的[自动分桶策略](../table_design/Data_distribution.md#确定分桶数量)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- 优化建表时 Comment 中的默认值。[#24803](https://github.com/StarRocks/starrocks/pull/24803)
+- 异步物化视图支持通过 REFRESH MATERIALIZED VIEW WITH SYNC MODE 进行同步手动刷新。 [#25910](https://github.com/StarRocks/starrocks/pull/25910)
+
+### 问题修复
+
+修复了如下问题：
+
+- 异步物化视图在创建时包含 Union，会导致 Count 结果不准确。 [#24460](https://github.com/StarRocks/starrocks/issues/24460)
+- 强制重置 root 密码时报 "Unknown error" 错误。 [#25492](https://github.com/StarRocks/starrocks/pull/25492)
+- 集群不满足 3 个 Alive BE 时，INSERT OVERWRITE 报错信息不准确。 [#25314](https://github.com/StarRocks/starrocks/pull/25314)
+
 ## 2.5.7
 
 发布日期：2023 年 6 月 14 日
