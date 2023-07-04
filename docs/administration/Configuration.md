@@ -273,7 +273,7 @@ This section provides an overview of the static parameters that you can configur
 | tablet_sched_storage_cooldown_second | -1              | The latency of automatic cooling starting from the time of table creation. The alias of this parameter is `storage_cooldown_second`. Unit: second. The default value `-1` specifies that automatic cooling is disabled. If you want to enable automatic cooling, set this parameter to a value greater than `-1`. |
 | tablet_stat_update_interval_second   | 300             | The time interval at which the FE retrieves tablet statistics from each BE. Unit: second. |
 
-#### StarRocks Shared-date cluster
+#### StarRocks shared-data cluster
 
 | Parameter                           | Default         | Description                                                  |
 | ----------------------------------- | --------------- | ------------------------------------------------------------ |
