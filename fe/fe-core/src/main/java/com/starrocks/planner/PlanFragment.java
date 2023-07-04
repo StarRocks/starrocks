@@ -46,6 +46,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TCacheParam;
+import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNetworkAddress;
@@ -163,6 +164,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private boolean forceAssignScanRangesPerDriverSeq = false;
 
     private boolean useRuntimeAdaptiveDop = false;
+
+    private boolean isShortCircuit = false;
 
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
@@ -576,6 +579,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.sink = sink;
     }
 
+
+    public TDataSink sinkToThrift() {
+        return sink != null ? sink.toThrift() : null;
+    }
+
     public PlanFragmentId getFragmentId() {
         return fragmentId;
     }
@@ -724,6 +732,18 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
         }
         return false;
+    }
+
+    public ArrayList<Expr> getOutputExprs() {
+        return outputExprs;
+    }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
     }
 
     /**

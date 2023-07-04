@@ -529,6 +529,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
+    public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1348,6 +1350,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
     private boolean auditExecuteStmt = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
+    private boolean enableShortCircuit = true;
 
     private int exprChildrenLimit = -1;
 
@@ -2591,6 +2596,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isAuditExecuteStmt() {
         return auditExecuteStmt;
+    }
+
+    public boolean isEnableShortCircuit() {
+        return enableShortCircuit;
     }
 
     public void setLargeDecimalUnderlyingType(String type) {

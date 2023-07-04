@@ -27,6 +27,7 @@ import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
@@ -45,6 +46,7 @@ import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
+import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
@@ -450,6 +452,11 @@ public class MockedBackend {
 
         @Override
         public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request) {
             return null;
         }
     }

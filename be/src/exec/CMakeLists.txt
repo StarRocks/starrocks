@@ -28,6 +28,7 @@ set(EXEC_FILES
     scan_node.cpp
     select_node.cpp
     sort_exec_exprs.cpp
+    short_circuit.cpp
     olap_common.cpp
     tablet_info.cpp
     tablet_sink.cpp
