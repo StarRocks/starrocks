@@ -134,6 +134,10 @@ import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 import javax.annotation.Nullable;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW;
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_ROW;
+
 /**
  * Internal representation of tableFamilyGroup-related metadata. A
  * OlaptableFamilyGroup contains several tableFamily.
@@ -522,7 +526,7 @@ public class OlapTable extends Table {
             Preconditions.checkState(storageType != null);
         } else {
             // The new storage type must be TStorageType.COLUMN
-            Preconditions.checkState(storageType == TStorageType.COLUMN);
+            Preconditions.checkState(storageType == TStorageType.COLUMN || storageType == TStorageType.COLUMN_WITH_ROW);
         }
 
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
@@ -755,9 +759,8 @@ public class OlapTable extends Table {
             List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
                     .seqChooseBackendIds(replicationNum, true, true);
             if (CollectionUtils.isEmpty(beIds)) {
-                return new Status(ErrCode.COMMON_ERROR, "failed to find "
-                        + replicationNum
-                        + " different hosts to create table: " + name);
+                return new Status(ErrCode.COMMON_ERROR,
+                        "failed to find " + replicationNum + " different hosts to create table: " + name);
             }
             for (Long beId : beIds) {
                 long newReplicaId = globalStateMgr.getNextId();
@@ -1978,10 +1981,11 @@ public class OlapTable extends Table {
         long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentState().getTabletScheduler());
         if (unhealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
-            throw new DdlException("Table [" + name + "] is not stable. "
-                    + "Unhealthy (or doing balance) tablet id: " + unhealthyTabletId + ". "
-                    + "Some tablets of this table may not be healthy or are being scheduled. "
-                    + "You need to repair the table first or stop cluster balance.");
+            throw new DdlException(
+                    "Table [" + name + "] is not stable. " + "Unhealthy (or doing balance) tablet id: " + unhealthyTabletId +
+                            ". " +
+                            "Some tablets of this table may not be healthy or are being scheduled. " +
+                            "You need to repair the table first or stop cluster balance.");
         }
     }
 
@@ -2187,6 +2191,40 @@ public class OlapTable extends Table {
             return BinlogConfig.INVALID;
         }
         return tableProperty.getBinlogConfig().getVersion();
+    }
+
+    public String storageType() {
+        if (tableProperty != null) {
+            return tableProperty.storageType();
+        }
+        return PROPERTIES_STORAGE_TYPE_COLUMN;
+    }
+
+    public TStorageType getStorageType() {
+        if (storageType() == null) {
+            return TStorageType.COLUMN;
+        }
+        switch (storageType().toLowerCase()) {
+            case PROPERTIES_STORAGE_TYPE_COLUMN:
+                return TStorageType.COLUMN;
+            case PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW:
+                return TStorageType.COLUMN_WITH_ROW;
+            case PROPERTIES_STORAGE_TYPE_ROW:
+                return TStorageType.ROW;
+            default:
+                throw new SemanticException("getStorageType type not support: " + storageType());
+        }
+    }
+
+    public void setStorageType(String storageType) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        if (storageType == null) {
+            storageType = PROPERTIES_STORAGE_TYPE_COLUMN;
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType);
+        tableProperty.buildStorageType();
     }
 
     public void setEnablePersistentIndex(boolean enablePersistentIndex) {
@@ -2853,6 +2891,15 @@ public class OlapTable extends Table {
     @Override
     public boolean supportInsert() {
         return true;
+    }
+
+    public boolean supportColumnWithRow() {
+        List<Column> noKeys = getColumns().stream().filter(column -> !column.isKey()).collect(Collectors.toList());
+        return noKeys.size() > 0;
+    }
+
+    public boolean hasRowStorageType() {
+        return TStorageType.ROW == getStorageType() || TStorageType.COLUMN_WITH_ROW == getStorageType();
     }
 
     // ------ for lake table and lake materialized view start ------

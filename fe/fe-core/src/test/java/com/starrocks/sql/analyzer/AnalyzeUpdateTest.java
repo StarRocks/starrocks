@@ -92,6 +92,12 @@ public class AnalyzeUpdateTest {
     }
 
     @Test
+    public void testColumnWithRowUpdate() {
+        analyzeFail("update tmcwr set name = 22",
+                "column with row table must specify where clause for update");
+    }
+
+    @Test
     public void testLake() {
         new MockUp<GlobalStateMgr>() {
 
