@@ -390,6 +390,7 @@ public class FileSystemManager {
                     }
                 }
                 if (!Strings.isNullOrEmpty(dfsNameServices)) {
+                    conf.set(DFS_NAMESERVICES_KEY, dfsNameServices);
                     logger.info("dfs.name.services:" + dfsNameServices);
                     String[] dfsNameServiceArray = dfsNameServices.split("\\s*,\\s*");
                     for (String dfsNameService: dfsNameServiceArray) {
@@ -401,7 +402,6 @@ public class FileSystemManager {
                                     "load request missed necessary arguments for ha mode");
                         }
                         String dfsHaNameNodes = properties.get(dfsHaNameNodesKey);
-                        conf.set(DFS_NAMESERVICES_KEY, dfsNameService);
                         conf.set(dfsHaNameNodesKey, dfsHaNameNodes);
                         String[] nameNodes = dfsHaNameNodes.split(",");
                         if (nameNodes == null) {
@@ -420,7 +420,6 @@ public class FileSystemManager {
                                 }
                             }
                         }
-
                         final String dfsClientFailoverProxyProviderKey =
                                 DFS_CLIENT_FAILOVER_PROXY_PROVIDER_PREFIX + dfsNameService;
                         if (properties.containsKey(dfsClientFailoverProxyProviderKey)) {
