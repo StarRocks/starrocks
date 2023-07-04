@@ -1990,6 +1990,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                 "table already exists");
                     } else {
                         LOG.info("Create table[{}] which already exists", table.getName());
+                        return;
                     }
                 }
 
