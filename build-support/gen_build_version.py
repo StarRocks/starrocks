@@ -23,7 +23,9 @@ from datetime import datetime
 def get_version():
     version = os.getenv("STARROCKS_VERSION")
     if not version:
-        version = "UNKNOWN"
+        git_res = subprocess.Popen(["git", "symbolic-ref", "-q", "--short" ,"HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = git_res.communicate()
+        version = out.decode('utf-8').strip().strip("branch-") if not err else "UNKNOWN"
     return version
 
 def get_commit_hash():
