@@ -160,6 +160,8 @@ PROPERTIES
 
 以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#hdfs)。
 
+从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 HDFS 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [INSERT > 通过 TABLE 关键字直接导入外部数据文件](../sql-reference/sql-statements/data-manipulation/insert.md)。
+
 #### 从 AWS S3 导入
 
 可以通过如下语句，把 AWS S3 存储空间 `bucket_s3` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
@@ -188,6 +190,8 @@ WITH BROKER
 > 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
 
 以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#aws-s3)。
+
+从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 AWS S3 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [INSERT > 通过 TABLE 关键字直接导入外部数据文件](../sql-reference/sql-statements/data-manipulation/insert.md)。
 
 #### 从 Google GCS 导入
 
