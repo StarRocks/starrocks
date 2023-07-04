@@ -332,7 +332,14 @@ public class PolymorphicFunctionAnalyzer {
         }
 
         if (!allRealElementType.isEmpty()) {
-            Type commonType = TypeManager.getCommonSuperType(allRealElementType);
+            Type commonType = allRealElementType.get(0);
+            for (Type type : allRealElementType) {
+                commonType = TypeManager.getCommonSuperType(commonType, type);
+                if (commonType == null) {
+                    LOGGER.warn("could not determine polymorphic type because input has non-match types");
+                    return null;
+                }
+            }
             commonType = AnalyzerUtils.replaceNullType2Boolean(commonType);
             typeArray = new ArrayType(commonType);
             typeElement = commonType;
