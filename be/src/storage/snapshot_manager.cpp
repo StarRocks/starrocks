@@ -379,7 +379,8 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
 
     // 4. Link files to snapshot directory.
     for (const auto& rowset : snapshot_rowsets) {
-        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id(), 0 /*snapshot_version*/);
+        auto st = rowset->link_files_to(tablet->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id(),
+                                        0 /*snapshot_version*/);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
             (void)fs::remove_all(snapshot_id_path);
@@ -443,7 +444,8 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     }
 
     for (const auto& snapshot_rowset : snapshot_rowsets) {
-        auto st = snapshot_rowset->link_files_to(snapshot_dir, snapshot_rowset->rowset_id(), snapshot_version);
+        auto st = snapshot_rowset->link_files_to(tablet->data_dir()->get_meta(), snapshot_dir,
+                                                 snapshot_rowset->rowset_id(), snapshot_version);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
             (void)fs::remove_all(snapshot_id_path);
@@ -536,7 +538,8 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
 
     // 4. Link files to snapshot directory.
     for (const auto& rowset : snapshot_rowsets) {
-        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id(), full_snapshot_version);
+        auto st = rowset->link_files_to(tablet->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id(),
+                                        full_snapshot_version);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
             (void)fs::remove_all(snapshot_id_path);
