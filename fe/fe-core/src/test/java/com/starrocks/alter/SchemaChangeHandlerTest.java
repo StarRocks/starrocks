@@ -34,20 +34,12 @@
 
 package com.starrocks.alter;
 
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.TestWithFeService;
-import mockit.Expectations;
-import mockit.Injectable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -57,6 +49,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 public class SchemaChangeHandlerTest extends TestWithFeService {
+
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandlerTest.class);
     private int jobSize = 0;
 
