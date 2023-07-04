@@ -4039,7 +4039,7 @@ public class GlobalStateMgr {
             String builtinStorageVolumeId = storageVolumeMgr
                     .getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
             authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
-        } catch (DdlException | AnalysisException | AlreadyExistsException e) {
+        } catch (DdlException | AlreadyExistsException e) {
             LOG.warn("Failed to create or update builtin storage volume", e);
         } catch (PrivilegeException e) {
             LOG.warn("Failed to grant builtin storage volume usage to public role", e);
