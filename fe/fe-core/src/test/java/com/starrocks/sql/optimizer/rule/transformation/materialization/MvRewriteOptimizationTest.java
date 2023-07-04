@@ -2296,8 +2296,8 @@ public class MvRewriteOptimizationTest {
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=1/6", "lineitem_par",
-                "NON-PARTITION PREDICATES: (((22: l_shipdate >= '1998-01-02') OR (20: l_orderkey != 100))" +
-                        " OR (22: l_shipdate < '1998-01-01')) OR (22: l_shipdate IS NULL)");
+                "NON-PARTITION PREDICATES: (((22: l_shipdate < '1998-01-01') OR (22: l_shipdate >= '1998-01-02')) " +
+                        "OR (20: l_orderkey != 100)) OR (22: l_shipdate IS NULL)");
         dropMv("test", "hive_parttbl_mv_4");
 
         createAndRefreshMv("test", "hive_parttbl_mv_5",
