@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
  */
 public class RowOutputInfo {
 
-    // store the final output of the optExpression
+    // store the final output of the optExpression after projection(if exists)
     private final Map<Integer, ColumnOutputInfo> colOutputInfo;
 
     // store the final common exprs referenced by the output

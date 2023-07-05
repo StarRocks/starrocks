@@ -152,7 +152,9 @@ public class SplitAggregateRule extends TransformationRule {
         }
     }
 
-    private boolean hasAggregateEffect(OptExpression input) {
+    // True means good cases for two phase agg. It requires both group by keys and distinct cols are
+    // low cardinality which helps deduplication in the local stage.
+    private boolean hasAggregateEffect(OptExpression input, List<ColumnRefOperator> distinctColumns) {
         Statistics statistics = input.getGroupExpression().getGroup().getStatistics();
         Statistics inputStatistics = input.getGroupExpression().getInputs().get(0).getStatistics();
         Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
@@ -160,13 +162,39 @@ public class SplitAggregateRule extends TransformationRule {
         if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
             return false;
         }
-
         double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
         double rowCount = Math.max(1, statistics.getOutputRowCount());
+
+        if (CollectionUtils.isNotEmpty(distinctColumns)) {
+            for (ColumnRefOperator distinctCol : distinctColumns) {
+                double ndv = inputStatistics.getColumnStatistic(distinctCol).getDistinctValuesCount();
+                rowCount = rowCount > ndv ? rowCount : ndv;
+            }
+        }
+
+
         if (rowCount * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount) {
             return true;
         }
         return false;
+    }
+
+
+    // True means good cases for parallel deduplication. It requires group by keys have a relatively high
+    // cardinality (number of distinct value > 1000) to distribute data across multiple cores which helps
+    // parallel deduplication in the distinct global stage.
+    private boolean isSuitableForParallelDeduplication(OptExpression input) {
+        Statistics statistics = input.getGroupExpression().getGroup().getStatistics();
+        Statistics inputStatistics = input.getGroupExpression().getInputs().get(0).getStatistics();
+        Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
+
+        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+            // split agg into more phase if no statistic info available
+            return false;
+        }
+        double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
+        double rowCount = Math.max(1, statistics.getOutputRowCount());
+        return inputRowCount / StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT < rowCount;
     }
 
     @Override
@@ -252,7 +280,8 @@ public class SplitAggregateRule extends TransformationRule {
         }
 
         return CollectionUtils.isNotEmpty(operator.getGroupingKeys())
-                && aggMode == AUTO_MODE && hasAggregateEffect(input);
+                && aggMode == AUTO_MODE
+                && hasAggregateEffect(input, distinctColumns);
     }
 
     private boolean canGenerateTwoStageAggregate(LogicalAggregationOperator operator,
@@ -303,6 +332,7 @@ public class SplitAggregateRule extends TransformationRule {
         LogicalAggregationOperator local = new LogicalAggregationOperator.Builder().withOperator(oldAgg)
                 .setType(AggType.LOCAL)
                 .setAggregations(createNormalAgg(AggType.LOCAL, newAggMap))
+                .setSplit()
                 .setPredicate(null)
                 .setLimit(Operator.DEFAULT_LIMIT)
                 .setProjection(null)
@@ -313,6 +343,8 @@ public class SplitAggregateRule extends TransformationRule {
                 .setType(AggType.GLOBAL)
                 .setAggregations(createNormalAgg(AggType.GLOBAL, newAggMap))
                 .setSplit()
+                // we have split the agg to two phase, hence clear the distinct pos
+                .setSingleDistinctFunctionPos(-1)
                 .build();
         OptExpression globalOptExpression = OptExpression.create(global, localOptExpression);
 
@@ -336,15 +368,31 @@ public class SplitAggregateRule extends TransformationRule {
         LogicalAggregationOperator distinctGlobal = createDistinctAggForFirstPhase(
                 columnRefFactory,
                 oldAgg.getGroupingKeys(), oldAgg.getAggregations(), AggType.DISTINCT_GLOBAL);
-        distinctGlobal.setPartitionByColumns(oldAgg.getGroupingKeys());
+        List<ColumnRefOperator> partitionByCols;
+
+        boolean shouldFurtherSplit = false;
+        if (isSuitableForParallelDeduplication(input)
+                || oldAgg.getGroupingKeys().containsAll(distinctGlobal.getGroupingKeys())) {
+            partitionByCols = oldAgg.getGroupingKeys();
+        } else {
+            partitionByCols = distinctGlobal.getGroupingKeys();
+            // use grouping keys and distinct cols to distribute data, we need to continue split the global agg.
+            shouldFurtherSplit = true;
+        }
+
+        distinctGlobal.setPartitionByColumns(partitionByCols);
         OptExpression distinctGlobalOptExpression = OptExpression.create(distinctGlobal, localOptExpression);
 
-        LogicalAggregationOperator global = new LogicalAggregationOperator.Builder().withOperator(oldAgg)
+        LogicalAggregationOperator.Builder aggBuilder = new LogicalAggregationOperator.Builder().withOperator(oldAgg)
                 .setType(AggType.GLOBAL)
                 .setAggregations(createDistinctAggForSecondPhase(AggType.GLOBAL, oldAgg.getAggregations()))
-                .setSplit()
-                .setSingleDistinctFunctionPos(singleDistinctFunctionPos)
-                .build();
+                .setSingleDistinctFunctionPos(singleDistinctFunctionPos);
+        if (!shouldFurtherSplit) {
+            // set isSplit = true to avoid split the global agg
+            aggBuilder.setSplit();
+        }
+
+        LogicalAggregationOperator global = aggBuilder.build();
         OptExpression globalOptExpression = OptExpression.create(global, distinctGlobalOptExpression);
 
         return Lists.newArrayList(globalOptExpression);
