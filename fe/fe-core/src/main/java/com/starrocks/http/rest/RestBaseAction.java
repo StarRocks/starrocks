@@ -21,7 +21,11 @@
 
 package com.starrocks.http.rest;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.UserIdentity;
+=======
+import com.fasterxml.jackson.databind.ObjectMapper;
+>>>>>>> cb34ad89ec ([BugFix] Remove package org.codehaus.jackson ref code (#26572))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
@@ -37,7 +41,6 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.codehaus.jackson.map.ObjectMapper;
 
 import java.net.URI;
 import java.net.URISyntaxException;
