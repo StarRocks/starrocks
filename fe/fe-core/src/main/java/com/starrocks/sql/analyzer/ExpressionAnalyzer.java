@@ -638,7 +638,8 @@ public class ExpressionAnalyzer {
                     // (both precision and and scale are -1, only used in function instance resolution), it's
                     // illegal for a function and expression to has a wildcard decimal type as its type in BE,
                     // so here substitute wildcard decimal types with real decimal types.
-                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, typeTriple.returnType, fn.hasVarArgs());
+                    Function newFn =
+                            new ScalarFunction(fn.getFunctionName(), args, typeTriple.returnType, fn.hasVarArgs());
                     node.setType(typeTriple.returnType);
                     node.setFn(newFn);
                     return null;
@@ -1056,7 +1057,12 @@ public class ExpressionAnalyzer {
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
                 fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
             } else {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                Function.CompareMode compareMode =
+                        Arrays.stream(argumentTypes).anyMatch(Type::isJsonType) ||
+                                FunctionSet.explicitTypeFunctions.contains(fnName) ?
+                                Function.CompareMode.IS_INDISTINGUISHABLE :
+                                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, compareMode);
             }
 
             if (fn == null) {

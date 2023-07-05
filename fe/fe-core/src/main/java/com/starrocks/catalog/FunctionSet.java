@@ -541,6 +541,13 @@ public class FunctionSet {
                     .add(SLEEP)
                     .build();
 
+    // Some functions not accept implicit cast of arguments
+    public static final Set<String> explicitTypeFunctions =
+            ImmutableSet.<String>builder()
+                    .add(FIRST_VALUE)
+                    .add(LAST_VALUE)
+                    .build();
+
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
             .add(FunctionSet.DENSE_RANK)
             .add(FunctionSet.RANK)

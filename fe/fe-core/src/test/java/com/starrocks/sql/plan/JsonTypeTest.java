@@ -236,4 +236,12 @@ public class JsonTypeTest extends PlanTestBase {
                 "Getting analyzing error from line 1, column 7 to line 1, column 50. Detail message: " +
                         "Invalid type cast from json to array<array<int(11)>> in sql `json_array(1, 2, 3)`.");
     }
+
+    /**
+     * Implicit cast is disabled for most functions
+     */
+    @Test
+    public void testImplicitCast() {
+        assertExceptionMessageContains("select least(parse_json('{}'), parse_json(''))", "No matching function");
+    }
 }
