@@ -4,7 +4,7 @@ When you create a table, you must specify the data distribution method by config
 
 > NOTICE
 >
-> - Since v3.1, StarRocks supports random bucketing, which which randomly distribute data across all buckets. You do not need to specify a bucketing key when creating a table or adding partitions, making the table creation statement more user-friendly. For more information, [Random bucketing](#random-bucketing-since-v31).
+> - Since v3.1, StarRocks supports random bucketing, which randomly distributes data across all buckets. You do not need to specify a bucketing key when creating a table or adding partitions, making the table creation statement more user-friendly. For more information, see [Random bucketing](#random-bucketing-since-v31).
 > - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
 
 ## Basic concepts
@@ -161,14 +161,15 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
 #### Random bucketing (since v3.1)
 
-For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. Additionally, there is no need to set bucketing columns during table creation, simplifying the CREATE TABLE statement. It is suitable for scenarios with relatively small data sizes and requirement for high query performance.
+For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. Additionally, there is no need to set bucketing columns during table creation, simplifying the CREATE TABLE statement. It is suitable for scenarios with relatively small data sizes and low requirements for query performance.
 
-However, note that random bucketing may not be suitable for scenarios that involve querying and aggregating based on specific columns. In such cases, hash bucketing may be more appropriate as it can store similar data in the same bucket, facilitating data access and processing.
+However, note that random bucketing may not be suitable for scenarios that involve queries and aggregations based on specific columns. In such cases, hash bucketing may be more appropriate as it can store similar data in the same bucket, facilitating data access and processing.
 
 **Precautions**
-- You can not use random bucketing to create a Primary Key table, a Unique Key table, or an aggregated table.
-- You can not specify a table bucketed randomly to belong to a Colocation Group.
-- Spark Load can not be used to load data into tables bucketed randomly.
+
+- You cannot use random bucketing to create a Primary Key table, a Unique Key table, or an Aggregate table.
+- You cannot specify a table bucketed randomly to belong to a [Colocation Group](../using_starrocks/Colocate_join.md).
+- [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
 
 In the following example, a table `site_access1` is created by using random bucketing, and the system automatically sets the number of buckets.
 
