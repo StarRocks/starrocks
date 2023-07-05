@@ -71,6 +71,9 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     private DataSkewInfo distinctColumnDataSkew = null;
 
+    // If the AggType is not GLOBAL, it means we have split the agg hence the isSplit should be true.
+    // `this.isSplit = !type.isGlobal() || isSplit;` helps us do the work.
+    // If you want to manually set this value, you could invoke setOnlyLocalAggregate().
     public LogicalAggregationOperator(AggType type,
                                       List<ColumnRefOperator> groupingKeys,
                                       Map<ColumnRefOperator, CallOperator> aggregations) {
@@ -262,7 +265,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
             Preconditions.checkNotNull(builder.aggregations);
             Preconditions.checkNotNull(builder.groupingKeys);
             Preconditions.checkNotNull(builder.partitionByColumns);
-            builder.isSplit = !builder.type.isGlobal() || builder.isSplit;
             return super.build();
         }
 
