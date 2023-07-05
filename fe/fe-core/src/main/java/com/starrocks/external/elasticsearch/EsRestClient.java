@@ -34,6 +34,9 @@
 
 package com.starrocks.external.elasticsearch;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.Credentials;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -42,10 +45,6 @@ import org.apache.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
-import org.codehaus.jackson.JsonParser;
-import org.codehaus.jackson.map.DeserializationConfig;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.map.SerializationConfig;
 
 import java.io.IOException;
 import java.security.SecureRandom;
@@ -69,8 +68,7 @@ public class EsRestClient {
 
     {
         mapper = new ObjectMapper();
-        mapper.configure(DeserializationConfig.Feature.USE_ANNOTATIONS, false);
-        mapper.configure(SerializationConfig.Feature.USE_ANNOTATIONS, false);
+        mapper.configure(MapperFeature.USE_ANNOTATIONS, false);
     }
 
     private static final OkHttpClient NETWORK_CLIENT = new OkHttpClient.Builder()
