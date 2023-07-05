@@ -675,6 +675,9 @@ public class OlapTable extends Table {
             partition.setIdForRestore(entry.getKey());
         }
 
+        // reset replication number for olaptable
+        setReplicationNum((short) restoreReplicationNum);
+
         return Status.OK;
     }
 
