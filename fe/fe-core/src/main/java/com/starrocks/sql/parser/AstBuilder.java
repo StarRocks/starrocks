@@ -5470,6 +5470,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             isDistinct = context.aggregationFunction().setQuantifier().DISTINCT() != null;
         }
 
+        if (isDistinct && CollectionUtils.isEmpty(context.aggregationFunction().expression())) {
+            throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
+        }
+
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
                         new FunctionParams(isDistinct,

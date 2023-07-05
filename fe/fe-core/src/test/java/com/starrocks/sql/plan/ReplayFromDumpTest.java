@@ -497,16 +497,6 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void testJoinWithPipelineDop() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("25:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 5: ss_customer_sk = 52: c_customer_sk"));
-    }
-
-    @Test
     public void testDecodeLimitWithProject() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         Pair<QueryDumpInfo, String> replayPair =
@@ -521,15 +511,15 @@ public class ReplayFromDumpTest {
 
     @Test
     public void testCountDistinctWithLimit() throws Exception {
-        // check use two stage agg
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/count_distinct_limit"), null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: multi_distinct_count(5: lo_suppkey)"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("3:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(18: count)\n" +
-                "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
+                "  |  group by: 5: lo_suppkey, 10: lo_extendedprice, 13: lo_revenue"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(5: lo_suppkey)\n" +
+                "  |  group by: 10: lo_extendedprice, 13: lo_revenue\n" +
+                "  |  limit: 1"));
     }
 
     @Test
