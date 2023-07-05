@@ -122,6 +122,67 @@ public class OptExternalPartitionPruner {
         return logicalScanOperator;
     }
 
+<<<<<<< HEAD
+=======
+    private static List<ScalarOperator> getColumnEQConstantPredicates(ScalarOperator predicate) {
+        List<ScalarOperator> predicateList = Utils.extractConjuncts(predicate);
+        List<ScalarOperator> equalPredicates = Lists.newArrayList();
+        for (ScalarOperator scalarOperator : predicateList) {
+            if (scalarOperator instanceof BinaryPredicateOperator) {
+                BinaryPredicateOperator binary = (BinaryPredicateOperator) scalarOperator;
+                ScalarOperator leftChild = scalarOperator.getChild(0);
+                ScalarOperator rightChild = scalarOperator.getChild(1);
+                BinaryType binaryType = binary.getBinaryType();
+                if (binaryType.isEqual() && leftChild.isColumnRef() && rightChild.isConstantRef()) {
+                    equalPredicates.add(scalarOperator);
+                }
+            }
+        }
+        return equalPredicates;
+    }
+
+    // get equivalence predicate which column ref is partition column
+    public static List<Optional<ScalarOperator>> getEffectivePartitionPredicate(LogicalScanOperator operator,
+                                                                                 List<Column> partitionColumns,
+                                                                                 ScalarOperator predicate) {
+        if (partitionColumns.isEmpty()) {
+            return Lists.newArrayList();
+        }
+
+        List<ScalarOperator> equalPredicates = getColumnEQConstantPredicates(predicate);
+        Map<ColumnRefOperator, ScalarOperator> equalPredicateMap = equalPredicates.stream().
+                collect(Collectors.toMap(rangePredicate -> rangePredicate.getChild(0).cast(),
+                        rangePredicate -> rangePredicate));
+
+        List<Optional<ScalarOperator>> effectivePartitionPredicate = Lists.newArrayList();
+        for (Column partitionColumn : partitionColumns) {
+            ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(partitionColumn);
+            // only support string type partition column
+            if (partitionColumn.getType().isStringType() && equalPredicateMap.containsKey(partitionColumnRefOperator)) {
+                effectivePartitionPredicate.add(Optional.of(equalPredicateMap.get(partitionColumnRefOperator)));
+            } else {
+                effectivePartitionPredicate.add(Optional.empty());
+            }
+        }
+        return effectivePartitionPredicate;
+    }
+
+    private static List<Optional<String>> getPartitionValue(List<Optional<ScalarOperator>> predicates) {
+        List<Optional<String>> partitionValues = Lists.newArrayList();
+        for (Optional<ScalarOperator> predicate : predicates) {
+            if (predicate.isPresent()) {
+                Preconditions.checkState(predicate.get() instanceof BinaryPredicateOperator);
+                ConstantOperator constantOperator = predicate.get().getChild(1).cast();
+                partitionValues.add(Optional.of(constantOperator.getVarchar()));
+            } else {
+                partitionValues.add(Optional.empty());
+            }
+        }
+        return partitionValues;
+    }
+
+
+>>>>>>> 29c6235eb ([BugFix] Fix Query hive/hudi with class cast exception (#26525))
     private static void initPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
                                           Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
                                           Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -22,8 +23,13 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -33,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.junit.Assert;
 import org.junit.Before;
@@ -43,9 +50,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
-
 
 public class ListPartitionPrunerTest {
     private Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap;
@@ -348,6 +355,43 @@ public class ListPartitionPrunerTest {
         Assert.assertEquals(Lists.newArrayList(1L, 4L, 5L, 6L), pruner.prune());
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testSpecifyPartition() throws AnalysisException {
+        // 2 partition columns
+        // int_col1=0/int_col2=10    0
+        // int_col1=0/int_col2=11    1
+        // int_col1=1/int_col2=10    2
+        intColumn = new ColumnRefOperator(2, Type.INT, "int_col", true);
+        ColumnRefOperator intCol1 = new ColumnRefOperator(3, Type.INT, "int_col1", true);
+        ColumnRefOperator intCol2 = new ColumnRefOperator(4, Type.INT, "int_col2", true);
+        ColumnRefOperator intColNotPart = new ColumnRefOperator(5, Type.INT, "int_col_not_part", true);
+
+        // column -> partition values
+        columnToPartitionValuesMap = Maps.newHashMap();
+        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap1 = Maps.newTreeMap();
+        columnToPartitionValuesMap.put(intCol1, intPartitionValuesMap1);
+        intPartitionValuesMap1.put(new IntLiteral(0, Type.INT), Sets.newHashSet(0L, 1L));
+        intPartitionValuesMap1.put(new IntLiteral(1, Type.INT), Sets.newHashSet(2L));
+        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap2 = Maps.newTreeMap();
+        columnToPartitionValuesMap.put(intCol2, intPartitionValuesMap2);
+        intPartitionValuesMap2.put(new IntLiteral(10, Type.INT), Sets.newHashSet(0L, 2L));
+        intPartitionValuesMap2.put(new IntLiteral(11, Type.INT), Sets.newHashSet(1L));
+
+        // column -> null partitions
+        columnToNullPartitions = Maps.newHashMap();
+        columnToNullPartitions.put(intCol1, Sets.newHashSet());
+        columnToNullPartitions.put(intCol2, Sets.newHashSet());
+
+        List<Long> specifyPartition = Lists.newArrayList(2L);
+        conjuncts = Lists.newArrayList();
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, specifyPartition);
+        List<Long> prune = pruner.prune();
+        Assert.assertNotNull(prune);
+        Assert.assertEquals(prune.get(0), (Long) 2L);
+    }
+>>>>>>> 29c6235eb ([BugFix] Fix Query hive/hudi with class cast exception (#26525))
     @Test
     public void testComplexBinaryPredicate() throws AnalysisException {
         // 2 partition columns
@@ -512,6 +556,39 @@ public class ListPartitionPrunerTest {
                         new InPredicateOperator(false, Lists.newArrayList(intColumn, ConstantOperator.createInt(0)))
                 )));
         Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L, 3L, 6L, 9L), pruner.prune());
+
+        // date_col != "2021-01-02" and int_col is not null
+        conjuncts.clear();
+        conjuncts.add(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND,
+                new BinaryPredicateOperator(BinaryType.NE, dateColumn,
+                        ConstantOperator.createDate(LocalDateTime.of(2021, 1, 2, 0, 0, 0))),
+                new IsNullPredicateOperator(true, intColumn)));
+        Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L, 6L, 7L, 8L), pruner.prune());
+    }
+
+    @Test
+    public void testGetEffectivePartitionPredicate() {
+        Column dateCol = new Column("date_col", Type.DATE);
+        Column intCol = new Column("int_col", Type.INT);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dateCol, dateColumn);
+        columnMetaToColRefMap.put(intCol, intColumn);
+
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(new HiveTable(), Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        conjuncts.clear();
+        conjuncts.add(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND,
+                new BinaryPredicateOperator(BinaryType.NE, dateColumn,
+                        ConstantOperator.createDate(LocalDateTime.of(2021, 1, 2, 0, 0, 0))),
+                new IsNullPredicateOperator(true, intColumn)));
+
+        List<Optional<ScalarOperator>> result = OptExternalPartitionPruner.getEffectivePartitionPredicate(scanOperator, 
+                ImmutableList.of(dateCol, intCol), Utils.compoundAnd(conjuncts));
+        Assert.assertEquals(2, result.size());
     }
 
     @Test
