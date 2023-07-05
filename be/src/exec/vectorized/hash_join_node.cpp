@@ -281,10 +281,6 @@ Status HashJoinNode::open(RuntimeState* state) {
     // we still have to build it.
     RETURN_IF_ERROR(_do_publish_runtime_filters(state, _runtime_join_filter_pushdown_limit));
 
-    build_timer.stop();
-    RETURN_IF_ERROR(child(0)->open(state));
-    build_timer.start();
-
     // special cases of short-circuit break.
     if (_ht.get_row_count() == 0 && (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN)) {
         _eos = true;
@@ -304,6 +300,10 @@ Status HashJoinNode::open(RuntimeState* state) {
             return Status::OK();
         }
     }
+
+    build_timer.stop();
+    RETURN_IF_ERROR(child(0)->open(state));
+    build_timer.start();
 
     _mem_tracker->set(_ht.mem_usage());
 
