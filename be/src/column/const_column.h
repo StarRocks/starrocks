@@ -50,7 +50,10 @@ public:
 
     bool is_null(size_t index) const override { return _data->is_null(0); }
 
-    bool only_null() const override { return _data->is_null(0); }
+    bool only_null() const override { 
+        DCHECK(_data->is_null(0));
+        return _data->is_nullable(); 
+    }
 
     bool has_null() const override { return _data->has_null(); }
 
