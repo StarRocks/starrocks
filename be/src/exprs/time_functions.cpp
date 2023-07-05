@@ -2389,7 +2389,6 @@ StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Colu
     ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
     ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
     ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
-
     auto size = columns[2]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
