@@ -17,6 +17,8 @@
 
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -84,10 +86,10 @@ public:
     virtual void cancel_one_sinker() { _is_cancelled = true; }
 
     virtual void close(RuntimeState* state) {
-        _is_finished = true;
         if (_exec_queue_id != nullptr) {
             bthread::execution_queue_stop(*_exec_queue_id);
         }
+        _is_finished = true;
     }
 
     inline void set_io_status(const Status& status) {
@@ -103,6 +105,9 @@ public:
     }
 
     static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
+        if (iter.is_queue_stopped()) {
+            return 0;
+        }
         auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(sink_io_buffer->_state->query_mem_tracker_ptr().get());
         for (; iter; ++iter) {

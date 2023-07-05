@@ -44,6 +44,7 @@ set(EXEC_FILES
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
+        ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
         ./exec/stream/stream_aggregator_test.cpp
         ./exec/stream/stream_operators_test.cpp
