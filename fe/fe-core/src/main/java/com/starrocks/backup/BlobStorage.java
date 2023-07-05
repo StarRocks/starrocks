@@ -108,7 +108,9 @@ public class BlobStorage implements Writable {
     private String brokerName;
     @SerializedName("pt")
     private Map<String, String> properties = Maps.newHashMap();
+    @SerializedName("hasBroker")
     private boolean hasBroker;
+    @SerializedName("brokerDesc")
     private BrokerDesc brokerDesc; // for non broker operation only
 
     private BlobStorage() {
