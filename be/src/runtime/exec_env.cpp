@@ -56,6 +56,7 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/dummy_load_path_mgr.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/heartbeat_flags.h"
@@ -152,16 +153,16 @@ static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
 
 bool ExecEnv::_is_init = false;
 
-Status ExecEnv::init(ExecEnv* env, const std::vector<StorePath>& store_paths) {
+Status ExecEnv::init(ExecEnv* env, const std::vector<StorePath>& store_paths, bool as_cn) {
     DeferOp op([]() { ExecEnv::_is_init = true; });
-    return env->_init(store_paths);
+    return env->_init(store_paths, as_cn);
 }
 
 bool ExecEnv::is_init() {
     return _is_init;
 }
 
-Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
+Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
     _metrics = StarRocksMetrics::instance()->metrics();
@@ -251,7 +252,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
-    _load_path_mgr = new LoadPathMgr(this);
+    if (store_paths.empty() && as_cn) {
+        _load_path_mgr = new DummyLoadPathMgr();
+    } else {
+        _load_path_mgr = new LoadPathMgr(this);
+    }
+
     _broker_mgr = new BrokerMgr(this);
     _bfd_parser = BfdParser::create();
     _load_channel_mgr = new LoadChannelMgr();
@@ -288,12 +294,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                                          workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
     _scan_executor->initialize(num_io_threads);
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
-    if (!store_paths.empty()) {
-        Status status = _load_path_mgr->init();
-        if (!status.ok()) {
-            LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
-            exit(-1);
-        }
+    Status status = _load_path_mgr->init();
+    if (!status.ok()) {
+        LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
+        exit(-1);
     }
 
 #if defined(USE_STAROS) && !defined(BE_TEST)

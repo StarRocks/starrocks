@@ -45,6 +45,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/base_load_path_mgr.h"
 #include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
@@ -69,6 +70,7 @@ Status LoadPathMgr::init() {
 
     // error log is saved in first root path
     _error_log_dir = _exec_env->store_paths()[0].path + ERROR_LOG_PREFIX;
+
     // check and make dir
     RETURN_IF_ERROR(fs::create_directories(_error_log_dir));
 
