@@ -34,6 +34,7 @@
 
 package com.starrocks.http.rest;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
@@ -50,7 +51,6 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.codehaus.jackson.map.ObjectMapper;
 
 import java.net.URI;
 import java.net.URISyntaxException;
