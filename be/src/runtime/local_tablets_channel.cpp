@@ -358,9 +358,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     response->set_execution_time_us(last_execution_time_us +
                                     std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
-<<<<<<< HEAD
-=======
-    response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_us);
 
     // reset error message if it already set by other replica
     {
@@ -407,7 +404,6 @@ void LocalTabletsChannel::_abort_replica_tablets(
                 << tablet_ids.size() << " tablets " << node_abort_tablet_id_list_str << " request to "
                 << endpoint.host() << ":" << endpoint.port();
     }
->>>>>>> e08494d2b ([BugFix] Fix write fail error message (#25942))
 }
 
 void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& request,
@@ -587,12 +583,8 @@ void LocalTabletsChannel::abort() {
     _num_ref_senders.fetch_sub(1);
 }
 
-<<<<<<< HEAD
-void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids) {
-=======
 void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) {
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
->>>>>>> e08494d2b ([BugFix] Fix write fail error message (#25942))
     for (auto tablet_id : tablet_ids) {
         auto it = _delta_writers.find(tablet_id);
         if (it != _delta_writers.end()) {
