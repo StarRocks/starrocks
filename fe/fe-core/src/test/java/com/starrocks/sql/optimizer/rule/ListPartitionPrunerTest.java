@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -23,8 +24,13 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -34,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.junit.Assert;
 import org.junit.Before;
@@ -44,9 +51,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
-
 
 public class ListPartitionPrunerTest {
     private Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap;
@@ -332,8 +339,6 @@ public class ListPartitionPrunerTest {
         Assert.assertEquals(Lists.newArrayList(1L, 4L, 5L, 6L), pruner.prune());
     }
 
-
-
     @Test
     public void testSpecifyPartition() throws AnalysisException {
         // 2 partition columns
@@ -532,6 +537,39 @@ public class ListPartitionPrunerTest {
                         new InPredicateOperator(false, Lists.newArrayList(intColumn, ConstantOperator.createInt(0)))
                 )));
         Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L, 3L, 6L, 9L), pruner.prune());
+
+        // date_col != "2021-01-02" and int_col is not null
+        conjuncts.clear();
+        conjuncts.add(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND,
+                new BinaryPredicateOperator(BinaryType.NE, dateColumn,
+                        ConstantOperator.createDate(LocalDateTime.of(2021, 1, 2, 0, 0, 0))),
+                new IsNullPredicateOperator(true, intColumn)));
+        Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L, 6L, 7L, 8L), pruner.prune());
+    }
+
+    @Test
+    public void testGetEffectivePartitionPredicate() {
+        Column dateCol = new Column("date_col", Type.DATE);
+        Column intCol = new Column("int_col", Type.INT);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dateCol, dateColumn);
+        columnMetaToColRefMap.put(intCol, intColumn);
+
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(new HiveTable(), Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        conjuncts.clear();
+        conjuncts.add(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND,
+                new BinaryPredicateOperator(BinaryType.NE, dateColumn,
+                        ConstantOperator.createDate(LocalDateTime.of(2021, 1, 2, 0, 0, 0))),
+                new IsNullPredicateOperator(true, intColumn)));
+
+        List<Optional<ScalarOperator>> result = OptExternalPartitionPruner.getEffectivePartitionPredicate(scanOperator, 
+                ImmutableList.of(dateCol, intCol), Utils.compoundAnd(conjuncts));
+        Assert.assertEquals(2, result.size());
     }
 
     @Test
