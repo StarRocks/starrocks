@@ -1471,7 +1471,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testCreateMvFromMv2() {
+    public void testCreateMvFromMv2() throws Exception {
         String sql1 = "create materialized view base_mv2 " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
@@ -1480,12 +1480,11 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, k2 from tbl1;";
-        try {
+        {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
         }
+
         String sql2 = "create materialized view mv_from_base_mv2 " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +

@@ -2712,7 +2712,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             if (asyncRefreshSchemeDesc.isDefineStartTime() || !randomizeStart) {
                 asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-            } else {
+            } else if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
                 // randomize the start time if not specified manually, to avoid refresh conflicts
                 IntervalLiteral interval = asyncRefreshSchemeDesc.getIntervalLiteral();
                 long period = ((IntLiteral) interval.getValue()).getLongValue();
