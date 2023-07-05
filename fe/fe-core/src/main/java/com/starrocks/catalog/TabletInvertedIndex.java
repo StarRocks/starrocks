@@ -390,6 +390,7 @@ public class TabletInvertedIndex {
             return false;
         }
 
+<<<<<<< HEAD
         if (backendTabletInfo.getVersion() == replicaInFe.getVersion() - 1) {
             /*
              * This is very tricky:
@@ -404,6 +405,8 @@ public class TabletInvertedIndex {
             return false;
         }
 
+=======
+>>>>>>> 9d9856c6a ([BugFix] fix recover tablet not work (#23366))
         if (backendTabletInfo.isSetVersion_miss() && backendTabletInfo.isVersion_miss()) {
             // even if backend version is less than fe's version, but if version_miss is false,
             // which means this may be a stale report.
