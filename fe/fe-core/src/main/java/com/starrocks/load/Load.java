@@ -510,11 +510,6 @@ public class Load {
             if (importColumnDesc.isColumn()) {
                 continue;
             }
-            // if the colunm is ref by generated column, it should not be treated as VARCHAR
-            if (tbl.getColumn(importColumnDesc.getColumnName()) != null &&
-                    tbl.getColumn(importColumnDesc.getColumnName()).isMaterializedColumn()) {
-                continue;
-            }
 
             List<SlotRef> slots = Lists.newArrayList();
             importColumnDesc.getExpr().collect(SlotRef.class, slots);
@@ -808,14 +803,29 @@ public class Load {
                 SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
                 // In this case, generated column ref some mapping column
                 // and the expression should be replace by mapping column expression.
-                if (slotDesc == null) {
+
+                // Notes that, if slotDesc != null and exprsByName.get(slot.getColumnName()) != null
+                // it means that the ref columns are both in column list and expression list.
+                // In this case, we should rewrite the generated column expression using
+                // the expression in expression list instead of column list.
+                if (slotDesc == null || exprsByName.get(slot.getColumnName()) != null) {
                     smap.getLhs().add(slot);
-                    smap.getRhs().add(exprsByName.get(slot.getColumnName()));
+                    Expr replaceExpr = exprsByName.get(slot.getColumnName());
+                    if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
+                            !replaceExpr.getType().matchesType(slot.getType())) {
+                        replaceExpr = replaceExpr.castTo(slot.getType());
+                    }
+                    smap.getRhs().add(replaceExpr);
                 } else {
                     smap.getLhs().add(slot);
                     SlotRef slotRef = new SlotRef(slotDesc);
                     slotRef.setColumnName(slot.getColumnName());
-                    smap.getRhs().add(slotRef);
+                    Expr replaceExpr = slotRef;
+                    if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
+                            !replaceExpr.getType().matchesType(slot.getType())) {
+                        replaceExpr = replaceExpr.castTo(slot.getType());
+                    }
+                    smap.getRhs().add(replaceExpr);
                 }
             }
             Expr expr = entry.getValue().clone(smap);
