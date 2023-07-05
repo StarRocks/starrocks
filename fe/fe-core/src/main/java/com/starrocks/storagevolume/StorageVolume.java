@@ -88,12 +88,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.locations = new ArrayList<>(locations);
         this.comment = comment;
         this.enabled = enabled;
-        preprocessAuthenticationIfNeeded(params);
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
-        if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid");
-        }
         this.params = new HashMap<>(params);
+        preprocessAuthenticationIfNeeded(this.params);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(this.params);
+        if (!isValidCloudConfiguration()) {
+            Gson gson = new Gson();
+            throw new SemanticException("Storage params is not valid " + gson.toJson(params));
+        }
     }
 
     public StorageVolume(StorageVolume sv) {
@@ -112,7 +113,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         newParams.putAll(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams);
         if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid");
+            Gson gson = new Gson();
+            throw new SemanticException("Storage params is not valid " + gson.toJson(newParams));
         }
         this.params = newParams;
     }

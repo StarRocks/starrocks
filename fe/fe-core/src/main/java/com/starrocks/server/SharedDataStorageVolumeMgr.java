@@ -25,14 +25,14 @@ import com.starrocks.storagevolume.StorageVolume;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
-    public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
-
     @Override
     public StorageVolume getStorageVolumeByName(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
@@ -100,6 +100,124 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         }
     }
 
+    private String getStorageVolumeIdOfDb(String svKey) throws DdlException {
+        StorageVolume sv = null;
+        if (svKey.equals(StorageVolumeMgr.DEFAULT)) {
+            sv = getDefaultStorageVolume();
+        } else {
+            sv = getStorageVolumeByName(svKey);
+        }
+        if (sv == null) {
+            throw new DdlException("Unknown storage volume \"" + svKey + "\"");
+        }
+        return sv.getId();
+    }
+
+    // In replay phase, the check of storage volume existence can be skipped.
+    // Because it has been checked when creating db.
+    private boolean bindDbToStorageVolume(String svId, long dbId, boolean isReplay) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            if (!isReplay && !storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
+                return false;
+            }
+            Set<Long> dbs = storageVolumeToDbs.getOrDefault(svId, new HashSet<>());
+            dbs.add(dbId);
+            storageVolumeToDbs.put(svId, dbs);
+            dbToStorageVolume.put(dbId, svId);
+            return true;
+        }
+    }
+
+    @Override
+    public boolean bindDbToStorageVolume(String svKey, long dbId) throws DdlException {
+        String svId = getStorageVolumeIdOfDb(svKey);
+        return bindDbToStorageVolume(svId, dbId, false);
+    }
+
+    @Override
+    public void replayBindDbToStorageVolume(String svId, long dbId) {
+        bindDbToStorageVolume(svId, dbId, true);
+    }
+
+    @Override
+    public void unbindDbToStorageVolume(long dbId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            if (!dbToStorageVolume.containsKey(dbId)) {
+                return;
+            }
+            String svId = dbToStorageVolume.remove(dbId);
+            Set<Long> dbs = storageVolumeToDbs.get(svId);
+            dbs.remove(dbId);
+            if (dbs.isEmpty()) {
+                storageVolumeToDbs.remove(svId);
+            }
+        }
+    }
+
+    private String getStorageVolumeIdOfTable(String svKey, long dbId) throws DdlException {
+        StorageVolume sv = null;
+        if (svKey.isEmpty()) {
+            String dbStorageVolumeId = getStorageVolumeIdOfDb(dbId);
+            if (dbStorageVolumeId != null) {
+                return dbStorageVolumeId;
+            } else {
+                sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
+            }
+        } else if (svKey.equals(StorageVolumeMgr.DEFAULT)) {
+            sv = getDefaultStorageVolume();
+        } else {
+            sv = getStorageVolumeByName(svKey);
+        }
+        if (sv == null) {
+            throw new DdlException("Unknown storage volume \"" + svKey + "\"");
+        }
+        return sv.getId();
+    }
+
+    @Override
+    public boolean bindTableToStorageVolume(String svKey, long dbId, long tableId) throws DdlException {
+        String svId = getStorageVolumeIdOfTable(svKey, dbId);
+        return bindTableToStorageVolume(svId, tableId, false);
+    }
+
+    @Override
+    public void replayBindTableToStorageVolume(String svId, long tableId) {
+        bindTableToStorageVolume(svId, tableId, true);
+    }
+
+    // In replay phase, the check of storage volume existence can be skipped.
+    // Because it has been checked when creating table.
+    private boolean bindTableToStorageVolume(String svId, long tableId, boolean isReplay) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            if (!isReplay && !storageVolumeToDbs.containsKey(svId) &&
+                    !storageVolumeToTables.containsKey(svId) &&
+                    getStorageVolume(svId) == null) {
+                return false;
+            }
+        }
+        Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
+        tables.add(tableId);
+        storageVolumeToTables.put(svId, tables);
+        tableToStorageVolume.put(tableId, svId);
+        return true;
+    }
+
+    @Override
+    public void unbindTableToStorageVolume(long tableId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            if (!tableToStorageVolume.containsKey(tableId)) {
+                return;
+            }
+            String svId = tableToStorageVolume.remove(tableId);
+            Set<Long> tables = storageVolumeToTables.get(svId);
+            tables.remove(tableId);
+            if (tables.isEmpty()) {
+                storageVolumeToTables.remove(svId);
+            }
+        }
+    }
+
+    @Override
     public void createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
         if (Config.cloud_native_storage_type.isEmpty()) {
             return;
@@ -156,6 +274,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 break;
             case "hdfs":
                 // TODO
+                break;
             case "azblob":
                 params.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, Config.azure_blob_shared_key);
                 params.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, Config.azure_blob_sas_token);

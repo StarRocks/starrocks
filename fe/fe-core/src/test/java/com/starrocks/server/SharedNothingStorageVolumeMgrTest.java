@@ -133,8 +133,8 @@ public class SharedNothingStorageVolumeMgrTest {
         }
 
         // bind/unbind db and table to storage volume
-        svm.bindDbToStorageVolume(sv.getId(), 1L);
-        svm.bindTableToStorageVolume(sv.getId(), 1L);
+        Assert.assertTrue(svm.bindDbToStorageVolume(svKey, 1L));
+        Assert.assertTrue(svm.bindTableToStorageVolume(svKey, 1L, 1L));
 
         // remove
         try {
@@ -155,17 +155,16 @@ public class SharedNothingStorageVolumeMgrTest {
         svm.setDefaultStorageVolume(svKey1);
 
         sv = svm.getStorageVolumeByName(svKey);
-
-        try {
-            svm.removeStorageVolume(svKey);
-            Assert.fail();
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage volume 'test' is referenced by dbs or tables, " +
-                    "dbs: [1], tables: [1]"));
-        }
         svm.unbindDbToStorageVolume(1L);
         svm.unbindTableToStorageVolume(1L);
         svm.removeStorageVolume(svKey);
         Assert.assertFalse(svm.exists(svKey));
+    }
+
+    @Test
+    public void testCreateOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
+        StorageVolumeMgr svm = new SharedNothingStorageVolumeMgr();
+        svm.createOrUpdateBuiltinStorageVolume();
+        Assert.assertNull(svm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
     }
 }
