@@ -51,11 +51,8 @@ public:
 
     void abort() override;
 
-<<<<<<< HEAD
-=======
     void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
 
->>>>>>> e08494d2b ([BugFix] Fix write fail error message (#25942))
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
