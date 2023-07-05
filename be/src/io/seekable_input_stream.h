@@ -116,7 +116,7 @@ public:
 
     void set_size(int64_t value) override { return _impl->set_size(value); }
 
-protected:
+private:
     SeekableInputStream* _impl;
     Ownership _ownership;
 };
