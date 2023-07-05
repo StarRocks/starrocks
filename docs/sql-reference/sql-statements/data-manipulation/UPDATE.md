@@ -2,7 +2,7 @@
 
 Updates rows in a Primary Key table.
 
-In versions earlier than version 3.0, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTEs. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE. Since version 3.1, the UPDATE statement supports the column mode, which are suitable for scenarios involving a small number of columns but a large number of rows, resulting in faster update speeds.
+In versions earlier than version 3.0, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTEs. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE. Since version 3.1, the UPDATE statement supports the column mode partial update, which is suitable for scenarios involving a small number of columns but a large number of rows, resulting in faster update speeds.
 
 This command requires the UPDATE privilege on the table you want to update.
 
@@ -59,22 +59,22 @@ One or more other tables in the database. These tables can be joined with the ta
 
 `where_condition`
 
-The condition based on which you want to update rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'. However, this parameter is not mandatory for [column mode partial updates](#column-mode-partial-updates).
+The condition based on which you want to update rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'. However, this parameter is not mandatory for [column mode partial update](#column-mode-partial-update).
 
 ## Column mode partial update
 
-Column mode partial updates are suitable for scenarios where only a small number of columns, but a large number of rows need to be updated. In such scenarios, enabing the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.
+Column mode partial update is suitable for scenarios where only a small number of columns, but a large number of rows need to be updated. In such scenarios, enabing the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.
 
-The system variable `partial_update_mode` controls the mode of partial updates and supports the following values:
+The system variable `partial_update_mode` controls the mode of partial update and supports the following values:
 
-- `auto` (default): The system automatically determines the mode of partial updates by analyzing the UPDATE statement and the columns involved. If the following criteria are met, the system automatically uses the column mode:
+- `auto` (default): The system automatically determines the mode of partial update by analyzing the UPDATE statement and the columns involved. If the following criteria are met, the system automatically uses the column mode:
   - The percentage of updated columns compared to the total number of columns is less than 30%, and the number of updated columns is fewer than 4.
   - The update statement does not use a WHERE condition.
 Otherwise, the system automatically uses the regular mode.
 
-- `column`: The column mode is used for partial updates, which is particularly suitable for partial updates which involve a small number of columns and a large number of rows.
+- `column`: The column mode is used for the partial update, which is particularly suitable for the partial update which involve a small number of columns and a large number of rows.
 
-You can use `EXPLAIN UPDATE xxx` to view the partial update mode.
+You can use `EXPLAIN UPDATE xxx` to view the mode of partial update.
 
 ## Examples
 
