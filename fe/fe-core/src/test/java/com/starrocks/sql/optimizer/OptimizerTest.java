@@ -227,27 +227,27 @@ public class OptimizerTest {
     @Test
     public void testPreprocessMvPartitionMv() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test.tbl_with_mv\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
-                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01')),\n" +
-                        "    PARTITION p3 values [('2022-03-01'),('2022-03-10'))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');");
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                "    PARTITION p2 values [('2022-02-16'),('2022-03-01')),\n" +
+                "    PARTITION p3 values [('2022-03-01'),('2022-03-10'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
         cluster.runSql("test", "insert into tbl_with_mv values(\"2020-02-20\", 20, 30)");
 
         {
             starRocksAssert.withMaterializedView("create materialized view mv_4\n" +
-                "PARTITION BY k1\n" +
-                "distributed by hash(k2) buckets 3\n" +
-                "refresh manual\n" +
-                "as select k1, k2, v1  from tbl_with_mv;");
+                    "PARTITION BY k1\n" +
+                    "distributed by hash(k2) buckets 3\n" +
+                    "refresh manual\n" +
+                    "as select k1, k2, v1  from tbl_with_mv;");
             refreshMaterializedView("test", "mv_4");
             cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
 
