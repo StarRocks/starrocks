@@ -51,11 +51,7 @@ public:
 
     void abort() override;
 
-<<<<<<< HEAD
-    void abort(const std::vector<int64_t>& tablet_ids);
-=======
     void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override;
->>>>>>> e08494d2b ([BugFix] Fix write fail error message (#25942))
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -200,17 +196,9 @@ private:
     bool _is_replicated_storage = false;
 
     std::unordered_map<int64_t, PNetworkAddress> _node_id_to_endpoint;
-<<<<<<< HEAD
-=======
-
-    // Initially load tablets are not present on this node, so there will be no TabletsChannel.
-    // After the partition is created during data loading, there are some tablets of the new partitions on this node,
-    // so a TabletsChannel needs to be created, such that _is_incremental_channel=true
-    bool _is_incremental_channel = false;
 
     mutable bthread::Mutex _status_lock;
     Status _status = Status::OK();
->>>>>>> e08494d2b ([BugFix] Fix write fail error message (#25942))
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
