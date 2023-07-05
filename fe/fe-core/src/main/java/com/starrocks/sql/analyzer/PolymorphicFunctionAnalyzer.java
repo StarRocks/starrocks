@@ -313,9 +313,9 @@ public class PolymorphicFunctionAnalyzer {
         Type typeElement;
 
         List<Type> allRealElementType = Lists.newArrayList();
-
-        for (int i = 0; i < declTypes.length; i++) {
-            Type declType = declTypes[i];
+        int size = fn.hasVarArgs() ? paramTypes.length : declTypes.length;
+        for (int i = 0; i < size; i++) {
+            Type declType = i >= declTypes.length ? fn.getVarArgsType() : declTypes[i];
             Type realType = paramTypes[i];
             if (declType instanceof AnyArrayType) {
                 if (realType.isNull()) {
@@ -334,13 +334,12 @@ public class PolymorphicFunctionAnalyzer {
         if (!allRealElementType.isEmpty()) {
             Type commonType = allRealElementType.get(0);
             for (Type type : allRealElementType) {
-                commonType = getSuperType(commonType, type);
+                commonType = TypeManager.getCommonSuperType(commonType, type);
                 if (commonType == null) {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
             }
-
             commonType = AnalyzerUtils.replaceNullType2Boolean(commonType);
             typeArray = new ArrayType(commonType);
             typeElement = commonType;

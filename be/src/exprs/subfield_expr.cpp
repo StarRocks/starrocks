@@ -54,9 +54,6 @@ public:
         if (col->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(col.get());
             const uint8_t* nulls = nullable->null_column()->raw_data();
-            // for (size_t i = 0; i < num_rows; i++) {
-            //     null_flags[i] = nulls[i];
-            // }
             std::memcpy(&null_flags[0], &nulls[0], num_rows * sizeof(uint8_t));
         }
 
@@ -66,9 +63,6 @@ public:
 
         std::string fieldname = _used_subfield_names.back();
         ColumnPtr subfield_column = struct_column->field_column(fieldname);
-        if (subfield_column == nullptr) {
-            return Status::InternalError("Struct subfield name: " + fieldname + " not found!");
-        }
         if (subfield_column->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(subfield_column.get());
             const uint8_t* nulls = nullable->null_column()->raw_data();

@@ -59,11 +59,11 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testConcatArray() throws Exception {
         String sql = "select concat(c1, c2) from test_array";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>))");
+        assertContains(plan, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR(65533)>))");
 
         sql = "select concat(c1, c0) from test_array";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(2: c1, CAST([1: c0] AS ARRAY<VARCHAR>))");
+        assertContains(plan, "array_concat(2: c1, CAST([1: c0] AS ARRAY<VARCHAR(65533)>))");
 
         sql = "select concat(c0, c2) from test_array";
         plan = getFragmentPlan(sql);
@@ -98,7 +98,8 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select concat(v1, [1,2,3], s_1) from adec";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST([1: v1] AS ARRAY<VARCHAR>), CAST([1,2,3] AS ARRAY<VARCHAR>), 3: s_1)");
+        assertContains(plan, "array_concat(CAST([1: v1] AS ARRAY<VARCHAR(65533)>), " +
+                "CAST([1,2,3] AS ARRAY<VARCHAR(65533)>), 3: s_1)");
 
         sql = "select concat(1,2, [1,2])";
         plan = getFragmentPlan(sql);

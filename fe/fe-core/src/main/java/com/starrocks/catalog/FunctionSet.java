@@ -297,8 +297,6 @@ public class FunctionSet {
     public static final String ARRAY_CONTAINS_ALL = "array_contains_all";
     public static final String ARRAY_CUM_SUM = "array_cum_sum";
 
-
-
     public static final String ARRAY_JOIN = "array_join";
     public static final String ARRAY_DISTINCT = "array_distinct";
     public static final String ARRAY_LENGTH = "array_length";
@@ -438,7 +436,7 @@ public class FunctionSet {
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
-            new FunctionName(JSON_QUERY), new Type[]{Type.JSON, Type.VARCHAR}, Type.JSON, false);
+            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -652,24 +650,20 @@ public class FunctionSet {
                 || alwaysReturnNonNullableFunctions.contains(funcName);
     }
 
-    private Function pickupFromFuncCandidates(Function desc, Function.CompareMode mode, List<Function> fns) {
-        // First check for identical
-        for (Function f : fns) {
-            if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
-                return f;
-            }
+    private Function matchFuncCandidates(Function desc, Function.CompareMode mode, List<Function> fns) {
+        Function fn = matchStrictFunction(desc, mode, fns);
+        if (fn != null) {
+            return fn;
         }
-        if (mode == Function.CompareMode.IS_IDENTICAL) {
+        return matchCastFunction(desc, mode, fns);
+    }
+
+    private Function matchCastFunction(Function desc, Function.CompareMode mode, List<Function> fns) {
+        if (fns == null || fns.isEmpty()) {
             return null;
         }
 
-        // Next check for indistinguishable
-        for (Function f : fns) {
-            if (f.compare(desc, Function.CompareMode.IS_INDISTINGUISHABLE)) {
-                return f;
-            }
-        }
-        if (mode == Function.CompareMode.IS_INDISTINGUISHABLE) {
+        if (mode.ordinal() < Function.CompareMode.IS_SUPERTYPE_OF.ordinal()) {
             return null;
         }
 
@@ -679,7 +673,8 @@ public class FunctionSet {
                 return f;
             }
         }
-        if (mode == Function.CompareMode.IS_SUPERTYPE_OF) {
+
+        if (mode.ordinal() < Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF.ordinal()) {
             return null;
         }
 
@@ -692,14 +687,38 @@ public class FunctionSet {
         return null;
     }
 
-    private Function pickupFromPolymorphicFunction(Function desc, Function.CompareMode mode, List<Function> fns) {
-        Function fn = pickupFromFuncCandidates(desc, mode, fns);
+    private Function matchStrictFunction(Function desc, Function.CompareMode mode, List<Function> fns) {
+        if (fns == null || fns.isEmpty()) {
+            return null;
+        }
+        // First check for identical
+        for (Function f : fns) {
+            if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
+                return f;
+            }
+        }
+
+        if (mode.ordinal() < Function.CompareMode.IS_INDISTINGUISHABLE.ordinal()) {
+            return null;
+        }
+
+        // Next check for indistinguishable
+        for (Function f : fns) {
+            if (f.compare(desc, Function.CompareMode.IS_INDISTINGUISHABLE)) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    private Function matchPolymorphicFunction(Function desc, Function.CompareMode mode, List<Function> fns) {
+        Function fn = matchFuncCandidates(desc, mode, fns);
         if (fn != null) {
             fn = PolymorphicFunctionAnalyzer.generatePolymorphicFunction(fn, desc.getArgs());
         }
         if (fn != null) {
             // check generate function is right
-            return pickupFromFuncCandidates(desc, mode, Collections.singletonList(fn));
+            return matchFuncCandidates(desc, mode, Collections.singletonList(fn));
         }
         return null;
     }
@@ -709,20 +728,23 @@ public class FunctionSet {
         if (fns == null || fns.isEmpty()) {
             return null;
         }
+
+        Function func;
         // To be back-compatible, we first choose the functions from the non-polymorphic functions, if we can't find
         // a suitable in non-polymorphic functions. We will try to search in the polymorphic functions.
-        List<Function> nonPolyFuncs = fns.stream().filter(func -> !func.isPolymorphic()).collect(Collectors.toList());
-        if (!nonPolyFuncs.isEmpty()) {
-            Function func = pickupFromFuncCandidates(desc, mode, nonPolyFuncs);
-            if (func != null) {
-                return func;
-            }
+        List<Function> standFns = fns.stream().filter(fn -> !fn.isPolymorphic()).collect(Collectors.toList());
+        func = matchStrictFunction(desc, mode, standFns);
+        if (func != null) {
+            return func;
         }
-        List<Function> polyFuncs = fns.stream().filter(Function::isPolymorphic).collect(Collectors.toList());
-        if (!polyFuncs.isEmpty()) {
-            return pickupFromPolymorphicFunction(desc, mode, polyFuncs);
+
+        List<Function> polyFns = fns.stream().filter(Function::isPolymorphic).collect(Collectors.toList());
+        func = matchPolymorphicFunction(desc, mode, polyFns);
+        if (func != null) {
+            return func;
         }
-        return null;
+
+        return matchCastFunction(desc, mode, standFns);
     }
 
     private void addBuiltInFunction(Function fn) {
@@ -874,7 +896,6 @@ public class FunctionSet {
 
         // Percentile
         registerBuiltinPercentileAggFunction();
-
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin(HLL_UNION_AGG,
