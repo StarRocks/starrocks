@@ -607,6 +607,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
             partition.setIdForRestore(entry.getKey());
         }
 
+        // reset replication number for olaptable
+        setReplicationNum((short) restoreReplicationNum);
+
         return Status.OK;
     }
 
