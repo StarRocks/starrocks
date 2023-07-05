@@ -2777,25 +2777,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (properties == null) {
             properties = Maps.newHashMap();
         }
-        // set replication_num
-        short replicationNum = RunMode.defaultReplicationNum();
-        try {
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
-                materializedView.setReplicationNum(replicationNum);
-            }
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
-                Integer maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
-                materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
-            }
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage(), e);
-        }
-        // replicated storage
-        materializedView.setEnableReplicatedStorage(
-                PropertyAnalyzer.analyzeBooleanProp(
-                        properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                        Config.enable_replicated_storage_as_default_engine));
+
         boolean isNonPartitioned = partitionInfo.getType() == PartitionType.UNPARTITIONED;
         DataProperty dataProperty = analyzeMVDataProperties(db, materializedView, properties, isNonPartitioned);
 
@@ -2805,7 +2787,7 @@ public class LocalMetastore implements ConnectorMetadata {
             long partitionId = GlobalStateMgr.getCurrentState().getNextId();
             Preconditions.checkNotNull(dataProperty);
             partitionInfo.setDataProperty(partitionId, dataProperty);
-            partitionInfo.setReplicationNum(partitionId, replicationNum);
+            partitionInfo.setReplicationNum(partitionId, materializedView.getDefaultReplicationNum());
             partitionInfo.setIsInMemory(partitionId, false);
             partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
             StorageInfo storageInfo = materializedView.getTableProperty().getStorageInfo();
@@ -2831,8 +2813,45 @@ public class LocalMetastore implements ConnectorMetadata {
                                                  MaterializedView materializedView,
                                                  Map<String, String> properties,
                                                  boolean isNonPartitioned) throws DdlException {
-        DataProperty dataProperty;
+        DataProperty dataProperty = null;
         try {
+            // replicated storage
+            materializedView.setEnableReplicatedStorage(
+                    PropertyAnalyzer.analyzeBooleanProp(
+                            properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                            Config.enable_replicated_storage_as_default_engine));
+
+            // replication_num
+            short replicationNum = RunMode.defaultReplicationNum();
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                materializedView.setReplicationNum(replicationNum);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+                Integer maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
+                materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+            }
+
+            // bucket number
+            // infer bucket number of materialized view based on base-table,
+            // currently is max{bucket_num of base_table}
+            // TODO: infer the bucket number according to MV pattern and cardinality
+            DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
+            if (distributionInfo.getBucketNum() == 0) {
+                int inferredBucketNum = 0;
+                for (BaseTableInfo base : materializedView.getBaseTableInfos()) {
+                    if (base.getTable().isNativeTableOrMaterializedView()) {
+                        OlapTable olapTable = (OlapTable) base.getTable();
+                        DistributionInfo dist = olapTable.getDefaultDistributionInfo();
+                        inferredBucketNum = Math.max(inferredBucketNum, dist.getBucketNum());
+                    }
+                }
+                if (inferredBucketNum == 0) {
+                    inferredBucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                }
+                distributionInfo.setBucketNum(inferredBucketNum);
+            }
+
             // set storage medium
             boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
@@ -2953,7 +2972,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getTableProperty().getProperties().putAll(properties);
             }
         } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage(), e);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
         }
         return dataProperty;
     }
