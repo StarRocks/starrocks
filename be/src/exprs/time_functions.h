@@ -367,11 +367,12 @@ public:
     /*
      * Called by date_diff to the corresponding part
      */
-    DEFINE_VECTORIZED_FN(date_diff_time);
+    static StatusOr<ColumnPtr> date_diff_time(FunctionContext* context, const Columns& columns, int64_t t);
 
     // function for datediff
     struct DateDiffCtx {
-        ScalarFunction function;
+        int64_t type;
+        StatusOr<ColumnPtr> (*function)(FunctionContext* context, const Columns& columns, int64_t t);
     };
 
     /**
