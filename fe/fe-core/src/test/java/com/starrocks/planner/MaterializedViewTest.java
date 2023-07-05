@@ -1110,7 +1110,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+
     public void testJoinAggregateMaterializationAggregateFuncs4() {
         testRewriteOK("select empid, emps.deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -1121,7 +1121,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+
     public void testJoinAggregateMaterializationAggregateFuncs5() {
         testRewriteOK("select empid, depts.deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -1436,14 +1436,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     @Ignore
-    // TODO: agg need push down below join
     public void testAggregateOnJoinKeys2() {
         testRewriteOK("select deptno, empid, salary, sum(1) as c "
                         + "from emps\n"
                         + "group by deptno, empid, salary",
                 "select sum(1) "
                         + "from emps\n"
-                        + "join depts on depts.deptno = empid group by empid, depts.deptno");
+                        + "join depts on depts.deptno = emps.empid group by empid, depts.deptno");
     }
 
     @Test
