@@ -259,9 +259,9 @@ public:
 
         bool is_cache_hit = (*file_st)->is_cache_hit();
         std::unique_ptr<io::SeekableInputStream> istream = std::make_unique<StarletInputStream>(std::move(*file_st));
-        if (!is_cache_hit && config::experimental_lake_wait_per_get > 0) {
+        if (!is_cache_hit && config::experimental_lake_wait_per_get_ms > 0) {
             istream = std::make_unique<io::ThrottledSeekableInputStream>(std::move(istream),
-                                                                         config::experimental_lake_wait_per_get);
+                                                                         config::experimental_lake_wait_per_get_ms);
         }
         return std::make_unique<RandomAccessFile>(std::move(istream), path, is_cache_hit);
     }
@@ -303,8 +303,8 @@ public:
         }
 
         std::unique_ptr<io::OutputStream> os = std::make_unique<StarletOutputStream>(std::move(*file_st));
-        if (config::experimental_lake_wait_per_put > 0) {
-            os = std::make_unique<io::ThrottledOutputStream>(std::move(os), config::experimental_lake_wait_per_put);
+        if (config::experimental_lake_wait_per_put_ms > 0) {
+            os = std::make_unique<io::ThrottledOutputStream>(std::move(os), config::experimental_lake_wait_per_put_ms);
         }
         return std::make_unique<starrocks::OutputStreamAdapter>(std::move(os), path);
     }
