@@ -2432,7 +2432,8 @@ Status TimeFunctions::datediff_prepare(FunctionContext* context, FunctionContext
     }
     ColumnPtr column = context->get_constant_column(2);
     auto type_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
-    if (type_str != "day" && type_str != "hour" && type_str != "minute" && type_str != "second" && type_str != "millisecond") {
+    if (type_str != "day" && type_str != "hour" && type_str != "minute" && type_str != "second" &&
+        type_str != "millisecond") {
         return Status::InvalidArgument("type column show be one of day/hour/minute/second/millisecond");
     }
     auto fc = new TimeFunctions::DateDiffCtx();
