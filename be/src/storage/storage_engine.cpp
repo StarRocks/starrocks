@@ -215,6 +215,9 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
+    REGISTER_GAUGE_STARROCKS_METRIC(memtable_flush_queue_count, [this]() {
+        return _memtable_flush_executor->get_thread_pool()->num_queued_tasks();
+    });
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
