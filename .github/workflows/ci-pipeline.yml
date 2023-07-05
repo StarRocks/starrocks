@@ -39,7 +39,6 @@ jobs:
     steps:
       - run: echo "success"
       - run: |
-          echo "${{ github.event.pull_request.title }}"
           echo "${{ github.head_ref }}"
 
 
