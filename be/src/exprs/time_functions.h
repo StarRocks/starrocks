@@ -367,11 +367,7 @@ public:
     /*
      * Called by date_diff to the corresponding part
      */
-    DEFINE_VECTORIZED_FN(date_diff_day);
-    DEFINE_VECTORIZED_FN(date_diff_hour);
-    DEFINE_VECTORIZED_FN(date_diff_minute);
-    DEFINE_VECTORIZED_FN(date_diff_second);
-    DEFINE_VECTORIZED_FN(date_diff_millisecond);
+    DEFINE_VECTORIZED_FN(date_diff_time);
 
     // function for datediff
     struct DateDiffCtx {

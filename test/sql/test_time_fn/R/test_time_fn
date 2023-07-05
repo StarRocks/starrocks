@@ -752,6 +752,10 @@ select date_diff('2010-11-30 23:59:59.000001', '2010-11-30 20:58:59.000001', 'da
 -- result:
 0
 -- !result
+select date_diff("2010-11-30 23:59:59", NULL, "hour");
+-- result:
+NULL
+-- !result
 CREATE TABLE IF NOT EXISTS `test_data_diff` (
   `d0` datetime,
   `d1` datetime,
