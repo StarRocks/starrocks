@@ -81,6 +81,10 @@ public:
 
     void report_epoch(ExecEnv* exec_env, QueryContext* query_ctx, std::vector<FragmentContext*> fragment_ctxs) override;
 
+    ThreadPool* get_thread_pool() {
+        return _thread_pool.get();
+    }
+
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();
