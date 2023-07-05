@@ -34,7 +34,7 @@ namespace starrocks {
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
     OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsScannerContext& scanner_ctx,
-                       OrcChunkReader* reader, const std::set<int64_t>& need_skip_rowids);
+                       OrcChunkReader* reader);
     bool filterOnOpeningStripe(uint64_t stripeIndex, const orc::proto::StripeInformation* stripeInformation) override;
     bool filterOnPickRowGroup(size_t rowGroupIdx, const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                               const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilters) override;
@@ -46,6 +46,9 @@ public:
     void onStartingPickRowGroups() override;
     void onEndingPickRowGroups() override;
     void setWriterTimezone(const std::string& tz) override;
+
+    void set_can_use_any_column(bool v) { _can_use_any_column = v; }
+    size_t num_rows_in_stripes() const { return _num_rows_in_stripes; }
 
 private:
     const HdfsScannerParams& _scanner_params;
@@ -65,9 +68,9 @@ private:
     std::map<uint64_t, uint64_t> _scan_ranges;
     OrcChunkReader* _reader;
     int64_t _writer_tzoffset_in_seconds;
-    const std::set<int64_t>& _need_skip_rowids;
 
-    bool _can_use_any_column() const;
+    bool _can_use_any_column = false;
+    size_t _num_rows_in_stripes = 0;
 };
 
 void OrcRowReaderFilter::onStartingPickRowGroups() {}
@@ -84,12 +87,11 @@ void OrcRowReaderFilter::setWriterTimezone(const std::string& tz) {
 }
 
 OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsScannerContext& scanner_ctx,
-                                       OrcChunkReader* reader, const std::set<int64_t>& need_skip_rowids)
+                                       OrcChunkReader* reader)
         : _scanner_params(scanner_params),
           _scanner_ctx(scanner_ctx),
           _reader(reader),
-          _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()),
-          _need_skip_rowids(need_skip_rowids) {
+          _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()) {
     if (_scanner_params.min_max_tuple_desc != nullptr) {
         VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_params.min_max_tuple_desc->debug_string();
         for (ExprContext* ctx : _scanner_params.min_max_conjunct_ctxs) {
@@ -101,20 +103,25 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params, 
     }
 }
 
-bool OrcRowReaderFilter::_can_use_any_column() const {
-    return _scanner_params.can_use_any_column && _need_skip_rowids.empty();
-}
-
 bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
                                                const orc::proto::StripeInformation* stripeInformation) {
     _current_stripe_index = stripeIndex;
     uint64_t offset = stripeInformation->offset();
     // range end must > offset
+    bool filtered = true;
     auto it = _scan_ranges.upper_bound(offset);
     if ((it != _scan_ranges.end()) && (offset >= it->second) && (offset < it->first)) {
-        return false;
+        filtered = false;
     }
-    return true;
+
+    // We are going to use this stripe, but we don't want to read any data from this stripe.
+    // we just collect know many rows from this stripe.
+    if (_can_use_any_column && !filtered) {
+        _num_rows_in_stripes += stripeInformation->numberofrows();
+        filtered = true;
+    }
+
+    return filtered;
 }
 
 bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
@@ -381,6 +388,10 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));
+
+    if (_can_use_any_column()) {
+        _init_use_any_column();
+    }
     return Status::OK();
 }
 
@@ -392,6 +403,11 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     CHECK(chunk != nullptr);
     if (_should_skip_file) {
         return Status::EndOfFile("");
+    }
+
+    if (_can_use_any_column()) {
+        size_t row_count = runtime_state->chunk_size();
+        return _build_chunk_on_use_any_column(chunk, &row_count);
     }
 
     ChunkPtr& ck = *chunk;
@@ -529,6 +545,46 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
 
     COUNTER_UPDATE(delete_build_timer, _stats.delete_build_ns);
     COUNTER_UPDATE(delete_file_per_scan_counter, _stats.delete_file_per_scan);
+}
+
+bool HdfsOrcScanner::_can_use_any_column() const {
+    return _scanner_params.can_use_any_column && _need_skip_rowids.empty();
+}
+
+void HdfsOrcScanner::_init_use_any_column() {
+    _orc_row_reader_filter->set_can_use_any_column(true);
+
+    // since we filtered all stripes, we will get EOF at first try
+    // and during this filtering process, we have collected num of rows to be emitted.
+    orc::RowReader::ReadPosition position;
+    Status st = _orc_reader->read_next(&position);
+    DCHECK(st.is_end_of_file());
+
+    UseAnyColumnContext& ctx = _use_any_column_ctx;
+    ctx.row_count = _orc_row_reader_filter->num_rows_in_stripes();
+    if (_src_slot_descriptors.size() != 0) {
+        DCHECK_EQ(_src_slot_descriptors.size(), 1);
+        ctx.slot_desc = _src_slot_descriptors[0];
+    }
+}
+
+Status HdfsOrcScanner::_build_chunk_on_use_any_column(ChunkPtr* chunk, size_t* row_count) {
+    UseAnyColumnContext& ctx = _use_any_column_ctx;
+    if (ctx.row_count == 0 || ctx.slot_desc == nullptr) {
+        *row_count = 0;
+        return Status::EndOfFile("");
+    }
+
+    size_t count = std::min(ctx.row_count, *row_count);
+    ctx.row_count -= count;
+    *row_count = count;
+
+    ColumnPtr c = ColumnHelper::create_const_null_column(count);
+    (*chunk)->update_column(c, ctx.slot_desc->id());
+
+    _scanner_ctx.append_not_existed_columns_to_chunk(chunk, count);
+    _scanner_ctx.append_partition_column_to_chunk(chunk, count);
+    return Status::OK();
 }
 
 } // namespace starrocks
