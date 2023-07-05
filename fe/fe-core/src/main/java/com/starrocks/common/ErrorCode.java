@@ -84,7 +84,8 @@ public enum ErrorCode {
     ERR_FUNC_ACCESS_DENIED_ERROR(1144, new byte[] {'4', '2', '0', '0', '0'},
             "%s command denied to user '%s'@'%s' for function '%s'"),
     ERR_WRONG_COLUMN_NAME(1166, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect column name '%s'"),
-    ERR_UNKNOWN_SYSTEM_VARIABLE(1193, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown system variable '%s'"),
+    ERR_UNKNOWN_SYSTEM_VARIABLE(1193, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown system variable '%s', " +
+            "the most similar variables are %s"),
     ERR_TOO_MANY_USER_CONNECTIONS(1203, new byte[] {'4', '2', '0', '0', '0'},
             "User %s already has more than 'max_user_connections' active connections"),
     ERR_NO_PERMISSION_TO_CREATE_USER(1211, new byte[] {'4', '2', '0', '0', '0'},
@@ -312,8 +313,9 @@ public enum ErrorCode {
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
 
     ERR_BAD_WAREHOUSE_ERROR(6002, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown warehouse '%s'");
+            "Unknown warehouse '%s'"),
 
+    ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
