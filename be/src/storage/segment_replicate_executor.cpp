@@ -339,7 +339,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
 Status SegmentReplicateExecutor::init(const std::vector<DataDir*>& data_dirs) {
     int data_dir_num = static_cast<int>(data_dirs.size());
     int min_threads = std::max<int>(1, config::flush_thread_num_per_store);
-    int max_threads = data_dir_num * min_threads;
+    int max_threads = std::max(data_dir_num * min_threads, min_threads);
     return ThreadPoolBuilder("segment_replicate")
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)

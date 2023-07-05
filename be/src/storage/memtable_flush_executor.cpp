@@ -137,7 +137,7 @@ void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
 Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
     int data_dir_num = static_cast<int>(data_dirs.size());
     int min_threads = std::max<int>(1, config::flush_thread_num_per_store);
-    int max_threads = data_dir_num * min_threads;
+    int max_threads = std::max(data_dir_num * min_threads, min_threads);
     return ThreadPoolBuilder("memtable_flush") // mem table flush
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)
