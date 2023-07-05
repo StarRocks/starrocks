@@ -1450,7 +1450,11 @@ StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* 
     // only null
     auto column = ColumnHelper::create_column(_type, true);
     column->append_nulls(1);
-    return std::move(ConstColumn::create(column, 1));
+    auto only_null = std::move(ConstColumn::create(column, 1));
+    if (ptr != nullptr) {
+        only_null->resize(ptr->num_rows());
+    }
+    return only_null;
 }
 
 Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
