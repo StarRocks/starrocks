@@ -314,4 +314,24 @@ public class TablePruningCTETest extends TablePruningTestBase {
             checkHashJoinCountWithBothRBOAndCBO(items, q, numHashJoins);
         }
     }
+    @Test
+    public void testRandomlyPermuteTPCHTables(){
+        String sql = "select\n" +
+                "  l_orderkey,\n" +
+                "  snation.n_name,\n" +
+                "  sregion.r_name\n" +
+                "from\n" +
+                "  supplier,customer, nation snation, region sregion,nation cnation, region cregion, lineitem, orders, partsupp, part\n" +
+                "where \n" +
+                "  lineitem.l_orderkey = orders.o_orderkey \n" +
+                "  and lineitem.l_partkey = partsupp.ps_partkey and lineitem.l_suppkey = partsupp.ps_suppkey \n" +
+                "  and lineitem.l_partkey =  part.p_partkey\n" +
+                "  and lineitem.l_suppkey = supplier.s_suppkey\n" +
+                "  and orders.o_custkey = customer.c_custkey\n" +
+                "  and supplier.s_nationkey = snation.n_nationkey \n" +
+                "  and snation.n_regionkey = sregion.r_regionkey \n" +
+                "  and customer.c_nationkey = cnation.n_nationkey \n" +
+                "  and cnation.n_regionkey = cregion.r_regionkey";
+        checkHashJoinCountWithBothRBOAndCBO(sql, 3);
+    }
 }

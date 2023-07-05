@@ -347,7 +347,6 @@ public class TablePruningTest extends TablePruningTestBase {
                 {"sum(FII.fii_c0), sum(FII.fii_c0+1)", "limit 1", 1, 1},
                 {"sum(FII.fii_c0), sum(CII.cii_c0)", "limit 1", 1, 1, 1},
         };
-
         String sqlFmt = "select %s from %s where %s %s";
         for (Object[] tc : testCases) {
             String selectItems = (String) tc[0];
@@ -575,6 +574,7 @@ public class TablePruningTest extends TablePruningTestBase {
             checkHashJoinCountWithBothRBOAndCBO(q, 0);
         });
     }
+
     @Test
     public void testManyTablesJoinOnTheSamePK() {
         String sql100Tables =

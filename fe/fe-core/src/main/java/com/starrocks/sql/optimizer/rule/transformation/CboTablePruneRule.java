@@ -21,7 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.CPJoinGardener;
+import com.starrocks.sql.optimizer.CPBiRel;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -103,13 +103,13 @@ public class CboTablePruneRule extends TransformationRule {
             eqColRefPairs.add(Pair.create(leftCol, rightCol));
         }
 
-        List<CPJoinGardener.CPBiRel> lhsToRhsBiRels =
-                CPJoinGardener.getCardinalityPreserving(input.inputAt(0), input.inputAt(1), true);
+        List<CPBiRel> lhsToRhsBiRels =
+                CPBiRel.getCPBiRels(input.inputAt(0), input.inputAt(1), true);
 
-        List<CPJoinGardener.CPBiRel> rhsToLhsBiRels =
-                CPJoinGardener.getCardinalityPreserving(input.inputAt(1), input.inputAt(0), false);
+        List<CPBiRel> rhsToLhsBiRels =
+                CPBiRel.getCPBiRels(input.inputAt(1), input.inputAt(0), false);
 
-        List<CPJoinGardener.CPBiRel> biRels = Collections.emptyList();
+        List<CPBiRel> biRels = Collections.emptyList();
 
         if (joinType.isLeftOuterJoin()) {
             biRels = lhsToRhsBiRels;
@@ -124,7 +124,7 @@ public class CboTablePruneRule extends TransformationRule {
         }
         Set<Pair<ColumnRefOperator, ColumnRefOperator>> reverseEqColRefPairs =
                 eqColRefPairs.stream().map(p -> Pair.create(p.second, p.first)).collect(Collectors.toSet());
-        List<CPJoinGardener.CPBiRel> matchedBiRels =
+        List<CPBiRel> matchedBiRels =
                 biRels.stream().filter(biRel -> biRel.isLeftToRight() ? biRel.getPairs().equals(eqColRefPairs) :
                         biRel.getPairs().equals(reverseEqColRefPairs)).collect(
                         Collectors.toList());
@@ -134,7 +134,7 @@ public class CboTablePruneRule extends TransformationRule {
         boolean sameTableJoinUK = false;
         boolean hasLeftToRightFK = false;
         boolean hasRightToLeftFK = false;
-        for (CPJoinGardener.CPBiRel biRel : matchedBiRels) {
+        for (CPBiRel biRel : matchedBiRels) {
             if (!biRel.isFromForeignKey()) {
                 sameTableJoinUK = true;
             } else {

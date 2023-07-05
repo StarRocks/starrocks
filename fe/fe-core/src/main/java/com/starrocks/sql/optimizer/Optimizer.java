@@ -248,7 +248,13 @@ public class Optimizer {
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext) {
         if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableRboTablePrune()) {
+            // PARTITION_PRUNE is required to run before ReorderJoinRule because ReorderJoinRule's
+            // Statistics calculation on Operators depends on row count yielded by the PARTITION_PRUNE.
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+            // ReorderJoinRule is a in-memo rule, when it is used outside memo, we must apply
+            // MergeProjectWithChildRule to merge LogicalProjectionOperator into its child's
+            // projection before ReorderJoinRule's application, after that, we must separate operator's
+            // projection as LogicalProjectionOperator from the operator by applying SeparateProjectRule.
             ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
             tree = new ReorderJoinRule().rewrite(tree, context);
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);

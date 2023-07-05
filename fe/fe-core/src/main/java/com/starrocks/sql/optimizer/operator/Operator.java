@@ -47,7 +47,10 @@ public abstract class Operator {
     protected RowOutputInfo rowOutputInfo;
 
     // Add salt make the original equivalent operators nonequivalent to avoid Group
-    // mutual reference in Memo
+    // mutual reference in Memo.
+    // Only LogicalScanOperator/PhysicalScanOperator yielded by CboTablePruneRule has salt.
+    // if no salt, two different Groups will be merged into one, that leads to mutual reference
+    // or self reference of groups
     protected long salt = 0;
 
     public Operator(OperatorType opType) {

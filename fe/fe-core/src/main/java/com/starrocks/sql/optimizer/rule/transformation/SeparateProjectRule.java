@@ -21,6 +21,11 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
+// SeparateProjectRule is used to separate the projection from Operator and construct
+// a LogicalProjectOperator which resides above the Operator from the projection.
+// When applying some in-memo rule(e.g. ReorderJoinRule) to the Logical Plan outside-memo,
+// we must merge LogicalProjectOperator into its child before that and Separate the
+// LogicalProjectOperator after that.
 public class SeparateProjectRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {

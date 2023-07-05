@@ -21,7 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.CPJoinGardener;
+import com.starrocks.sql.optimizer.CPBiRel;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -96,17 +96,21 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
         public List<OptExpression> chooseOrder() {
             List<OptExpression> roots = getRoot();
             Set<OptExpression> visited = Sets.newHashSet();
+            // graph has source nodes.
             if (!roots.isEmpty()) {
+                // travel each source node.
                 List<List<OptExpression>> components = Lists.newArrayList();
                 for (int i = 0; i < roots.size(); ++i) {
                     List<OptExpression> component = Lists.newArrayList();
                     travel(roots.get(i), visited, component);
                     components.add(component);
                 }
+                // put the longest chain in the front.
                 components.sort(Comparator.comparingInt(List::size));
                 Collections.reverse(components);
                 return components.stream().flatMap(Collection::stream).collect(Collectors.toList());
             } else {
+                // no source nodes, travel all node, find the longest chain.
                 List<OptExpression> longestOrders = Collections.emptyList();
                 for (OptExpression node : nodes.keySet()) {
                     visited.clear();
@@ -123,6 +127,7 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
             }
         }
 
+        // BFS travel
         void travel(OptExpression root, Set<OptExpression> visited, List<OptExpression> component) {
             Queue<OptExpression> q0 = new LinkedList<OptExpression>();
             Queue<OptExpression> q1 = new LinkedList<OptExpression>();
@@ -139,7 +144,7 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
                     component.add(curr);
                     Long currTableId = getTableId.apply(curr);
                     // permute LogicalScanOperator originates from the same table together will give
-                    // TablePruneRule more chance to prune tables.
+                    // CboTablePruneRule more chance to prune tables.
                     List<OptExpression> children =
                             outEdges.get(nodes.get(curr)).stream().filter(child -> !visited.contains(child))
                                     .sorted((lhs, rhs) -> Boolean.compare(
@@ -157,6 +162,8 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
 
     @Override
     protected void enumerate() {
+        // We only try to reorder atoms which are LogicalScanOperator, since at present,
+        // we can extract cardinality-preserving relation from a pair of OlapTable.
         List<OptExpression> scanOps = atomOptExprs.stream().filter(opt -> {
             if (!(opt.getOp() instanceof LogicalScanOperator)) {
                 return false;
@@ -173,6 +180,10 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
             return;
         }
 
+        // Construct a mapping from ColumnRefOperator to OptExpression, later we
+        // only try matches equality predicate that references ColumnRefOperators backed
+        // by real columns of OlapTables to pairs of ColumnRefOperator of cardinality-preserving
+        // relation of two OptExpression.
         Map<ColumnRefOperator, OptExpression> colRefToScanNodes = Maps.newHashMap();
         for (OptExpression scanOp : scanOps) {
             LogicalScanOperator scan = scanOp.getOp().cast();
@@ -197,12 +208,15 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
 
             ColumnRefOperator lhsColRef = lhs.cast();
             ColumnRefOperator rhsColRef = rhs.cast();
+            // column ref references real column
             if (!(colRefToScanNodes.containsKey(lhsColRef) && colRefToScanNodes.containsKey(rhsColRef))) {
                 continue;
             }
 
             OptExpression lhsOptExpr = colRefToScanNodes.get(lhsColRef);
             OptExpression rhsOptExpr = colRefToScanNodes.get(rhsColRef);
+            // Pair(OptExprA, OptExprB) and Pair(OptExprB, OptExprA) are the same, so normalize them into
+            // one form.
             if (lhsOptExpr.hashCode() < rhsOptExpr.hashCode()) {
                 OptExpression tmpOptExpr = lhsOptExpr;
                 lhsOptExpr = rhsOptExpr;
@@ -217,6 +231,8 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
         }
 
         Graph graph = new Graph(scanOps);
+        // Try to extract cardinality-preserving relation from a pair of OptExpressions
+        // Construct a graph from cardinality-preserving relations.
         for (Map.Entry<Pair<OptExpression, OptExpression>, Set<Pair<ColumnRefOperator, ColumnRefOperator>>>
                 e : biRelToColRefPairs.entrySet()) {
             OptExpression lhsOptExpr = e.getKey().first;
@@ -224,10 +240,10 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
             Set<Pair<ColumnRefOperator, ColumnRefOperator>> pairs = e.getValue();
             Set<Pair<ColumnRefOperator, ColumnRefOperator>> inversePairs = pairs.stream().map(Pair::inverse).collect(
                     Collectors.toSet());
-            List<CPJoinGardener.CPBiRel> biRels = Lists.newArrayList();
-            biRels.addAll(CPJoinGardener.getCardinalityPreserving(lhsOptExpr, rhsOptExpr, true));
-            biRels.addAll(CPJoinGardener.getCardinalityPreserving(rhsOptExpr, lhsOptExpr, false));
-            for (CPJoinGardener.CPBiRel biRel : biRels) {
+            List<CPBiRel> biRels = Lists.newArrayList();
+            biRels.addAll(CPBiRel.getCPBiRels(lhsOptExpr, rhsOptExpr, true));
+            biRels.addAll(CPBiRel.getCPBiRels(rhsOptExpr, lhsOptExpr, false));
+            for (CPBiRel biRel : biRels) {
                 if (biRel.isLeftToRight() && biRel.getPairs().equals(pairs)) {
                     graph.addEdge(lhsOptExpr, rhsOptExpr);
                 } else if (!biRel.isLeftToRight() && biRel.getPairs().equals(inversePairs)) {
@@ -235,17 +251,21 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
                 }
             }
         }
-
+        // choose the longest cardinality-preserving chains.
         List<OptExpression> order = graph.chooseOrder();
         Set<OptExpression> orderedScanNodes = new HashSet<>(order);
         Set<OptExpression> allScanNodes = new HashSet<>(scanOps);
         Set<OptExpression> allNodes = new HashSet<>(atomOptExprs);
+        // add remaining OptExpressions to the order.
         order.addAll(Sets.difference(allScanNodes, orderedScanNodes));
         order.addAll(Sets.difference(allNodes, allScanNodes));
         List<GroupInfo> atoms = joinLevels.get(1).groups;
         Preconditions.checkArgument(order.size() == atoms.size());
         Map<OptExpression, GroupInfo> optExprToAtoms =
                 atoms.stream().collect(Collectors.toMap(g -> g.bestExprInfo.expr, Function.identity()));
+        // construct left-deep join tree, the longest cardinality-preserving chain in the bottom
+        // of the left-deep tree. because our cardinality-preserving relation infer algorithm is
+        // bottom-up style, it can benefit from left-deep tree.
         atoms.clear();
         for (OptExpression optExpr : order) {
             atoms.add(optExprToAtoms.get(optExpr));
