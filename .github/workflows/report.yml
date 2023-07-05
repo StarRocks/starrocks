@@ -27,7 +27,7 @@ jobs:
       github.event.workflow_run.event == 'pull_request'
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
-      BASE_REF: ${{ steps.pr_details.outputs.base_ref }}
+      BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
     steps:
       - name: Download workflow artifact
         uses: dawidd6/action-download-artifact@v2.11.0
@@ -39,7 +39,7 @@ jobs:
 
       - name: Read the pr_num file
         id: pr_num_reader
-        uses: juliangruber/read-file-action@v1.0.0
+        uses: juliangruber/read-file-action@v1
         with:
           path: ./pr_num.txt
 
@@ -52,7 +52,7 @@ jobs:
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
           base_ref=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName -q .baseRefName`
-          echo "base_ref=${base_ref}" >> $GITHUB_OUTPUT 
+          echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT 
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT 
 
   FE-UT-REPORT:
@@ -92,9 +92,12 @@ jobs:
         env:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          commit_id: ${{ github.event.workflow_run.head_sha }}
         with:
           check_name: 'FE UT Report'
           detailed_summary: true
+          fail_on_failure: true
+          commit: ${commit_id}
           report_paths: ./fe-ut/*.xml
 
       # Incremental Coverage
@@ -170,11 +173,15 @@ jobs:
 
       - name: Publish SQL-Tester Report
         uses: ./.actions/nose-report-action
+        if: success()
+        env:
+          commit_id: ${{ github.event.workflow_run.head_sha }}
         with:
           check_name: 'SQL-Tester Report'
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
+          commit: ${commit_id}
           report_paths: 'sql-tester-result/*.xml'
 
   Admit-REPORT:
@@ -217,9 +224,13 @@ jobs:
 
       - name: Publish Admit Report
         uses: ./.actions/nose-report-action
+        if: success()
+        env:
+          commit_id: ${{ github.event.workflow_run.head_sha }}
         with:
           check_name: 'Admit Report'
           fail_on_failure: true
           detailed_summary: true
+          commit: ${commit_id}
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'admit-result/*.xml'
