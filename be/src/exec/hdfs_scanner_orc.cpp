@@ -579,7 +579,7 @@ Status HdfsOrcScanner::_build_chunk_on_use_any_column(ChunkPtr* chunk, size_t* r
     ctx.row_count -= count;
     *row_count = count;
 
-    ColumnPtr c = ColumnHelper::create_const_null_column(count);
+    ColumnPtr c = ColumnHelper::create_column(ctx.slot_desc->type(), ctx.slot_desc->is_nullable(), true, count);
     (*chunk)->update_column(c, ctx.slot_desc->id());
 
     _scanner_ctx.append_not_existed_columns_to_chunk(chunk, count);
