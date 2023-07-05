@@ -253,17 +253,13 @@ void LoadChannel::abort() {
 void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason) {
     auto channel = get_tablets_channel(index_id);
     if (channel != nullptr) {
-<<<<<<< HEAD
         auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(channel.get());
         if (local_tablets_channel != nullptr) {
             local_tablets_channel->incr_num_ref_senders();
-            local_tablets_channel->abort(tablet_ids);
+            local_tablets_channel->abort(tablet_ids, reason);
         } else {
             channel->abort();
         }
-=======
-        channel->abort(tablet_ids, reason);
->>>>>>> e08494d2b ([BugFix] Fix write fail error message (#25942))
     }
 }
 

@@ -60,18 +60,8 @@ public:
     virtual void cancel() = 0;
 
     virtual void abort() = 0;
-<<<<<<< HEAD
-=======
 
     virtual void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) = 0;
-
-    // timeout: in microseconds
-    virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
-
-protected:
-    // counter of remaining senders
-    std::atomic<int> _num_remaining_senders = 0;
->>>>>>> e08494d2b ([BugFix] Fix write fail error message (#25942))
 };
 
 struct TabletsChannelKey {
