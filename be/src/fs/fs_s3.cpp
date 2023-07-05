@@ -178,6 +178,12 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
         config.endpointOverride = aws_cloud_credential.endpoint;
     }
     config.maxConnections = config::object_storage_max_connection;
+    if (config::object_storage_connect_timeout_ms > 0) {
+        config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
+    }
+    if (config::object_storage_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
+    }
 
     ClientCacheKey client_cache_key{config, aws_cloud_configuration};
     {
@@ -303,6 +309,13 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
             config.region = config::object_storage_region;
         }
         config.maxConnections = config::object_storage_max_connection;
+    }
+    if (config::object_storage_connect_timeout_ms > 0) {
+        config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
+    }
+    // 0 is meaningful for object_storage_request_timeout_ms
+    if (config::object_storage_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
     return S3ClientFactory::instance().new_client(config, opts);
 }

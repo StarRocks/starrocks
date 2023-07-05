@@ -754,6 +754,18 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 // https://github.com/aws/aws-sdk-cpp/issues/587
 // https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
 CONF_Bool(object_storage_endpoint_path_style_access, "false");
+// Socket connect timeout for object storage.
+// Default is -1, indicate to use the default value in sdk (1000ms)
+// Unless you are very far away from your the data center you are talking to, 1000ms is more than sufficient.
+CONF_Int64(object_storage_connect_timeout_ms, "-1");
+// Request timeout for object storage
+// Default is -1, indicate to use the default value in sdk.
+// For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be
+// below "lowSpeedLimit" for the library to consider it too slow and abort.
+// Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
+// value is greater than 0 and less than 1000.
+// When it's 0, low speed limit check will be disabled.
+CONF_Int64(object_storage_request_timeout_ms, "-1");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
