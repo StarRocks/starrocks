@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
@@ -695,5 +696,19 @@ public class AnalyzeSingleTest {
 
         query = ((QueryStatement) analyzeSuccess("select t0.a, * from (values(1,2,3)) t0(a,b,c)")).getQueryRelation();
         Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+    }
+
+    @Test
+    public void testRemoveCommentAndLineSeparator() {
+        String sql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from    tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend\" and col = \"中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\";";
+        String res = LogUtil.removeCommentAndLineSeparator(sql);
+        Assert.assertEquals("select /*+SET_VAR(disable_join_reorder=true)*/* from tbl where col = 1 and col = \"con tent\n" +
+                "contend\" and col = \"中\t文 \\\"\r\n\\r\\n\\t\\\"英 文\";", res);
     }
 }
