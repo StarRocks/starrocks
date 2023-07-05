@@ -41,6 +41,7 @@
 #include "common/status.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "runtime/base_load_path_mgr.h"
 #include "storage/options.h"
 #include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
@@ -109,7 +110,7 @@ class DirManager;
 class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
-    static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths);
+    static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths, bool as_cn = false);
     static bool is_init();
     static void stop(ExecEnv* exec_env);
     static void destroy(ExecEnv* exec_env);
@@ -182,7 +183,7 @@ public:
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
-    LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
+    BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
@@ -234,7 +235,7 @@ public:
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
 private:
-    Status _init(const std::vector<StorePath>& store_paths);
+    Status _init(const std::vector<StorePath>& store_paths, bool as_cn);
     void _stop();
     void _destroy();
     void _reset_tracker();
@@ -320,7 +321,7 @@ private:
     pipeline::DriverLimiter* _driver_limiter = nullptr;
     int64_t _max_executor_threads = 0; // Max thread number of executor
 
-    LoadPathMgr* _load_path_mgr = nullptr;
+    BaseLoadPathMgr* _load_path_mgr = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;

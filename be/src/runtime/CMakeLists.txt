@@ -41,6 +41,7 @@ set(RUNTIME_FILES
     large_int_value.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
+    dummy_load_path_mgr.cpp
     types.cpp
     mem_tracker.cpp
     data_stream_recvr.cpp
