@@ -53,6 +53,15 @@ private:
     Filter _dict_filter;
     Filter _chunk_filter;
     std::set<int64_t> _need_skip_rowids;
+
+    struct UseAnyColumnContext {
+        size_t row_count = 0;
+        SlotDescriptor* slot_desc = nullptr;
+    };
+    bool _can_use_any_column() const;
+    void _init_use_any_column();
+    Status _build_chunk_on_use_any_column(ChunkPtr* chunk, size_t* row_count);
+    UseAnyColumnContext _use_any_column_ctx;
 };
 
 } // namespace starrocks
