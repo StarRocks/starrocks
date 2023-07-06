@@ -421,7 +421,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
 
-    public static final String SELECT_RATIO_THRESHOLD = "SELECT_RATIO_THRESHOLD";
+    public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
