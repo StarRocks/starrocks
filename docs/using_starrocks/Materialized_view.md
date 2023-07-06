@@ -299,11 +299,12 @@ The following table shows the correspondence between the aggregate functions in 
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                                    |
 | percentile_approx, percentile_union                    | percentile_union                                             |
 
+DISTINCT aggregates alone cannot be rewritten with Aggregate Rollup. From StarRocks v3.1 onwards, if a query with an Aggregate Rollup DISTINCT aggregate function does not have a GROUP BY column but an equal predicate, it can also be rewritten by the relevant materialized view because StarRocks can convert the equal predicates into a GROUP BY constant expression.
 
-Distinct aggregates cannot be rewritten with Aggregate Rollup. Since StarRocks v3.1, if distinct aggregates with rollup have the missing group by columns' equal predicates, it can also be rewritten by the MV because we can convert the equal predicates into group by const exprs.
+In the following example, StarRocks can rewrite the query with the materialized view `order_agg_mv1`.
 
 ```SQL
-CREATE MATERIALIZED VIEW order_agg_mv
+CREATE MATERIALIZED VIEW order_agg_mv1
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
 REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
 AS
@@ -314,11 +315,11 @@ FROM order_list
 GROUP BY order_date;
 
 
--- query
+-- Query
 SELECT
     order_date,
     count(distinct client_id) 
-FROM order_list where order_date='2023-07-03';
+FROM order_list WHERE order_date='2023-07-03';
 ```
 
 ### Rewrite queries in View Delta Join scenarios
