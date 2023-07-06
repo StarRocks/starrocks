@@ -148,7 +148,7 @@ public class PruneGroupByKeysRule extends TransformationRule {
                 // like `select 'a','b' from table group by 'c','d'`,
                 // we can remove agg node and rewrite it to `select 'a','b' from table limit 1`
                 OptExpression result = OptExpression.create(
-                        new LogicalLimitOperator(1, 0, LogicalLimitOperator.Phase.GLOBAL),
+                        new LogicalLimitOperator(1, 0, LogicalLimitOperator.Phase.INIT),
                         OptExpression.create(
                                 projectOperator, input.getInputs().get(0).getInputs()));
                 return Lists.newArrayList(result);
