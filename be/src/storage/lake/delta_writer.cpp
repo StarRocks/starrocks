@@ -215,6 +215,12 @@ inline Status DeltaWriterImpl::flush_async() {
     Status st;
     if (_mem_table != nullptr) {
         RETURN_IF_ERROR(_mem_table->finalize());
+<<<<<<< HEAD
+=======
+        if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
+            RETURN_IF_ERROR(_fill_auto_increment_id(*_mem_table->get_result_chunk()));
+        }
+>>>>>>> d15df2fab ([BugFix] fill AUTO_INCREMENT fail in Cloud Native mode(#26584) (#26586))
         st = _flush_token->submit(std::move(_mem_table));
         _mem_table.reset(nullptr);
     }
@@ -353,6 +359,77 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status DeltaWriterImpl::_fill_auto_increment_id(const Chunk& chunk) {
+    ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
+
+    // 1. get pk column from chunk
+    vector<uint32_t> pk_columns;
+    for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
+        pk_columns.push_back((uint32_t)i);
+    }
+    Schema pkey_schema = ChunkHelper::convert_schema(*_tablet_schema, pk_columns);
+    std::unique_ptr<Column> pk_column;
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+        CHECK(false) << "create column for primary key encoder failed";
+    }
+    auto col = pk_column->clone();
+
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    std::vector<std::unique_ptr<Column>> upserts;
+    upserts.resize(1);
+    upserts[0] = std::move(col);
+
+    std::vector<uint64_t> rss_rowid_map(upserts[0]->size(), (uint64_t)((uint32_t)-1) << 32);
+    std::vector<std::vector<uint64_t>*> rss_rowids;
+    rss_rowids.resize(1);
+    rss_rowids[0] = &rss_rowid_map;
+
+    // 2. probe index
+    auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
+    Status st;
+    if (metadata != nullptr) {
+        st = tablet.update_mgr()->get_rowids_from_pkindex(&tablet, metadata->version(), upserts, &rss_rowids);
+    }
+
+    std::vector<uint8_t> filter;
+    uint32_t gen_num = 0;
+    // There are two cases we should allocate full id for this chunk for simplicity:
+    // 1. We can not get the tablet meta from cache.
+    // 2. fail in seeking index
+    if (metadata != nullptr && st.ok()) {
+        for (unsigned long v : rss_rowid_map) {
+            uint32_t rssid = v >> 32;
+            if (rssid == (uint32_t)-1) {
+                filter.emplace_back(1);
+                ++gen_num;
+            } else {
+                filter.emplace_back(0);
+            }
+        }
+    } else {
+        gen_num = rss_rowid_map.size();
+        filter.resize(gen_num, 1);
+    }
+
+    // 3. fill the non-existing rows
+    std::vector<int64_t> ids(gen_num);
+    RETURN_IF_ERROR(StorageEngine::instance()->get_next_increment_id_interval(_table_id, gen_num, ids));
+
+    for (int i = 0; i < _vectorized_schema.num_fields(); i++) {
+        const TabletColumn& tablet_column = _tablet_schema->column(i);
+        if (tablet_column.is_auto_increment()) {
+            auto& column = chunk.get_column_by_index(i);
+            RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(column))->fill_range(ids, filter));
+            break;
+        }
+    }
+
+    return Status::OK();
+}
+
+>>>>>>> d15df2fab ([BugFix] fill AUTO_INCREMENT fail in Cloud Native mode(#26584) (#26586))
 void DeltaWriterImpl::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
