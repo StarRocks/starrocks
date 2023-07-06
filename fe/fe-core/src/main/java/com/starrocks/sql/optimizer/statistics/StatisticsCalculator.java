@@ -215,7 +215,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
         // 1. get table row count
-        long tableRowCount = StatisticsCalcUtils.getTableRowCount(table, node);
+        long tableRowCount = StatisticsCalcUtils.getTableRowCount(table, node, optimizerContext);
         // 2. get required columns statistics
         Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table, colRefToColumnMetaMap, optimizerContext);
         if (tableRowCount <= 1) {
