@@ -991,8 +991,10 @@ public class LocalMetastore implements ConnectorMetadata {
                         .map(item -> new ColumnDef(item.getName(), new TypeDef(item.getType())))
                         .collect(Collectors.toList());
                 partitionDesc.analyze(columnDefList, cloneProperties);
-                CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc,
-                        addPartitionClause.isTempPartition());
+                if (!existPartitionNameSet.contains(partitionDesc.getPartitionName())) {
+                    CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc,
+                            addPartitionClause.isTempPartition());
+                }
             } else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");
             }
@@ -1202,8 +1204,10 @@ public class LocalMetastore implements ConnectorMetadata {
                                      AddPartitionClause addPartitionClause, PartitionInfo partitionInfo,
                                      List<Partition> partitionList, Set<String> existPartitionNameSet)
             throws DdlException {
-        if (partitionList == null || partitionList.size() != 1) {
+        if (partitionList == null || partitionList.size() > 1) {
             throw new DdlException("Only support add one partition when add list partition now");
+        } else if (partitionList.size() == 0) {
+            return;
         }
 
         boolean isTempPartition = addPartitionClause.isTempPartition();
