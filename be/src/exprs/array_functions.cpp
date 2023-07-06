@@ -698,8 +698,12 @@ private:
                                                      std::is_same_v<StructColumn, ElementColumn>,
                                              uint8_t, typename ElementColumn::ValueType>;
 
-        [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
-        [[maybe_unused]] auto targets_ptr = (const ValueType*)(targets.raw_data());
+        constexpr bool is_complex_type =
+                (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
+                 std::is_same_v<StructColumn, ElementColumn> || std::is_same_v<JsonColumn, ElementColumn>);
+
+        [[maybe_unused]] auto elements_ptr = is_complex_type ? nullptr : (const ValueType*)(elements.raw_data());
+        [[maybe_unused]] auto targets_ptr = is_complex_type ? nullptr : (const ValueType*)(targets.raw_data());
 
         [[maybe_unused]] auto is_null = [](const NullColumn::Container* null_map, size_t idx) -> bool {
             return (*null_map)[idx] != 0;
@@ -948,7 +952,6 @@ private:
         }
 
         ASSIGN_OR_RETURN(auto result, _array_has_non_nullable(*array_col, *target_col));
-        DCHECK_EQ(array_nullable->size(), result->size());
         return NullableColumn::create(std::move(result), merge_nullcolum(array_nullable, target_nullable));
     }
 };
