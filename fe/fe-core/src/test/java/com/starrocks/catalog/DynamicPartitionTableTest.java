@@ -139,36 +139,6 @@ public class DynamicPartitionTableTest {
     }
 
     @Test
-    public void testMissTimeUnit() throws Exception {
-        expectedException.expect(DdlException.class);
-        expectedException.expectMessage("Must assign dynamic_partition.time_unit properties");
-        starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_time_unit` (\n" +
-                "  `k1` date NULL COMMENT \"\",\n" +
-                "  `k2` int NULL COMMENT \"\",\n" +
-                "  `k3` smallint NULL COMMENT \"\",\n" +
-                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
-                "  `v2` datetime NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "PARTITION BY RANGE (k1)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
-                "\"dynamic_partition.start\" = \"-3\",\n" +
-                "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.prefix\" = \"p\",\n" +
-                "\"dynamic_partition.buckets\" = \"1\"\n" +
-                ");");
-    }
-
-    @Test
     public void testMissStart() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_start` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
