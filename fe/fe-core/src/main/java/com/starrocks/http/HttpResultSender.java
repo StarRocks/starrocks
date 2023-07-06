@@ -122,12 +122,6 @@ public class HttpResultSender {
             } else {
                 channel.writeAndFlush(Unpooled.copiedBuffer(row));
             }
-            //            Charset charset = StandardCharsets.UTF_8;
-            //            String str = charset.decode(row).toString();
-            //            if (!charset.newEncoder().canEncode(str)) {
-            //                LOG.error("can't decode by utf-8");
-            //            }
-            //            LOG.info("writen row: {}", str);
         }
     }
 
