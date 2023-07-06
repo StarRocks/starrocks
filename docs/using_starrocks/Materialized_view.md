@@ -299,7 +299,7 @@ The following table shows the correspondence between the aggregate functions in 
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                                    |
 | percentile_approx, percentile_union                    | percentile_union                                             |
 
-DISTINCT aggregates alone cannot be rewritten with Aggregate Rollup. From StarRocks v3.1 onwards, if a query with an Aggregate Rollup DISTINCT aggregate function does not have a GROUP BY column but an equal predicate, it can also be rewritten by the relevant materialized view because StarRocks can convert the equal predicates into a GROUP BY constant expression.
+DISTINCT aggregates without the corresponding GROUP BY column cannot be rewritten with Aggregate Rollup. However, from StarRocks v3.1 onwards, if a query with an Aggregate Rollup DISTINCT aggregate function does not have a GROUP BY column but an equal predicate, it can also be rewritten by the relevant materialized view because StarRocks can convert the equal predicates into a GROUP BY constant expression.
 
 In the following example, StarRocks can rewrite the query with the materialized view `order_agg_mv1`.
 
