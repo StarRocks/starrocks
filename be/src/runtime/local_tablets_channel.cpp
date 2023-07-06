@@ -584,7 +584,6 @@ void LocalTabletsChannel::abort() {
 }
 
 void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) {
-    std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     for (auto tablet_id : tablet_ids) {
         auto it = _delta_writers.find(tablet_id);
         if (it != _delta_writers.end()) {
