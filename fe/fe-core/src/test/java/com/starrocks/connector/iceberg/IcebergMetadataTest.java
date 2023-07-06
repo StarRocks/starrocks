@@ -42,6 +42,7 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.junit.Assert;
@@ -94,6 +95,21 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(expectResult, metadata.getDb(db));
     }
 
+    @Test
+    public void testGetNotExistDB(@Mocked IcebergHiveCatalog icebergHiveCatalog) {
+        String db = "db";
+
+        new Expectations() {
+            {
+                icebergHiveCatalog.getDB(db);
+                result = new NoSuchNamespaceException("database not found");
+                minTimes = 0;
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        Assert.assertNull(metadata.getDb(db));
+    }
 
     @Test
     public void testListTableNames(@Mocked IcebergHiveCatalog icebergHiveCatalog) {

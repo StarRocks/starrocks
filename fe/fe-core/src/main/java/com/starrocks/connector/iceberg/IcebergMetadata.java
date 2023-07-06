@@ -60,6 +60,7 @@ import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.CloseableIterable;
@@ -131,7 +132,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (databases.containsKey(dbName)) {
             return databases.get(dbName);
         }
-        Database db = icebergCatalog.getDB(dbName);
+        Database db;
+        try {
+            db = icebergCatalog.getDB(dbName);
+        } catch (NoSuchNamespaceException e) {
+            LOG.error("Database {} not found", dbName, e);
+            return null;
+        }
+
         databases.put(dbName, db);
         return db;
     }
