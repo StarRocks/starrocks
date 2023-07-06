@@ -129,6 +129,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.hintsTabletIds = builder.hintsTabletIds;
         this.prunedPartitionPredicates = builder.prunedPartitionPredicates;
         this.usePkIndex = builder.usePkIndex;
+        this.fromSplitOR = builder.fromSplitOR;
     }
 
     public HashDistributionSpec getDistributionSpec() {
