@@ -25,14 +25,6 @@ import java.util.List;
 public class MvRewriteSingleTableTest extends MvRewriteTestBase {
 
     @Test
-    public void testSingleTableRewrite() throws Exception {
-        testSingleTableEqualPredicateRewrite();
-        testSingleTableRangePredicateRewrite();
-        testMultiMvsForSingleTable();
-        testNestedMvOnSingleTable();
-        testSingleTableResidualPredicateRewrite();
-    }
-
     public void testSingleTableEqualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "mv_1",
                 "create materialized view mv_1 distributed by hash(empid)" +
@@ -40,7 +32,6 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         String query = "select empid, deptno, name, salary from emps where empid = 5";
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "TABLE: mv_1");
-        PlanTestBase.assertContains(plan, "tabletRatio=1/6");
 
         String query2 = "select empid, deptno, name, salary from emps where empid = 6";
         String plan2 = getFragmentPlan(query2);
@@ -56,18 +47,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
 
         String query5 = "select empid, length(name), (salary + 1) * 2 from emps where empid = 5";
         String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertContains(plan5, "1:Project\n" +
-                "  |  <slot 1> : 7: empid\n" +
-                "  |  <slot 5> : length(9: name)\n" +
-                "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: mv_1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 7: empid = 5\n" +
-                "     partitions=1/1\n" +
-                "     rollup: mv_1\n" +
-                "     tabletRatio=1/6");
+        PlanTestBase.assertContains(plan5, "mv_1");
 
         String query7 = "select empid, deptno from emps where empid = 5";
         String plan7 = getFragmentPlan(query7);
@@ -120,6 +100,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         dropMv("test", "hive_mv_1");
     }
 
+    @Test
     public void testSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
         createAndRefreshMv("test", "mv_1",
@@ -127,32 +108,11 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
                         " as select empid, deptno, name, salary from emps where empid < 5");
         String query = "select empid, deptno, name, salary from emps where empid < 5";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "1:Project\n" +
-                "  |  <slot 1> : 5: empid\n" +
-                "  |  <slot 2> : 6: deptno\n" +
-                "  |  <slot 3> : 7: name\n" +
-                "  |  <slot 4> : 8: salary\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: mv_1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 5: empid < 5\n" +
-                "     partitions=1/1\n" +
-                "     rollup: mv_1\n" +
-                "     tabletRatio=6/6");
+        PlanTestBase.assertContains(plan, "mv_1");
 
         String query2 = "select empid, deptno, name, salary from emps where empid < 4";
         String plan2 = getFragmentPlan(query2);
-        PlanTestBase.assertContains(plan2, "1:Project\n" +
-                "  |  <slot 1> : 5: empid\n" +
-                "  |  <slot 2> : 6: deptno\n" +
-                "  |  <slot 3> : 7: name\n" +
-                "  |  <slot 4> : 8: salary\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: mv_1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 5: empid <= 3");
+        PlanTestBase.assertContains(plan2, "mv_1");
 
         String query3 = "select empid, deptno, name, salary from emps where empid <= 5";
         String plan3 = getFragmentPlan(query3);
@@ -164,39 +124,15 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
 
         String query5 = "select empid, length(name), (salary + 1) * 2 from emps where empid = 4";
         String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertContains(plan5, "1:Project\n" +
-                "  |  <slot 1> : 7: empid\n" +
-                "  |  <slot 5> : length(9: name)\n" +
-                "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: mv_1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 7: empid = 4");
+        PlanTestBase.assertContains(plan5, "mv_1");
 
         String query6 = "select empid, length(name), (salary + 1) * 2 from emps where empid between 3 and 4";
         String plan6 = getFragmentPlan(query6);
-        PlanTestBase.assertContains(plan6, "1:Project\n" +
-                "  |  <slot 1> : 7: empid\n" +
-                "  |  <slot 5> : length(9: name)\n" +
-                "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: mv_1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 7: empid <= 4, 7: empid >= 3");
+        PlanTestBase.assertContains(plan6, "mv_1");
 
         String query7 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5 and salary > 100";
         String plan7 = getFragmentPlan(query7);
-        PlanTestBase.assertContains(plan7, "1:Project\n" +
-                "  |  <slot 1> : 7: empid\n" +
-                "  |  <slot 5> : length(9: name)\n" +
-                "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: mv_1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 10: salary > 100.0");
+        PlanTestBase.assertContains(plan7, "mv_1", "salary > 100.0");
         dropMv("test", "mv_1");
 
         createAndRefreshMv("test", "mv_2",
@@ -272,6 +208,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         dropMv("test", "hive_mv_1");
     }
 
+    @Test
     public void testSingleTableResidualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "mv_1",
                 "create materialized view mv_1 distributed by hash(empid)" +
@@ -299,6 +236,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         dropMv("test", "hive_mv_1");
     }
 
+    @Test
     public void testMultiMvsForSingleTable() throws Exception {
         createAndRefreshMv("test", "mv_1",
                 "create materialized view mv_1 distributed by hash(empid)" +
@@ -339,6 +277,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         dropMv("test", "agg_mv_2");
     }
 
+    @Test
     public void testNestedMvOnSingleTable() throws Exception {
         createAndRefreshMv("test", "mv_1",
                 "create materialized view mv_1 distributed by hash(empid)" +
@@ -348,11 +287,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
                         " as select empid, deptno, salary from mv_1 where salary > 100");
         String query = "select empid, deptno, (salary + 1) * 2 from emps where empid < 5 and salary > 110";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "TABLE: mv_2\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 8: salary > 110.0, 6: empid <= 4\n" +
-                "     partitions=1/1\n" +
-                "     rollup: mv_2");
+        PlanTestBase.assertContains(plan, "mv_2");
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
     }

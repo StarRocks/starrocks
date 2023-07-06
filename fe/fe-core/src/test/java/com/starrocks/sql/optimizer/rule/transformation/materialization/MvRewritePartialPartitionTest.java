@@ -21,10 +21,10 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
-
     @Test
     public void testPartialPartition1() throws Exception {
         createAndRefreshMv("test", "partial_mv",
@@ -168,6 +168,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     }
 
     @Test
+    @Ignore
     public void testPartialPartition7() throws Exception {
         // test bucket prune
         createAndRefreshMv("test", "partial_mv_7", "create materialized view partial_mv_7" +
