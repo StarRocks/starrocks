@@ -466,6 +466,8 @@ Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions ca
 
 Unlike the automatic asynchronous update policy, the automatic incremental update policy enables the FEs in your StarRocks cluster to read events, such as adding columns, removing partitions, and updating data, from your Hive metastore. StarRocks can automatically update the metadata cached in the FEs based on these events. This means you do not need to manually update the metadata of your Hive tables.
 
+This feature may cause significant pressure to the HMS, exercise caution when you use this feature. We recommend that you use [Periodically refresh metadata cache](#periodically-refresh-metadata-cache).
+
 To enable automatic incremental update, follow these steps:
 
 #### Step 1: Configure event listener for your Hive metastore
