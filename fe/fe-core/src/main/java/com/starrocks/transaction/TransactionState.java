@@ -364,6 +364,14 @@ public class TransactionState implements Writable {
         this.publishVersionTasks.put(backendId, task);
     }
 
+    public boolean checkTabletVersionFinish(long backendId, long tabletId, long version) {
+        PublishVersionTask task = this.publishVersionTasks.get(backendId);
+        if (task != null) {
+            return task.checkTabletVersionFinish(tabletId, version);
+        }
+        return false;
+    }
+
     public void setHasSendTask(boolean hasSendTask) {
         this.hasSendTask = hasSendTask;
         this.publishVersionTime = System.currentTimeMillis();

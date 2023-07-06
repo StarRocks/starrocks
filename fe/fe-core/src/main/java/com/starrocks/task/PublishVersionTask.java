@@ -34,12 +34,14 @@
 
 package com.starrocks.task;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.TraceManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TTabletVersionPair;
@@ -51,6 +53,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -64,6 +67,7 @@ public class PublishVersionTask extends AgentTask {
     private long commitTimestamp;
     private TransactionState txnState = null;
     private Span span;
+    private Map<Long, Long> successTabletVersions;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
@@ -80,6 +84,7 @@ public class PublishVersionTask extends AgentTask {
             span.setAttribute("backend_id", backendId);
             span.setAttribute("num_partition", partitionVersionInfos.size());
         }
+        this.successTabletVersions = Maps.newHashMap();
     }
 
     public TPublishVersionRequest toThrift() {
@@ -153,6 +158,21 @@ public class PublishVersionTask extends AgentTask {
             }
         }
         return errorReplicas;
+    }
+
+    public void collectTabletVersions(TFinishTaskRequest request) {
+        List<TTabletVersionPair> tabletVersions = request.getTablet_versions();
+        for (int i = 0; i < tabletVersions.size(); i++) {
+            this.successTabletVersions.put(tabletVersions.get(i).tablet_id, tabletVersions.get(i).version);
+        }
+    }
+
+    public boolean checkTabletVersionFinish(long tabletId, long version) {
+        Long tv = this.successTabletVersions.get(tabletId);
+        if (tv != null && tv.longValue() >= version) {
+            return true;
+        }
+        return false;
     }
 
     public void updateReplicaVersions(List<TTabletVersionPair> tabletVersions) {

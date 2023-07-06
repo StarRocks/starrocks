@@ -621,6 +621,7 @@ public class LeaderImpl {
 
         PublishVersionTask publishVersionTask = (PublishVersionTask) task;
         publishVersionTask.setErrorTablets(errorTabletIds);
+        publishVersionTask.collectTabletVersions(request);
         if (Config.enable_new_publish_mechanism) {
             if (request.isSetTablet_versions()) {
                 publishVersionTask.updateReplicaVersions(request.getTablet_versions());

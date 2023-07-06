@@ -969,7 +969,9 @@ public class DatabaseTransactionMgr {
                                     }
                                     // this means the replica is a healthy replica,
                                     // it is healthy in the past and does not have error in current load
-                                    if (replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
+                                    if (replica.checkVersionCatchUp(partition.getVisibleVersion(), true) 
+                                            && transactionState.checkTabletVersionFinish(replica.getBackendId(), 
+                                            tablet.getId(), partitionCommitInfo.getVersion())) {
                                         // during rollup, the rollup replica's last failed version < 0,
                                         // it may be treated as a normal replica.
 
