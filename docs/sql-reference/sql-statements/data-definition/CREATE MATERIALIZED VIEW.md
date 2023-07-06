@@ -61,9 +61,9 @@ SELECT select_expr[, select_expr ...]
   The query statement used to create the materialized view.
 
   - Synchronous materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
-  - From v3.1 onwards, synchronous materialized views support complex expressions for SELECT and aggregate functions, for example, query statements such as `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` or `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table`.
-  - From v3.1 onwards, synchronous materialized views can support more than one aggregate function for each column of the base table, for example, query statements such as `select sum(a), min(a) from table group by b`.
   - When creating a synchronous materialized view with an aggregate function, you must specify the GROUP BY clause, and specify at least one GROUP BY column in SELECT.
+  - From v3.1 onwards, synchronous materialized views support complex expressions for SELECT and aggregate functions, for example, query statements such as `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` or `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table`.
+  - From v3.1 onwards, each synchronous materialized view can support more than one aggregate function for each column of the base table, for example, query statements such as `select b, sum(a), min(a) from table group by b`.
   - Synchronous materialized views do not support clauses such as JOIN, WHERE, and the HAVING clause of GROUP BY.
 
   > **CAUTION**
@@ -85,7 +85,6 @@ SELECT select_expr[, select_expr ...]
   - Columns in the ORDER BY clause must be declared in the same order as the columns in `select_expr`.
   - If the query statement contains a GROUP BY clause, the ORDER BY columns must be identical to the GROUP BY columns.
   - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to the following rules:
-
     - If the materialized view is the AGGREGATE type, all GROUP BY columns are automatically used as sort keys.
     - If the materialized view is not the AGGREGATE type, StarRocks automatically selects sort keys based on the prefix columns.
 
