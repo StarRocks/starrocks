@@ -19,7 +19,7 @@ permissions:
   repository-projects: write
   security-events: write
   statuses: write
-  
+
 jobs:
   INFO:
     runs-on: [ self-hosted, quick ]
@@ -131,7 +131,7 @@ jobs:
             pull_status=$?
             time_count=`expr $time_count + 1`
           done
-          
+
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
@@ -164,6 +164,7 @@ jobs:
           fi
 
       - name: Prepare Tools
+        id: prepare-tools
         if: steps.download-SQL-Tester-xml.outputs.size != '0'
         run: |
           mkdir -p .actions/nose-report-action
@@ -172,7 +173,7 @@ jobs:
 
       - name: Publish SQL-Tester Report
         uses: ./.actions/nose-report-action
-        if: success()
+        if: steps.prepare-tools.outcome == 'success'
         with:
           check_name: 'SQL-Tester Report'
           fail_on_failure: true
@@ -214,6 +215,7 @@ jobs:
 
       - name: Prepare Tools
         if: steps.download-admit-xml.outputs.size != '0'
+        id: prepare-tools
         run: |
           mkdir -p .actions/nose-report-action
           cd .actions/nose-report-action
@@ -221,7 +223,7 @@ jobs:
 
       - name: Publish Admit Report
         uses: ./.actions/nose-report-action
-        if: success()
+        if: steps.prepare-tools.outcome == 'success'
         with:
           check_name: 'Admit Report'
           fail_on_failure: true
