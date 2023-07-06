@@ -355,6 +355,27 @@ public:
     DEFINE_VECTORIZED_FN(time_diff);
 
     /**
+     * Calculate times from the first timestamp to the second timestamp. according to type return bigint in hour/minute/second/millisecond.
+     * @param context
+     * @param columns [TimestampColumn] Columns that holds two groups timestamps for calculation.
+     * @return  BigIntColumn Difference in times between the two timestamps. It can be negative.
+     */
+    DEFINE_VECTORIZED_FN(datediff);
+    static Status datediff_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status datediff_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /*
+     * Called by date_diff to handle
+     */
+    static StatusOr<ColumnPtr> date_diff_time(FunctionContext* context, const Columns& columns, int64_t t);
+
+    // function for datediff
+    struct DateDiffCtx {
+        int64_t type;
+        StatusOr<ColumnPtr> (*function)(FunctionContext* context, const Columns& columns, int64_t t);
+    };
+
+    /**
      * @param: [timestmap, year]
      * @paramType columns: [TimestampColumn, IntColumn]
      * @return TimestampColumn
