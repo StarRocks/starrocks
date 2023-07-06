@@ -12,6 +12,31 @@ select dayofweek_iso("2023-01-03");
 select dayofweek_iso("");
 select dayofweek_iso(NULL);
 
+-- name: test_date_diff
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "millisecond");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "hour");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:58:59", "minute");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:59:59", "second");
+select date_diff('2010-11-30 23:59:59.000001', '2010-11-30 20:58:59.000001', 'hour');
+select date_diff('2010-11-30 23:59:59.000001', '2010-11-30 20:58:59.000001', 'day');
+select date_diff("2010-11-30 23:59:59", NULL, "hour");
+select date_diff("2010-11-30 23:59:59", "2010-11-30 20:59:59", "aaa");
+CREATE TABLE IF NOT EXISTS `test_data_diff` (
+  `d0` datetime,
+  `d1` datetime,
+  `t` varchar(12)
+)
+PROPERTIES(
+  "replication_num" = "1"
+);
+insert into test_data_diff(d0,d1,t)
+values ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'hour'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'day'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'second'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'minute'),
+       ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'millisecond');
+select date_diff(d0,d1,t) from test_data_diff order by t;
+
 -- name: test_last_day
 select last_day('2023-02-12', 'month');
 select last_day('2020-02-12');
