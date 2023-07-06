@@ -8,7 +8,7 @@ It is also recommended to **evaluate the impact of generated columns on loading 
 
 ## Basic operations
 
-### Create  generated columns
+### Create generated columns
 
 #### Syntax
 
@@ -148,7 +148,7 @@ During data loading, StarRocks automatically calculates the values for generated
 
 You can modify the data type and expression of a generated column.
 
-1. Create a table `test_tbl3`  with five columns of which columns `newcol1` and `newcol2` are generated columns whose values are computed by using the specified expressions and referencing the values of the regular columns `data_array` and `data_json` respectively.  Insert a data row into the table.
+1. Create a table `test_tbl3` with five columns of which columns `newcol1` and `newcol2` are generated columns whose values are computed by using the specified expressions and referencing the values of the regular columns `data_array` and `data_json` respectively. Insert a data row into the table.
 
     ```SQL
     -- Create a table.
@@ -199,7 +199,7 @@ You can modify the data type and expression of a generated column.
     - View the modified schema.
 
         ```SQL
-        MySQL [example_db]>  show create table test_tbl3\G
+        MySQL [example_db]> show create table test_tbl3\G
         **** 1. row ****
             Table: test_tbl3
         Create Table: CREATE TABLE test_tbl3 (
@@ -241,7 +241,7 @@ If the expression in a query matches the expression of a generated column, the o
         data_array ARRAY<int> NOT NULL,
         data_json JSON NOT NULL,
         newcol1 DOUBLE AS array_avg(data_array),
-        newcol2 String  AS json_string(json_query(data_json, "$.a"))
+        newcol2 String AS json_string(json_query(data_json, "$.a"))
     )
     Primary KEY (id) DISTRIBUTED BY HASH(id);
     ```
@@ -254,7 +254,7 @@ If the expression in a query matches the expression of a generated column, the o
     | Explain String                        |
     +---------------------------------------+
     | PLAN FRAGMENT 0                       |
-    |  OUTPUT EXPRS:4: newcol1 | 5: newcol2 | --  The query is rewritten to read data from the generated columns newcol1 and newcol2 are accessed.
+    |  OUTPUT EXPRS:4: newcol1 | 5: newcol2 | -- The query is rewritten to read data from the generated columns newcol1 and newcol2 are accessed.
     |   PARTITION: RANDOM                   |
     |                                       |
     |   RESULT SINK                         |
@@ -276,7 +276,7 @@ If the expression in a query matches the expression of a generated column, the o
 
 To perform partial updates on a Primary Key table, you must specify all the regular columns referenced by the generated columns in the `columns` parameter. The following example uses Stream Load to perform partial updates.
 
-1. Create a table `test_tbl5`  with five columns of which columns `newcol1` and `newcol2` are generated columns whose values are computed by using the specified expressions and referencing the values of the regular columns `data_array` and `data_json` respectively.  Insert a data row into the table.
+1. Create a table `test_tbl5` with five columns of which columns `newcol1` and `newcol2` are generated columns whose values are computed by using the specified expressions and referencing the values of the regular columns `data_array` and `data_json` respectively. Insert a data row into the table.
 
     ```SQL
     -- Create a table.
@@ -345,7 +345,7 @@ An error is returned by Stream Load if you perform partial updates without speci
       2|[3,4]
       ```
 
-2. When partial column updates are performed by using  [Stream Load](../../) with the `my_data2.csv` file, if the values for the `data_json` column are not provided in `my_data2.csv` and the `columns` parameter in the Stream Load job does not include the `data_json` column, even if the `data_json` column allows null values, an error is returned by Stream Load because the column `data_json` is referenced by the generated column `newcol2`.
+2. When partial column updates are performed by using [Stream Load](../../) with the `my_data2.csv` file, if the values for the `data_json` column are not provided in `my_data2.csv` and the `columns` parameter in the Stream Load job does not include the `data_json` column, even if the `data_json` column allows null values, an error is returned by Stream Load because the column `data_json` is referenced by the generated column `newcol2`.
 
 ## Limits
 
