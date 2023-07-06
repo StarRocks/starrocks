@@ -388,6 +388,56 @@ struct TMaterializedViewStatus {
     25: optional string inactive_reason
 }
 
+struct TListPipesParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListPipesResult {
+    // pipe entity
+    1: optional i64 pipe_id
+    2: optional string pipe_name
+    
+    // schema info
+    10: optional string database_name
+
+    // pipe status and statistics
+    20: optional string state
+
+    // pipe statistics
+    30: optional i64 loaded_files
+    31: optional i64 loaded_rows
+    32: optional i64 loaded_bytes
+}
+
+struct TListPipeFilesParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListPipeFilesResult {
+    // pipe entity
+    1: optional i64 pipe_id
+    2: optional string database_name    
+    
+
+    // file entity
+    10: optional string filename
+    11: optional i64 file_version
+    12: optional string state
+    13: optional i64 file_size
+    14: optional i64 file_rows
+    15: optional string last_modified
+    
+    // load status
+    20: optional string staged_time
+    21: optional string start_load
+    22: optional string finish_load
+    
+    // error information
+    30: optional string first_error_msg
+    31: optional i64 error_count
+}
+
+
 struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
 }
@@ -1412,6 +1462,8 @@ service FrontendService {
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
+    TListPipesResult listPipes(1: TListPipesParams params)
+    TListPipeFilesResult listPipeFiles(1: TListPipeFilesParams params)
 
     TGetTaskInfoResult getTasks(1:TGetTasksParams params)
     TGetTaskRunInfoResult getTaskRuns(1:TGetTasksParams params)
