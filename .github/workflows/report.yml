@@ -2,7 +2,7 @@ name: Report on the pull request
 
 on:
   workflow_run:
-    workflows: [ "CI PIPELINE 2" ]
+    workflows: [ "CI PIPELINE", "CI PIPELINE - BRANCH" ]
     types:
       - completed
 
