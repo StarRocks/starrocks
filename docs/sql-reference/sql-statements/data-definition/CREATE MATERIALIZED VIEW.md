@@ -60,7 +60,7 @@ SELECT select_expr[, select_expr ...]
 
   All columns in the query statement, that is, all columns in the materialized view schema. This parameter supports the following values:
 
-  - Simple columns or aggregate columns such as `SELECT a, abs(b), min(c) FROM table_a`, where `a`, `b`, and `c` are the names of columns in the base table. If you do not specify column names for the materialized view, the original column names are used.
+  - Simple columns or aggregate columns such as `SELECT a, abs(b), min(c) FROM table_a`, where `a`, `b`, and `c` are the names of columns in the base table. If you do not specify column names for the materialized view, StarRocks automatically assigns names to the columns.
   - Expressions such as `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`, where `a+1`, `b+2` and `c*c` are the expressions referenced columns in the base tables, and `x`, `y` and `z` are the aliases assigned to the columns of in the materialized view.
 
   > **NOTE**
