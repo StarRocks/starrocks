@@ -133,7 +133,7 @@ public abstract class Type implements Cloneable {
     public static final Type ARRAY_VARCHAR = new ArrayType(Type.VARCHAR);
     public static final Type ARRAY_JSON = new ArrayType(Type.JSON);
 
-    private static final ImmutableList<ScalarType> INTEGER_TYPES =
+    public static final ImmutableList<ScalarType> INTEGER_TYPES =
             ImmutableList.of(TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
     private static final ImmutableList<ScalarType> FLOAT_POINT_TYPES =
             ImmutableList.of(FLOAT, DOUBLE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128);

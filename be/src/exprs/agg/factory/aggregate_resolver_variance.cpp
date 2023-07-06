@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/covariance.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/variance.h"
@@ -14,25 +15,43 @@ struct StdDispatcher {
         if constexpr (pt_is_numeric<pt>) {
             using VarState = DevFromAveAggregateState<RunTimeCppType<DevFromAveResultPT<pt>>>;
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "variance", false, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
+                    "variance", true, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "variance_pop", false, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
+                    "variance_pop", true, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "var_pop", false, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
+                    "var_pop", true, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
 
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "variance_samp", false, AggregateFactory::MakeVarianceAggregateFunction<pt, true>());
+                    "variance_samp", true, AggregateFactory::MakeVarianceAggregateFunction<pt, true>());
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "var_samp", false, AggregateFactory::MakeVarianceAggregateFunction<pt, true>());
+                    "var_samp", true, AggregateFactory::MakeVarianceAggregateFunction<pt, true>());
 
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "stddev", false, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
+                    "stddev", true, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "std", false, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
+                    "std", true, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "stddev_pop", false, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
+                    "stddev_pop", true, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
             resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
-                    "stddev_samp", false, AggregateFactory::MakeStddevAggregateFunction<pt, true>());
+                    "stddev_samp", true, AggregateFactory::MakeStddevAggregateFunction<pt, true>());
+        }
+    };
+};
+
+struct CorVarDispatcher {
+    template <PrimitiveType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (pt_is_numeric<pt>) {
+            using VarState = CovarianceCorelationAggregateState<false>;
+            resolver->add_aggregate_mapping_variadic<pt, TYPE_DOUBLE, VarState>(
+                    "covar_pop", true, AggregateFactory::MakeCovarianceAggregateFunction<pt, false>());
+
+            resolver->add_aggregate_mapping_variadic<pt, TYPE_DOUBLE, VarState>(
+                    "covar_samp", true, AggregateFactory::MakeCovarianceAggregateFunction<pt, true>());
+
+            using CorrState = CovarianceCorelationAggregateState<true>;
+            resolver->add_aggregate_mapping_variadic<pt, TYPE_DOUBLE, CorrState>(
+                    "corr", true, AggregateFactory::MakeCorelationAggregateFunction<pt>());
         }
     }
 };
@@ -40,6 +59,7 @@ struct StdDispatcher {
 void AggregateFuncResolver::register_variance() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, StdDispatcher(), this);
+        type_dispatch_all(type, CorVarDispatcher(), this);
     }
 }
 

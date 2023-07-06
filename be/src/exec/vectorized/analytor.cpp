@@ -180,16 +180,14 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
 
         for (size_t j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
-            // Currently, only lead and lag window function have multi args.
-            // For performance, we do this special handle.
-            // In future, if need, we could remove this if else easily.
-            if (j == 0) {
-                _agg_intput_columns[i][j] = vectorized::ColumnHelper::create_column(
-                        _agg_expr_ctxs[i][j]->root()->type(), is_input_nullable);
-            } else {
+            // if function's args is const, like lead/lag's second and third parameter
+            if (_agg_expr_ctxs[i][j]->root()->is_constant()) {
                 _agg_intput_columns[i][j] = vectorized::ColumnHelper::create_column(
                         _agg_expr_ctxs[i][j]->root()->type(), _agg_expr_ctxs[i][j]->root()->is_nullable(),
                         _agg_expr_ctxs[i][j]->root()->is_constant(), 0);
+            } else {
+                _agg_intput_columns[i][j] = vectorized::ColumnHelper::create_column(
+                        _agg_expr_ctxs[i][j]->root()->type(), is_input_nullable);
             }
         }
 
@@ -466,15 +464,8 @@ Status Analytor::add_chunk(const vectorized::ChunkPtr& chunk) {
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
-                // Currently, only lead and lag window function have multi args.
-                // For performance, we do this special handle.
-                // In future, if need, we could remove this if else easily.
-                if (j == 0) {
-                    TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
-                } else {
-                    TRY_CATCH_BAD_ALLOC(_agg_intput_columns[i][j]->append(*column, 0, column->size()));
-                }
-                RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
+                // when chunk's column is const, maybe need to unpack it
+                TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
             }
         }
 
@@ -501,11 +492,17 @@ Status Analytor::add_chunk(const vectorized::ChunkPtr& chunk) {
 void Analytor::_append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column) {
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
-    } else if (src_column->is_constant()) {
-        auto* const_column = static_cast<vectorized::ConstColumn*>(src_column.get());
+    } else if (src_column->is_constant() && !dst_column->is_constant()) {
+        // unpack const column, then append it to dst
+        auto* const_column = down_cast<vectorized::ConstColumn*>(src_column.get());
         const_column->data_column()->assign(chunk_size, 0);
         dst_column->append(*const_column->data_column(), 0, chunk_size);
+    } else if (src_column->is_constant() && dst_column->is_constant() && (!dst_column->empty()) &&
+               (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)) {
+        // i dont't think this will happen
+        DCHECK(0);
     } else {
+        // most of case
         dst_column->append(*src_column, 0, chunk_size);
     }
 }
@@ -735,13 +732,18 @@ void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t p
 void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                            int64_t frame_end) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        const vectorized::Column* agg_column = _agg_intput_columns[i][0].get();
+        size_t column_size = _agg_intput_columns[i].size();
+        const vectorized::Column* data_columns[column_size];
+        for (size_t j = 0; j < column_size; j++) {
+            data_columns[j] = _agg_intput_columns[i][j].get();
+        }
+
         frame_start = std::max<int64_t>(frame_start, _partition_start);
         // for rows betweend unbounded preceding and current row, we have not found the partition end, for others,
         // _found_partition_end = _partition_end, so we use _found_partition_end instead of _partition_end
         frame_end = std::min<int64_t>(frame_end, _found_partition_end.second);
         _agg_functions[i]->update_batch_single_state_with_frame(
-                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
+                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
                 peer_group_start, peer_group_end, frame_start, frame_end);
     }
 }
