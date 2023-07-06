@@ -70,7 +70,7 @@ public:
 
     // create a new column iterator.
     // REQUIRES: the index data has been successfully `load()`ed into memory.
-    Status new_iterator(std::unique_ptr<BloomFilterIndexIterator>* iterator);
+    Status new_iterator(const IndexReadOptions& opts, std::unique_ptr<BloomFilterIndexIterator>* iterator);
 
     const TypeInfoPtr& type_info() const { return _typeinfo; }
 

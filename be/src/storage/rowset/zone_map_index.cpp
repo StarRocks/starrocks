@@ -276,11 +276,10 @@ StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const Zone
 }
 
 Status ZoneMapIndexReader::_do_load(const IndexReadOptions& opts, const ZoneMapIndexPB& meta) {
-    IndexedColumnReader reader(opts, meta.page_zone_maps());
-    RETURN_IF_ERROR(reader.load());
+    IndexedColumnReader reader(meta.page_zone_maps());
+    RETURN_IF_ERROR(reader.load(opts));
     std::unique_ptr<IndexedColumnIterator> iter;
-    IndexReadOptions options;
-    RETURN_IF_ERROR(reader.new_iterator(&iter, options));
+    RETURN_IF_ERROR(reader.new_iterator(opts, &iter));
 
     _page_zone_maps.resize(reader.num_values());
 
