@@ -76,6 +76,10 @@ public class Replica implements Writable {
     // the version could be queried
     @SerializedName(value = "version")
     private volatile long version;
+    // The last version reported from BE, this version should be increased monotonically.
+    // Use this version to detect data lose on BE.
+    // This version is only accessed by ReportHandler, so lock is unnecessary when updating.
+    private volatile long lastReportVersion = 0;
     private int schemaHash = -1;
     @SerializedName(value = "dataSize")
     private volatile long dataSize = 0;
@@ -468,6 +472,8 @@ public class Replica implements Writable {
         strBuffer.append(version);
         strBuffer.append(", versionHash=");
         strBuffer.append(0);
+        strBuffer.append(", lastReportVersion=");
+        strBuffer.append(lastReportVersion);
         strBuffer.append(", dataSize=");
         strBuffer.append(dataSize);
         strBuffer.append(", rowCount=");
@@ -570,5 +576,13 @@ public class Replica implements Writable {
 
     public long getWatermarkTxnId() {
         return watermarkTxnId;
+    }
+
+    public void setLastReportVersion(long lastReportVersion) {
+        this.lastReportVersion = lastReportVersion;
+    }
+
+    public long getLastReportVersion() {
+        return this.lastReportVersion;
     }
 }
