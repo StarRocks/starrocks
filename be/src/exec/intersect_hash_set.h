@@ -36,7 +36,7 @@ public:
 
 struct IntersectSliceFlagEqual {
     bool operator()(const IntersectSliceFlag& x, const IntersectSliceFlag& y) const {
-        return memequal(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
+        return memequal_unsafe(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
     }
 };
 

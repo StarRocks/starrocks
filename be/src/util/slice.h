@@ -176,10 +176,12 @@ public:
     int compare(const Slice& b) const;
 
     /// Check whether the slice starts with the given prefix.
-    bool starts_with(const Slice& x) const { return ((size >= x.size) && (memequal(data, x.size, x.data, x.size))); }
+    bool starts_with(const Slice& x) const {
+        return ((size >= x.size) && (memequal_safe(data, x.size, x.data, x.size)));
+    }
 
     bool ends_with(const Slice& x) const {
-        return ((size >= x.size) && memequal(data + (size - x.size), x.size, x.data, x.size));
+        return ((size >= x.size) && memequal_safe(data + (size - x.size), x.size, x.data, x.size));
     }
 
     /// @brief Comparator struct, useful for ordered collections (like STL maps).
@@ -235,7 +237,7 @@ inline std::ostream& operator<<(std::ostream& os, const Slice& slice) {
 
 /// Check whether two slices are identical.
 inline bool operator==(const Slice& x, const Slice& y) {
-    return memequal(x.data, x.size, y.data, y.size);
+    return memequal_safe(x.data, x.size, y.data, y.size);
 }
 
 /// Check whether two slices are not identical.

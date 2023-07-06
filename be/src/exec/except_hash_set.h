@@ -38,7 +38,7 @@ public:
 
 struct ExceptSliceFlagEqual {
     bool operator()(const ExceptSliceFlag& x, const ExceptSliceFlag& y) const {
-        return memequal(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
+        return memequal_unsafe(x.slice.data, x.slice.size, y.slice.data, y.slice.size);
     }
 };
 

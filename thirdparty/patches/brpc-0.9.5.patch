@@ -14,7 +14,7 @@ diff -urN brpc-0.9.5-origin/CMakeLists.txt brpc-0.9.5/CMakeLists.txt
      endif()
  else()
 -    set(CMAKE_CXX_STANDARD 11)
-+    set(CMAKE_CXX_STANDARD 17)
++    set(CMAKE_CXX_STANDARD 20)
      set(CMAKE_CXX_STANDARD_REQUIRED ON)
  endif()
  endmacro(use_cxx11)

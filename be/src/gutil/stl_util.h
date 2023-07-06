@@ -756,8 +756,10 @@ BinaryComposeBinary<F, G1, G2> BinaryCompose2(F f, G1 g1, G2 g2) {
 template <typename T, typename Alloc = std::allocator<T> >
 class STLCountingAllocator : public Alloc {
 public:
-    typedef typename Alloc::pointer pointer;
-    typedef typename Alloc::size_type size_type;
+    using AllocatorTraits = std::allocator_traits<Alloc>;
+
+    typedef typename AllocatorTraits::pointer pointer;
+    typedef typename AllocatorTraits::size_type size_type;
 
     STLCountingAllocator() {}
     STLCountingAllocator(int64* b) : bytes_used_(b) {} // TODO(user): explicit?

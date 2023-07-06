@@ -28,7 +28,7 @@ struct int96_t {
     uint32_t hi;
 
     bool operator==(const int96_t& other) const {
-        return memequal((const char*)this, sizeof(int96_t), (const char*)&other, sizeof(int96_t));
+        return memequal_safe((const char*)this, sizeof(int96_t), (const char*)&other, sizeof(int96_t));
     }
 
     bool operator!=(const int96_t& other) const { return !(*this == other); }

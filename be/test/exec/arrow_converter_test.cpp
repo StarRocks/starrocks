@@ -528,7 +528,7 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
             ASSERT_EQ(s.size, 0);
         } else {
             ASSERT_EQ(filter[idx], 1);
-            ASSERT_TRUE(memequal(s.data, slice_size, value.data(), slice_size));
+            ASSERT_TRUE(memequal_safe(s.data, slice_size, value.data(), slice_size));
         }
     }
 }
@@ -567,7 +567,7 @@ void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_
             ASSERT_EQ(s.size, 0);
         } else {
             ASSERT_EQ(null_data[i], DATUM_NOT_NULL);
-            ASSERT_TRUE(memequal(s.data, slice_size, value.data(), slice_size));
+            ASSERT_TRUE(memequal_safe(s.data, slice_size, value.data(), slice_size));
         }
     }
 }
