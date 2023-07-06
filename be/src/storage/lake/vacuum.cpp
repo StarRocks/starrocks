@@ -37,6 +37,10 @@
 namespace starrocks::lake {
 
 static Status delete_file(FileSystem* fs, const std::string& path) {
+    auto wait_duration = config::experimental_lake_wait_per_delete_ms;
+    if (wait_duration > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
+    }
     auto st = fs->delete_file(path);
     if (st.ok() && config::lake_print_delete_log) {
         LOG(INFO) << "Deleted " << path;
