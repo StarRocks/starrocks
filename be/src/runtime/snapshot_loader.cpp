@@ -186,7 +186,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             if (!res.ok()) {
                 return res.status();
             }
-            LOG(INFO) << "finished to write file via broker. file: " << local_file_path << ", length: " << *res;
+            LOG(INFO) << "finished to write the file: " << local_file_path << ", length: " << *res;
             RETURN_IF_ERROR(remote_writable_file->close());
             // rename file to end with ".md5sum"
             if (!upload.__isset.use_broker || upload.use_broker) {
@@ -388,7 +388,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
             // local_files always keep the updated local files
             local_files.push_back(local_file_name);
-            LOG(INFO) << "finished to download file via broker. file: " << full_local_file << ", length: " << file_len;
+            LOG(INFO) << "finished to download the file: " << full_local_file << ", length: " << file_len;
         } // end for all remote files
 
         // finally, delete local files which are not in remote

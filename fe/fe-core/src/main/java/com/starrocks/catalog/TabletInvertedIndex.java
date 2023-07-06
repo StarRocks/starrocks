@@ -383,7 +383,7 @@ public class TabletInvertedIndex {
              *      is (X, Y), and BE will create a replica with version (X+1, 0).
              * 2. BE will report version (X+1, 0), and FE will sync with this version, change to (X+1, 0), too.
              * 3. When restore, BE will restore the replica with version (X, Y) (which is the visible version of partition)
-             * 4. BE report the version (X-Y), and than we fall into here
+             * 4. BE report the version (X-Y), and then we fall into here
              *
              * Actually, the version (X+1, 0) is a 'virtual' version, so here we ignore this kind of report
              */

@@ -2538,15 +2538,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean isReadOnly = context.READ() != null && context.ONLY() != null;
 
         Map<String, String> properties = new HashMap<>();
-        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-        for (Property property : propertyList) {
-            properties.put(property.getKey(), property.getValue());
+        if (context.propertyList() != null) {
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
         }
-        String location = ((StringLiteral) visit(context.string())).getValue();
-        String repoName = ((Identifier) visit(context.identifier(0))).getValue();
+        String location = ((StringLiteral) visit(context.location)).getValue();
+        String repoName = ((Identifier) visit(context.repoName)).getValue();
         String brokerName = null;
-        if (context.identifier().size() == 2) {
-            brokerName = ((Identifier) visit(context.identifier(1))).getValue();
+        if (context.brokerName != null) {
+            brokerName = ((Identifier) visit(context.brokerName)).getValue();
         }
 
         return new CreateRepositoryStmt(isReadOnly, repoName, brokerName,
