@@ -864,6 +864,9 @@ CONF_mBool(lake_print_delete_log, "true");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
+CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
+CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
+CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
