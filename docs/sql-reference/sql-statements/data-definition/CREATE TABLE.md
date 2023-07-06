@@ -474,7 +474,7 @@ PROPERTIES (
 
 #### Create cloud-native tables for StarRocks Shared-data cluster
 
-To use your StarRocks Shared-data cluster, you must create cloud-native tables with the following properties:
+To [use your StarRocks Shared-data cluster](../../../deployment/deploy_shared_data.md#use-your-shared-data-starrocks-cluster), you must create cloud-native tables with the following properties:
 
 ```SQL
 PROPERTIES (
@@ -491,7 +491,7 @@ PROPERTIES (
 
   > **NOTE**
   >
-  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`.
+  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/Configuration.md#be-configuration-items).
 
 - `storage_cache_ttl`: The duration for which StarRocks caches the loaded data in the local disk if the local disk cache is enabled. The expired data is deleted from the local disk. If the value is set to `-1`, the cached data does not expire. Default: `2592000` (30 days).
 
