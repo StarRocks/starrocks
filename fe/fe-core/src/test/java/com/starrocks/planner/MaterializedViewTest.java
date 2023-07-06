@@ -692,8 +692,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
-    // TODO: Remove const group by keys
     public void testAggregateWithContGroupByKey() {
         testRewriteOK("select empid, floor(cast('1997-01-20 12:34:56' as DATETIME)), "
                         + "count(*) + 1 as c, sum(empid) as s\n"
@@ -873,8 +871,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
-    // TODO: Remove const group by keys
     public void testAggregateMaterializationAggregateFuncsWithConstGroupByKeys() {
         testRewriteOK("select empid, floor(cast('1997-01-20 12:34:56' as DATETIME)), "
                         + "count(*) + 1 as c, sum(empid) as s\n"
@@ -912,20 +908,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "group by empid, floor(cast('1997-01-20 12:34:56' as DATETIME))",
                 "select floor(cast('1997-01-20 12:34:56' as DATETIME)), sum(empid) as s\n"
                         + "from emps group by floor(cast('1997-01-20 12:34:56' as DATETIME))");
-        testRewriteOK("select eventid, floor(cast(ts as DATETIME)), "
-                        + "count(*) + 1 as c, sum(eventid) as s\n"
-                        + "from events group by eventid, floor(cast(ts as DATETIME))",
-                "select floor(cast(ts as DATETIME) ), sum(eventid) as s\n"
-                        + "from events group by floor(cast(ts as DATETIME) )");
-        testRewriteOK("select eventid, cast(ts as DATETIME), count(*) + 1 as c, sum(eventid) as s\n"
-                        + "from events group by eventid, cast(ts as DATETIME)",
-                "select floor(cast(ts as DATETIME)), sum(eventid) as s\n"
-                        + "from events group by floor(cast(ts as DATETIME))");
-        testRewriteOK("select eventid, floor(cast(ts as DATETIME)), "
-                        + "count(*) + 1 as c, sum(eventid) as s\n"
-                        + "from events group by eventid, floor(cast(ts as DATETIME))",
-                "select floor(cast(ts as DATETIME)), sum(eventid) as s\n"
-                        + "from events group by floor(cast(ts as DATETIME))");
+        //        testRewriteOK("select eventid, floor(cast(ts as DATETIME)), "
+        //                        + "count(*) + 1 as c, sum(eventid) as s\n"
+        //                        + "from events group by eventid, floor(cast(ts as DATETIME))",
+        //                "select floor(cast(ts as DATETIME) ), sum(eventid) as s\n"
+        //                        + "from events group by floor(cast(ts as DATETIME) )");
+        //        testRewriteOK("select eventid, cast(ts as DATETIME), count(*) + 1 as c, sum(eventid) as s\n"
+        //                        + "from events group by eventid, cast(ts as DATETIME)",
+        //                "select floor(cast(ts as DATETIME)), sum(eventid) as s\n"
+        //                        + "from events group by floor(cast(ts as DATETIME))");
+        //        testRewriteOK("select eventid, floor(cast(ts as DATETIME)), "
+        //                        + "count(*) + 1 as c, sum(eventid) as s\n"
+        //                        + "from events group by eventid, floor(cast(ts as DATETIME))",
+        //                "select floor(cast(ts as DATETIME)), sum(eventid) as s\n"
+        //                        + "from events group by floor(cast(ts as DATETIME))");
     }
 
     @Test
@@ -945,16 +941,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "from emps group by empid + 10");
     }
 
-
-    // TODO: Don't support group by position.
-    @Ignore
-    public void testAggregateMaterializationAggregateFuncs20() {
-        testRewriteOK("select 11 as empno, 22 as sal, count(*) from emps group by 11",
-                "select * from\n"
-                        + "(select 11 as empno, 22 as sal, count(*)\n"
-                        + "from emps group by 11, 22 ) tmp\n"
-                        + "where sal = 33");
-    }
 
     @Test
     public void testJoinAggregateMaterializationNoAggregateFuncs1() {
@@ -1096,8 +1082,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
 
     @Test
-    @Ignore
-    // TODO: This test relies on FK-UK relationship
     public void testJoinAggregateMaterializationAggregateFuncs1() {
         testRewriteOK("select empid, depts.deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -1116,9 +1100,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         + "group by depts.deptno");
     }
 
-    @Ignore
     @Test
-    // TODO: This test relies on FK-UK relationship
     public void testJoinAggregateMaterializationAggregateFuncs3() {
         testRewriteOK("select empid, depts.deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -1128,7 +1110,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+
     public void testJoinAggregateMaterializationAggregateFuncs4() {
         testRewriteOK("select empid, emps.deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -1139,7 +1121,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
+
     public void testJoinAggregateMaterializationAggregateFuncs5() {
         testRewriteOK("select empid, depts.deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -1454,14 +1436,13 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     @Ignore
-    // TODO: agg need push down below join
     public void testAggregateOnJoinKeys2() {
         testRewriteOK("select deptno, empid, salary, sum(1) as c "
                         + "from emps\n"
                         + "group by deptno, empid, salary",
                 "select sum(1) "
                         + "from emps\n"
-                        + "join depts on depts.deptno = empid group by empid, depts.deptno");
+                        + "join depts on depts.deptno = emps.empid group by empid, depts.deptno");
     }
 
     @Test

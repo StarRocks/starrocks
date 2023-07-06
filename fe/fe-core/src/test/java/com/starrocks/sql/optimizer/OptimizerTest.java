@@ -80,6 +80,7 @@ public class OptimizerTest {
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         cluster = PseudoCluster.getInstance();
         connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
@@ -225,111 +226,108 @@ public class OptimizerTest {
 
     @Test
     public void testPreprocessMvPartitionMv() throws Exception {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        Config.enable_experimental_mv = true;
         starRocksAssert.withTable("CREATE TABLE test.tbl_with_mv\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
-                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01')),\n" +
-                        "    PARTITION p3 values [('2022-03-01'),('2022-03-10'))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');")
-                .withMaterializedView("create materialized view mv_3\n" +
-                        "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
-                        "as select k2, sum(v1) as total from tbl_with_mv group by k2;")
-                .withMaterializedView("create materialized view mv_4\n" +
-                        "PARTITION BY k1\n" +
-                        "distributed by hash(k2) buckets 3\n" +
-                        "refresh manual\n" +
-                        "as select k1, k2, v1  from tbl_with_mv;");
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                "    PARTITION p2 values [('2022-02-16'),('2022-03-01')),\n" +
+                "    PARTITION p3 values [('2022-03-01'),('2022-03-10'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
         cluster.runSql("test", "insert into tbl_with_mv values(\"2020-02-20\", 20, 30)");
-        refreshMaterializedView("test", "mv_3");
-        refreshMaterializedView("test", "mv_4");
 
-        cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
+        {
+            starRocksAssert.withMaterializedView("create materialized view mv_4\n" +
+                    "PARTITION BY k1\n" +
+                    "distributed by hash(k2) buckets 3\n" +
+                    "refresh manual\n" +
+                    "as select k1, k2, v1  from tbl_with_mv;");
+            refreshMaterializedView("test", "mv_4");
+            cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
 
-        String sql = "select k1, sum(v1) from tbl_with_mv group by k1";
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        QueryStatement query = (QueryStatement) stmt;
+            String sql = "select k1, sum(v1) from tbl_with_mv group by k1";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            QueryStatement query = (QueryStatement) stmt;
 
-        //1. Build Logical plan
-        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
-                .transformWithSelectLimit(query.getQueryRelation());
-        Optimizer optimizer = new Optimizer();
-        OptExpression expr = optimizer.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
-        Assert.assertNotNull(expr);
-        Assert.assertEquals(1, optimizer.getContext().getCandidateMvs().size());
-        MaterializationContext materializationContext = optimizer.getContext().getCandidateMvs().iterator().next();
-        Assert.assertEquals("mv_4", materializationContext.getMv().getName());
+            //1. Build Logical plan
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                    .transformWithSelectLimit(query.getQueryRelation());
+            Optimizer optimizer = new Optimizer();
+            OptExpression expr = optimizer.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            Assert.assertNotNull(expr);
+            Assert.assertEquals(1, optimizer.getContext().getCandidateMvs().size());
+            MaterializationContext materializationContext = optimizer.getContext().getCandidateMvs().iterator().next();
+            Assert.assertEquals("mv_4", materializationContext.getMv().getName());
 
-        MaterializedView mv = getMv("test", "mv_4");
-        Pair<Table, Column> partitionTableAndColumn = mv.getPartitionTableAndColumn();
-        Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
+            MaterializedView mv = getMv("test", "mv_4");
+            Pair<Table, Column> partitionTableAndColumn = mv.getPartitionTableAndColumn();
+            Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
-        ScalarOperator scalarOperator  = materializationContext.getMvPartialPartitionPredicate();
-        if (scalarOperator != null) {
-            Assert.assertTrue(scalarOperator instanceof CompoundPredicateOperator);
-            Assert.assertTrue(((CompoundPredicateOperator) scalarOperator).isAnd());
+            ScalarOperator scalarOperator  = materializationContext.getMvPartialPartitionPredicate();
+            if (scalarOperator != null) {
+                Assert.assertTrue(scalarOperator instanceof CompoundPredicateOperator);
+                Assert.assertTrue(((CompoundPredicateOperator) scalarOperator).isAnd());
+            }
+
+            refreshMaterializedView("test", "mv_4");
+            cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
+            Optimizer optimizer2 = new Optimizer();
+            OptExpression expr2 = optimizer2.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            Assert.assertNotNull(expr2);
+            MaterializationContext materializationContext2 = optimizer2.getContext().getCandidateMvs().iterator().next();
+            Assert.assertEquals("mv_4", materializationContext2.getMv().getName());
+            ScalarOperator scalarOperator2  = materializationContext2.getMvPartialPartitionPredicate();
+            if (scalarOperator2 != null) {
+                Assert.assertTrue(scalarOperator2 instanceof CompoundPredicateOperator);
+            }
+            starRocksAssert.dropMaterializedView("mv_4");
         }
 
-        refreshMaterializedView("test", "mv_4");
-        cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
-        Optimizer optimizer2 = new Optimizer();
-        OptExpression expr2 = optimizer2.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
-        Assert.assertNotNull(expr2);
-        MaterializationContext materializationContext2 = optimizer2.getContext().getCandidateMvs().iterator().next();
-        Assert.assertEquals("mv_4", materializationContext2.getMv().getName());
-        ScalarOperator scalarOperator2  = materializationContext2.getMvPartialPartitionPredicate();
-        if (scalarOperator2 != null) {
-            Assert.assertTrue(scalarOperator2 instanceof CompoundPredicateOperator);
+        {
+            starRocksAssert.withMaterializedView("create materialized view mv_5\n" +
+                    "PARTITION BY date_trunc(\"month\", k1)\n" +
+                    "distributed by hash(k2) buckets 3\n" +
+                    "refresh manual\n" +
+                    "as select k1, k2, v1  from tbl_with_mv;");
+            refreshMaterializedView("test", "mv_5");
+            cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
 
+            String sql = "select k1, sum(v1) from tbl_with_mv group by k1";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            QueryStatement query = (QueryStatement) stmt;
+
+            Optimizer optimizer3 = new Optimizer();
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                    .transformWithSelectLimit(query.getQueryRelation());
+            OptExpression expr3 = optimizer3.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            Assert.assertNotNull(expr3);
+            MaterializationContext materializationContext3 = optimizer3.getContext().getCandidateMvs().iterator().next();
+            Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
+            List<OptExpression> scanExpr3 = MvUtils.collectScanExprs(materializationContext3.getMvExpression());
+            Assert.assertEquals(1, scanExpr3.size());
+            ScalarOperator scalarOperator3  = materializationContext3.getMvPartialPartitionPredicate();
+            if (scalarOperator3 != null) {
+                Assert.assertNotNull(scalarOperator3);
+                Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);
+                Assert.assertTrue(((CompoundPredicateOperator) scalarOperator3).isAnd());
+                Assert.assertTrue(scalarOperator3.getChild(0) instanceof BinaryPredicateOperator);
+                Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof ColumnRefOperator);
+                ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator3.getChild(0).getChild(0);
+                Assert.assertEquals("k1", columnRef.getName());
+            }
+            LogicalOlapScanOperator scanOperator = materializationContext3.getScanMvOperator();
+            Assert.assertEquals(1, scanOperator.getSelectedPartitionId().size());
         }
-        starRocksAssert.dropMaterializedView("mv_3");
-        starRocksAssert.dropMaterializedView("mv_4");
-
-        starRocksAssert.withMaterializedView("create materialized view mv_5\n" +
-                "PARTITION BY date_trunc(\"month\", k1)\n" +
-                "distributed by hash(k2) buckets 3\n" +
-                "refresh manual\n" +
-                "as select k1, k2, v1  from tbl_with_mv;");
-        refreshMaterializedView("test", "mv_5");
-        cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
-
-        stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        query = (QueryStatement) stmt;
-
-        Optimizer optimizer3 = new Optimizer();
-        logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
-                .transformWithSelectLimit(query.getQueryRelation());
-        OptExpression expr3 = optimizer3.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
-        Assert.assertNotNull(expr3);
-        MaterializationContext materializationContext3 = optimizer3.getContext().getCandidateMvs().iterator().next();
-        Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
-        List<OptExpression> scanExpr3 = MvUtils.collectScanExprs(materializationContext3.getMvExpression());
-        Assert.assertEquals(1, scanExpr3.size());
-        ScalarOperator scalarOperator3  = materializationContext3.getMvPartialPartitionPredicate();
-        if (scalarOperator3 != null) {
-            Assert.assertNotNull(scalarOperator3);
-            Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);
-            Assert.assertTrue(((CompoundPredicateOperator) scalarOperator3).isAnd());
-            Assert.assertTrue(scalarOperator3.getChild(0) instanceof BinaryPredicateOperator);
-            Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof ColumnRefOperator);
-            ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator3.getChild(0).getChild(0);
-            Assert.assertEquals("k1", columnRef.getName());
-        }
-        LogicalOlapScanOperator scanOperator = materializationContext3.getScanMvOperator();
-        Assert.assertEquals(1, scanOperator.getSelectedPartitionId().size());
     }
 }
