@@ -192,15 +192,14 @@ public class TabletInvertedIndex {
                                 if (needRecover(replica, tabletMeta.getOldSchemaHash(), backendTabletInfo)) {
                                     LOG.warn("replica {} of tablet {} on backend {} need recovery. "
                                                     + "replica in FE: {}, report version {}, report schema hash: {},"
-                                                    + " is bad: {}, is version missing: {}",
-                                            replica.getId(), tabletId, backendId, replica,
-                                            backendTabletInfo.getVersion(),
-                                            backendTabletInfo.getSchema_hash(),
-                                            backendTabletInfo.isSetUsed() ? backendTabletInfo.isUsed() : "unknown",
-                                            backendTabletInfo.isSetVersion_miss() ? backendTabletInfo.isVersion_miss() :
-                                                    "unset");
+                                                    + " is bad: {}",
+                                            replica.getId(), tabletId, backendId,
+                                            replica, backendTabletInfo.getVersion(), backendTabletInfo.getSchema_hash(),
+                                            backendTabletInfo.isSetUsed() ? backendTabletInfo.isUsed() : "unknown");
                                     tabletRecoveryMap.put(tabletMeta.getDbId(), tabletId);
                                 }
+
+                                replica.setLastReportVersion(backendTabletInfo.getVersion());
 
                                 // check if tablet needs migration
                                 long partitionId = tabletMeta.getPartitionId();
@@ -384,23 +383,29 @@ public class TabletInvertedIndex {
             return false;
         }
 
-        if (backendTabletInfo.isSetUsed() && !backendTabletInfo.isUsed()) {
-            // tablet is bad
-            return true;
-        }
-
         if (schemaHashInFe != backendTabletInfo.getSchema_hash()
                 || backendTabletInfo.getVersion() == -1) {
             // no data file exist on BE, maybe this is a newly created schema change tablet. no need to recovery
             return false;
         }
 
+<<<<<<< HEAD
         if (backendTabletInfo.isSetVersion_miss() && backendTabletInfo.isVersion_miss()) {
             // even if backend version is less than fe's version, but if version_miss is false,
             // which means this may be a stale report.
             // so we only return true if version_miss is true.
+=======
+        if (backendTabletInfo.isSetUsed() && !backendTabletInfo.isUsed()) {
+            // tablet is bad
+>>>>>>> 5d64387d2 ([Enhancement] Add LastReportVersion to Replica to help detect data lose on backend (#26518))
             return true;
         }
+
+        // lastReportVersion should be increased monotonically.
+        if (backendTabletInfo.getVersion() < replicaInFe.getLastReportVersion()) {
+            return true;
+        }
+
         return false;
     }
 

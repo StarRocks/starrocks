@@ -1090,6 +1090,7 @@ public class ReportHandler extends Daemon {
                         continue;
                     }
 
+<<<<<<< HEAD
                     for (TTabletInfo tTabletInfo : backendTablets.get(tabletId).getTablet_infos()) {
                         if (tTabletInfo.getSchema_hash() == schemaHash) {
                             if (tTabletInfo.isSetUsed() && !tTabletInfo.isUsed()) {
@@ -1124,6 +1125,14 @@ public class ReportHandler extends Daemon {
                                 break;
                             }
                         }
+=======
+                    if (replica.setBad(true)) {
+                        LOG.warn("set bad for replica {} of tablet {} on backend {}",
+                                replica.getId(), tabletId, backendId);
+                        ReplicaPersistInfo replicaPersistInfo = ReplicaPersistInfo.createForReport(
+                                dbId, tableId, partitionId, indexId, tabletId, backendId, replica.getId());
+                        backendTabletsInfo.addReplicaInfo(replicaPersistInfo);
+>>>>>>> 5d64387d2 ([Enhancement] Add LastReportVersion to Replica to help detect data lose on backend (#26518))
                     }
                 }
             } finally {
