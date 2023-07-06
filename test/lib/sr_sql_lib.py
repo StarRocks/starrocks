@@ -882,12 +882,13 @@ class StarrocksSQLApiLib(object):
                 tools.assert_true(False, "acquire dictionary error")
             if str(res["result"]).find("Decode") > 0:
                 return ""
-            time.sleep(1) 
+            time.sleep(1)
 
     def assert_has_global_dict(self, column_name, table_name):
         """
         assert table_name:column_name has global dict
         """
+        time.sleep(1)
         sql = "explain costs select distinct %s from %s" % (column_name, table_name)
         res = self.execute_sql(sql, True)
         tools.assert_true(str(res["result"]).find("Decode") > 0, "assert dictionary error")
@@ -896,6 +897,7 @@ class StarrocksSQLApiLib(object):
         """
         assert table_name:column_name has global dict
         """
+        time.sleep(1)
         sql = "explain costs select distinct %s from %s" % (column_name, table_name)
         res = self.execute_sql(sql, True)
         tools.assert_true(str(res["result"]).find("Decode") <= 0, "assert dictionary error")
