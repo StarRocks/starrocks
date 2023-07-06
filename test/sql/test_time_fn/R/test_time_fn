@@ -758,7 +758,7 @@ None
 -- !result
 select date_diff("2010-11-30 23:59:59", "2010-11-30 20:59:59", "aaa");
 -- result:
-[REGEX].*type column show be one of day/hour/minute/second/millisecond.*
+[REGEX].*type column should be one of day/hour/minute/second/millisecond.*
 -- !result
 CREATE TABLE IF NOT EXISTS `test_data_diff` (
   `d0` datetime,

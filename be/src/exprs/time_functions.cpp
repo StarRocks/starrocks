@@ -2395,6 +2395,7 @@ StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Colu
         TimestampValue l = (TimestampValue)lv_column.value(row);
         TimestampValue r = (TimestampValue)rv_column.value(row);
         auto type_str = type_column.value(row).to_string();
+        transform(type_str.begin(), type_str.end(), type_str.begin(), ::tolower);
         if (type_str == "hour") {
             result.append(l.diff_microsecond(r) / USECS_PER_HOUR);
         } else if (type_str == "second") {
@@ -2406,7 +2407,7 @@ StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Colu
         } else if (type_str == "day") {
             result.append(l.diff_microsecond(r) / USECS_PER_DAY);
         } else {
-            return Status::InvalidArgument("type column show be one of day/hour/minute/second/millisecond");
+            return Status::InvalidArgument("type column should be one of day/hour/minute/second/millisecond");
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -2431,10 +2432,11 @@ Status TimeFunctions::datediff_prepare(FunctionContext* context, FunctionContext
         return Status::OK();
     }
     ColumnPtr column = context->get_constant_column(2);
-    auto type_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    auto type_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(column).to_string();
+    transform(type_str.begin(), type_str.end(), type_str.begin(), ::tolower);
     if (type_str != "day" && type_str != "hour" && type_str != "minute" && type_str != "second" &&
         type_str != "millisecond") {
-        return Status::InvalidArgument("type column show be one of day/hour/minute/second/millisecond");
+        return Status::InvalidArgument("type column should be one of day/hour/minute/second/millisecond");
     }
     auto fc = new TimeFunctions::DateDiffCtx();
     fc->function = &TimeFunctions::date_diff_time;
