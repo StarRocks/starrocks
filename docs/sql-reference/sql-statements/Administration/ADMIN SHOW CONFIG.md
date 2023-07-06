@@ -2,7 +2,9 @@
 
 ## Description
 
-Displays the configuration of the current cluster (currently only FE configuration items are supported).
+Displays the configuration of the current cluster (Currently, only FE configuration items can be displayed). For detailed description of these configuration items, see [Configuration](../../../administration/Configuration.md#fe-configuration-items).
+
+If you want to set or modify a configuration item, use [ADMIN SET CONFIG](ADMIN%20SET%20CONFIG.md).
 
 ## Syntax
 
