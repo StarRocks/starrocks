@@ -24,38 +24,36 @@ import java.util.List;
 import java.util.Objects;
 
 public class OrRangePredicate extends RangePredicate {
-    private List<RangePredicate> rangePredicates;
-
     public OrRangePredicate(List<RangePredicate> rangePredicates) {
-        this.rangePredicates = rangePredicates;
+        this.childPredicates = rangePredicates;
     }
 
-    public List<RangePredicate> getRangePredicates() {
-        return rangePredicates;
+    public List<RangePredicate> getChildPredicates() {
+        return childPredicates;
     }
 
     @Override
     public boolean enclose(RangePredicate other) {
         if (other instanceof ColumnRangePredicate) {
-            return rangePredicates.stream().anyMatch(rangePredicate -> rangePredicate.enclose(other));
+            return childPredicates.stream().anyMatch(rangePredicate -> rangePredicate.enclose(other));
         } else if (other instanceof AndRangePredicate) {
             if (this.equals(other)) {
                 return true;
             }
             // check any range predicate in OrRangePredicate enclose other
-            return rangePredicates.stream().anyMatch(rangePredicate -> rangePredicate.enclose(other));
+            return childPredicates.stream().anyMatch(rangePredicate -> rangePredicate.enclose(other));
         } else {
             // OrRangePredicate
             OrRangePredicate orRangePredicate = other.cast();
             // for every range predicate in other should be enclosed by this OrRangePredicate
-            return orRangePredicate.getRangePredicates().stream().allMatch(otherRange -> this.enclose(otherRange));
+            return orRangePredicate.getChildPredicates().stream().allMatch(otherRange -> this.enclose(otherRange));
         }
     }
 
     @Override
     public ScalarOperator toScalarOperator() {
         List<ScalarOperator> children = Lists.newArrayList();
-        for (RangePredicate rangePredicate : rangePredicates) {
+        for (RangePredicate rangePredicate : childPredicates) {
             children.add(rangePredicate.toScalarOperator());
         }
         return Utils.compoundOr(children);
@@ -72,7 +70,7 @@ public class OrRangePredicate extends RangePredicate {
             return ConstantOperator.TRUE;
         }
 
-        for (RangePredicate childRangePredicate : rangePredicates) {
+        for (RangePredicate childRangePredicate : childPredicates) {
             ScalarOperator child = childRangePredicate.simplify(other);
             if (child == null) {
                 return null;
@@ -90,11 +88,11 @@ public class OrRangePredicate extends RangePredicate {
             return false;
         }
         OrRangePredicate that = (OrRangePredicate) o;
-        return Objects.equals(rangePredicates, that.rangePredicates);
+        return Objects.equals(childPredicates, that.childPredicates);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(rangePredicates);
+        return Objects.hash(childPredicates);
     }
 }

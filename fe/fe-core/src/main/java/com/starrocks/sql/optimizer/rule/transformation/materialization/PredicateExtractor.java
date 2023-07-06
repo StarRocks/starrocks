@@ -67,6 +67,11 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
             rangeSet.addAll(range(predicate.getBinaryType(), constant));
             return new ColumnRangePredicate(left.cast(), rangeSet);
+        } else if (left.isConstantRef() && right.isColumnRef()) {
+            ConstantOperator constant = (ConstantOperator) left;
+            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+            rangeSet.addAll(range(predicate.getBinaryType(), constant));
+            return new ColumnRangePredicate(right.cast(), rangeSet);
         } else if (left.isColumnRef() && right.isColumnRef() && context.isAnd()) {
             if (predicate.getBinaryType().isEqual()) {
                 columnEqualityPredicates.add(predicate);
@@ -82,9 +87,17 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
     @Override
     public RangePredicate visitCompoundPredicate(
             CompoundPredicateOperator predicate, PredicateExtractorContext context) {
+
         if (predicate.isNot()) {
-            return null;
+            // try to remove not
+            ScalarOperator canonized = MvUtils.canonizePredicate(predicate);
+            if (canonized == null || ((canonized instanceof CompoundPredicateOperator)
+                    && ((CompoundPredicateOperator) canonized).isNot())) {
+                return null;
+            }
+            return canonized.accept(this, context);
         }
+
         List<RangePredicate> rangePredicates = Lists.newArrayList();
         for (ScalarOperator child : predicate.getChildren()) {
             boolean isAndOrigin = context.isAnd();
@@ -142,6 +155,7 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                     rangePredicates.add(childRange);
                 }
             } else if (predicate.isNot()) {
+                // it is normalized, can not be here
                 return null;
             }
         }

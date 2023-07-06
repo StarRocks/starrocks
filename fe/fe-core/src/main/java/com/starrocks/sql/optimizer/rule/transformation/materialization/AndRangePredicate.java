@@ -24,43 +24,37 @@ import java.util.List;
 import java.util.Objects;
 
 public class AndRangePredicate extends RangePredicate {
-    private List<RangePredicate> rangePredicates;
-
-    public AndRangePredicate(List<RangePredicate> rangePredicates) {
-        this.rangePredicates = rangePredicates;
-    }
-
-    public List<RangePredicate> getRangePredicates() {
-        return rangePredicates;
+    public AndRangePredicate(List<RangePredicate> childPredicates) {
+        this.childPredicates = childPredicates;
     }
 
     @Override
     public boolean enclose(RangePredicate other) {
         if (other instanceof ColumnRangePredicate) {
-            return rangePredicates.size() == 1 && rangePredicates.get(0).enclose(other);
+            return childPredicates.size() == 1 && childPredicates.get(0).enclose(other);
         } else if (other instanceof AndRangePredicate) {
             if (this.equals(other)) {
                 return true;
             }
             AndRangePredicate otherAnd = other.cast();
-            if (otherAnd.getRangePredicates().size() < rangePredicates.size()) {
+            if (otherAnd.getChildPredicates().size() < childPredicates.size()) {
                 return false;
             }
             // for every RangePredicate in this should enclose one range predicate in other
-            return rangePredicates.stream().allMatch(thisPredicate -> {
-                return otherAnd.getRangePredicates().stream().anyMatch(otherPredicate -> thisPredicate.enclose(otherPredicate));
+            return childPredicates.stream().allMatch(thisPredicate -> {
+                return otherAnd.getChildPredicates().stream().anyMatch(otherPredicate -> thisPredicate.enclose(otherPredicate));
             });
         } else {
             // OrRangePredicate
             OrRangePredicate orRangePredicate = other.cast();
-            return orRangePredicate.getRangePredicates().stream().anyMatch(oneRange -> oneRange.enclose(this));
+            return orRangePredicate.getChildPredicates().stream().anyMatch(oneRange -> oneRange.enclose(this));
         }
     }
 
     @Override
     public ScalarOperator toScalarOperator() {
         List<ScalarOperator> children = Lists.newArrayList();
-        for (RangePredicate rangePredicate : rangePredicates) {
+        for (RangePredicate rangePredicate : childPredicates) {
             children.add(rangePredicate.toScalarOperator());
         }
         return Utils.compoundAnd(children);
@@ -74,7 +68,7 @@ public class AndRangePredicate extends RangePredicate {
         List<ScalarOperator> simpliedPredicates = Lists.newArrayList();
         if (other instanceof ColumnRangePredicate) {
             boolean matched = false;
-            for (RangePredicate childRangePredicate : rangePredicates) {
+            for (RangePredicate childRangePredicate : childPredicates) {
                 ScalarOperator child = childRangePredicate.simplify(other);
                 if (child != null) {
                     matched = true;
@@ -92,9 +86,9 @@ public class AndRangePredicate extends RangePredicate {
         } else if (other instanceof AndRangePredicate) {
             List<RangePredicate> otherMatchedPredicates = Lists.newArrayList();
             AndRangePredicate otherRangePredicate = (AndRangePredicate) other;
-            for (RangePredicate rangePredicate : rangePredicates) {
+            for (RangePredicate rangePredicate : childPredicates) {
                 boolean matched = false;
-                for (RangePredicate otherChildRangePredicate : otherRangePredicate.rangePredicates) {
+                for (RangePredicate otherChildRangePredicate : otherRangePredicate.childPredicates) {
                     ScalarOperator simplied = rangePredicate.simplify(otherChildRangePredicate);
                     if (simplied != null) {
                         otherMatchedPredicates.add(otherChildRangePredicate);
@@ -108,14 +102,14 @@ public class AndRangePredicate extends RangePredicate {
                     simpliedPredicates.add(rangePredicate.toScalarOperator());
                 }
             }
-            if (otherRangePredicate.rangePredicates.stream().anyMatch(
+            if (otherRangePredicate.childPredicates.stream().anyMatch(
                     predicate -> !otherMatchedPredicates.contains(predicate))) {
                 // some predicates not matched in src, means can not be simplied
                 return null;
             }
         } else {
             OrRangePredicate orRangePredicate = (OrRangePredicate) other;
-            for (RangePredicate rangePredicate : orRangePredicate.getRangePredicates()) {
+            for (RangePredicate rangePredicate : orRangePredicate.getChildPredicates()) {
                 ScalarOperator simplied = simplify(rangePredicate);
                 if (simplied != null) {
                     simpliedPredicates.add(toScalarOperator());
@@ -135,11 +129,11 @@ public class AndRangePredicate extends RangePredicate {
             return false;
         }
         AndRangePredicate that = (AndRangePredicate) o;
-        return Objects.equals(rangePredicates, that.rangePredicates);
+        return Objects.equals(childPredicates, that.childPredicates);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(rangePredicates);
+        return Objects.hash(childPredicates);
     }
 }

@@ -92,6 +92,78 @@ public class PredicateSplitTest {
         );
 
         {
+            {
+                ScalarOperator predicate = CompoundPredicateOperator.not(
+                        CompoundPredicateOperator.or(
+                                CompoundPredicateOperator.and(
+                                        BinaryPredicateOperator.eq(a, ConstantOperator.createInt(0)),
+                                        BinaryPredicateOperator.eq(b, ConstantOperator.createInt(3))
+                                ),
+                                CompoundPredicateOperator.and(
+                                        BinaryPredicateOperator.eq(a, ConstantOperator.createInt(4)),
+                                        BinaryPredicateOperator.eq(b, ConstantOperator.createInt(7))
+                                )
+                        ));
+                ScalarOperator result = CompoundPredicateOperator.and(
+                        CompoundPredicateOperator.or(
+                                CompoundPredicateOperator.or(
+                                        BinaryPredicateOperator.lt(a, ConstantOperator.createInt(0)),
+                                        BinaryPredicateOperator.gt(a, ConstantOperator.createInt(0))),
+                                CompoundPredicateOperator.or(
+                                        BinaryPredicateOperator.lt(b, ConstantOperator.createInt(3)),
+                                        BinaryPredicateOperator.gt(b, ConstantOperator.createInt(3)))
+                        ),
+                        CompoundPredicateOperator.or(
+                                CompoundPredicateOperator.or(
+                                        BinaryPredicateOperator.lt(a, ConstantOperator.createInt(4)),
+                                        BinaryPredicateOperator.gt(a, ConstantOperator.createInt(4))),
+                                CompoundPredicateOperator.or(
+                                        BinaryPredicateOperator.lt(b, ConstantOperator.createInt(7)),
+                                        BinaryPredicateOperator.gt(b, ConstantOperator.createInt(7)))
+                        )
+                );
+                PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
+                Assert.assertEquals(result, predicateSplit.getRangePredicates());
+            }
+        }
+
+        {
+            {
+                ScalarOperator predicate = CompoundPredicateOperator.not(
+                        CompoundPredicateOperator.and(
+                                CompoundPredicateOperator.or(
+                                        BinaryPredicateOperator.eq(a, ConstantOperator.createInt(0)),
+                                        BinaryPredicateOperator.eq(b, ConstantOperator.createInt(3))
+                                ),
+                                CompoundPredicateOperator.or(
+                                        BinaryPredicateOperator.eq(a, ConstantOperator.createInt(4)),
+                                        BinaryPredicateOperator.eq(b, ConstantOperator.createInt(7))
+                                )
+                        ));
+                ScalarOperator result = CompoundPredicateOperator.or(
+                        CompoundPredicateOperator.and(
+                                CompoundPredicateOperator.or(
+                                        BinaryPredicateOperator.lt(a, ConstantOperator.createInt(0)),
+                                        BinaryPredicateOperator.gt(a, ConstantOperator.createInt(0))),
+                                CompoundPredicateOperator.or(
+                                        BinaryPredicateOperator.lt(b, ConstantOperator.createInt(3)),
+                                        BinaryPredicateOperator.gt(b, ConstantOperator.createInt(3)))
+                        ),
+                        CompoundPredicateOperator.and(
+                                CompoundPredicateOperator.or(
+                                        BinaryPredicateOperator.lt(a, ConstantOperator.createInt(4)),
+                                        BinaryPredicateOperator.gt(a, ConstantOperator.createInt(4))),
+                                CompoundPredicateOperator.or(
+                                        BinaryPredicateOperator.lt(b, ConstantOperator.createInt(7)),
+                                        BinaryPredicateOperator.gt(b, ConstantOperator.createInt(7)))
+                        )
+                );
+                PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
+                Assert.assertEquals(result, predicateSplit.getRangePredicates());
+            }
+        }
+
+        {
             ScalarOperator predicate = CompoundPredicateOperator.and(rangePredicate, equalPredicate, otherPredicate);
 
             PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);

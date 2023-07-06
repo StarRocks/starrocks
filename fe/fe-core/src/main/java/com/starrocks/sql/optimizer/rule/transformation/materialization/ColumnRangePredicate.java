@@ -29,8 +29,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+// all ranges about one column ref
+// eg: a > 10 and a < 100 => a -> (10, 100)
+// (a > 10 and a < 100) or (a > 1000 and a <= 10000) => a -> (10, 100) or (1000, 10000]
 public class ColumnRangePredicate extends RangePredicate {
     private ColumnRefOperator columnRef;
+    // the relation between each Range in RangeSet is 'or'
     private TreeRangeSet<ConstantOperator> columnRanges;
 
     public ColumnRangePredicate(ColumnRefOperator columnRef, TreeRangeSet<ConstantOperator> columnRanges) {
@@ -132,7 +136,7 @@ public class ColumnRangePredicate extends RangePredicate {
             return null;
         } else {
             OrRangePredicate orRangePredicate = (OrRangePredicate) other;
-            for (RangePredicate rangePredicate : orRangePredicate.getRangePredicates()) {
+            for (RangePredicate rangePredicate : orRangePredicate.getChildPredicates()) {
                 ScalarOperator simplied = simplify(rangePredicate);
                 if (simplied != null) {
                     return toScalarOperator();
