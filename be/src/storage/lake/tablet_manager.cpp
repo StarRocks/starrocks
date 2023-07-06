@@ -15,6 +15,7 @@
 #include "storage/lake/tablet_manager.h"
 
 #include <bthread/bthread.h>
+#include <bvar/bvar.h>
 
 #include <atomic>
 #include <chrono>
@@ -53,6 +54,64 @@
 #endif
 
 namespace starrocks::lake {
+
+static bvar::Adder<uint64_t> g_metadata_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_metadata_cache_hit_minute("lake", "metadata_cache_hit_minute",
+                                                                       &g_metadata_cache_hit, 60);
+
+static bvar::Adder<uint64_t> g_metadata_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_metadata_cache_miss_minute("lake", "metadata_cache_miss_minute",
+                                                                        &g_metadata_cache_miss, 60);
+
+static bvar::Adder<uint64_t> g_txnlog_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_txnlog_cache_hit_minute("lake", "txnlog_cache_hit_minute",
+                                                                     &g_txnlog_cache_hit, 60);
+
+static bvar::Adder<uint64_t> g_txnlog_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_txnlog_cache_miss_minute("lake", "txnlog_cache_miss_minute",
+                                                                      &g_txnlog_cache_miss, 60);
+
+static bvar::Adder<uint64_t> g_schema_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_schema_cache_hit_minute("lake", "schema_cache_hit_minute",
+                                                                     &g_schema_cache_hit, 60);
+
+static bvar::Adder<uint64_t> g_schema_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_schema_cache_miss_minute("lake", "schema_cache_miss_minute",
+                                                                      &g_schema_cache_miss, 60);
+
+static bvar::Adder<uint64_t> g_dv_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_dv_cache_hit_minute("lake", "delvec_cache_hit_minute", &g_dv_cache_hit,
+                                                                 60);
+
+static bvar::Adder<uint64_t> g_dv_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_dv_cache_miss_minute("lake", "delvec_cache_miss_minute", &g_dv_cache_miss,
+                                                                  60);
+
+static bvar::Adder<uint64_t> g_segment_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_segment_cache_hit_minute("lake", "segment_cache_hit_minute",
+                                                                      &g_segment_cache_hit, 60);
+
+static bvar::Adder<uint64_t> g_segment_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_segment_cache_miss_minute("lake", "segment_cache_miss_minute",
+                                                                       &g_segment_cache_miss, 60);
+
+static Cache* get_metacache() {
+    auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    return (mgr != nullptr) ? mgr->metacache() : nullptr;
+}
+
+static size_t get_metacache_capacity(void*) {
+    auto cache = get_metacache();
+    return (cache != nullptr) ? cache->get_capacity() : 0;
+}
+
+static size_t get_metacache_usage(void*) {
+    auto cache = get_metacache();
+    return (cache != nullptr) ? cache->get_memory_usage() : 0;
+}
+
+static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capacity", get_metacache_capacity, nullptr);
+static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
 
 static StatusOr<TabletMetadataPtr> publish(Tablet* tablet, int64_t base_version, int64_t new_version,
                                            const int64_t* txns, int txns_size);
@@ -128,8 +187,10 @@ void TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int si
 TabletMetadataPtr TabletManager::lookup_tablet_metadata(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
+        g_metadata_cache_miss << 1;
         return nullptr;
     }
+    g_metadata_cache_hit << 1;
     auto value = static_cast<CacheValue*>(_metacache->value(handle));
     auto metadata = std::get<TabletMetadataPtr>(*value);
     _metacache->release(handle);
@@ -139,8 +200,10 @@ TabletMetadataPtr TabletManager::lookup_tablet_metadata(std::string_view key) {
 TabletMetadataPtr TabletManager::lookup_tablet_latest_metadata(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
+        g_metadata_cache_miss << 1;
         return nullptr;
     }
+    g_metadata_cache_hit << 1;
     auto value = static_cast<CacheValue*>(_metacache->value(handle));
     auto metadata = std::get<TabletMetadataPtr>(*value);
     _metacache->release(handle);
@@ -156,8 +219,10 @@ void TabletManager::cache_tablet_latest_metadata(TabletMetadataPtr metadata) {
 TabletSchemaPtr TabletManager::lookup_tablet_schema(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
+        g_schema_cache_miss << 1;
         return nullptr;
     }
+    g_schema_cache_hit << 1;
     auto value = static_cast<CacheValue*>(_metacache->value(handle));
     auto schema = std::get<TabletSchemaPtr>(*value);
     _metacache->release(handle);
@@ -167,8 +232,10 @@ TabletSchemaPtr TabletManager::lookup_tablet_schema(std::string_view key) {
 TxnLogPtr TabletManager::lookup_txn_log(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
+        g_txnlog_cache_miss << 1;
         return nullptr;
     }
+    g_txnlog_cache_hit << 1;
     auto value = static_cast<CacheValue*>(_metacache->value(handle));
     auto log = std::get<TxnLogPtr>(*value);
     _metacache->release(handle);
@@ -178,8 +245,10 @@ TxnLogPtr TabletManager::lookup_txn_log(std::string_view key) {
 SegmentPtr TabletManager::lookup_segment(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
+        g_segment_cache_miss << 1;
         return nullptr;
     }
+    g_segment_cache_hit << 1;
     auto value = static_cast<CacheValue*>(_metacache->value(handle));
     auto segment = std::get<SegmentPtr>(*value);
     _metacache->release(handle);
@@ -195,8 +264,10 @@ void TabletManager::cache_segment(std::string_view key, SegmentPtr segment) {
 DelVectorPtr TabletManager::lookup_delvec(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
+        g_dv_cache_miss << 1;
         return nullptr;
     }
+    g_dv_cache_hit << 1;
     auto value = static_cast<CacheValue*>(_metacache->value(handle));
     auto delvec = std::get<DelVectorPtr>(*value);
     _metacache->release(handle);
