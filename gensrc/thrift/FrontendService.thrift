@@ -392,7 +392,7 @@ struct TListPipesParams {
     1: optional Types.TUserIdentity user_ident
 }
 
-struct TListPipesResult {
+struct TListPipesInfo {
     // pipe entity
     1: optional i64 pipe_id
     2: optional string pipe_name
@@ -409,11 +409,15 @@ struct TListPipesResult {
     32: optional i64 loaded_bytes
 }
 
+struct TListPipesResult {
+    1: optional list<TListPipesInfo> pipes;
+}
+
 struct TListPipeFilesParams {
     1: optional Types.TUserIdentity user_ident
 }
 
-struct TListPipeFilesResult {
+struct TListPipeFilesInfo {
     // pipe entity
     1: optional i64 pipe_id
     2: optional string database_name    
@@ -437,6 +441,9 @@ struct TListPipeFilesResult {
     31: optional i64 error_count
 }
 
+struct TListPipeFilesResult {
+    1: optional list<TListPipeFilesInfo> pipe_files
+}
 
 struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
