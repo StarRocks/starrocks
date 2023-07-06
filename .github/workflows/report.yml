@@ -92,12 +92,11 @@ jobs:
         env:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit_id: ${{ github.event.workflow_run.head_sha }}
         with:
           check_name: 'FE UT Report'
           detailed_summary: true
           fail_on_failure: true
-          commit: ${commit_id}
+          commit: ${{ github.event.workflow_run.head_sha }}
           report_paths: ./fe-ut/*.xml
 
       # Incremental Coverage
@@ -174,14 +173,12 @@ jobs:
       - name: Publish SQL-Tester Report
         uses: ./.actions/nose-report-action
         if: success()
-        env:
-          commit_id: ${{ github.event.workflow_run.head_sha }}
         with:
           check_name: 'SQL-Tester Report'
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit: ${commit_id}
+          commit: ${{ github.event.workflow_run.head_sha }}
           report_paths: 'sql-tester-result/*.xml'
 
   Admit-REPORT:
@@ -225,12 +222,10 @@ jobs:
       - name: Publish Admit Report
         uses: ./.actions/nose-report-action
         if: success()
-        env:
-          commit_id: ${{ github.event.workflow_run.head_sha }}
         with:
           check_name: 'Admit Report'
           fail_on_failure: true
           detailed_summary: true
-          commit: ${commit_id}
+          commit: ${{ github.event.workflow_run.head_sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'admit-result/*.xml'
