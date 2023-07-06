@@ -631,4 +631,12 @@ TEST_F(FileWriterTest, TestWriteNestedArray) {
     Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+TEST_F(FileWriterTest, TestVarbinaryNotSupport) {
+    auto type_varbinary = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> type_descs{type_varbinary};
+
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema == nullptr);
+}
+
 } // namespace starrocks::parquet
