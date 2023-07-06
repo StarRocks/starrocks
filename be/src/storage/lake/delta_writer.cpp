@@ -248,7 +248,7 @@ inline Status DeltaWriterImpl::flush_async() {
     if (_mem_table != nullptr) {
         RETURN_IF_ERROR(_mem_table->finalize());
         if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
-            _fill_auto_increment_id(*_mem_table->get_result_chunk());
+            RETURN_IF_ERROR(_fill_auto_increment_id(*_mem_table->get_result_chunk()));
         }
         st = _flush_token->submit(std::move(_mem_table));
         _mem_table.reset(nullptr);
@@ -447,20 +447,29 @@ Status DeltaWriterImpl::_fill_auto_increment_id(const Chunk& chunk) {
 
     // 2. probe index
     auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
-    std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(tablet, metadata);
-
-    RETURN_IF_ERROR(tablet.update_mgr()->get_rowids_from_pkindex(&tablet, metadata->version(), upserts, &rss_rowids));
+    Status st;
+    if (metadata != nullptr) {
+        st = tablet.update_mgr()->get_rowids_from_pkindex(&tablet, metadata->version(), upserts, &rss_rowids);
+    }
 
     std::vector<uint8_t> filter;
     uint32_t gen_num = 0;
-    for (unsigned long v : rss_rowid_map) {
-        uint32_t rssid = v >> 32;
-        if (rssid == (uint32_t)-1) {
-            filter.emplace_back(1);
-            ++gen_num;
-        } else {
-            filter.emplace_back(0);
+    // There are two cases we should allocate full id for this chunk for simplicity:
+    // 1. We can not get the tablet meta from cache.
+    // 2. fail in seeking index
+    if (metadata != nullptr && st.ok()) {
+        for (unsigned long v : rss_rowid_map) {
+            uint32_t rssid = v >> 32;
+            if (rssid == (uint32_t)-1) {
+                filter.emplace_back(1);
+                ++gen_num;
+            } else {
+                filter.emplace_back(0);
+            }
         }
+    } else {
+        gen_num = rss_rowid_map.size();
+        filter.resize(gen_num, 1);
     }
 
     // 3. fill the non-existing rows
