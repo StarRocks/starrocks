@@ -154,6 +154,8 @@ public:
 
     void update_metacache_limit(size_t limit);
 
+    Cache* metacache() { return _metacache.get(); }
+
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
 
