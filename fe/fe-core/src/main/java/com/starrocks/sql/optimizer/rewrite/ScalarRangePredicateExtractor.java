@@ -92,7 +92,7 @@ public class ScalarRangePredicateExtractor {
 
         predicate = Utils.compoundAnd(Lists.newArrayList(conjuncts));
         if (isOnlyOrCompound(predicate)) {
-            Set<ColumnRefOperator> c = new HashSet<>(Utils.extractColumnRef(predicate));
+            Set<ColumnRefOperator> c = Sets.newHashSet(Utils.extractColumnRef(predicate));
             if (c.size() == extractMap.size() &&
                     extractMap.values().stream().allMatch(v -> v instanceof MultiValuesDescriptor)) {
                 return extractExpr;
