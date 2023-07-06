@@ -39,6 +39,10 @@ public:
                                                 const TGetTablesParams& request,
                                                 TListMaterializedViewStatusResult* result);
 
+    static Status list_pipes(const std::string& ip, int32_t port, const TListPipesParams& req, TListPipesResult* res);
+    static Status list_pipe_files(const std::string& ip, int32_t port, const TListPipeFilesParams& req,
+                                  TListPipeFilesResult* res);
+
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response);
 

@@ -16,6 +16,7 @@
 
 #include "exec/schema_scanner.h"
 #include "exec/schema_scanner/schema_helper.h"
+#include "gen_cpp/FrontendService_types.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "types/logical_type.h"
@@ -27,17 +28,17 @@ SchemaScanner::ColumnDesc SchemaTablePipeFiles::_s_columns[] = {
         {"PIPE_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"PIPE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"FILE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ROW_COUNT", TYPE_BIGINT, sizeof(int64_t), false},
+        {"FILE_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
         {"FILE_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
         {"LOAD_STATE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"LOAD_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"ERROR_MSG", TYPE_VARCHAR, sizeof(StringValue), false},
         {"ERROR_LINE_NUMBER", TYPE_BIGINT, sizeof(int64_t), false},
         {"ERROR_COLUMN", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaTablePipeFiles::SchemaTablePipeFiles()
-    :SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) ){
-}
+        : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 Status SchemaTablePipeFiles::start(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaScanner::start(state));
@@ -45,28 +46,55 @@ Status SchemaTablePipeFiles::start(RuntimeState* state) {
     return {};
 }
 
-Status SchemaTablePipeFiles::get_next(ChunkPtr* chunk, bool* eos) {
-    if (_cur_idx > 0) {
-        *eos = true;
-        return {};
+Status SchemaTablePipeFiles::_list_pipe_files() {
+    RETURN_IF(_param->ip == nullptr || _param->port == 0, Status::InternalError("unknown frontend address"));
+
+    TListPipeFilesParams params;
+    if (_param->current_user_ident) {
+        params.__set_user_ident(*_param->current_user_ident);
     }
-    fill_chunk(chunk);
-    *eos = false;
-    return {};
+    return SchemaHelper::list_pipe_files(*(_param->ip), _param->port, params, &_pipe_files_result);
 }
 
-Status SchemaTablePipeFiles::fill_chunk(ChunkPtr* chunk) {
-    _cur_idx++;
+Status SchemaTablePipeFiles::get_next(ChunkPtr* chunk, bool* eos) {
+    while (_cur_row >= _pipe_files_result.pipe_files.size()) {
+        if (!_fetched) {
+            // send RPC
+            _fetched = true;
+            RETURN_IF_ERROR(_list_pipe_files());
+        } else {
+            *eos = true;
+            return Status::OK();
+        }
+    }
+    *eos = false;
+    return _fill_chunk(chunk);
+}
+
+DatumArray SchemaTablePipeFiles::_build_row() {
+    auto& pipe_file = _pipe_files_result.pipe_files.at(_cur_row);
+    _cur_row++;
+    return {
+            Slice(pipe_file.database_name),
+            pipe_file.pipe_id,
+            Slice(pipe_file.pipe_name),
+            Slice(pipe_file.filename),
+            pipe_file.file_rows,
+            pipe_file.file_size,
+            Slice(pipe_file.state),
+            Slice("load_time"),    // TODO
+            Slice("error_msg"),    // TODO
+            (int64_t)0,            // TODO
+            Slice("error_column"), // TODO
+    };
+}
+
+Status SchemaTablePipeFiles::_fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
+    auto datum_array = _build_row();
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
-        if (column->is_binary()) {
-            Slice fake = "fake";
-            fill_column_with_slot<TYPE_VARCHAR>(column, &fake);
-        } else if (column->is_numeric()) {
-            int64_t fake = 1024;
-            fill_column_with_slot<TYPE_BIGINT>(column, &fake);
-        }
+        column->append_datum(datum_array[index]);
     }
     return {};
 }

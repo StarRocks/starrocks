@@ -420,7 +420,8 @@ struct TListPipeFilesParams {
 struct TListPipeFilesInfo {
     // pipe entity
     1: optional i64 pipe_id
-    2: optional string database_name    
+    2: optional string pipe_name
+    3: optional string database_name    
     
 
     // file entity

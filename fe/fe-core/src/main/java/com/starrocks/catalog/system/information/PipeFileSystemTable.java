@@ -26,15 +26,13 @@ public class PipeFileSystemTable {
     public static final String NAME = "pipe_files";
 
     public static SystemTable create() {
-        return new SystemTable(SystemId.PIPE_FILES_ID,
-                NAME,
-                Table.TableType.SCHEMA,
+        return new SystemTable(SystemId.PIPE_FILES_ID, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
                         .column("DATABASE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("PIPE_ID", ScalarType.BIGINT)
                         .column("PIPE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("FILE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("ROW_COUNT", ScalarType.BIGINT)
+                        .column("FILE_ROWS", ScalarType.BIGINT)
                         .column("FILE_SIZE", ScalarType.BIGINT)
                         .column("LOAD_STATE", ScalarType.createVarcharType(8))
                         .column("LOAD_TIME", ScalarType.createVarcharType(16))
