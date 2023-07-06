@@ -699,16 +699,30 @@ public class AnalyzeSingleTest {
     }
 
     @Test
-    public void testRemoveCommentAndLineSeparator() {
+    public void testRemoveCommentAndLineSeparator1() {
         String sql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from    tbl where-- comment\n" +
                 "col = 1 #comment\r\n" +
                 "\tand /*\n" +
                 "comment\n" +
                 "comment\n" +
                 "*/ col = \"con   tent\n" +
-                "contend\" and col = \"中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\";";
+                "contend\" and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
         String res = LogUtil.removeCommentAndLineSeparator(sql);
-        Assert.assertEquals("select /*+SET_VAR(disable_join_reorder=true)*/* from tbl where col = 1 and col = \"con tent\n" +
-                "contend\" and col = \"中\t文 \\\"\r\n\\r\\n\\t\\\"英 文\";", res);
+        Assert.assertEquals("select /*+SET_VAR(disable_join_reorder=true)*/* from tbl where col = 1 and col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';", res);
+    }
+
+    @Test
+    public void testRemoveCommentAndLineSeparator2() {
+        String invalidSql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from    tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeCommentAndLineSeparator(invalidSql);
+        Assert.assertEquals("select /*+SET_VAR(disable_join_reorder=true)*/* from tbl where col = 1 and col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';`", res);
     }
 }

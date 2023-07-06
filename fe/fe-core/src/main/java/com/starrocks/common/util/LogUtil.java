@@ -61,7 +61,8 @@ public class LogUtil {
         StringBuilder sb = new StringBuilder();
 
         int idx = 0;
-        while (idx < origStmt.length()) {
+        int length = origStmt.length();
+        while (idx < length) {
             char character = origStmt.charAt(idx);
 
             if (character == '\"' || character == '\'' || character == '`') {
@@ -69,36 +70,36 @@ public class LogUtil {
                 inStringStart = character;
                 appendChar(sb, inStringStart);
                 idx++;
-                character = origStmt.charAt(idx);
-                while ((character != inStringStart) || (idx > 0 && origStmt.charAt(idx - 1) == '\\')) {
-                    appendChar(sb, character);
-                    character = origStmt.charAt(++idx);
+                while (idx < length && ((origStmt.charAt(idx) != inStringStart) || origStmt.charAt(idx - 1) == '\\')) {
+                    sb.append(origStmt.charAt(idx));
+                    ++idx;
                 }
-                appendChar(sb, character);
-            } else if ((character == '-' && idx != origStmt.length() - 1 && origStmt.charAt(idx + 1) == '-') ||
+                sb.append(inStringStart);
+            } else if ((character == '-' && idx != length - 1 && origStmt.charAt(idx + 1) == '-') ||
                     character == '#') {
                 // process comment style like '-- comment' or '# comment'
-                while (character != '\n') {
-                    character = origStmt.charAt(++idx);
+                while (idx < length - 1 && origStmt.charAt(idx) != '\n') {
+                    ++idx;
                 }
                 appendChar(sb, ' ');
-            } else if (character == '/' && idx != origStmt.length() - 2 &&
+            } else if (character == '/' && idx != length - 2 &&
                     origStmt.charAt(idx + 1) == '*' && origStmt.charAt(idx + 2) != '+') {
                 //  process comment style like '/* comment */'
-                while (character != '*' || idx == origStmt.length() - 1 || origStmt.charAt(idx + 1) != '/') {
-                    character = origStmt.charAt(++idx);
+                while (idx < length - 1 && (origStmt.charAt(idx) != '*' || origStmt.charAt(idx + 1) != '/')) {
+                    ++idx;
                 }
                 ++idx;
                 appendChar(sb, ' ');
             } else if (character == '/' && idx != origStmt.length() - 2 &&
                     origStmt.charAt(idx + 1) == '*' && origStmt.charAt(idx + 2) == '+') {
                 //  process hint
-                while (character != '*' || idx == origStmt.length() - 1 || origStmt.charAt(idx + 1) != '/') {
-                    appendChar(sb, character);
-                    character = origStmt.charAt(++idx);
+                while (idx < length - 1 && (origStmt.charAt(idx) != '*' || origStmt.charAt(idx + 1) != '/')) {
+                    appendChar(sb, origStmt.charAt(idx));
+                    idx++;
                 }
-                appendChar(sb, character);
-                appendChar(sb, origStmt.charAt(++idx));
+                appendChar(sb, '*');
+                appendChar(sb, '/');
+                idx++;
             } else if (character == '\t' || character == '\r' || character == '\n') {
                 // replace line separator
                 appendChar(sb, ' ');
