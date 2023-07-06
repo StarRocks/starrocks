@@ -365,7 +365,7 @@ public:
     static Status datediff_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /*
-     * Called by date_diff to the corresponding part
+     * Called by date_diff to handle
      */
     static StatusOr<ColumnPtr> date_diff_time(FunctionContext* context, const Columns& columns, int64_t t);
 
