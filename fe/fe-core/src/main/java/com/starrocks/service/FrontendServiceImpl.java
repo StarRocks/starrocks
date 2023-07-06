@@ -90,6 +90,7 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.pipe.Pipe;
+import com.starrocks.load.pipe.PipeFile;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -199,8 +200,10 @@ import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
+import com.starrocks.thrift.TListPipeFilesInfo;
 import com.starrocks.thrift.TListPipeFilesParams;
 import com.starrocks.thrift.TListPipeFilesResult;
+import com.starrocks.thrift.TListPipesInfo;
 import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TListPipesResult;
 import com.starrocks.thrift.TListTableStatusResult;
@@ -502,12 +505,27 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!params.isSetUser_ident()) {
             throw new TException("missed user_identity");
         }
+        // TODO: check privilege
         UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
         for (Pipe pipe : pipes.values()) {
+            String databaseName = GlobalStateMgr.getCurrentState().mayGetDb(pipe.getPipeId().getDbId())
+                    .map(Database::getOriginName)
+                    .orElse(null);
 
+            TListPipesInfo row = new TListPipesInfo();
+            row.setPipe_id(pipe.getPipeId().getId());
+            row.setPipe_name(pipe.getName());
+            row.setDatabase_name(databaseName);
+            row.setState(pipe.getState().toString());
+            row.setLoaded_files(pipe.getLoadStatus().loadFiles);
+            row.setLoaded_rows(pipe.getLoadStatus().loadRows);
+            row.setLoaded_bytes(pipe.getLoadStatus().loadBytes);
+
+            result.addToPipes(row);
         }
 
         return result;
@@ -518,8 +536,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!params.isSetUser_ident()) {
             throw new TException("missed user_identity");
         }
+        // TODO: check privilege
         UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
         TListPipeFilesResult result = new TListPipeFilesResult();
+        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+        Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
+        for (Pipe pipe : pipes.values()) {
+            String databaseName = GlobalStateMgr.getCurrentState().mayGetDb(pipe.getPipeId().getDbId())
+                    .map(Database::getOriginName)
+                    .orElse(null);
+            for (PipeFile pipeFile : pipe.getPipeSource().getFileListRepo().listFiles()) {
+                TListPipeFilesInfo file = new TListPipeFilesInfo();
+                file.setPipe_id(pipe.getId());
+                file.setDatabase_name(databaseName);
+                file.setFilename(pipeFile.path);
+                file.setFile_version(0);
+                file.setState(pipeFile.getState().toString());
+                file.setFile_size(pipeFile.getSize());
+                result.addToPipe_files(file);
+            }
+        }
 
         return result;
     }
