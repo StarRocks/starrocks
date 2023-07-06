@@ -417,6 +417,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PLAN_VALIDATION = "enable_plan_validation";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
+
+    public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
+
+    public static final String SCAN_OR_TO_UNION_LIMIT = "scan_or_to_union_limit";
+
+    public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
+
+    public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
+
+    public static final String DISABLE_FUNCTION_FOLD_CONSTANTS = "disable_function_fold_constants";
+
+    public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
+
+>>>>>>> 3a71b1084 ([BugFix] fix case when not been rewrite correctly (#26504))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1088,6 +1105,24 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PLAN_VALIDATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePlanValidation = true;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = SCAN_OR_TO_UNION_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int scanOrToUnionLimit = 4;
+
+    @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private long scanOrToUnionThreshold = 50000000;
+
+    @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double selectRatioThreshold = 0.15;
+
+    @VarAttr(name = DISABLE_FUNCTION_FOLD_CONSTANTS, flag = VariableMgr.INVISIBLE)
+    private boolean disableFunctionFoldConstants = false;
+
+    @VarAttr(name = ENABLE_SIMPLIFY_CASE_WHEN, flag = VariableMgr.INVISIBLE)
+    private boolean enableSimplifyCaseWhen = true;
+
+>>>>>>> 3a71b1084 ([BugFix] fix case when not been rewrite correctly (#26504))
     private int exprChildrenLimit = -1;
 
     public int getExprChildrenLimit() {
@@ -2046,6 +2081,57 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePlanValidation = val;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isCboPruneSubfield() {
+        return cboPruneSubfield;
+    }
+
+    public void setCboPruneSubfield(boolean cboPruneSubfield) {
+        this.cboPruneSubfield = cboPruneSubfield;
+    }
+
+    public int getScanOrToUnionLimit() {
+        return scanOrToUnionLimit;
+    }
+
+    public void setScanOrToUnionLimit(int scanOrToUnionLimit) {
+        this.scanOrToUnionLimit = scanOrToUnionLimit;
+    }
+
+    public long getScanOrToUnionThreshold() {
+        return scanOrToUnionThreshold;
+    }
+
+    public void setScanOrToUnionThreshold(long scanOrToUnionThreshold) {
+        this.scanOrToUnionThreshold = scanOrToUnionThreshold;
+    }
+
+    public double getSelectRatioThreshold() {
+        return selectRatioThreshold;
+    }
+
+    public void setSelectRatioThreshold(double selectRatioThreshold) {
+        this.selectRatioThreshold = selectRatioThreshold;
+    }
+
+    public boolean isDisableFunctionFoldConstants() {
+        return disableFunctionFoldConstants;
+    }
+
+    public void setDisableFunctionFoldConstants(boolean disableFunctionFoldConstants) {
+        this.disableFunctionFoldConstants = disableFunctionFoldConstants;
+    }
+
+    public boolean isEnableSimplifyCaseWhen() {
+        return enableSimplifyCaseWhen;
+    }
+
+    public void setEnableSimplifyCaseWhen(boolean enableSimplifyCaseWhen) {
+        this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
+    }
+
+>>>>>>> 3a71b1084 ([BugFix] fix case when not been rewrite correctly (#26504))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
