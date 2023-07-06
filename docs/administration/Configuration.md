@@ -6,7 +6,7 @@ This topic describes FE, BE, and system parameters. It also provides suggestions
 
 FE parameters are classified into dynamic parameters and static parameters.
 
-- Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid after you restart your FE.
+- Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid if you restart your FE. Therefore, we recommend that you also modify the configuration items in the `fe.conf` file to prevent the loss of modifications.
 
 - Static parameters can only be configured and adjusted in the FE configuration file **fe.conf**. **After you modify this file, you must restart your FE for the changes to take effect.**
 
@@ -35,6 +35,10 @@ You can configure or modify the settings of FE dynamic parameters using [ADMIN S
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
 ```
+
+> **NOTE**
+>
+> The configurations will be restored to the default values in the `fe.conf` file after the FE restarts. Therefore, we recommend that you also modify the configuration items in `fe.conf` to prevent the loss of modifications.
 
 #### Logging
 
