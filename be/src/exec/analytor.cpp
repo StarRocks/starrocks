@@ -764,13 +764,18 @@ void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t p
 void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                            int64_t frame_end) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        const Column* agg_column = _agg_intput_columns[i][0].get();
+        size_t column_size = _agg_intput_columns[i].size();
+        const Column* data_columns[column_size];
+        for (size_t j = 0; j < column_size; j++) {
+            data_columns[j] = _agg_intput_columns[i][j].get();
+        }
+
         frame_start = std::max<int64_t>(frame_start, _partition_start);
         // for rows betweend unbounded preceding and current row, we have not found the partition end, for others,
         // _found_partition_end = _partition_end, so we use _found_partition_end instead of _partition_end
         frame_end = std::min<int64_t>(frame_end, _found_partition_end.second);
         _agg_functions[i]->update_batch_single_state_with_frame(
-                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
+                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
                 peer_group_start, peer_group_end, frame_start, frame_end);
     }
 }

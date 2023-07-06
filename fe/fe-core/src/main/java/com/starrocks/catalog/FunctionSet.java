@@ -243,6 +243,9 @@ public class FunctionSet {
     public static final String VARIANCE_POP = "variance_pop";
     public static final String VAR_SAMP = "var_samp";
     public static final String VARIANCE_SAMP = "variance_samp";
+    public static final String COVAR_POP = "covar_pop";
+    public static final String COVAR_SAMP = "covar_samp";
+    public static final String CORR = "corr";
     public static final String ANY_VALUE = "any_value";
     public static final String STD = "std";
     public static final String HLL_UNION = "hll_union";
@@ -445,7 +448,6 @@ public class FunctionSet {
             ImmutableSet.<Type>builder()
                     .addAll(Type.FLOAT_TYPES)
                     .addAll(Type.INTEGER_TYPES)
-                    .addAll(Type.DECIMAL_TYPES)
                     .build();
 
     private static final Set<Type> HISTOGRAM_TYPE =
@@ -565,6 +567,18 @@ public class FunctionSet {
             .add(FunctionSet.STDDEV)
             .add(FunctionSet.STDDEV_POP)
             .add(FunctionSet.STDDEV_SAMP).build();
+
+    public static final Set<String> STATISTIC_FUNCTIONS = ImmutableSet.<String>builder()
+            .add(FunctionSet.VAR_POP)
+            .add(FunctionSet.VAR_SAMP)
+            .add(FunctionSet.VARIANCE)
+            .add(FunctionSet.VARIANCE_POP)
+            .add(FunctionSet.VARIANCE_SAMP)
+            .add(FunctionSet.STD)
+            .add(FunctionSet.STDDEV)
+            .add(FunctionSet.STDDEV_POP)
+            .add(FunctionSet.STDDEV_SAMP)
+            .add(FunctionSet.COVAR_POP).add(FunctionSet.COVAR_SAMP).add(FunctionSet.CORR).build();
 
     public static final List<String> ARRAY_DECIMAL_FUNCTIONS = ImmutableList.<String>builder()
             .add(ARRAY_SUM)
@@ -1148,6 +1162,15 @@ public class FunctionSet {
                     false, true, false));
             addBuiltin(AggregateFunction.createBuiltin(VAR_POP,
                     Lists.newArrayList(t), Type.DOUBLE, Type.VARBINARY,
+                    false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(COVAR_POP,
+                    Lists.newArrayList(t, t), Type.DOUBLE, Type.VARBINARY,
+                    false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(COVAR_SAMP,
+                    Lists.newArrayList(t, t), Type.DOUBLE, Type.VARBINARY,
+                    false, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(CORR,
+                    Lists.newArrayList(t, t), Type.DOUBLE, Type.VARBINARY,
                     false, true, false));
         }
     }

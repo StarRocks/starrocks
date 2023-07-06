@@ -837,6 +837,14 @@ public:
         }
     }
 
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        for (size_t i = frame_start; i < frame_end; ++i) {
+            update(ctx, columns, state, i);
+        }
+    }
+
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
         auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
