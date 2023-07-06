@@ -89,6 +89,9 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.pipe.Pipe;
+import com.starrocks.load.pipe.PipeId;
+import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
@@ -196,6 +199,10 @@ import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
+import com.starrocks.thrift.TListPipeFilesParams;
+import com.starrocks.thrift.TListPipeFilesResult;
+import com.starrocks.thrift.TListPipesParams;
+import com.starrocks.thrift.TListPipesResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TLoadJobType;
@@ -488,6 +495,33 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         Preconditions.checkState(params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType()));
         return listMaterializedViewStatus(limit, matcher, currentUser, params.db);
+    }
+
+    @Override
+    public TListPipesResult listPipes(TListPipesParams params) throws TException {
+        if (!params.isSetUser_ident()) {
+            throw new TException("missed user_identity");
+        }
+        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+        Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
+        TListPipesResult result = new TListPipesResult();
+        for (Pipe pipe : pipes.values()) {
+
+        }
+
+        return result;
+    }
+
+    @Override
+    public TListPipeFilesResult listPipeFiles(TListPipeFilesParams params) throws TException {
+        if (!params.isSetUser_ident()) {
+            throw new TException("missed user_identity");
+        }
+        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+        TListPipeFilesResult result = new TListPipeFilesResult();
+
+        return result;
     }
 
     // list MaterializedView table match pattern
