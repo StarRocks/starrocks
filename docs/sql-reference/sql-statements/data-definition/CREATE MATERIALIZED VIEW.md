@@ -58,21 +58,21 @@ SELECT select_expr[, select_expr ...]
 
 - select_expr (required)
 
-  All columns in the query statement, that is, all columns in the materialized view schema. This parameter supports the following values:
+  The query statement used to create the materialized view.
 
   - Synchronous materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
-  - Synchronous materialized views can support complex expressions(not simple slot refereneces) for select or aggregate function. Query statements such as `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b`  or `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table` are supported since StarRocks v3.1.
-  - Synchronous materialized views can support more than one aggregate functions for each column of the base table. Query statements such as `select sum(a), min(a) from table group by b` are supported since StarRocks v3.1.
+  - From v3.1 onwards, synchronous materialized views support complex expressions for SELECT and aggregate functions, for example, query statements such as `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` or `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table`.
+  - From v3.1 onwards, synchronous materialized views can support more than one aggregate function for each column of the base table, for example, query statements such as `select sum(a), min(a) from table group by b`.
   - When creating a synchronous materialized view with an aggregate function, you must specify the GROUP BY clause, and specify at least one GROUP BY column in SELECT.
   - Synchronous materialized views do not support clauses such as JOIN, WHERE, and the HAVING clause of GROUP BY.
 
   > **CAUTION**
   >
-  > - This parameter must contain at least one single column, and all specified columns can only be specified once.
-  > - There are some restrictions about Synchronous materialized views's complex expression:
-  >   - Complex expressions must have an alias name and Different complex expressions should have different alias names in all the base Table's Sync Materialized Views. eg, `select b, sum(a + 1) as sum_a from table group by b` and `select b, sum(a) as sum_a from table group by b` should not been created at the same time.
-  >   - Complex expressions only can refer one column references for now(eg, `a + b as col1` is not supported yet.).
-  >   - When you use Sync Materialized Views with complex expressions, you need take care whether your query can be rewritten by the mv.
+  > - This parameter must contain at least one column.
+  > - The following restrictions are imposed on the complex expression used for synchronous materialized views:
+  >   - Each complex expression must have an alias and different aliases must be assigned to different complex expressions among all the synchronous materialized views of a base table. For example, query statements `select b, sum(a + 1) as sum_a from table group by b` and `select b, sum(a) as sum_a from table group by b` cannot be used to create synchronous materialized views for a same base table.
+  >   - Each complex expression can reference one column. Query statements such as `a + b as col1` are not supported.
+  >   - You can check whether your queries are rewritten by the synchronous materialized views created with complex expressions by executing `EXPLAIN <sql_statement>`. For more information, see [Query analysis](../../../administration/Query_planning.md).
 
 - GROUP BY (optional)
 
@@ -190,7 +190,7 @@ If this parameter is not specified, the default value `MANUAL` is used.
 The partitioning strategy of the asynchronous materialized view. As for the current version of StarRocks, only one partition expression is supported when creating an asynchronous materialized view. Valid values:
 
 - `column_name`: The name of the column used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
-- date_trunc function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", 'dt')` means that the `dt` column is truncated to month as the unit for partitioning. The date_trunc function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`. Since StarRocks v3.1, `dt` can also be `time_slice(`dt`, INTERVAL N type) as dt` which `time_slice`'s type must be less than `date_trunc`'s type, eg. `time_slice`'s interval unit is `MINUTE` and `date_trunc`'s unit is `HOUR`.
+- date_trunc function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", 'dt')` means that the `dt` column is truncated to month as the unit for partitioning. The date_trunc function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`. From v3.1 onwards, you can further use time_slice or date_slice functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(`dt`, INTERVAL 7 DAY))` where time_slice's or date_slice's type must be of finer granularity than `date_trunc`'s type.
 
 If this parameter is not specified, no partitioning strategy is adopted by default.
 
