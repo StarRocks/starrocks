@@ -41,7 +41,11 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
+<<<<<<< HEAD
 #include "service/backend_options.h"
+=======
+#include "types/logical_type.h"
+>>>>>>> ff551fbf97 ([BugFix] Fix the mem leak of build in predicate for es external table (#26631))
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -356,6 +360,7 @@ Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) 
     return Status::OK();
 }
 
+<<<<<<< HEAD
 #define BUILD_INPRED_VALUES(TYPE)                                                                                   \
     case TYPE: {                                                                                                    \
         RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                   \
@@ -363,6 +368,15 @@ Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) 
                     slot_desc->type().type, vectorized::ColumnHelper::create_const_column<TYPE>(v, 1), _timezone)); \
         }));                                                                                                        \
         break;                                                                                                      \
+=======
+#define BUILD_INPRED_VALUES(TYPE)                                                                        \
+    case TYPE: {                                                                                         \
+        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                        \
+            in_pred_values.emplace_back(_pool->add(new VExtLiteral(                                      \
+                    slot_desc->type().type, ColumnHelper::create_const_column<TYPE>(v, 1), _timezone))); \
+        }));                                                                                             \
+        break;                                                                                           \
+>>>>>>> ff551fbf97 ([BugFix] Fix the mem leak of build in predicate for es external table (#26631))
     }
 
 Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
@@ -400,18 +414,18 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
         bool is_not_in = false;
         // insert in list to ExtLiteral
         switch (expr->type().type) {
-            BUILD_INPRED_VALUES(TYPE_BOOLEAN);
-            BUILD_INPRED_VALUES(TYPE_INT);
-            BUILD_INPRED_VALUES(TYPE_TINYINT);
-            BUILD_INPRED_VALUES(TYPE_SMALLINT);
-            BUILD_INPRED_VALUES(TYPE_BIGINT);
-            BUILD_INPRED_VALUES(TYPE_LARGEINT);
-            BUILD_INPRED_VALUES(TYPE_FLOAT);
-            BUILD_INPRED_VALUES(TYPE_DOUBLE);
-            BUILD_INPRED_VALUES(TYPE_DATE);
-            BUILD_INPRED_VALUES(TYPE_DATETIME);
-            BUILD_INPRED_VALUES(TYPE_CHAR);
-            BUILD_INPRED_VALUES(TYPE_VARCHAR);
+            BUILD_INPRED_VALUES(TYPE_BOOLEAN)
+            BUILD_INPRED_VALUES(TYPE_INT)
+            BUILD_INPRED_VALUES(TYPE_TINYINT)
+            BUILD_INPRED_VALUES(TYPE_SMALLINT)
+            BUILD_INPRED_VALUES(TYPE_BIGINT)
+            BUILD_INPRED_VALUES(TYPE_LARGEINT)
+            BUILD_INPRED_VALUES(TYPE_FLOAT)
+            BUILD_INPRED_VALUES(TYPE_DOUBLE)
+            BUILD_INPRED_VALUES(TYPE_DATE)
+            BUILD_INPRED_VALUES(TYPE_DATETIME)
+            BUILD_INPRED_VALUES(TYPE_CHAR)
+            BUILD_INPRED_VALUES(TYPE_VARCHAR)
         default:
             DCHECK(false) << "unsupported type:" << expr->type().type;
             return Status::InternalError("unsupported type to push down to ES");
