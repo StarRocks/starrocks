@@ -2391,6 +2391,7 @@ StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Colu
     ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
     auto size = columns[2]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
+    
     for (int row = 0; row < size; ++row) {
         TimestampValue l = (TimestampValue)lv_column.value(row);
         TimestampValue r = (TimestampValue)rv_column.value(row);
