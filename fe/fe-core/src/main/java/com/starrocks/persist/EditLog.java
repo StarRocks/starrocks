@@ -62,6 +62,7 @@ import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
+import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.Policy;
@@ -101,6 +102,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -115,6 +117,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1102,6 +1105,24 @@ public class EditLog {
                 case OperationType.OP_PIPE: {
                     PipeOpEntry opEntry = (PipeOpEntry) journal.getData();
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
+                    break;
+                }
+                case OperationTypeEPack.OP_CREATE_WAREHOUSE: {
+                    Warehouse wh = (Warehouse) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayCreateWarehouse(wh);
+                    break;
+                }
+                case OperationTypeEPack.OP_DROP_WAREHOUSE: {
+                    DropWarehouseLog log = (DropWarehouseLog) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayDropWarehouse(log);
+                    break;
+                }
+                case OperationTypeEPack.OP_ALTER_WAREHOUSE: {
+                    Warehouse wh = (Warehouse) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayAlterWarehouse(wh);
                     break;
                 }
                 default: {
@@ -2116,5 +2137,19 @@ public class EditLog {
 
     public void logDropStorageVolume(DropStorageVolumeLog log) {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
+    }
+
+    // warehouse
+
+    public void logCreateWarehouse(Warehouse warehouse) {
+        logEdit(OperationTypeEPack.OP_CREATE_WAREHOUSE, warehouse);
+    }
+
+    public void logDropWarehouse(DropWarehouseLog log) {
+        logEdit(OperationTypeEPack.OP_DROP_WAREHOUSE, log);
+    }
+
+    public void logAlterWarehouse(Warehouse wh) {
+        logEdit(OperationTypeEPack.OP_ALTER_WAREHOUSE, wh);
     }
 }

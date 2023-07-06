@@ -4,9 +4,14 @@ package com.starrocks.epack.sql.analyzer;
 
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
+import com.starrocks.epack.sql.ast.DropWarehouseStmt;
+import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
+import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerVisitor;
 
@@ -40,6 +45,39 @@ public class AnalyzerVisitorEPack extends AnalyzerVisitor {
     @Override
     public Void visitShowCreatePolicyStatement(ShowCreatePolicyStmt stmt, ConnectContext context) {
         SecurityPolicyAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+
+    // ---------------------------------------- Warehouse Statement ---------------------------------------------------
+
+    @Override
+    public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
+        WarehouseAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
+        WarehouseAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
+        WarehouseAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
+        WarehouseAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitSetWarehouseStatement(SetWarehouseStmt stmt, ConnectContext session) {
+        WarehouseAnalyzer.analyze(stmt, session);
         return null;
     }
 }

@@ -55,6 +55,7 @@ import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
+import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
@@ -149,6 +150,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1053,6 +1055,15 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_PIPE:
                 data = PipeOpEntry.read(in);
+                isRead = true;
+                break;
+            case OperationTypeEPack.OP_CREATE_WAREHOUSE:
+            case OperationTypeEPack.OP_ALTER_WAREHOUSE:
+                data = Warehouse.read(in);
+                isRead = true;
+                break;
+            case OperationTypeEPack.OP_DROP_WAREHOUSE:
+                data = DropWarehouseLog.read(in);
                 isRead = true;
                 break;
             default: {

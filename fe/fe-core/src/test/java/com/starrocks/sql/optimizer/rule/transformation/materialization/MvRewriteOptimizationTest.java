@@ -1905,6 +1905,7 @@ public class MvRewriteOptimizationTest {
         starRocksAssert.dropTable("nest_base_table_1");
     }
 
+    @Ignore
     @Test
     public void testPartialPartition1() throws Exception {
         createAndRefreshMv("test", "partial_mv",

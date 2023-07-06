@@ -16,6 +16,7 @@ package com.starrocks.warehouse;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -41,9 +42,21 @@ public class Cluster implements Writable {
     @SerializedName(value = "wgid")
     private long workerGroupId;
 
+    public Cluster() {
+    }
+
     public Cluster(long id) {
         this.id = id;
-        workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+        this.workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+    }
+
+    public void init() throws DdlException {
+        try {
+            workerGroupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup("x0");
+        } catch (DdlException e) {
+            LOG.warn("create Cluster " + id + " failed, because : " + e);
+            throw e;
+        }
     }
 
     public long getId() {

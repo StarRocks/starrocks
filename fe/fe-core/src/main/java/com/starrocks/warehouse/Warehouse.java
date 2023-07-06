@@ -45,19 +45,29 @@ public abstract class Warehouse implements Writable {
     @SerializedName(value = "state")
     protected WarehouseState state = WarehouseState.INITIALIZING;
 
+    @SerializedName(value = "comment")
+    private String comment;
+
     private volatile boolean exist = true;
 
-    public Warehouse(long id, String name) {
+    public Warehouse(long id, String name, String comment) {
         this.id = id;
         this.name = name;
+        this.comment = comment;
     }
+
+    public abstract void initCluster() throws DdlException;
 
     public long getId() {
         return id;
     }
 
-    public String getFullName() {
+    public String getName() {
         return name;
+    }
+
+    public String getComment() {
+        return comment;
     }
 
     public void setState(WarehouseState state) {
@@ -85,6 +95,12 @@ public abstract class Warehouse implements Writable {
     }
 
     public abstract ProcResult getClusterProcData();
+
+    public abstract void dropSelf() throws DdlException;
+
+    public abstract void suspendSelf();
+
+    public abstract void resumeSelf();
 
     @Override
     public void write(DataOutput out) throws IOException {

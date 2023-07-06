@@ -17,10 +17,22 @@ package com.starrocks.server;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.epack.persist.DropWarehouseLog;
+import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
+import com.starrocks.epack.sql.ast.DropWarehouseStmt;
+import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.EditLog;
+import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.Warehouse;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.After;
-import org.junit.BeforeClass;
+import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.DataInputStream;
@@ -31,14 +43,18 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 
+
 public class WarehouseMgrTest {
-    private static StarRocksAssert starRocksAssert;
     private String fileName = "./testWarehouseMgr";
 
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        AnalyzeTestUtil.init();
-        starRocksAssert = new StarRocksAssert();
+    @Before
+    public void setUp() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
     }
 
     @After
@@ -47,9 +63,49 @@ public class WarehouseMgrTest {
         file.delete();
     }
 
+    @Test
+    public void testReplay(@Mocked StarOSAgent starOSAgent) throws Exception {
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getCurrentStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new Expectations() {
+            {
+                starOSAgent.deleteWorkerGroup(anyLong);
+                result = null;
+                minTimes = 0;
+
+                starOSAgent.createWorkerGroup(anyString);
+                result = -1L;
+                minTimes = 0;
+            }
+        };
+
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = new LocalWarehouse(10000, "warehouse_1", 1000, null);
+        warehouse.initCluster();
+        warehouseMgr.replayCreateWarehouse(warehouse);
+        Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
+        Assert.assertEquals(Warehouse.WarehouseState.INITIALIZING,
+                warehouseMgr.getWarehouse("warehouse_1").getState());
+
+        Deencapsulation.setField(warehouse, "state", Warehouse.WarehouseState.SUSPENDED);
+
+        warehouseMgr.replayAlterWarehouse(warehouse);
+        Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED, warehouseMgr.getWarehouse("warehouse_1").getState());
+
+        warehouseMgr.replayDropWarehouse(new DropWarehouseLog("warehouse_1"));
+        Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
+    }
+
 
     @Test
-    public void testLoadWarehouse() throws IOException, DdlException {
+    public void testLoadWarehouse(@Mocked StarOSAgent starOSAgent, @Mocked EditLog editLog)
+            throws IOException, DdlException {
         WarehouseManager warehouseMgr = GlobalStateMgr.getServingState().getWarehouseMgr();
         File file = new File(fileName);
         file.createNewFile();
@@ -59,7 +115,47 @@ public class WarehouseMgrTest {
         out.flush();
         out.close();
 
-        Deencapsulation.setField(warehouseMgr, "fullNameToWh", new HashMap<>());
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getCurrentStarOSAgent() {
+                return starOSAgent;
+            }
+
+            @Mock
+            public long getNextId() {
+                return 10000;
+            }
+
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+
+        new Expectations() {
+            {
+                starOSAgent.deleteWorkerGroup(anyLong);
+                result = null;
+                minTimes = 0;
+
+                starOSAgent.createWorkerGroup(anyString);
+                result = -1L;
+                minTimes = 0;
+            }
+        };
+
+        warehouseMgr.createWarehouse(new CreateWarehouseStmt(false, "aaa", null, null));
+
+        Assert.assertEquals(Warehouse.WarehouseState.INITIALIZING, warehouseMgr.getWarehouse("aaa").getState());
+        warehouseMgr.suspendWarehouse(new SuspendWarehouseStmt("aaa"));
+        Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED, warehouseMgr.getWarehouse("aaa").getState());
+        warehouseMgr.resumeWarehouse(new ResumeWarehouseStmt("aaa"));
+        Assert.assertEquals(Warehouse.WarehouseState.RUNNING, warehouseMgr.getWarehouse("aaa").getState());
+
+        warehouseMgr.dropWarehouse(new DropWarehouseStmt(false, "aaa"));
+        Assert.assertFalse(warehouseMgr.warehouseExists("aaa"));
+
+        Deencapsulation.setField(warehouseMgr, "nameToWh", new HashMap<>());
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         warehouseMgr.loadWarehouses(in, 0);
     }

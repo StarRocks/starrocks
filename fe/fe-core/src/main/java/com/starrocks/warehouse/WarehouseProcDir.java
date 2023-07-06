@@ -31,6 +31,7 @@ public class WarehouseProcDir implements ProcDirInterface {
             .add("Warehouse")
             .add("State")
             .add("ClusterCount")
+            .add("Comment")
             .build();
 
     private final WarehouseManager warehouseManager;

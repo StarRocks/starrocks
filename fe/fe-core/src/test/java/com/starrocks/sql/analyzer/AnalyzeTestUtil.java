@@ -28,13 +28,17 @@ public class AnalyzeTestUtil {
     private static StarRocksAssert starRocksAssert;
     private static String DB_NAME = "test";
 
-    public static void init() throws Exception {
+    public static void initWithoutTableAndDb() throws Exception {
         // create connect context
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+    }
 
+    public static void init() throws Exception {
+
+        initWithoutTableAndDb();
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +

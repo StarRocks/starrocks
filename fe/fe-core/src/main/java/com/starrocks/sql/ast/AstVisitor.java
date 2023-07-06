@@ -47,9 +47,14 @@ import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
+import com.starrocks.epack.sql.ast.DropWarehouseStmt;
+import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
+import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -93,6 +98,27 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowClusterStatement(ShowClustersStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+
+    public R visitCreateWarehouseStatement(CreateWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropWarehouseStatement(DropWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitResumeWarehouseStatement(ResumeWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetWarehouseStatement(SetWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
 
@@ -773,10 +799,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSetUserPropertyStatement(SetUserPropertyStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitSetWarehouseStatement(SetWarehouseStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

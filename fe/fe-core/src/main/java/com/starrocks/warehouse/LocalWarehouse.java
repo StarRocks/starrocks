@@ -21,16 +21,19 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 
 import java.util.Map;
 
 // on-premise
 public class LocalWarehouse extends Warehouse {
+    private static final Logger LOG = LogManager.getLogger(LocalWarehouse.class);
+
     @SerializedName(value = "cluster")
     Cluster cluster;
-
-    public static final long DEFAULT_CLUSTER_ID = 0L;
 
     public static final ImmutableList<String> CLUSTER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("ClusterId")
@@ -40,17 +43,23 @@ public class LocalWarehouse extends Warehouse {
             .add("Running")
             .build();
 
-    public LocalWarehouse(long id, String name) {
-        super(id, name);
-        cluster = new Cluster(DEFAULT_CLUSTER_ID);
+    public LocalWarehouse(long id, String name, long clusterId, String comment) {
+        super(id, name, comment);
+        cluster = new Cluster(clusterId);
+    }
+
+    @Override
+    public void initCluster() throws DdlException {
+        cluster.init();
     }
 
     @Override
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
-                this.getFullName(),
+                this.getName(),
                 this.getState().toString(),
-                String.valueOf(1L)));
+                String.valueOf(1L),
+                this.getComment()));
     }
 
     @Override
@@ -74,5 +83,25 @@ public class LocalWarehouse extends Warehouse {
         result.setNames(CLUSTER_PROC_NODE_TITLE_NAMES);
         cluster.getProcNodeData(result);
         return result;
+    }
+
+    @Override
+    public void dropSelf() throws DdlException {
+        releaseComputeNodes();
+    }
+
+    @Override
+    public void suspendSelf() {
+        this.state = WarehouseState.SUSPENDED;
+    }
+
+    @Override
+    public void resumeSelf() {
+        this.state = WarehouseState.RUNNING;
+    }
+
+    private void releaseComputeNodes() throws DdlException {
+        long workerGroupId = cluster.getWorkerGroupId();
+        GlobalStateMgr.getCurrentStarOSAgent().deleteWorkerGroup(workerGroupId);
     }
 }

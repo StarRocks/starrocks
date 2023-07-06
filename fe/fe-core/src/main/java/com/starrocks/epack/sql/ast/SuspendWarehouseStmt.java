@@ -12,19 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.epack.sql.ast;
 
-import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-public class SetWarehouseStmt extends StatementBase {
+public class SuspendWarehouseStmt extends DdlStmt {
     private String warehouseName;
 
-    public SetWarehouseStmt(String warehouseName) {
+    public SuspendWarehouseStmt(String warehouseName) {
         this(warehouseName, NodePosition.ZERO);
     }
 
-    public SetWarehouseStmt(String warehouseName, NodePosition pos) {
+    public SuspendWarehouseStmt(String warehouseName, NodePosition pos) {
         super(pos);
         this.warehouseName = warehouseName;
     }
@@ -35,11 +36,6 @@ public class SetWarehouseStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetWarehouseStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
+        return visitor.visitSuspendWarehouseStatement(this, context);
     }
 }

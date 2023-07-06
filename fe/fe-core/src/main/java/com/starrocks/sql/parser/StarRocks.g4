@@ -31,6 +31,11 @@ statement
     : queryStatement
 
     // Warehouse Statement
+    | createWarehouseStatement
+    | dropWarehouseStatement
+    | suspendWarehouseStatement
+    | resumeWarehouseStatement
+    | setWarehouseStatement
     | showWarehousesStatement
     | showClustersStatement
 
@@ -702,7 +707,7 @@ showCatalogsStatement
 
 createWarehouseStatement
     : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
-    properties?
+    comment? properties?
     ;
 
 showWarehousesStatement
@@ -711,12 +716,6 @@ showWarehousesStatement
 
 dropWarehouseStatement
     : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
-    ;
-
-alterWarehouseStatement
-    : ALTER WAREHOUSE identifier ADD CLUSTER
-    | ALTER WAREHOUSE identifier REMOVE CLUSTER
-    | ALTER WAREHOUSE identifier SET propertyList
     ;
 
 showClustersStatement

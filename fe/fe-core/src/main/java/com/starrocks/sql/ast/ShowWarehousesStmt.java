@@ -29,6 +29,7 @@ public class ShowWarehousesStmt extends ShowStmt {
                     .addColumn(new Column("Warehouse", ScalarType.createVarchar(256)))
                     .addColumn(new Column("State", ScalarType.createVarchar(20)))
                     .addColumn(new Column("ClusterCount", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Comment", ScalarType.createVarchar(256)))
                     .build();
     private final String pattern;
     private Expr where;

@@ -42,6 +42,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
 import com.staros.proto.WorkerGroupDetailInfo;
+import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -684,6 +685,35 @@ public class StarOSAgent {
             return nodeIds;
         } catch (StarClientException e) {
             throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
+        }
+    }
+
+    public long createWorkerGroup(String size) throws DdlException {
+        prepare();
+
+        // size should be x0, x1, x2, x4...
+        WorkerGroupSpec spec = WorkerGroupSpec.newBuilder().setSize(size).build();
+        // owner means tenant, now there is only one tenant, so pass "Starrocks" to starMgr
+        String owner = "Starrocks";
+        WorkerGroupDetailInfo result = null;
+        try {
+            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
+                    Collections.emptyMap());
+        } catch (StarClientException e) {
+            LOG.warn("Failed to create worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to create worker group. error: " + e.getMessage());
+        }
+        return result.getGroupId();
+    }
+
+    public void deleteWorkerGroup(long groupId) throws DdlException {
+        prepare();
+
+        try {
+            client.deleteWorkerGroup(serviceId, groupId);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to delete worker group {}. error: {}", groupId, e.getMessage());
+            throw new DdlException("Failed to delete worker group. error: " + e.getMessage());
         }
     }
 }

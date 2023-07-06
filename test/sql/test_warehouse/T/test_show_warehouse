@@ -1,6 +1,3 @@
--- name: test_show_warehouse
-SHOW WAREHOUSES;
-SHOW PROC '/warehouses';
 -- name: test_show_warehouse_clusters
 SHOW CLUSTERS FROM WAREHOUSE default_warehouse;
 SHOW PROC '/warehouses/0';

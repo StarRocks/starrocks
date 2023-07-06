@@ -11,4 +11,9 @@ public class OperationTypeEPack extends OperationType {
     public static final short OP_ALTER_POLICY_SET_BODY = 20004;
     public static final short OP_ALTER_POLICY_SET_COMMENT = 20005;
     public static final short OP_ALTER_POLICY_RENAME = 20006;
+
+    // warehouse
+    public static final short OP_CREATE_WAREHOUSE = 20101;
+    public static final short OP_DROP_WAREHOUSE = 20102;
+    public static final short OP_ALTER_WAREHOUSE = 20103;
 }
