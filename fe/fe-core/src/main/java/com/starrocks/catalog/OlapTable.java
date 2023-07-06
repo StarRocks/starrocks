@@ -2443,8 +2443,7 @@ public class OlapTable extends Table {
         StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         String storageVolumeId = svm.getStorageVolumeIdOfTable(id);
         if (storageVolumeId != null) {
-            String volume = svm.getStorageVolume(storageVolumeId).getName();
-            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, volume);
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, svm.getStorageVolumeName(storageVolumeId));
         }
         return properties;
     }

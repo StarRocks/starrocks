@@ -797,7 +797,9 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             onCreate(db, table, storageVolumeId, stmt.isSetIfNotExists());
         } catch (DdlException e) {
-            GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
+            if (table.isCloudNativeTable()) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
+            }
             throw e;
         }
         return true;

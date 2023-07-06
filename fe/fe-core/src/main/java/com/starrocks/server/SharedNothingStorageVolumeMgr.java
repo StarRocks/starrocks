@@ -146,7 +146,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public void createOrUpdateBuiltinStorageVolume() {
-
+    public String createOrUpdateBuiltinStorageVolume() {
+        return "";
     }
 }

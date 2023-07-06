@@ -278,7 +278,6 @@ import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -4034,11 +4033,9 @@ public class GlobalStateMgr {
 
     public void createOrUpdateBuiltinStorageVolume() {
         try {
-            storageVolumeMgr.createOrUpdateBuiltinStorageVolume();
-            StorageVolume builtinStorageVolume = storageVolumeMgr
-                    .getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-            if (builtinStorageVolume != null) {
-                authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolume.getId());
+            String builtinStorageVolumeId = storageVolumeMgr.createOrUpdateBuiltinStorageVolume();
+            if (!builtinStorageVolumeId.isEmpty()) {
+                authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
             }
         } catch (DdlException | AlreadyExistsException e) {
             LOG.warn("Failed to create or update builtin storage volume", e);

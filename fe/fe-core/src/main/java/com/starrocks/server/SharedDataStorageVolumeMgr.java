@@ -218,23 +218,26 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public void createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
+    public String createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
         if (Config.cloud_native_storage_type.isEmpty()) {
-            return;
+            return "";
         }
 
         List<String> locations = parseLocationsFromConfig();
         Map<String, String> params = parseParamsFromConfig();
 
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (exists(BUILTIN_STORAGE_VOLUME)) {
+            StorageVolume sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
+            if (sv != null) {
                 updateStorageVolume(BUILTIN_STORAGE_VOLUME, params, Optional.empty(), "");
+                return sv.getId();
             } else {
-                createStorageVolume(BUILTIN_STORAGE_VOLUME,
+                String svId = createStorageVolume(BUILTIN_STORAGE_VOLUME,
                         Config.cloud_native_storage_type, locations, params, Optional.of(true), "");
                 if (getDefaultStorageVolumeId().isEmpty()) {
                     setDefaultStorageVolume(BUILTIN_STORAGE_VOLUME);
                 }
+                return svId;
             }
         }
     }

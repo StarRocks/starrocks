@@ -217,6 +217,12 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
+    public String getStorageVolumeName(String svId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return getStorageVolume(svId).getName();
+        }
+    }
+
     public void replaySetDefaultStorageVolume(SetDefaultStorageVolumeLog log) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             defaultStorageVolumeId = log.getId();
@@ -295,5 +301,5 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     public abstract void unbindTableToStorageVolume(long tableId);
 
-    public abstract void createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException;
+    public abstract String createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException;
 }
