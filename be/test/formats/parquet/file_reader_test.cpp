@@ -2485,14 +2485,14 @@ TEST_F(FileReaderTest, CheckLargeParquetHeader) {
     TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
     TypeDescriptor type_string = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
 
-    Utils::SlotDesc slot_descs[] = {
+    SlotDesc slot_descs[] = {
             {"myString", type_string},
             {"myInteger", type_int},
             {""},
     };
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
 
     // --------------finish init context---------------
