@@ -231,9 +231,12 @@ public class InsertOverwriteJobRunner {
         }
         List<Expr> partitionColValues = insertStmt.getTargetPartitionNames().getPartitionColValues();
         List<List<String>> partitionValues = Lists.newArrayList();
+        // Currently we only support overwriting one partition at a time
+        List<String> firstValues = Lists.newArrayList();
+        partitionValues.add(firstValues);
         for (Expr expr : partitionColValues) {
             if (expr instanceof LiteralExpr) {
-                partitionValues.add(Lists.newArrayList(((LiteralExpr) expr).getStringValue()));
+                firstValues.add(((LiteralExpr) expr).getStringValue());
             } else {
                 throw new SemanticException("Only support literal value for partition column.");
             }
