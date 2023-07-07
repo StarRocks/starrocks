@@ -18,7 +18,7 @@ Release date: July 7, 2023
 
 - Supports accessing Parquet-formatted Iceberg v2 tables.
 - [Preview] Supports sinking data to Iceberg tables in Parquet format.
-- Supports accessing data stored in Elasticsearch by using [Elasticsearch catalogs](../data_source/catalog/elasticsearch_catalog.md). This simplifies the creation of Elasticsearch tables.
+- Supports accessing data stored in Elasticsearch by using [Elasticsearch catalogs](../data_source/catalog/elasticsearch_catalog.md). This simplifies the creation of Elasticsearch external tables.
 
 #### Storage engine, data ingestion, and query
 
