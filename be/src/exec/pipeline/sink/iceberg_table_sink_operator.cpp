@@ -200,6 +200,9 @@ Status IcebergTableSinkOperatorFactory::prepare(RuntimeState* state) {
         std::vector<parquet::FileColumnId> field_ids = generate_parquet_field_ids(t_iceberg_schema->fields);
         auto result = parquet::ParquetBuildHelper::make_schema(_iceberg_table->full_column_names(), _output_expr_ctxs,
                                                                field_ids);
+        if (!result.ok()) {
+            return Status::NotSupported(result.status().message());
+        }
         _parquet_file_schema = result.ValueOrDie();
     }
 
