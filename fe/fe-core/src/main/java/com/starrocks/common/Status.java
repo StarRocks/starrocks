@@ -105,7 +105,7 @@ public class Status {
         this.errorMsg = status.getErrorMsg();
     }
 
-    public void setStatus(String msg) {
+    public void setInternalErrorStatus(String msg) {
         this.errorCode = TStatusCode.INTERNAL_ERROR;
         this.errorMsg = msg;
     }

@@ -299,7 +299,8 @@ public class StmtExecutor {
         profile = buildTopLevelProfile();
         if (coord != null) {
             if (coord.getQueryProfile() != null) {
-                coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+                coord.getQueryProfile().getCounterTotalTime()
+                        .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 coord.endProfile();
                 profile.addChild(coord.buildMergedQueryProfile(getQueryStatisticsForAuditLog()));
             }
@@ -525,7 +526,8 @@ public class StmtExecutor {
                         // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
                         // and hence there is no need to log it here.
                         if (i == 0 && context.getQueryDetail() == null && Config.log_plan_cancelled_by_crash_be) {
-                            LOG.warn("Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}] [Plan={}]",
+                            LOG.warn(
+                                    "Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}] [Plan={}]",
                                     DebugUtil.printId(context.getExecutionId()),
                                     originStmt == null ? "" : originStmt.originStmt,
                                     execPlan.getExplainString(TExplainLevel.COSTS),
@@ -1547,7 +1549,7 @@ public class StmtExecutor {
                 }
             }
 
-            TLoadJobType type = null;
+            TLoadJobType type;
             if (containOlapScanNode) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
                 type = TLoadJobType.INSERT_QUERY;
@@ -1638,7 +1640,8 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql
                         );
                     } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
                         // schema table does not need txn
@@ -1646,7 +1649,8 @@ public class StmtExecutor {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql,
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
                                 TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
                     }
@@ -1856,7 +1860,7 @@ public class StmtExecutor {
             } while (!batch.isEos());
         } catch (Exception e) {
             LOG.warn(e);
-            coord.getExecStatus().setStatus(e.getMessage());
+            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
@@ -88,11 +87,11 @@ public class CoordinatorTest extends PlanTestBase {
         PlanFragment fragment = genFragment();
         CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(fragment);
         CoordinatorPreprocessor.FInstanceExecParam instance0 =
-                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 0, params);
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, params);
         CoordinatorPreprocessor.FInstanceExecParam instance1 =
-                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 1, params);
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, params);
         CoordinatorPreprocessor.FInstanceExecParam instance2 =
-                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 2, params);
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, params);
         instance0.bucketSeqToDriverSeq = ImmutableMap.of(2, -1, 0, -1);
         instance1.bucketSeqToDriverSeq = ImmutableMap.of(1, -1, 4, -1);
         instance2.bucketSeqToDriverSeq = ImmutableMap.of(3, -1, 5, -1);
@@ -137,7 +136,8 @@ public class CoordinatorTest extends PlanTestBase {
                                                              List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs,
                                                              List<Integer> expectedNumScanRangesList,
                                                              List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList) {
-        CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(genFragment());
+        CoordinatorPreprocessor.FragmentExecParams params =
+                coordinatorPreprocessor.new FragmentExecParams(genFragment());
         CoordinatorPreprocessor.BucketSeqToScanRange bucketSeqToScanRange =
                 new CoordinatorPreprocessor.BucketSeqToScanRange();
         for (Integer bucketSeq : bucketSeqToAddress.keySet()) {

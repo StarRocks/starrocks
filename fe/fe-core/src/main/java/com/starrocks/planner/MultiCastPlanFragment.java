@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
@@ -103,4 +102,9 @@ public class MultiCastPlanFragment extends PlanFragment {
         Preconditions.checkState(false);
     }
 
+    @Override
+    public void reset() {
+        MultiCastDataSink multiSink = (MultiCastDataSink) getSink();
+        multiSink.getDestinations().forEach(List::clear);
+    }
 }

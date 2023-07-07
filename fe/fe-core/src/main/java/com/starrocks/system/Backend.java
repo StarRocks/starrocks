@@ -45,7 +45,6 @@ import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDisk;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -108,10 +107,6 @@ public class Backend extends ComputeNode {
 
     public boolean hasPathHash() {
         return disksRef.values().stream().allMatch(DiskInfo::hasPathHash);
-    }
-
-    public TNetworkAddress getAddress() {
-        return new TNetworkAddress(getHost(), getBePort());
     }
 
     public long getTotalCapacityB() {
