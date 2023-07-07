@@ -60,11 +60,11 @@ public class WorkerProvider {
     /**
      * The available backend nodes, which are alive and not in the blacklist.
      */
-    private ImmutableMap<Long, ComputeNode> availableID2Backend;
+    private final ImmutableMap<Long, ComputeNode> availableID2Backend;
     /**
      * The available compute nodes, which are alive and not in the blacklist.
      */
-    private ImmutableMap<Long, ComputeNode> availableID2ComputeNode;
+    private final ImmutableMap<Long, ComputeNode> availableID2ComputeNode;
 
     /**
      * These three members record the workers used by the related job.
@@ -72,18 +72,20 @@ public class WorkerProvider {
      */
     private final Set<Long> usedWorkerIDs;
     private final Map<TNetworkAddress, ComputeNode> beAddr2UsedWorker;
-    // Used only by channel stream load, records the mapping from BE port to BE's webserver port.
+    /**
+     * Used only by channel stream load, recording the mapping from BE port to BE's HTTP port.
+     */
     private final Map<TNetworkAddress, TNetworkAddress> beAddr2HttpAddr;
 
     /**
      * Indicates whether there are available compute nodes.
      */
-    private boolean hasComputeNode;
+    private final boolean hasComputeNode;
     /**
      * Indicates whether compute nodes should be used for non-HDFS operators.
      * The HDFS operator always prefers to use compute nodes even if {@code usedComputeNode} is false.
      */
-    private boolean usedComputeNode;
+    private final boolean usedComputeNode;
 
     @VisibleForTesting
     public WorkerProvider(ImmutableMap<Long, ComputeNode> id2Backend, ImmutableMap<Long, ComputeNode> id2ComputeNode,
