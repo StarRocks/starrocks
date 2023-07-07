@@ -14,8 +14,7 @@ StarRocks 自 v2.4 起支持异步物化视图。异步物化视图与先前版�
 
 |                              | **单表聚合** | **多表关联** | **查询改写** | **刷新策略** | **基表** |
 | ---------------------------- | ----------- | ---------- | ----------- | ---------- | -------- |
-| **StarRocks 2.5 异步物化视图** | 是 | 是 | 是 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog</li><li>已有异步物化视图</li></ul> |
-| **StarRocks 2.4 异步物化视图** | 是 | 是 | 否 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持基于 Default Catalog 的多表构建 |
+| **异步物化视图** | 是 | 是 | 是 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog（v2.5）</li><li>已有异步物化视图（v2.5）</li><li>已有视图（v3.1）</li></ul> |
 | **同步物化视图（Rollup）** | 仅部分聚合函数 | 否 | 是 | 导入同步刷新 | 仅支持基于 Default Catalog 的单表构建 |
 
 ## 同步物化视图
@@ -123,7 +122,7 @@ SELECT * FROM <mv_name> [_SYNC_MV_];
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- distribution_desc
-[DISTRIBUTED BY HASH(<bucket_key>) [BUCKETS <bucket_number>]]
+[DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]]
 -- refresh_desc
 [REFRESH 
 -- refresh_moment
@@ -157,13 +156,37 @@ AS
 >
 > 同一张基表可以创建多个异步物化视图，但同一数据库内的异步物化视图名称不可重复。
 
-**distribution_desc**（必填）
+**distribution_desc**（选填）
 
-异步物化视图的分桶方式，形如 `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`。
+异步物化视图的分桶方式，包括哈希分桶和随机分桶（自 3.1 版本起）。如不指定该参数，StarRocks 使用随机分桶方式，并自动设置分桶数量。
 
-> **注意**
->
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+- **哈希分桶**：
+
+  语法
+
+  ```SQL
+  DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
+  ```
+
+  更多信息，请参见 [分桶](../../../table_design/Data_distribution.md#分桶)。
+
+  > **说明**
+  >
+  > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+
+- **随机分桶**：
+
+  如果您选择随机分桶方式，并且自动设置分桶数量，则无需指定 `distribution_desc`。如果您需要手动设置分桶数，请使用以下语法：
+
+  ```SQL
+  DISTRIBUTED BY RANDOM BUCKETS <bucket_number>
+  ```
+
+  > **注意**
+  >
+  > 采用随机分桶方式的异步物化视图不支持设置 Colocation Group。
+
+  更多信息，请参见 [随机分桶](../../../table_design/Data_distribution.md#随机分桶自-31)。
 
 **refresh_moment**（选填）
 
@@ -204,11 +227,12 @@ AS
 
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。有效值：`HDD` 和 `SSD`。
+- `storage_cooldown_time`: 当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间必须大于当前时间。如不指定该属性，默认不进行自动降冷。取值格式为："yyyy-MM-dd HH:mm:ss"。
 - `partition_ttl_number`：需要保留的最近的物化视图分区数量。分区数量超过该值后，过期分区将被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。默认值：`-1`。当值为 `-1` 时，将不会拆分刷新任务。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 - `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并从最近分区开始刷新 N 个分区。如果分区数不足 N，则刷新所有已存在的分区。如果您的动态分区物化视图中存在预创建的未来时段动态分区，StarRocks 会优先刷新这些未来时段的分区，然后刷新已有的分区。因此设定此参数时请确保已为预创建的未来时段动态分区保留余量。
-- `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可用于查询重写。否则，该物化视图无法作为查询重写的候选物化视图。单位：秒。该属性自 v3.0 起支持。
+- `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询重写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询重写。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/Materialized_view.md#基于-view-delta-join-场景改写查询)。该属性自 v3.0 起支持。
 
