@@ -486,18 +486,6 @@ private:
     const ColumnReaderOptions& _opts;
 };
 
-Status ColumnReader::_check_complex_type_matched(const starrocks::TypeDescriptor& parquet_field_type,
-                                                 const starrocks::TypeDescriptor& column_type) {
-    // We only checked about complex types, because we will not set primitive type in ParquetField after schema parsed
-    if (parquet_field_type.is_complex_type() || column_type.is_complex_type()) {
-        if (UNLIKELY(parquet_field_type.type != column_type.type)) {
-            return Status::InternalError(fmt::format("Parquet parsed type {} is not matched the column type {}",
-                                                     parquet_field_type.debug_string(), column_type.debug_string()));
-        }
-    }
-    return Status::OK();
-}
-
 void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                      bool case_sensitive, std::vector<int32_t>& pos) {
     DCHECK(field.type.type == LogicalType::TYPE_STRUCT);
@@ -574,8 +562,6 @@ void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, 
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
-//    RETURN_IF_ERROR(_check_complex_type_matched(field->type, col_type));
-
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
@@ -627,8 +613,6 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output) {
-//    RETURN_IF_ERROR(_check_complex_type_matched(field->type, col_type));
-
     DCHECK(iceberg_schema_field != nullptr);
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
