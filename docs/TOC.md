@@ -652,6 +652,8 @@
     + Struct Functions
       + [named_struct](./sql-reference/sql-functions/struct-functions/named_struct.md)
       + [row](./sql-reference/sql-functions/struct-functions/row.md)
+    + Table Functions
+      + [generate_series](./sql-reference/sql-functions/table-functions/generate_series.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
