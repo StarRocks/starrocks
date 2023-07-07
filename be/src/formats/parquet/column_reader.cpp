@@ -574,7 +574,7 @@ void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, 
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
-    RETURN_IF_ERROR(_check_complex_type_matched(field->type, col_type));
+//    RETURN_IF_ERROR(_check_complex_type_matched(field->type, col_type));
 
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
@@ -627,7 +627,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output) {
-    RETURN_IF_ERROR(_check_complex_type_matched(field->type, col_type));
+//    RETURN_IF_ERROR(_check_complex_type_matched(field->type, col_type));
 
     DCHECK(iceberg_schema_field != nullptr);
     if (field->type.type == LogicalType::TYPE_ARRAY) {

@@ -81,6 +81,8 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
                 "./be/test/formats/parquet/test_data/column_converter/fixed_len_byte_array.parquet");
         // parquet column reader: not supported convert from parquet `BYTE_ARRAY` to `DECIMAL128`
         unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/column_converter/byte_array.parquet");
+        // corrupted file
+        unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/decimal.parquet");
     }
     // We don't support below files in get_next phase, it's illegal parquet files
     std::set<std::string> unsupported_paths_get_next;
@@ -98,11 +100,12 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
             ASSERT_FALSE(st.ok());
         } else {
             ASSERT_TRUE(st.ok());
+            std::cout << path << std::endl;
             auto res = reader.debug(1);
             if (unsupported_paths_get_next.find(path) != unsupported_paths_get_next.end()) {
                 ASSERT_FALSE(res.ok());
             } else {
-                ASSERT_TRUE(res.ok());
+                ASSERT_TRUE(res.ok()) << res.status().get_error_msg();
             }
             st = res.status();
         }

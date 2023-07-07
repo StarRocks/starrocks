@@ -33,6 +33,7 @@ public:
               _scan_stats(std::make_shared<HdfsScanStats>()) {
         _scanner_ctx->timezone = "Asia/Shanghai";
         _scanner_ctx->stats = _scan_stats.get();
+        _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     }
     ~ParquetCLIReader() = default;
 
@@ -47,6 +48,7 @@ public:
             HdfsScannerContext ctx;
             HdfsScanStats stats;
             ctx.stats = &stats;
+            ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
             RETURN_IF_ERROR(reader->init(&ctx));
             file_metadata = reader->get_file_metadata();
         }
