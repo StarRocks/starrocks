@@ -393,6 +393,8 @@ class ParserTest {
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
                 ");", "the most similar input is {<EOF>, ';'}"));
+        arguments.add(Arguments.of("create MATERIALIZED VIEW  as select * from (t1 join t2);",
+                "the most similar input is {a legal identifier}."));
         return arguments.stream();
     }
 
