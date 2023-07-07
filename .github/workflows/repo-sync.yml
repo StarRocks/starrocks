@@ -18,6 +18,7 @@ on:
         type: string
         default: 'main'
       DEBUG:
+        description: 'DEBUG REPO'
         required: true
         type: boolean
         default: false
@@ -136,11 +137,7 @@ jobs:
         id: cherry-pick
         run: |
           cd ${{ github.workspace }}/elastic-service
-          ./lib/run_cherry_pick.sh -c ${{ inputs.COMMIT_ID }}
-          cd ${{ github.workspace }}
-          rm -rf ${{ github.workspace }}/elastic-service
-          title="${{ needs.pr-info.outputs.title }}"
-          git commit -m "${title//\\\"/\"}" --allow-empty
+          ./lib/run_cherry_pick.sh --pr ${{ inputs.PR_ID }}
           git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
 
       - uses: repo-sync/pull-request@v2.12.1
