@@ -34,6 +34,7 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <memory>
 #include <queue>
 #include <set>
@@ -58,18 +59,11 @@
 #include "util/ref_count_closure.h"
 #include "util/reusable_closure.h"
 #include "util/threadpool.h"
+=======
+#include "exec/tablet_sink_sender.h"
+>>>>>>> 59dc2483a ([Enhancement] Support colocate sender in tablet sink (#25388))
 
-namespace starrocks {
-
-class Bitmap;
-class MemTracker;
-class RuntimeProfile;
-class RowDescriptor;
-class TupleDescriptor;
-class ExprContext;
-class TExpr;
-
-namespace stream_load {
+namespace starrocks::stream_load {
 
 class OlapTableSink;
 
@@ -344,7 +338,7 @@ private:
     // This method will change _validate_selection
     void _validate_data(RuntimeState* state, Chunk* chunk);
 
-    Status _init_node_channels(RuntimeState* state);
+    Status _init_node_channels(RuntimeState* state, IndexIdToTabletBEMap& index_id_to_tablet_be_map);
 
     // When compute buckect hash, we should use real string for char column.
     // So we need to pad char column after compute buckect hash.
@@ -491,7 +485,7 @@ private:
     // BeId
     std::set<int64_t> _failed_channels;
     // enable colocate index
-    bool _colocate_mv_index = config::enable_load_colocate_mv;
+    bool _colocate_mv_index{false};
 
     bool _enable_replicated_storage = false;
 
@@ -519,5 +513,4 @@ private:
     Status _automatic_partition_status;
 };
 
-} // namespace stream_load
-} // namespace starrocks
+} // namespace starrocks::stream_load
