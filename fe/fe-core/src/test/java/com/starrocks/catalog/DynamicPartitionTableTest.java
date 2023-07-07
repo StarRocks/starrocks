@@ -109,10 +109,10 @@ public class DynamicPartitionTableTest {
     }
 
     @Test
-    public void testMissPrefix() throws Exception {
+    public void testMissTimeUnit() throws Exception {
         expectedException.expect(DdlException.class);
-        expectedException.expectMessage("Must assign dynamic_partition.prefix properties");
-        starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_prefix` (\n" +
+        expectedException.expectMessage("Must assign dynamic_partition.time_unit properties");
+        starRocksAssert.withTable("CREATE TABLE test.`dynamic_partition_time_unit` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
                 "  `k2` int NULL COMMENT \"\",\n" +
                 "  `k3` smallint NULL COMMENT \"\",\n" +
@@ -133,7 +133,7 @@ public class DynamicPartitionTableTest {
                 "\"dynamic_partition.enable\" = \"true\",\n" +
                 "\"dynamic_partition.start\" = \"-3\",\n" +
                 "\"dynamic_partition.end\" = \"3\",\n" +
-                "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
                 "\"dynamic_partition.buckets\" = \"1\"\n" +
                 ");");
     }
