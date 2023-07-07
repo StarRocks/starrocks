@@ -282,7 +282,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                   file_column_id.field_id);
     }
     default: {
-        return arrow::Status::TypeError(fmt::format("Type {} is not supported", type_desc.debug_string()));
+        return arrow::Status::TypeError(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
     }
     }
 }
