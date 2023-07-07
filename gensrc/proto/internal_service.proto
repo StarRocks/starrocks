@@ -148,6 +148,7 @@ message PTabletInfo {
     repeated string invalid_dict_cache_columns = 3;
     repeated string valid_dict_cache_columns = 4;
     optional int64 node_id = 5;
+    repeated int64 valid_dict_collected_version = 6;
 }
 
 // Open a tablet writer.

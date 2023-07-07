@@ -156,9 +156,9 @@ public:
 
     virtual RowsetId rowset_id() { return _context.rowset_id; }
 
-    virtual const DictColumnsValidMap& global_dict_columns_valid_info() const {
-        return _global_dict_columns_valid_info;
-    }
+    const DictColumnsValidMap& global_dict_columns_valid_info() const { return _global_dict_columns_valid_info; }
+
+    const GlobalDictByNameMaps* rowset_global_dicts() const { return _writer_options.global_dicts; }
 
 private:
     Status _flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
