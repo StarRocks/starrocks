@@ -81,14 +81,14 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
                 "./be/test/formats/parquet/test_data/column_converter/fixed_len_byte_array.parquet");
         // parquet column reader: not supported convert from parquet `BYTE_ARRAY` to `DECIMAL128`
         unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/column_converter/byte_array.parquet");
-        // corrupted file
-        unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/decimal.parquet");
     }
     // We don't support below files in get_next phase, it's illegal parquet files
     std::set<std::string> unsupported_paths_get_next;
     {
         unsupported_paths_get_next.emplace(
                 "./be/test/exec/test_data/parquet_scanner/type_mismatch_decode_min_max.parquet");
+        // corrupted file
+        unsupported_paths_get_next.emplace("./be/test/exec/test_data/parquet_data/decimal.parquet");
     }
     traverse_directory_add_parquet(paths, "./be/test/exec/test_data/parquet_data", ".parquet");
     traverse_directory_add_parquet(paths, "./be/test/exec/test_data/parquet_scanner", ".parquet");
@@ -100,7 +100,6 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
             ASSERT_FALSE(st.ok());
         } else {
             ASSERT_TRUE(st.ok());
-            std::cout << path << std::endl;
             auto res = reader.debug(1);
             if (unsupported_paths_get_next.find(path) != unsupported_paths_get_next.end()) {
                 ASSERT_FALSE(res.ok());
@@ -109,23 +108,27 @@ TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
             }
             st = res.status();
         }
-        print_res(path, st);
+        // print_res(path, st);
     }
 }
 
 TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
     std::vector<std::string> read_paths;
-    { traverse_directory_add_parquet(read_paths, "./be/test/formats/parquet/test_data/arrow_fuzzing/fuzzing/"); }
+    {
+        traverse_directory_add_parquet(read_paths, "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/");
+        traverse_directory_add_parquet(read_paths, "./be/test/formats/parquet/arrow_fuzzing_data/generated_simple_numerics/");
+        read_paths.emplace_back("./be/test/formats/parquet/arrow_fuzzing_data/ARROW-17100.parquet");
+    }
     std::set<std::string> ignore_dcheck_paths;
 #ifndef NDEBUG
     {
         // ignore below files in DEBUG mode, because below code will consume lots of memory and face failed with DCHECK,
         // so we only run below two files in Release mode(It will not occur be crashed).
         ignore_dcheck_paths.emplace(
-                "./be/test/formats/parquet/test_data/arrow_fuzzing/fuzzing/"
+                "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/"
                 "clusterfuzz-testcase-minimized-parquet-arrow-fuzz-4819270771146752");
         ignore_dcheck_paths.emplace(
-                "./be/test/formats/parquet/test_data/arrow_fuzzing/fuzzing/"
+                "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/"
                 "clusterfuzz-testcase-minimized-parquet-arrow-fuzz-5667493425446912");
     }
 #endif
@@ -139,7 +142,7 @@ TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
             auto res = reader.debug(1);
             st = res.status();
         }
-        print_res(path, st);
+        // print_res(path, st);
     }
 }
 } // namespace starrocks::parquet
