@@ -141,9 +141,9 @@ the number of buckets: By default, StarRocks automatically sets the number of bu
 
 #### Random bucketing (since v3.1)
 
-For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. Additionally, there is no need to set bucketing columns during table creation, simplifying the CREATE TABLE statement. It is suitable for scenarios with relatively small data sizes and low requirements for query performance.
+For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. This method is suitable for scenarios with small data volumes and low requirements for query performance. If you do not set a bucketing method, StarRocks uses random bucketing by default and automatically determines the number of buckets.
 
-However, note that random bucketing may not be suitable for scenarios that involve queries and aggregations based on specific columns. In such cases, hash bucketing may be more appropriate as it can store similar data in the same bucket, facilitating data access and processing.
+However, note that the query performance provided by random bucketing may not be ideal when you query massive amounts of data and frequently use certain columns as conditional columns. In this scenario, it is recommended to use [hash bucketing](#hash-bucketing). Because only a small number of buckets need to be scanned and computed, significantly improving query performance.
 
 **Precautions**
 
@@ -151,7 +151,7 @@ However, note that random bucketing may not be suitable for scenarios that invol
 - You cannot specify a table bucketed randomly to belong to a [Colocation Group](../using_starrocks/Colocate_join.md).
 - [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
 
-In the following example, a table `site_access1` is created by using random bucketing, and the system automatically sets the number of buckets.
+the following example does not include the DISTRIBUTED BY xxx clause, so StarRocks uses random bucketing by default and automatically determines the number of buckets.
 
 ```SQL
 CREATE TABLE site_access1(
@@ -180,7 +180,16 @@ DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
 
 #### Hash bucketing
 
-Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
+Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. In hash bucketing, the value of the bucketing column is used as input to calculate a hash value by using the hash function, and then the data is assigned to the corresponding bucket based on that hash value.
+
+**Advantages**
+
+- Improved query performance: Rows with the same bucketing key value are assigned to the same bucket, reducing the amount of data scanned during queries.
+- Even distribution of data: By using the high-cardinality column (with a large number of unique values) as the bucketing key, data can be more evenly distributed across each bucket.
+
+**Choose the bucketing key**
+
+We recommend that you choose the column that satisfy the following two requirements as the bucketing key.
 
 - high cardinality column such as ID
 - column that often used as a filter in queries
@@ -197,13 +206,15 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 
 **Precautions**
 
-- **When  a table is created, you must specify the bucketing columns**.
+- **When a table is created, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
 - Bucketing columns cannot be modified after they are specified.
 
 **Examples**
 
-The following statement creates a table named `site_access`.
+The following statement creates a table named `site_access`. the table uses `site_id` as the bucketing column because. When the bucketing column `site_id` is used as a filter in queries, StarRocks only scans the relevant tablets, which greatly improves query performance.
+
+In the following example, the `site_access` table uses `site_id` as the bucketing key because `site_id` is a high-cardinality column and is always used as a filter in queries. so using site_id as the bucketing key, StarRocks only needs to scan the relevant buckets during querying.
 
 ```SQL
 CREATE TABLE site_access(
@@ -222,8 +233,6 @@ PARTITION BY RANGE(event_day)
 )
 DISTRIBUTED BY HASH(site_id);
 ```
-
-In this example, `site_access` uses `site_id` as the bucketing column because this column is always used as a filter in queries. When the bucketing column is used as a filter in queries, StarRocks only scans the relevant tablets, which greatly improves query performance.
 
 Suppose each partition of table `site_access` has 10 buckets. In the following query, 9 out of 10 buckets are pruned, so StarRocks only needs to scan 1/10 of the data in the `site_access` table:
 
