@@ -2702,25 +2702,31 @@ public class LocalMetastore implements ConnectorMetadata {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
             asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
-            boolean randomizeStart = true;
+            int randomizeStart = 0;
             if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START)) {
-                randomizeStart =
-                        VariableMgr.parseBooleanVariable(
-                                properties.get((PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START)));
+                try {
+                    randomizeStart = Integer.parseInt(properties.get((PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START)));
+                } catch (NumberFormatException e) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                            PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START + " only accept integer as parameter");
+                }
                 // remove this transient variable
                 properties.remove(PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START);
             }
-            if (asyncRefreshSchemeDesc.isDefineStartTime() || !randomizeStart) {
+            if (asyncRefreshSchemeDesc.isDefineStartTime() || randomizeStart == -1) {
                 asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
             } else if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
                 // randomize the start time if not specified manually, to avoid refresh conflicts
+                // default random interval is min(300s, INTERVAL/2)
+                // user could specify it through mv_randomize_start
                 IntervalLiteral interval = asyncRefreshSchemeDesc.getIntervalLiteral();
                 long period = ((IntLiteral) interval.getValue()).getLongValue();
                 TimeUnit timeUnit =
                         TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
                 long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
                 long currentTimeSecond = Utils.getLongFromDateTime(LocalDateTime.now());
-                long random = ThreadLocalRandom.current().nextLong(Math.min(300, intervalSeconds / 2));
+                long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
+                long random = ThreadLocalRandom.current().nextLong(randomInterval);
                 long randomizedStart = currentTimeSecond + random;
 
                 asyncRefreshContext.setStartTime(randomizedStart);
