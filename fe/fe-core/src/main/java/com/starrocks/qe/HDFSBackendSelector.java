@@ -223,7 +223,7 @@ public class HDFSBackendSelector implements BackendSelector {
         long avgScanRangeBytes = computeAverageScanRangeBytes();
         long maxImbalanceBytes = avgScanRangeBytes * kMaxImbalanceRatio;
 
-        for (ComputeNode computeNode : workerProvider.getWorkersPreferringComputeNode()) {
+        for (ComputeNode computeNode : workerProvider.getWorkers()) {
             assignedScansPerComputeNode.put(computeNode, 0L);
             hostToBackends.put(computeNode.getHost(), computeNode);
         }

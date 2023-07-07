@@ -297,7 +297,7 @@ public class WorkerProviderTest {
                                                                      Map<Long, C> availableId2Worker) {
         for (long id = -1; id < 16; id++) {
             ComputeNode backend = workerProvider.getBackend(id);
-            boolean isContained = workerProvider.containsBackend(id);
+            boolean isContained = workerProvider.isBackendAvailable(id);
             if (!availableId2Worker.containsKey(id)) {
                 Assert.assertNull(backend);
                 Assert.assertFalse(isContained);
@@ -322,16 +322,16 @@ public class WorkerProviderTest {
 
         workerProvider =
                 new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
-        assertThat(workerProvider.getWorkersPreferringComputeNode())
+        assertThat(workerProvider.getWorkers())
                 .containsOnlyOnceElementsOf(availableId2ComputeNode.values());
 
         workerProvider = new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true);
-        assertThat(workerProvider.getWorkersPreferringComputeNode())
+        assertThat(workerProvider.getWorkers())
                 .containsOnlyOnceElementsOf(availableId2Backend.values());
 
         workerProvider =
                 new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, false);
-        assertThat(workerProvider.getWorkersPreferringComputeNode())
+        assertThat(workerProvider.getWorkers())
                 .containsOnlyOnceElementsOf(availableId2ComputeNode.values());
     }
 

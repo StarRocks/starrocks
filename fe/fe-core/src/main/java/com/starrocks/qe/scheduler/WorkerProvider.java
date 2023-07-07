@@ -133,9 +133,12 @@ public class WorkerProvider {
             LOG.debug("idToComputeNode: {}", idToComputeNode);
         }
 
+        // Backends and compute nodes are identical in the SHARED_DATA mode.
+        preferComputeNode = preferComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA;
+
         return new WorkerProvider(idToBackend, idToComputeNode,
                 filterAvailableWorkers(idToBackend), filterAvailableWorkers(idToComputeNode),
-                preferComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA);
+                preferComputeNode);
     }
 
     /**
@@ -200,28 +203,16 @@ public class WorkerProvider {
         return addrs;
     }
 
-    public boolean containsBackend(Long backendID) {
-        return getBackend(backendID) != null;
-    }
-
-    public ComputeNode getBackend(Long backendID) {
-        return availableID2Backend.get(backendID);
-    }
-
-    public ComputeNode getWorker(Long workerID) {
-        ComputeNode worker = availableID2Backend.get(workerID);
-        if (worker != null) {
-            return worker;
-        }
-        return availableID2ComputeNode.get(workerID);
-    }
-
-    public Collection<ComputeNode> getWorkersPreferringComputeNode() {
+    public Collection<ComputeNode> getWorkers() {
         if (hasComputeNode) {
             return availableID2ComputeNode.values();
         } else {
             return ImmutableList.copyOf(availableID2Backend.values());
         }
+    }
+
+    public boolean isBackendAvailable(Long backendID) {
+        return getBackend(backendID) != null;
     }
 
     public boolean isUsingWorker(Long workerID) {
@@ -255,6 +246,14 @@ public class WorkerProvider {
                 FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode));
     }
 
+    public void recordUsedWorker(Long workerID, TNetworkAddress beAddr) {
+        if (usedWorkerIDs.add(workerID)) {
+            ComputeNode worker = getWorker(workerID);
+            beAddr2UsedWorker.put(beAddr, worker);
+            beAddr2HttpAddr.put(beAddr, worker.getHttpAddress());
+        }
+    }
+
     @Override
     public String toString() {
         return toString(usedComputeNode);
@@ -264,7 +263,21 @@ public class WorkerProvider {
         return chooseComputeNode ? computeNodesToString() : backendsToString();
     }
 
-    public String computeNodesToString() {
+    @VisibleForTesting
+    ComputeNode getBackend(Long backendID) {
+        return availableID2Backend.get(backendID);
+    }
+
+    @VisibleForTesting
+    ComputeNode getWorker(Long workerID) {
+        ComputeNode worker = availableID2Backend.get(workerID);
+        if (worker != null) {
+            return worker;
+        }
+        return availableID2ComputeNode.get(workerID);
+    }
+
+    private String computeNodesToString() {
         StringBuilder out = new StringBuilder("compute node: ");
         id2ComputeNode.forEach((backendID, backend) -> out.append(
                 String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
@@ -272,20 +285,12 @@ public class WorkerProvider {
         return out.toString();
     }
 
-    public String backendsToString() {
+    private String backendsToString() {
         StringBuilder out = new StringBuilder("backend: ");
         id2Backend.forEach((backendID, backend) -> out.append(
                 String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
                         backend.isAlive(), SimpleScheduler.isInBlacklist(backendID))));
         return out.toString();
-    }
-
-    public void recordUsedWorker(Long workerID, TNetworkAddress beAddr) {
-        if (usedWorkerIDs.add(workerID)) {
-            ComputeNode worker = getWorker(workerID);
-            beAddr2UsedWorker.put(beAddr, worker);
-            beAddr2HttpAddr.put(beAddr, worker.getHttpAddress());
-        }
     }
 
     @VisibleForTesting

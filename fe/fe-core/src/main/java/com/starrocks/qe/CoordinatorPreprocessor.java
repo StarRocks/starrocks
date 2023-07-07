@@ -1743,7 +1743,7 @@ public class CoordinatorPreprocessor {
                 Long minAssignedBytes = Long.MAX_VALUE;
                 TScanRangeLocation minLocation = null;
                 for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
-                    if (!workerProvider.containsBackend(location.getBackend_id())) {
+                    if (!workerProvider.isBackendAvailable(location.getBackend_id())) {
                         continue;
                     }
 
@@ -1925,7 +1925,7 @@ public class CoordinatorPreprocessor {
             int maxBucketNum = Integer.MAX_VALUE;
             long buckendId = Long.MAX_VALUE;
             for (TScanRangeLocation location : seqLocation.locations) {
-                if (!workerProvider.containsBackend(location.getBackend_id())) {
+                if (!workerProvider.isBackendAvailable(location.getBackend_id())) {
                     continue;
                 }
 
