@@ -1581,7 +1581,7 @@ public class LocalMetastore implements ConnectorMetadata {
             indexMap.put(indexId, rollup);
         }
 
-        DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
+        DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
         table.inferDistribution(distributionInfo);
 
         // create shard group
