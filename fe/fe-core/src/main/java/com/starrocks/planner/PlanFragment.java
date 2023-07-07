@@ -693,6 +693,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public void reset() {
-
+        // Do nothing.
     }
 }

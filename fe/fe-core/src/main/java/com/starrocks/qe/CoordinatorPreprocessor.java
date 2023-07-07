@@ -23,6 +23,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -321,7 +322,6 @@ public class CoordinatorPreprocessor {
         fragments.forEach(PlanFragment::reset);
     }
 
-    // TODO(lzh)
     @VisibleForTesting
     void prepareFragments() {
         for (PlanFragment fragment : fragments) {
@@ -875,7 +875,7 @@ public class CoordinatorPreprocessor {
     // Populates scan_range_assignment_.
     // <fragment, <server, nodeId>>
     @VisibleForTesting
-    void computeScanRangeAssignment() throws Exception {
+    void computeScanRangeAssignment() throws UserException {
         SessionVariable sv = connectContext.getSessionVariable();
 
         // set scan ranges/locations for scan nodes
@@ -914,11 +914,11 @@ public class CoordinatorPreprocessor {
                     selector.computeScanRangeAssignment();
                     replicateScanIds.add(scanNode.getId().asInt());
                 } else if (hasColocate || hasBucket) {
-                    ColocatedBackendSelector.Assignment colocatedAssignment = fragmentExecParams.colocatedAssignment;
-                    if (colocatedAssignment == null) {
-                        colocatedAssignment = new ColocatedBackendSelector.Assignment((OlapScanNode) scanNode);
-                        fragmentExecParams.colocatedAssignment = colocatedAssignment;
+                    if (fragmentExecParams.colocatedAssignment == null) {
+                        fragmentExecParams.colocatedAssignment =
+                                new ColocatedBackendSelector.Assignment((OlapScanNode) scanNode);
                     }
+                    ColocatedBackendSelector.Assignment colocatedAssignment = fragmentExecParams.colocatedAssignment;
                     boolean isRightOrFullBucketShuffleFragment =
                             rightOrFullBucketShuffleFragmentIds.contains(scanNode.getFragmentId().asInt());
                     BackendSelector selector = new ColocatedBackendSelector((OlapScanNode) scanNode, assignment,
@@ -1313,7 +1313,7 @@ public class CoordinatorPreprocessor {
 
         public List<FInstanceExecParam> instanceExecParams = Lists.newArrayList();
         public FragmentScanRangeAssignment scanRangeAssignment = new FragmentScanRangeAssignment();
-        public ColocatedBackendSelector.Assignment colocatedAssignment = null;
+        private ColocatedBackendSelector.Assignment colocatedAssignment = null;
         TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
         public boolean bucketSeqToInstanceForFilterIsSet = false;
 

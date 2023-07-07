@@ -41,7 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
+import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
 
 public class WorkerProvider {
@@ -326,11 +326,11 @@ public class WorkerProvider {
     }
 
     private static <C extends ComputeNode> C getNextWorker(ImmutableMap<Long, C> workers,
-                                                           Supplier<Integer> getNextWorkerNodeIndex) {
+                                                           IntSupplier getNextWorkerNodeIndex) {
         if (workers.isEmpty()) {
             return null;
         }
-        int index = getNextWorkerNodeIndex.get() % workers.size();
+        int index = getNextWorkerNodeIndex.getAsInt() % workers.size();
         return workers.values().asList().get(index);
     }
 

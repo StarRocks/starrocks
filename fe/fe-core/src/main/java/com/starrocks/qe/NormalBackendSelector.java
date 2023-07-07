@@ -27,7 +27,6 @@ import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 
@@ -65,14 +64,10 @@ public class NormalBackendSelector implements BackendSelector {
         // sort the scan ranges by row count
         // only sort the scan range when it is load job
         // but when there are too many scan ranges, we will not sort them since performance issue
-        if (locations.size() < 10240 && locations.size() > 0 && isEnableScheduleByRowCnt(locations.get(0))) {
-            locations.sort(new Comparator<TScanRangeLocations>() {
-                @Override
-                public int compare(TScanRangeLocations l, TScanRangeLocations r) {
-                    return Long.compare(r.getScan_range().getInternal_scan_range().getRow_count(),
-                            l.getScan_range().getInternal_scan_range().getRow_count());
-                }
-            });
+        if (locations.size() < 10240 && !locations.isEmpty() && isEnableScheduleByRowCnt(locations.get(0))) {
+            locations.sort((lhs, rhs) -> Long.compare(
+                    rhs.getScan_range().getInternal_scan_range().getRow_count(),
+                    lhs.getScan_range().getInternal_scan_range().getRow_count()));
         }
 
         for (TScanRangeLocations scanRangeLocations : locations) {

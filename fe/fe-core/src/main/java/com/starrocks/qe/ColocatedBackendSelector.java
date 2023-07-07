@@ -133,14 +133,14 @@ public class ColocatedBackendSelector implements BackendSelector {
         private final int bucketNum;
 
         public Assignment(OlapScanNode scanNode) {
-            int bucketNum = scanNode.getOlapTable().getDefaultDistributionInfo().getBucketNum();
+            int curBucketNum = scanNode.getOlapTable().getDefaultDistributionInfo().getBucketNum();
             if (scanNode.getSelectedPartitionIds().size() <= 1) {
                 for (Long pid : scanNode.getSelectedPartitionIds()) {
-                    bucketNum = scanNode.getOlapTable().getPartition(pid).getDistributionInfo().getBucketNum();
+                    curBucketNum = scanNode.getOlapTable().getPartition(pid).getDistributionInfo().getBucketNum();
                 }
             }
 
-            this.bucketNum = bucketNum;
+            this.bucketNum = curBucketNum;
         }
 
         public Map<Integer, TNetworkAddress> getSeqToAddress() {
