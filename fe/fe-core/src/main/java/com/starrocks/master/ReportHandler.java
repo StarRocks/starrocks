@@ -992,7 +992,8 @@ public class ReportHandler extends Daemon {
 
                     for (TTabletInfo tTabletInfo : backendTablets.get(tabletId).getTablet_infos()) {
                         if (tTabletInfo.getSchema_hash() == schemaHash) {
-                            if (tTabletInfo.isSetUsed() && !tTabletInfo.isUsed()) {
+                            if ((tTabletInfo.isSetUsed() && !tTabletInfo.isUsed())
+                                    || (tTabletInfo.getVersion() < replica.getLastReportVersion())) {
                                 if (replica.setBad(true)) {
                                     LOG.warn("set bad for replica {} of tablet {} on backend {}",
                                             replica.getId(), tabletId, backendId);
@@ -1023,6 +1024,8 @@ public class ReportHandler extends Daemon {
                                 // no need to write edit log, if FE crashed, this will be recovered again
                                 break;
                             }
+
+
                         }
                     }
                 }
