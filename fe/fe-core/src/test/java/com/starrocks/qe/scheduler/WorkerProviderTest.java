@@ -344,9 +344,9 @@ public class WorkerProviderTest {
 
     public static void testUsingWorkerHelper(WorkerProvider workerProvider, ComputeNode worker) {
         Assert.assertTrue(workerProvider.isUsingWorker(worker.getId()));
-        Assert.assertEquals(worker.getHttpAddress(), workerProvider.getUsingHttpAddrByAddr(worker.getAddress()));
-        Assert.assertEquals(worker, workerProvider.getUsingWorkerByAddr(worker.getAddress()));
-        assertThat(workerProvider.getUsingWorkerIDs()).contains(worker.getId());
-        assertThat(workerProvider.getUsingWorkerAddrs()).contains(worker.getAddress());
+        Assert.assertEquals(worker.getHttpAddress(), workerProvider.getUsedHttpAddrByBeAddr(worker.getAddress()));
+        Assert.assertEquals(worker, workerProvider.getUsedWorkerByBeAddr(worker.getAddress()));
+        assertThat(workerProvider.getUsedWorkerIDs()).contains(worker.getId());
+        assertThat(workerProvider.getUsedWorkerBeAddrs()).contains(worker.getAddress());
     }
 }

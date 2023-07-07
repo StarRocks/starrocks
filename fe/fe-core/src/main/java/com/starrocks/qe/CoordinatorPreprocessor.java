@@ -287,7 +287,7 @@ public class CoordinatorPreprocessor {
     }
 
     public TNetworkAddress getBrpcAddress(TNetworkAddress beAddress) {
-        return workerProvider.getUsingWorkerByAddr(beAddress).getBrpcAddress();
+        return workerProvider.getUsedWorkerByBeAddr(beAddress).getBrpcAddress();
     }
 
     public WorkerProvider getWorkerProvider() {
@@ -612,7 +612,7 @@ public class CoordinatorPreprocessor {
                             if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
                                 for (TScanRangeParams scanRange : scanRangeParams) {
                                     int channelId = scanRange.scan_range.broker_scan_range.channel_id;
-                                    TNetworkAddress beHttpAddress = workerProvider.getUsingHttpAddrByAddr(key);
+                                    TNetworkAddress beHttpAddress = workerProvider.getUsedHttpAddrByBeAddr(key);
                                     channelIdToBEHTTP.put(channelId, beHttpAddress);
                                     channelIdToBEPort.put(channelId, key);
                                 }
