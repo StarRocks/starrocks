@@ -4,7 +4,7 @@ This topic describes how to understand, create, use, and manage an asynchronous 
 
 Compared with synchronous materialized views, asynchronous materialized views support multi-table join and more aggregate functions. The refresh of asynchronous materialized views can be triggered manually or by scheduled tasks. You can also refresh some of the partitions instead of the whole materialized view, greatly reducing the cost of refresh. In addition, asynchronous materialized views support a variety of query rewrite scenarios, allowing automatic, transparent query acceleration.
 
-For the scenario and usage of the synchronized materialized views (Rollup), see [Synchronous materialized view (Rollup)](../using_starrocks/Materialized_view-single_table.md).
+For the scenario and usage of the synchronous materialized views (Rollup), see [Synchronous materialized view (Rollup)](../using_starrocks/Materialized_view-single_table.md).
 
 ## Overview
 
@@ -16,7 +16,7 @@ Additionally, asynchronous materialized views are especially useful for building
 
 ### Understand materialized views in StarRocks
 
-StarRocks v2.3 and earlier versions provided a synchronized materialized view that can be built only on a single table. Synchronized materialized views, or the Rollup, retain higher data freshness and lower refreshing costs. However, compared to asynchronous materialized views supported from v2.4 onwards, synchronized materialized views have many limitations. You have limited choices of aggregation operators when you want to build a synchronized materialized view to accelerate or rewrite your queries.
+StarRocks v2.3 and earlier versions provided a synchronous materialized view that can be built only on a single table. Synchronous materialized views, or the Rollup, retain higher data freshness and lower refreshing costs. However, compared to asynchronous materialized views supported from v2.4 onwards, synchronous materialized views have many limitations. You have limited choices of aggregation operators when you want to build a synchronous materialized view to accelerate or rewrite your queries.
 
 The following table compares the asynchronous materialized views (ASYNC MV) and the synchronous materialized view (SYNC MV) in StarRocks in the perspective of features that they support:
 
