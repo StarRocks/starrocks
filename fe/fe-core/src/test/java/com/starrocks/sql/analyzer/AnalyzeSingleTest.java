@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
@@ -607,4 +608,61 @@ public class AnalyzeSingleTest {
 
         analyzeFail("create view v as select * from t0,tnotnull", "Duplicate column name 'v1'");
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testColumnAlias() {
+        analyzeFail("select * from test.t0 as t(a,b,c)", "Getting syntax error at line 1, column 26. " +
+                "Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}");
+        analyzeSuccess("select * from (select * from test.t0) as t(a,b,c)");
+        QueryRelation query = ((QueryStatement) analyzeSuccess("select t.a from (select * from test.t0) as t(a,b,c)"))
+                .getQueryRelation();
+        Assert.assertEquals("a", String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t.a,* from (select * from test.t0) as t(a,b,c)"))
+                .getQueryRelation();
+        Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t0.column_0, * from (values(1,2,3)) t0")).getQueryRelation();
+        Assert.assertEquals("column_0,column_0,column_1,column_2",
+                String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t0.a, * from (values(1,2,3)) t0(a,b,c)")).getQueryRelation();
+        Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+    }
+
+    @Test
+    public void testRemoveCommentAndLineSeparator1() {
+        String sql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from    " +
+                "tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeCommentAndLineSeparator(sql);
+        Assert.assertEquals("select /*+SET_VAR(disable_join_reorder=true)*/* from tbl where col = 1 " +
+                "and col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';", res);
+    }
+
+    @Test
+    public void testRemoveCommentAndLineSeparator2() {
+        String invalidSql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from    " +
+                "tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeCommentAndLineSeparator(invalidSql);
+        Assert.assertEquals("select /*+SET_VAR(disable_join_reorder=true)*/* from tbl where col = 1 " +
+                "and col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';`", res);
+    }
+}
+>>>>>>> 6d1d7f728 ([BugFix] remove line separator correctly when log stmt (#26596))
