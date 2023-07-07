@@ -460,7 +460,6 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
             }
         }
     }
-
     _component_pool.clear();
     size_t process_partition_nums = _processing_partitions.size();
     _probers.resize(process_partition_nums);

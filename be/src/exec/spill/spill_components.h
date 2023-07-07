@@ -26,6 +26,7 @@
 #include "exec/spill/options.h"
 #include "exec/spill/partition.h"
 #include "exec/spill/serde.h"
+#include "fmt/format.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 
@@ -195,6 +196,11 @@ struct SpilledPartition : public SpillPartitionInfo {
                 std::make_unique<SpilledPartition>(partition_id + level_elements() * 2)};
     }
 
+    std::string debug_string() {
+        return fmt::format("[id={},bytes={},mem_size={},in_mem={},is_spliting={}]", partition_id, bytes, mem_size,
+                           in_mem, is_spliting);
+    }
+
     bool is_spliting = false;
     std::unique_ptr<RawSpillerWriter> spill_writer;
 };
@@ -225,7 +231,7 @@ public:
     Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    Status flush(RuntimeState* state, bool is_final_flush, TaskExecutor&& executor, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
     Status flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
@@ -296,6 +302,9 @@ private:
 
     void _add_partition(SpilledPartitionPtr&& partition);
     void _remove_partition(const SpilledPartition* partition);
+
+    Status _choose_partitions_to_flush(bool is_final_flush, std::vector<SpilledPartition*>& partitions_need_spilt,
+                                       std::vector<SpilledPartition*>& partitions_need_flush);
 
     size_t _partition_rows() {
         size_t total_rows = 0;
