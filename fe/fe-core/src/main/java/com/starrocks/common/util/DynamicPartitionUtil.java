@@ -226,7 +226,7 @@ public class DynamicPartitionUtil {
                 throw new DdlException("Must assign dynamic_partition.time_unit properties");
             }
             if (Strings.isNullOrEmpty(prefix)) {
-                throw new DdlException("Must assign dynamic_partition.prefix properties");
+                properties.put(DynamicPartitionProperty.PREFIX, DynamicPartitionProperty.NOT_SET_PREFIX);
             }
             if (Strings.isNullOrEmpty(start)) {
                 properties.put(DynamicPartitionProperty.START, String.valueOf(Integer.MIN_VALUE));
