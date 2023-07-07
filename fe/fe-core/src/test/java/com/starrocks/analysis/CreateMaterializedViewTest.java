@@ -44,7 +44,6 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -52,6 +51,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
@@ -1473,7 +1473,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testCreateMvFromMv2() {
+    public void testCreateMvFromMv2() throws Exception {
         String sql1 = "create materialized view base_mv2 " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
@@ -1482,12 +1482,11 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, k2 from tbl1;";
-        try {
+        {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
         }
+
         String sql2 = "create materialized view mv_from_base_mv2 " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
@@ -3040,6 +3039,78 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testRandomizeStart() throws Exception {
+        String sql = "create materialized view mv_test_randomize \n" +
+                "distributed by hash(k1) buckets 10\n" +
+                "refresh async every(interval 1 minute) " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'" +
+                ")\n" +
+                "as " +
+                "select tb1.k1, k2, " +
+                "array<int>[1,2,3] as type_array, " +
+                "map<int, int>{1:2} as type_map, " +
+                "parse_json('{\"a\": 1}') as type_json, " +
+                "row('c') as type_struct, " +
+                "array<json>[parse_json('{}')] as type_array_json " +
+                "from tbl1 tb1;";
+        long currentSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+        starRocksAssert.withMaterializedView(sql);
+        MaterializedView mv = getMv(testDb.getFullName(), "mv_test_randomize");
+        long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
+        Assert.assertTrue("difference is " + (startTime - currentSecond),
+                currentSecond <= startTime && startTime < currentSecond + 60);
+        starRocksAssert.dropMaterializedView("mv_test_randomize");
+
+        // manual disable it
+        sql = "create materialized view mv_test_randomize \n" +
+                "distributed by hash(k1) buckets 10\n" +
+                "refresh async every(interval 1 minute) " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1', " +
+                "'mv_randomize_start' = '-1'" +
+                ")\n" +
+                "as " +
+                "select tb1.k1, k2, " +
+                "array<int>[1,2,3] as type_array, " +
+                "map<int, int>{1:2} as type_map, " +
+                "parse_json('{\"a\": 1}') as type_json, " +
+                "row('c') as type_struct, " +
+                "array<json>[parse_json('{}')] as type_array_json " +
+                "from tbl1 tb1;";
+        currentSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+        starRocksAssert.withMaterializedView(sql);
+        mv = getMv(testDb.getFullName(), "mv_test_randomize");
+        startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
+        Assert.assertEquals(startTime, currentSecond);
+        starRocksAssert.dropMaterializedView("mv_test_randomize");
+
+        // manual specify it
+        sql = "create materialized view mv_test_randomize \n" +
+                "distributed by hash(k1) buckets 10\n" +
+                "refresh async every(interval 1 minute) " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1', " +
+                "'mv_randomize_start' = '2'" +
+                ")\n" +
+                "as " +
+                "select tb1.k1, k2, " +
+                "array<int>[1,2,3] as type_array, " +
+                "map<int, int>{1:2} as type_map, " +
+                "parse_json('{\"a\": 1}') as type_json, " +
+                "row('c') as type_struct, " +
+                "array<json>[parse_json('{}')] as type_array_json " +
+                "from tbl1 tb1;";
+        currentSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+        starRocksAssert.withMaterializedView(sql);
+        mv = getMv(testDb.getFullName(), "mv_test_randomize");
+        startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
+        Assert.assertTrue("difference is " + (startTime - currentSecond),
+                currentSecond <= startTime && startTime < currentSecond + 2);
+        starRocksAssert.dropMaterializedView("mv_test_randomize");
+    }
+
+    @Test
     public void testCreateMvWithTypes() throws Exception {
         String sql = "create materialized view mv_test_types \n" +
                 "distributed by hash(k1) buckets 10\n" +
@@ -3056,5 +3127,6 @@ public class CreateMaterializedViewTest {
                 "from tbl1 tb1;";
         starRocksAssert.withMaterializedView(sql);
     }
+
 }
 
