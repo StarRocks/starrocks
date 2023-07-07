@@ -7,7 +7,7 @@ This SQL statement can：
 - Alter the name of an asynchronous materialized view.
 - Alter the refresh strategy of an asynchronous materialized view.
 - Alter the status of an asynchronous materialized view to active or inactive.
-- Perform atomic exchange between two asynchronous materialized views.
+- Perform an atomic swap between two asynchronous materialized views.
 - Alter the properties of an asynchronous materialized view.
 
   You can use this SQL statement to alter the following properties:
