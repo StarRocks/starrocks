@@ -90,10 +90,6 @@ public:
     }
 
     std::unique_ptr<ColumnConverter> converter;
-
-private:
-    static Status _check_complex_type_matched(const TypeDescriptor& parquet_field_type,
-                                              const TypeDescriptor& column_type);
 };
 
 } // namespace starrocks::parquet
