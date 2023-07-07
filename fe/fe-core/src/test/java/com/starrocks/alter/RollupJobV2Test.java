@@ -260,7 +260,7 @@ public class RollupJobV2Test extends DDLTestBase {
         RollupJobV2 rollupJobV2 = new RollupJobV2(1, 1, 1, "test", 1, 1, 1, "test", "rollup", columns, 1, 1,
                 KeysType.AGG_KEYS, keysCount,
                 new OriginStatement("create materialized view rollup as select bitmap_union(to_bitmap(c1)) from test",
-                        0), "");
+                        0), "", false);
 
         // write rollup job
         rollupJobV2.write(out);
