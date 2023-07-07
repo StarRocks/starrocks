@@ -368,6 +368,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
 
+    public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -941,6 +942,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double selectRatioThreshold = 0.15;
+
+    @VarAttr(name = ENABLE_SIMPLIFY_CASE_WHEN, flag = VariableMgr.INVISIBLE)
+    private boolean enableSimplifyCaseWhen = true;
 
     private int exprChildrenLimit = -1;
 
@@ -1761,6 +1765,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSelectRatioThreshold(double selectRatioThreshold) {
         this.selectRatioThreshold = selectRatioThreshold;
+    }
+
+    public boolean isEnableSimplifyCaseWhen() {
+        return enableSimplifyCaseWhen;
+    }
+
+    public void setEnableSimplifyCaseWhen(boolean enableSimplifyCaseWhen) {
+        this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
     }
 
     // Serialize to thrift object
