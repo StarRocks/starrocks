@@ -29,15 +29,15 @@ CREATE TABLE test_tbl1
     newcol1 DOUBLE AS array_avg(data_array),
     newcol2 String AS json_string(json_query(data_json, "$.a"))
 )
-Primary KEY (id)
+PRIMARY KEY (id)
 DISTRIBUTED BY HASH(id);
 ```
 
 **NOTICE**:
 
 - Generated columns must be defined after regular columns.
-- Aggregate functions cannot be used in the expressions for generated columns. 
-- The expressions for generated column cannot reference other generated columns or auto-increment columns, but the expressions can reference multiple regular columns.
+- Aggregate functions cannot be used in the expressions for generated columns.
+- The expressions for generated column cannot reference other generated columns or [auto-increment columns](./auto_increment.md), but the expressions can reference multiple regular columns.
 - The data type of a generated column must match the data type of the expression's result.
 - Generated columns cannot be created on aggregate tables.
 - Currently, StarRocks's shared-data mode does not support generated columns.
@@ -58,7 +58,7 @@ DISTRIBUTED BY HASH(id);
         data_array ARRAY<int> NOT NULL,
         data_json JSON NOT NULL
     )
-    Primary KEY (id)
+    PRIMARY KEY (id)
     DISTRIBUTED BY HASH(id);
 
     -- Insert a data row.
@@ -161,7 +161,7 @@ You can modify the data type and expression of a generated column.
         newcol1 DOUBLE AS array_avg(data_array),
         newcol2 String AS json_string(json_query(data_json, "$.a"))
     )
-    Primary KEY (id)
+    PRIMARY KEY (id)
     DISTRIBUTED BY HASH(id);
 
     -- Insert a data row.
@@ -243,7 +243,7 @@ If the expression in a query matches the expression of a generated column, the o
         newcol1 DOUBLE AS array_avg(data_array),
         newcol2 String AS json_string(json_query(data_json, "$.a"))
     )
-    Primary KEY (id) DISTRIBUTED BY HASH(id);
+    PRIMARY KEY (id) DISTRIBUTED BY HASH(id);
     ```
 
 2. If you query the data in the table `test_tbl4` by using the `SELECT array_avg(data_array), json_string(json_query(data_json, "$.a")) FROM test_tbl4;` statement, the query involves only the regular columns `data_array` and `data_json`. However, the expressions in the query match the expressions of the generated columns `newcol1` and `newcol2`. In this case, the execution plan shows that the CBO automatically rewrites the query to read the values of the generated columns `newcol1` and `newcol2`.
@@ -288,7 +288,7 @@ To perform partial updates on a Primary Key table, you must specify all the regu
         newcol1 DOUBLE AS array_avg(data_array),
         newcol2 String AS json_string(json_query(data_json, "$.a"))
     )
-    Primary KEY (id)
+    PRIMARY KEY (id)
     DISTRIBUTED BY HASH(id);
 
     -- Insert into a data row.
