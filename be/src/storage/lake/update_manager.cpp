@@ -26,6 +26,7 @@
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
 #include "util/pretty_printer.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -53,9 +54,6 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadata& metadata, Tablet* tablet,
                                                  MetaFileBuilder* builder, int64_t base_version) {
-    std::stringstream cost_str;
-    MonotonicStopWatch watch;
-    watch.start();
     // 1. update primary index
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
@@ -70,8 +68,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     }
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
-    cost_str << " [primary index load] " << watch.elapsed_time();
-    watch.reset();
     // 2. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata.next_rowset_id();
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
@@ -82,12 +78,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     auto& state = state_entry->value();
     RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
     _update_state_cache.update_object_size(state_entry, state.memory_usage());
-    cost_str << " [UpdateStateCache load] " << watch.elapsed_time();
-    watch.reset();
     // 3. rewrite segment file if it is partial update
     RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet));
-    cost_str << " [UpdateStateCache rewrite segment] " << watch.elapsed_time();
-    watch.reset();
     PrimaryIndex::DeletesMap new_deletes;
     for (uint32_t i = 0; i < op_write.rowset().segments_size(); i++) {
         new_deletes[rowset_id + i] = {};
@@ -114,8 +106,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (const auto& one_delete : state.auto_increment_deletes()) {
         index.erase(*one_delete, &new_deletes);
     }
-    cost_str << " [update primary index] " << watch.elapsed_time();
-    watch.reset();
     // 4. generate delvec
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -157,23 +147,19 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         idx++;
     }
     new_deletes.clear();
-    cost_str << " [generate delvecs] " << watch.elapsed_time();
-    watch.reset();
 
     // 5. update TabletMeta and write to meta file
     for (auto&& each : new_del_vecs) {
         builder->append_delvec(each.second, each.first);
     }
     builder->apply_opwrite(op_write);
-    cost_str << " [apply meta] " << watch.elapsed_time();
 
-    LOG(INFO) << strings::Substitute(
-            "lake publish_primary_key_tablet tablet:$0 rowsetid:$1 upserts:$2 deletes:$3 new_del:$4 total_del:$5 "
-            "base_ver:$6 new_ver:$7 txn_id:$8 cost:$9",
-            tablet->id(), rowset_id, upserts.size(), state.deletes().size(), new_del, total_del, base_version,
-            metadata.version(), txn_id, cost_str.str());
+    TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
+    TRACE_COUNTER_INCREMENT("#upserts", upserts.size());
+    TRACE_COUNTER_INCREMENT("#deletes", state.deletes().size());
+    TRACE_COUNTER_INCREMENT("#new_del", new_del);
+    TRACE_COUNTER_INCREMENT("#total_del", total_del);
     _print_memory_stats();
-
     return Status::OK();
 }
 

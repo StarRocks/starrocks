@@ -29,6 +29,7 @@
 #include "util/phmap/phmap.h"
 #include "util/stack_util.h"
 #include "util/time.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -144,6 +145,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
 }
 
 Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("rowset_update_state_load");
     auto span = Tracer::Instance().start_trace_txn_tablet("rowset_update_state_load", rowset->txn_id(),
                                                           tablet->tablet_id());
     _tablet_id = tablet->tablet_id();
