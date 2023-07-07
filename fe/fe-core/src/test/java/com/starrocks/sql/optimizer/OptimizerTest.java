@@ -292,7 +292,6 @@ public class OptimizerTest {
             starRocksAssert.dropMaterializedView("mv_4");
         }
 
-
         {
             starRocksAssert.withMaterializedView("create materialized view mv_5\n" +
                     "PARTITION BY date_trunc(\"month\", k1)\n" +
