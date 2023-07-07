@@ -2,6 +2,7 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -58,6 +59,8 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             return;
         }
         List<String> validDictCacheColumns = Lists.newArrayList();
+        List<Long> dictCollectedVersions = Lists.newArrayList();
+
         long maxPartitionVersionTime = -1;
 
         table.lastVersionUpdateStartTime.set(System.currentTimeMillis());
@@ -134,12 +137,18 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
                 validDictCacheColumns = partitionCommitInfo.getValidDictCacheColumns();
             }
+            if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
+                dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
+            }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }
 
         table.lastVersionUpdateEndTime.set(System.currentTimeMillis());
-        for (String column : validDictCacheColumns) {
-            IDictManager.getInstance().updateGlobalDict(tableId, column, maxPartitionVersionTime);
+        Preconditions.checkState(dictCollectedVersions.size() == validDictCacheColumns.size());
+        for (int i = 0; i < validDictCacheColumns.size(); i++) {
+            String columnName = validDictCacheColumns.get(i);
+            long collectedVersion = dictCollectedVersions.get(i);
+            IDictManager.getInstance().updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
         }
     }
 

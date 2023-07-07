@@ -192,6 +192,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
+    const auto& dict_version = _runtime_state->load_dict_versions();
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());
@@ -199,6 +200,10 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
             auto dict = it->second.first;
             for (auto& item : dict) {
                 slot->add_global_dict_words(item.first.to_string());
+            }
+            auto it_version = dict_version.find(slot->id());
+            if (it_version != dict_version.end()) {
+                slot->set_global_dict_version(it_version->second);
             }
         }
     }
@@ -614,8 +619,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_num++;
     }
 
-    std::unordered_set<std::string> invalid_dict_cache_column_set;
-    std::unordered_set<std::string> valid_dict_cache_column_set;
+    std::vector<int64_t> tablet_ids;
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
@@ -625,28 +629,21 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
             commit_info.backendId = _node_id;
         }
 
-        for (auto& col_name : tablet.invalid_dict_cache_columns()) {
-            invalid_dict_cache_column_set.insert(col_name);
+        for (const auto& col_name : tablet.invalid_dict_cache_columns()) {
+            _valid_dict_cache_info.invalid_dict_cache_column_set.insert(col_name);
         }
 
-        for (auto& col_name : tablet.valid_dict_cache_columns()) {
-            valid_dict_cache_column_set.insert(col_name);
+        for (size_t i = 0; i < tablet.valid_dict_cache_columns_size(); ++i) {
+            int64_t version = 0;
+            // Some BEs don't have this field during grayscale upgrades, and we need to detect this case
+            if (tablet.valid_dict_collected_version_size() == tablet.valid_dict_cache_columns_size()) {
+                version = tablet.valid_dict_collected_version(i);
+            }
+            const auto& col_name = tablet.valid_dict_cache_columns(i);
+            _valid_dict_cache_info.valid_dict_cache_column_set.emplace(std::make_pair(col_name, version));
         }
 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
-    }
-
-    // Only send valid and invalid dict cache columns info once
-    if (!_tablet_commit_infos.empty()) {
-        std::vector<std::string> invalid_dict_cache_columns;
-        invalid_dict_cache_columns.assign(invalid_dict_cache_column_set.begin(), invalid_dict_cache_column_set.end());
-        _tablet_commit_infos[0].__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
-
-        std::vector<std::string> valid_dict_cache_columns;
-        std::set_difference(valid_dict_cache_column_set.begin(), valid_dict_cache_column_set.end(),
-                            invalid_dict_cache_column_set.begin(), invalid_dict_cache_column_set.end(),
-                            std::back_inserter(valid_dict_cache_columns));
-        _tablet_commit_infos[0].__set_valid_dict_cache_columns(valid_dict_cache_columns);
     }
 
     return Status::OK();
