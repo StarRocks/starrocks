@@ -184,11 +184,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
->>>>>>> 371d8df31 ([Enhancement] randomize mv refresh start (#26489))
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionConvertContext;
@@ -3052,24 +3048,10 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
-<<<<<<< HEAD
         PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
         PartitionInfo partitionInfo;
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(
-=======
-        ExpressionPartitionDesc expressionPartitionDesc = stmt.getPartitionExpDesc();
-        if (expressionPartitionDesc != null) {
-            Expr expr = expressionPartitionDesc.getExpr();
-            if (expr instanceof SlotRef) {
-                SlotRef slotRef = (SlotRef) expr;
-                if (slotRef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
-                    return new ListPartitionInfo(PartitionType.LIST,
-                            Collections.singletonList(stmt.getPartitionColumn()));
-                }
-            }
-            return expressionPartitionDesc.toPartitionInfo(
->>>>>>> 371d8df31 ([Enhancement] randomize mv refresh start (#26489))
                     Collections.singletonList(stmt.getPartitionColumn()),
                     Maps.newHashMap(), false);
         } else {
