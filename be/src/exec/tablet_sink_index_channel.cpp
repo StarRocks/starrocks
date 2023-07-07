@@ -14,18 +14,12 @@
 
 #include "exec/tablet_sink_index_channel.h"
 
-#include "agent/master_info.h"
-#include "agent/utils.h"
-#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
 #include "config.h"
-#include "exec/pipeline/query_context.h"
-#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/tablet_sink.h"
-#include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
@@ -33,16 +27,9 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "simd/simd.h"
-#include "storage/storage_engine.h"
-#include "storage/tablet_manager.h"
-#include "types/hll.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
-#include "util/defer_op.h"
-#include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/uid_util.h"
 
 namespace starrocks::stream_load {
 
@@ -869,7 +856,6 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
             auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id());
             return Status::NotFound(msg);
         }
-        std::vector<int64_t> bes;
         for (auto& node_id : location->node_ids) {
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
@@ -884,9 +870,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
                 channel = it->second.get();
             }
             channel->add_tablet(_index_id, tablet);
-            bes.emplace_back(node_id);
         }
-        _tablet_to_be.emplace(tablet.tablet_id(), std::move(bes));
     }
     for (auto& it : _node_channels) {
         RETURN_IF_ERROR(it.second->init(state));
