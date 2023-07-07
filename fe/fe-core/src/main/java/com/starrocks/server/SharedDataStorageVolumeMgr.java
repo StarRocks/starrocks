@@ -104,11 +104,14 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         StorageVolume sv = null;
         if (svKey.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
+            if (sv == null) {
+                throw new DdlException("Default storage volume not exists, it should be created first");
+            }
         } else {
             sv = getStorageVolumeByName(svKey);
-        }
-        if (sv == null) {
-            throw new DdlException("Unknown storage volume \"" + svKey + "\"");
+            if (sv == null) {
+                throw new DdlException("Unknown storage volume \"" + svKey + "\"");
+            }
         }
         return sv.getId();
     }
@@ -162,14 +165,20 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 return dbStorageVolumeId;
             } else {
                 sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
+                if (sv == null) {
+                    throw new DdlException("Builtin storage volume not exists, please check the params in config");
+                }
             }
         } else if (svKey.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
+            if (sv == null) {
+                throw new DdlException("Default storage volume not exists, it should be created first");
+            }
         } else {
             sv = getStorageVolumeByName(svKey);
-        }
-        if (sv == null) {
-            throw new DdlException("Unknown storage volume \"" + svKey + "\"");
+            if (sv == null) {
+                throw new DdlException("Unknown storage volume \"" + svKey + "\"");
+            }
         }
         return sv.getId();
     }
@@ -194,12 +203,12 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                     getStorageVolume(svId) == null) {
                 return false;
             }
+            Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
+            tables.add(tableId);
+            storageVolumeToTables.put(svId, tables);
+            tableToStorageVolume.put(tableId, svId);
+            return true;
         }
-        Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
-        tables.add(tableId);
-        storageVolumeToTables.put(svId, tables);
-        tableToStorageVolume.put(tableId, svId);
-        return true;
     }
 
     @Override

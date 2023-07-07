@@ -219,6 +219,10 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     public String getStorageVolumeName(String svId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            StorageVolume sv = getStorageVolume(svId);
+            if (sv == null) {
+                return "";
+            }
             return getStorageVolume(svId).getName();
         }
     }
