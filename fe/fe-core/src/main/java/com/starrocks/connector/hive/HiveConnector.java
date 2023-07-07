@@ -23,9 +23,13 @@ import java.util.Optional;
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
+<<<<<<< HEAD
     public static final String DUMMY_THRIFT_URI = "thrift://127.0.0.1:9083";
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("glue", "dlf");
     
+=======
+    public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
+>>>>>>> 71040c71ca ([BugFix] Fix create hive/hive catalog with param hive.metastore.type error (#26657))
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
@@ -44,11 +48,23 @@ public class HiveConnector implements Connector {
     }
 
     public void validate() {
+<<<<<<< HEAD
         if (properties.containsKey(HIVE_METASTORE_TYPE)) {
             String hiveMetastoreType = properties.get(HIVE_METASTORE_TYPE).toLowerCase();
             if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
                 throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
             }
+=======
+        String hiveMetastoreType = properties.getOrDefault(HIVE_METASTORE_TYPE, "hive").toLowerCase();
+        if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
+            throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
+        }
+
+        if (hiveMetastoreType.equals("hive")) {
+            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                    "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
+            Util.validateMetastoreUris(hiveMetastoreUris);
+>>>>>>> 71040c71ca ([BugFix] Fix create hive/hive catalog with param hive.metastore.type error (#26657))
         }
         String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
                 "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);

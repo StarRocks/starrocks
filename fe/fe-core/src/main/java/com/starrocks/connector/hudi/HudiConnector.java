@@ -18,6 +18,11 @@ import java.util.Map;
 
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+<<<<<<< HEAD
+=======
+    public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
+    public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
+>>>>>>> 71040c71ca ([BugFix] Fix create hive/hive catalog with param hive.metastore.type error (#26657))
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
@@ -36,9 +41,22 @@ public class HudiConnector implements Connector {
     }
 
     public void validate() {
+<<<<<<< HEAD
         String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
                 "%s must be set in properties when creating hudi catalog", HIVE_METASTORE_URIS);
         Util.validateMetastoreUris(hiveMetastoreUris);
+=======
+        String hiveMetastoreType = properties.getOrDefault(HIVE_METASTORE_TYPE, "hive").toLowerCase();
+        if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
+            throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
+        }
+
+        if (hiveMetastoreType.equals("hive")) {
+            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                    "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
+            Util.validateMetastoreUris(hiveMetastoreUris);
+        }
+>>>>>>> 71040c71ca ([BugFix] Fix create hive/hive catalog with param hive.metastore.type error (#26657))
     }
 
     @Override
