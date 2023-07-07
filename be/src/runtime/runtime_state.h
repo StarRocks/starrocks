@@ -54,6 +54,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "util/logging.h"
+#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -376,6 +377,8 @@ public:
 
     const GlobalDictMaps& get_load_global_dict_map() const;
 
+    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
+
     using GlobalDictLists = std::vector<TGlobalDict>;
     Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     Status init_load_global_dict(const GlobalDictLists& global_dict_list);
@@ -404,7 +407,8 @@ private:
 
     Status create_error_log_file();
 
-    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result);
+    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
+                              phmap::flat_hash_map<uint32_t, int64_t>* version);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -520,6 +524,7 @@ private:
 
     GlobalDictMaps _query_global_dicts;
     GlobalDictMaps _load_global_dicts;
+    phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;

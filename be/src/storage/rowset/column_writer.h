@@ -124,7 +124,8 @@ public:
     // only invalid in the case of global_dict is not nullptr
     // column is not encoding by dict or append new words that
     // not in global_dict, it will return false
-    virtual bool is_global_dict_valid() { return true; }
+    // return false if type is not string column
+    virtual bool is_global_dict_valid() { return false; }
 
     TypeInfo* type_info() const { return _type_info.get(); }
     int length() const { return _length; }
