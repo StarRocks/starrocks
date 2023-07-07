@@ -8,7 +8,8 @@ Spark load 是一种异步导入方式，用户需要通过 MySQL 协议创建 S
 
 > **注意**
 >
-> Spark Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../account-management/GRANT.md) 给用户赋权。
+> - Spark Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../account-management/GRANT.md) 给用户赋权。
+> - 使用 Spark Load 导入数据至 StarRocks 表时，不支持该表分桶列的数据类型为 DATE、DATETIME 或者 DECIMAL。
 
 ## 语法
 
