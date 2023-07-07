@@ -165,6 +165,14 @@ public class FunctionAnalyzer {
             }
         }
 
+        if (fnName.getFunction().equals(FunctionSet.ALLOCATE_SESSION)) {
+            if (!functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException(
+                        "The delta parameter (parameter 2) of ALLOCATE_SESSION must be a constant: "
+                                + functionCallExpr.toSql(), functionCallExpr.getChild(1).getPos());
+            }
+        }
+
         if (FunctionSet.onlyAnalyticUsedFunctions.contains(fnName.getFunction())) {
             if (!functionCallExpr.isAnalyticFnCall()) {
                 throw new SemanticException(fnName.getFunction() + " only used in analytic function", functionCallExpr.getPos());

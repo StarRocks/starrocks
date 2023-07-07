@@ -104,6 +104,7 @@ public class AnalyticExpr extends Expr {
     public static String MAX = "MAX";
     public static String SUM = "SUM";
     public static String COUNT = "COUNT";
+    public static String ALLOCATE_SESSION = "ALLOCATE_SESSION";
 
     // The function of HLL_UNION_AGG can't be used with a window by now.
     public static String HLL_UNION_AGG = "HLL_UNION_AGG";

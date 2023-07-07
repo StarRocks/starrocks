@@ -207,6 +207,11 @@ public:
     }
 
     template <LogicalType LT>
+    static AggregateFunctionPtr MakeAllocateSessionWindowFunction() {
+        return std::make_shared<AllocateSessionWindowFunction<LT>>();
+    }
+
+    template <LogicalType LT>
     static AggregateFunctionPtr MakeHistogramAggregationFunction() {
         return std::make_shared<HistogramAggregationFunction<LT>>();
     }
