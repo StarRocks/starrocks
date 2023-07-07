@@ -14,7 +14,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [key_desc]
 [COMMENT "table comment"]
 [partition_desc]
-distribution_desc
+[distribution_desc]
 [rollup_index]
 [ORDER BY (column_definition1,...)]
 [PROPERTIES ("key"="value", ...)]
@@ -270,7 +270,25 @@ For more information, see [Data distribution](../../../table_design/Data_distrib
 
 ### distribution_desc
 
-This parameter is used to specify the bucketing strategy. Currently, StarRocks supports hash bucketing and random bucketing.
+StarRocks supports hash bucketing and random bucketing. If you do not specify bucketing configurations, StarRocks uses random bucketing and automatically sets the number of buckets by default.
+
+- Random bucketing (since v3.1)
+
+  For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. And if you want StarRocks to automatically determine the number of buckets, you do not need to specify any bucketing configurations. If you choose to manually specify the number of buckets, the syntax is as follows:
+
+  ```SQL
+  DISTRIBUTED BY RANDOM BUCKETS <num>
+  ```
+  
+  However, note that the query performance provided by random bucketing may not be ideal when you query massive amounts of data and frequently use certain columns as conditional columns. In this scenario, it is recommended to use hash bucketing. Because only a small number of buckets need to be scanned and computed, significantly improving query performance.
+
+  **Precautions**
+  - You can only use random bucketing to create a Duplicate Key table.
+  - You cannot specify a table bucketed randomly to belong to a [Colocation Group](../../../using_starrocks/Colocate_join.md).
+  - [Spark Load](../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
+  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31).
 
 - Hash bucketing
 
@@ -298,23 +316,6 @@ This parameter is used to specify the bucketing strategy. Currently, StarRocks s
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
   - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
-
-- Random bucketing (since v3.1)
-
-  For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. And if you want StarRocks to automatically determine the number of buckets, you do not need to specify any bucketing information. If you choose to manually specify the number of buckets, the syntax is as follows:
-
-  ```SQL
-  DISTRIBUTED BY RANDOM BUCKETS <num>
-  ```
-
-  However, note that random bucketing may not be suitable for scenarios that involve queries and aggregations based on specific columns. In such cases, hash bucketing may be more appropriate as it can store similar data in the same bucket, facilitating data access and processing.
-
-  **Precautions**
-  - You cannot use random bucketing to create a Primary Key table, a Unique Key table, or an Aggregate table.
-  - You cannot specify a table bucketed randomly to belong to a [Colocation Group](../../../using_starrocks/Colocate_join.md).
-  - [Spark Load](../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
-
-  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31).
 
 ### ORDER BY
 

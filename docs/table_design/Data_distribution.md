@@ -1,11 +1,11 @@
 # Data distribution
 
-When you create a table, you must specify the data distribution method by configuring the partitioning and bucketing strategy in the table. An appropriate data distribution method helps evenly distribute data across the nodes of your StarRocks cluster, reduces table scans, makes full use of the concurrency of the cluster, thereby improving query performance.
+When you create a table, you can specify the data distribution method by configuring the partitioning and bucketing strategy in the table. An appropriate data distribution method helps evenly distribute data across the nodes of your StarRocks cluster. It can also reduce the data scanned and makes full use of the concurrency of the cluster during queries, thereby improving query performance.
 
-> NOTICE
+> **NOTICE**
 >
-> - Since v3.1, StarRocks supports random bucketing, which randomly distributes data across all buckets. You do not need to specify a bucketing key when creating a table or adding partitions, making the table creation statement more user-friendly. For more information, see [Random bucketing](#random-bucketing-since-v31).
-> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
+> - Since v3.1, you do not need to specify a bucketing key when creating a table or adding partitions. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
+> - Since v2.5.7, You no longer need to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
 
 ## Basic concepts
 
@@ -21,9 +21,11 @@ Before you dive into the details of designing and managing data distribution, fa
   
   **You must specify the bucketing column when you create a table.** Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](#determine-the-number-of-buckets).
 
-## Partitioning methods
+## Distribution methods
 
-Modern distributed database systems generally use the following basic distribution methods: round-robin, range, list, hash, and random.
+### Distribution methods in general
+
+Modern distributed database systems generally use the following basic distribution methods: round-robin, range, list, and hash.
 
 ![Data distribution method](../assets/3.3.2-1.png)
 
@@ -31,50 +33,89 @@ Modern distributed database systems generally use the following basic distributi
 - **Range**: distributes data across different nodes based on the value range of partitioning columns.
 - **List**: distributes data across different nodes based on the discrete values of partitioning columns, such as age.
 - **Hash**: distributes data across different nodes based on a hash algorithm.
-- **Random**: distributes data randomly across different nodes.
 
-To achieve more flexible data distribution, you can combine the preceding distribution methods based on your business requirements, such as hash-hash, range-hash, and hash-list. **StarRocks offers the following data distribution methods:**
+To achieve more flexible data distribution, you can combine the preceding distribution methods based on your business requirements, such as hash-hash, range-hash, and hash-list.
 
-- **Hash**: A hash-partitioned table has only one partition (the entire table is considered a partition). The partition is divided into tablets based on the bucketing column and the number of buckets (either manually specified or automatically configured).
+### Distribution methods in StarRocks
 
-  For example, the following statement creates a table `site_access`. The table is divided into tablets based on the `site_id` column and the number of buckets.
+StarRocks uses a flexible two-level distribution method that combines partitioning and bucketing.
 
-  ```SQL
-  CREATE TABLE site_access(
-      site_id INT DEFAULT '10',
-      city_code SMALLINT,
-      user_name VARCHAR(32) DEFAULT '',
-      pv BIGINT SUM DEFAULT '0'
-  )
-  AGGREGATE KEY(site_id, city_code, user_name)
-  DISTRIBUTED BY HASH(site_id);
-  ```
+- The first level is partitioning: supports Range distribution and no partitioning (the entire table is regarded as one partition).
 
-- **Range-hash**: A range-hash partitioned table divides data into multiple partitions based on the partitioning column. Each partition is further divided into tablets based on the bucketing column and the number of buckets.
+- The second level is bucketing: Within a partition, data in a partition need to be further distributed into smaller bucktes. There are two ways to distribute data into buckets, Hash and Random distribution. as for the  number of buckets, StarRocks can automatically set the number of buckets or you can specify it manually.
 
-  For example, the following statement creates a table `site_access` that is partitioned by the `event_day` column. The table contains 3 partitions: `p1`, `p2`, and `p3`. Each partition is divided into tablets based on the `site_id` column and the number of buckets.
+> 
+>
+In addition to common distribution methods, StarRocks also supports Random distribution, which makes bucketing configuration simpler.
 
-  ```SQL
-  CREATE TABLE site_access(
-      event_day DATE,
-      site_id INT DEFAULT '10',
-      city_code VARCHAR(100),
-      user_name VARCHAR(32) DEFAULT '',
-      pv BIGINT SUM DEFAULT '0'
-  )
-  AGGREGATE KEY(event_day, site_id, city_code, user_name)
-  PARTITION BY RANGE(event_day)
-  (
-      PARTITION p1 VALUES LESS THAN ("2020-01-31"),
-      PARTITION p2 VALUES LESS THAN ("2020-02-29"),
-      PARTITION p3 VALUES LESS THAN ("2020-03-31")
-  )
-  DISTRIBUTED BY HASH(site_id);
-  ```
+In summary, StarRocks supports four data distribution methods: Random, Hash, Range + Random, and Range + Hash.
 
-- **Random**: The data of the table is randomly distributed across different buckets.
+- **Random distribution**: The entire table is regarded as one partition. The data in the table is randomly distributed across different buckets. This is suitable for scenarios with small volume of data that grows slowly over time. If you don't specify the data distribution method, StarRocks uses this data distribution method by default.
+- **Hash distribution**: The entire table is regarded as one partition. The data in the table is divided into buckets based on the bucketing column and the number of buckets (either manually specified or automatically configured).
+- **Range+Random distribution**: The data of the table is partitioned based on the range of values in the partitioning column. The data within a partition is randomly distributed across different buckets.
+- **Range+hash distribution**: The data of the table is partitioned based on the range of values in the partitioning column. The data within a partition is further distributed into buckets based on the bucketing column and the number of buckets.
 
-- **Range+Random**: The data of the table is partitioned based on the range of values in the partitioning column. The data within a partition is randomly distributed across different buckets.
+For example, if you create a table without specifying the data distribution method, StarRocks uses Random distribution by default:
+
+```SQL
+CREATE TABLE site_access(
+    site_id INT DEFAULT '10',
+    city_code SMALLINT,
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(site_id, city_code, user_name); -- the data distribution method is not specified.
+```
+
+Specify Hash distribution as the data distribution method at table creation.
+
+```SQL
+CREATE TABLE site_access(
+    site_id INT DEFAULT '10',
+    city_code SMALLINT,
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(site_id, city_code, user_name)
+DISTRIBUTED BY HASH(site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
+```
+
+Specify Range + Random distribution as the data distribution method at table creation.
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+PARTITION BY RANGE(event_day)( -- Set the partitioning method as Range partitioning.
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-31")
+); -- The bucketing method is not specified, and StarRocks uses Random bucketing by default.
+```
+
+Specify Range + Hash distribution as the data distribution method at table creation.
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+PARTITION BY RANGE(event_day)( -- Set the partitioning method as Range partitioning.
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-31")
+)
+DISTRIBUTED BY HASH(site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
+```
 
 ## Design partitioning and bucketing rules
 
@@ -89,6 +130,53 @@ Data in a partitioned table is divided based on partitioning columns, also calle
 - The amount of data in each partition must be less than 100 GB.
 
 ### Bucketing
+
+Data in partitions can be subdivided into multiple buckets, and the data within a bucket can be referred to as a tablet.
+
+- Bucketing methods: StarRocks supports Random bucketing (since v3.1) and Hash bucketing.
+Random bucketing: does not require the bucketing key when creating a table or adding a partition. The data is randomly distributed across different buckets.
+- Hash bucketing: requires the bucketing key when creating a table or adding a partition. data within a partition is subdivided into buckets based on the bucketing key. rows with the same bucketing key value are assigned to the corresponding and unique bucket.
+
+the number of buckets: By default, StarRocks automatically sets the number of buckets (since version 2.5.7). However, you can also manually set the number of buckets. For more information, see [Determine the number of buckets](#determine-the-number-of-buckets).
+
+#### Random bucketing (since v3.1)
+
+For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. Additionally, there is no need to set bucketing columns during table creation, simplifying the CREATE TABLE statement. It is suitable for scenarios with relatively small data sizes and low requirements for query performance.
+
+However, note that random bucketing may not be suitable for scenarios that involve queries and aggregations based on specific columns. In such cases, hash bucketing may be more appropriate as it can store similar data in the same bucket, facilitating data access and processing.
+
+**Precautions**
+
+- You can only use random bucketing to create a depplicate key table.
+- You cannot specify a table bucketed randomly to belong to a [Colocation Group](../using_starrocks/Colocate_join.md).
+- [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+
+In the following example, a table `site_access1` is created by using random bucketing, and the system automatically sets the number of buckets.
+
+```SQL
+CREATE TABLE site_access1(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+DUPLICATE KEY(event_day,site_id,city_code,pv);
+```
+
+However, if you are familiar with StarRocks' bucketing mechanism, you can also manually set the number of buckets when creating a table with random bucketing.
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+DUPLICATE KEY(event_day,site_id,city_code,pv)
+DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
+```
 
 #### Hash bucketing
 
@@ -157,45 +245,6 @@ CREATE TABLE site_access
 )
 AGGREGATE KEY(site_id, city_code, user_name)
 DISTRIBUTED BY HASH(site_id,city_code);
-```
-
-#### Random bucketing (since v3.1)
-
-For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. Additionally, there is no need to set bucketing columns during table creation, simplifying the CREATE TABLE statement. It is suitable for scenarios with relatively small data sizes and low requirements for query performance.
-
-However, note that random bucketing may not be suitable for scenarios that involve queries and aggregations based on specific columns. In such cases, hash bucketing may be more appropriate as it can store similar data in the same bucket, facilitating data access and processing.
-
-**Precautions**
-
-- You cannot use random bucketing to create a Primary Key table, a Unique Key table, or an Aggregate table.
-- You cannot specify a table bucketed randomly to belong to a [Colocation Group](../using_starrocks/Colocate_join.md).
-- [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
-
-In the following example, a table `site_access1` is created by using random bucketing, and the system automatically sets the number of buckets.
-
-```SQL
-CREATE TABLE site_access1(
-    event_day DATE,
-    site_id INT DEFAULT '10',
-    city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
-)
-DUPLICATE KEY(event_day,site_id,city_code,pv);
-```
-
-However, if you are familiar with StarRocks' bucketing mechanism, you can also manually set the number of buckets when creating a table with random bucketing.
-
-```SQL
-CREATE TABLE site_access(
-    event_day DATE,
-    site_id INT DEFAULT '10',
-    city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
-)
-DUPLICATE KEY(event_day,site_id,city_code,pv)
-DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
 ```
 
 ### Determine the number of buckets
