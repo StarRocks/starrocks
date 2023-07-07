@@ -1145,7 +1145,7 @@ public class PseudoBackend {
                                 .collect(Collectors.toList());
                         numTabletScan += scanRanges.size();
                         runOlapScan(planNode, scanRanges);
-                        System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
+                        LOG.info(String.format("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan));
                     }
                 } else if (planNode.node_type == TPlanNodeType.SCHEMA_SCAN_NODE) {
                     numSchemaScan.incrementAndGet();
@@ -1212,7 +1212,7 @@ public class PseudoBackend {
                                 .collect(Collectors.toList());
                         numTabletScan += scanRanges.size();
                         runOlapScan(planNode, scanRanges);
-                        System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
+                        LOG.info(String.format("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan));
                     }
                 } else if (planNode.node_type == TPlanNodeType.SCHEMA_SCAN_NODE) {
                     numSchemaScan.incrementAndGet();
@@ -1220,7 +1220,7 @@ public class PseudoBackend {
                 }
             }
             if (allScans != numTabletScan) {
-                System.out.printf(" not all scanrange used: all:%d used:%d\n", allScans, numTabletScan);
+                LOG.info(String.format(" not all scanrange used: all:%d used:%d\n", allScans, numTabletScan));
             }
             if (numTabletScan > 0) {
                 scansByQueryId.computeIfAbsent(DebugUtil.printId(commonParams.params.query_id), k -> new AtomicInteger(0))
