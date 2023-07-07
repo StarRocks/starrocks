@@ -1547,7 +1547,7 @@ public class StmtExecutor {
                 }
             }
 
-            TLoadJobType type = null;
+            TLoadJobType type;
             if (containOlapScanNode) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
                 type = TLoadJobType.INSERT_QUERY;
@@ -1856,7 +1856,7 @@ public class StmtExecutor {
             } while (!batch.isEos());
         } catch (Exception e) {
             LOG.warn(e);
-            coord.getExecStatus().setStatus(e.getMessage());
+            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }

@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.qe;
+package com.starrocks.qe.scheduler;
 
 import com.starrocks.common.UserException;
 
-public interface BackendSelector {
-    void computeScanRangeAssignment() throws UserException;
+public class SchedulerException extends UserException {
+    public SchedulerException(String msg) {
+        super(msg);
+    }
 }

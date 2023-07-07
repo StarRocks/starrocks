@@ -14,6 +14,8 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
@@ -30,11 +32,24 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * map from an backend host address to the per-node assigned scan ranges;
+ * map from a backend host address to the per-node assigned scan ranges;
  * records scan range assignment for a single fragment
  */
-class FragmentScanRangeAssignment extends
+public class FragmentScanRangeAssignment extends
         HashMap<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> {
+
+    public void put(TNetworkAddress addr, int scanNodeId, TScanRangeParams scanRange) {
+        computeIfAbsent(addr, k -> Maps.newHashMap())
+                .computeIfAbsent(scanNodeId, k -> Lists.newArrayList())
+                .add(scanRange);
+    }
+
+    public void putAll(TNetworkAddress addr, int scanNodeId, List<TScanRangeParams> scanRanges) {
+        computeIfAbsent(addr, k -> Maps.newHashMap())
+                .computeIfAbsent(scanNodeId, k -> Lists.newArrayList())
+                .addAll(scanRanges);
+    }
+
     public String toDebugString() {
         StringBuilder sb = new StringBuilder();
         sb.append("---------- FragmentScanRangeAssignment ----------\n");
@@ -45,7 +60,7 @@ class FragmentScanRangeAssignment extends
                 Collections.sort(scanRangeParams);
                 TMemoryBuffer transport = new TMemoryBuffer(1024 * 1024);
                 TBinaryProtocol protocol = new TBinaryProtocol(transport);
-                String output = null;
+                String output;
                 try {
                     for (TScanRangeParams param : scanRangeParams) {
                         param.write(protocol);
