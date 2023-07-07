@@ -2,7 +2,7 @@
 
 本文介绍如何使用 INSERT 语句向 StarRocks 导入数据。
 
-与 MySQL 等数据库系统类似，StarRocks 支持通过 INSERT 语句导入数据。您可以使用 INSERT INTO VALUES 语句直接向表中插入数据，您还可以通过 INSERT INTO SELECT 语句将其他 StarRocks 表中的数据导入到新的 StarRocks 表中，或者将其他数据源的数据通过[外部表功能](../data_source/External_table.md)导入至 StarRocks 内部表中。
+与 MySQL 等数据库系统类似，StarRocks 支持通过 INSERT 语句导入数据。您可以使用 INSERT INTO VALUES 语句直接向表中插入数据，您还可以通过 INSERT INTO SELECT 语句将其他 StarRocks 表中的数据导入到新的 StarRocks 表中，或者将其他数据源的数据通过[外部表功能](../data_source/External_table.md)导入至 StarRocks 内部表中。自 v3.1 起，您可以使用 INSERT 语句和 TABLE 关键字直接导入外部数据源中的文件。
 
 2.4 版本中，StarRocks 进一步支持通过 INSERT OVERWRITE 语句批量**覆盖写入**目标表。INSERT OVERWRITE 语句通过整合以下三部分操作来实现覆盖写入：
 
@@ -284,6 +284,76 @@ WITH LABEL insert_load_wikipedia_ow_3
     channel
 )
 SELECT event_time, channel FROM source_wiki_edit;
+```
+
+## 通过 TABLE 关键字直接导入外部数据文件
+
+自 v3.1 起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接导入外部数据源中的文件，避免了需事先创建外部表的麻烦。
+
+目前 StarRocks 支持以下数据源和文件格式：
+
+- **数据源**：
+  - AWS S3
+  - HDFS
+
+- **文件格式**：
+  - Parquet
+  - ORC
+
+以下示例将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet_file/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
+
+```Plain
+mysql> INSERT INTO insert_wiki_edit
+    ->     SELECT * FROM TABLE(
+    ->         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+    ->         "format" = "parquet",
+    ->         "aws.s3.access_key" = "xxxxxxxxxx",
+    ->         "aws.s3.secret_key" = "yyyyyyyyyy",
+    ->         "aws.s3.region" = "aa-bbbb-c"
+    -> );
+Query OK, 2 rows affected (0.03 sec)
+{'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
+```
+
+## 通过 INSERT 语句导入数据至生成列
+
+生成列（Generated Columns）是一种特殊的列，其数据源自于预定义的表达式或基于其他列的计算。当您的查询请求涉及对大量表达式的计算时，例如查询 JSON 类型的某个字段，或者查询 ARRAY 类型的聚合结果，生成列尤其有用。在数据导入时，StarRocks 将计算表达式，然后将结果存储在生成列中，从而避免了在查询过程中计算表达式，进而提高了查询性能。
+
+您可以使用 INSERT 语句将数据导入至包含生成列的表中。
+
+以下示例创建了表 `insert_generated_columns` 并向其中插入一行数据。该表包含两个生成列：`avg_array` 和 `get_string`。`avg_array` 计算 `data_array` 中 ARRAY 类型数据的平均值，`get_string` 从 `data_json` 中提取 JSON 路径为 `a`  的字符串。
+
+```SQL
+CREATE TABLE insert_generated_columns (
+  id           INT(11)           NOT NULL    COMMENT "ID",
+  data_array   ARRAY<INT(11)>    NOT NULL    COMMENT "ARRAY",
+  data_json    JSON              NOT NULL    COMMENT "JSON",
+  avg_array    DOUBLE            NULL 
+      AS array_avg(data_array)               COMMENT "Get the average of ARRAY",
+  get_string   VARCHAR(65533)    NULL 
+      AS get_json_string(json_string(data_json), '$.a') COMMENT "Extract JSON string"
+) ENGINE=OLAP 
+PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id);
+
+INSERT INTO insert_generated_columns 
+VALUES (1, [1,2], parse_json('{"a" : 1, "b" : 2}'));
+```
+
+> **说明**
+>
+> 不支持将数据直接导入至生成列中。
+
+查询该表以查看其中的数据。
+
+```Plain
+mysql> SELECT * FROM insert_generated_columns;
++------+------------+------------------+-----------+------------+
+| id   | data_array | data_json        | avg_array | get_string |
++------+------------+------------------+-----------+------------+
+|    1 | [1,2]      | {"a": 1, "b": 2} |       1.5 | 1          |
++------+------------+------------------+-----------+------------+
+1 row in set (0.02 sec)
 ```
 
 ## 通过 INSERT 语句异步导入数据
