@@ -39,6 +39,7 @@ public class TabletCommitInfo implements Writable {
     // For low cardinality string column with global dict
     private List<String> invalidDictCacheColumns = Lists.newArrayList();
     private List<String> validDictCacheColumns = Lists.newArrayList();
+    private List<Long> validDictCollectedVersions = Lists.newArrayList();
 
     public TabletCommitInfo(long tabletId, long backendId) {
         super();
@@ -47,11 +48,12 @@ public class TabletCommitInfo implements Writable {
     }
 
     public TabletCommitInfo(long tabletId, long backendId, List<String> invalidDictCacheColumns,
-                            List<String> validDictCacheColumns) {
+                            List<String> validDictCacheColumns, List<Long> validDictCollectedVersions) {
         this.tabletId = tabletId;
         this.backendId = backendId;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
         this.validDictCacheColumns = validDictCacheColumns;
+        this.validDictCollectedVersions = validDictCollectedVersions;
     }
 
     public long getTabletId() {
@@ -70,6 +72,10 @@ public class TabletCommitInfo implements Writable {
         return validDictCacheColumns;
     }
 
+    public List<Long> getValidDictCollectedVersions() {
+        return validDictCollectedVersions;
+    }
+
     public static List<TabletCommitInfo> fromThrift(List<TTabletCommitInfo> tTabletCommitInfos) {
         List<TabletCommitInfo> commitInfos = Lists.newArrayList();
         for (TTabletCommitInfo tTabletCommitInfo : tTabletCommitInfos) {
@@ -77,7 +83,9 @@ public class TabletCommitInfo implements Writable {
                 commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),
                         tTabletCommitInfo.getBackendId(),
                         tTabletCommitInfo.getInvalid_dict_cache_columns(),
-                        tTabletCommitInfo.getValid_dict_cache_columns()));
+                        tTabletCommitInfo.getValid_dict_cache_columns(),
+                        tTabletCommitInfo.getValid_dict_collected_versions()
+                ));
             } else {
                 commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),
                         tTabletCommitInfo.getBackendId()));

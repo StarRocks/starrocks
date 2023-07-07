@@ -30,6 +30,7 @@
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
+#include "runtime/primitive_type.h"
 #include "storage/field.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/page_io.h"
@@ -161,7 +162,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         if (column.type() == FieldType::OLAP_FIELD_TYPE_VARCHAR && _opts.global_dicts != nullptr) {
             auto iter = _opts.global_dicts->find(column.name().data());
             if (iter != _opts.global_dicts->end()) {
-                opts.global_dict = &iter->second;
+                opts.global_dict = &iter->second.dict;
                 _global_dict_columns_valid_info[iter->first] = true;
             }
         }
@@ -227,10 +228,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
         *index_size += _wfile->size() - index_offset;
 
-        // global dict
-        if (!column_writer->is_global_dict_valid()) {
-            std::string col_name(_tablet_schema->columns()[column_index].name().data(),
-                                 _tablet_schema->columns()[column_index].name().size());
+        // check global dict valid
+        const auto& column = _tablet_schema->column(column_index);
+        if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
+            std::string col_name(column.name());
             _global_dict_columns_valid_info[col_name] = false;
         }
 

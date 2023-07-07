@@ -146,9 +146,11 @@ public:
 
     virtual RowsetId rowset_id() { return _context.rowset_id; }
 
-    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
+    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
         return _global_dict_columns_valid_info;
     }
+
+    const vectorized::GlobalDictByNameMaps* rowset_global_dicts() const { return _writer_options.global_dicts; }
 
 protected:
     RowsetWriterContext _context;
