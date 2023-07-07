@@ -6,6 +6,14 @@ Spark load preprocesses the imported data through external spark resources, impr
 
 Spark load is an asynchronous import method. Users need to create Spark type import tasks through MySQL protocol and view the import results through`SHOW LOAD`.
 
+<<<<<<< HEAD
+=======
+> **NOTICE**
+>
+> - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+> - When Spark Load is used to load data into a StarRocks table, the bucketing column of the StarRocks table cannot be of DATE, DATETIME, or DECIMAL type.
+
+>>>>>>> c656a24dd3 (add limit in spark load  (#26731))
 Syntax
 
 ```sql
