@@ -273,6 +273,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | tablet_sched_storage_cooldown_second | -1         | 从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。<br>参数别名为 `storage_cooldown_second`。单位：秒。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。 |
 | tablet_stat_update_interval_second| 300         | FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。单位：秒。  |
 
+#### StarRocks 存算分离集群
+
+| 配置项                               | 默认值          | 描述                                                         |
+| ----------------------------------- | -------------- | ------------------------------------------------------------ |
+| run_mode                            | shared_nothing | StarRocks 集群的运行模式。有效值：`shared_data` 和 `shared_nothing` (默认)。`shared_data` 表示在存算分离模式下运行 StarRocks。`shared_nothing` 表示以普通模式运行 StarRocks。<br />**注意**<br />StarRocks 集群不支持存算分离和普通模式混合部署。<br />请勿在集群部署完成后更改 `run_mode`，否则将导致集群无法再次启动。不支持从普通集群转换为存算分离集群，反之亦然。 |
+| cloud_native_meta_port              | 6090           | 云原生元数据服务监听端口。默认值：`6090`。                         |
+| cloud_native_storage_type           | S3             | 您使用的存储类型。有效值：`S3`（默认）和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。 |
+| cloud_native_hdfs_url               | N/A            | HDFS 存储的 URL，例如 `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。 |
+| aws_s3_path                         | N/A            | 用于存储数据的 S3 存储空间路径，由 S3 存储桶的名称及其下的子路径（如有）组成，如 `testbucket/subpath`。 |
+| aws_s3_region                       | N/A            | 需访问的 S3 存储空间的地区，如 `us-west-2`。                      |
+| aws_s3_endpoint                     | N/A            | 访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。 |
+| aws_s3_use_aws_sdk_default_behavior | false          | 是否使用 AWS SDK 默认的认证凭证。有效值：`true` 和 `false` (默认)。 |
+| aws_s3_use_instance_profile         | false          | 是否使用 Instance Profile 或 Assumed Role 作为安全凭证访问 S3。有效值：`true` 和 `false` (默认)。<ul><li>如果您使用 IAM 用户凭证（Access Key 和 Secret Key）访问 S3，则需要将此项设为 `false`，并指定 `aws_s3_access_key` 和 `aws_s3_secret_key`。</li><li>如果您使用 Instance Profile 访问 S3，则需要将此项设为 `true`。</li><li>如果您使用 Assumed Role 访问 S3，则需要将此项设为 `true`，并指定 `aws_s3_iam_role_arn`。</li><li>如果您使用外部 AWS 账户通过 Assumed Role 认证访问 S3，则需要额外指定 `aws_s3_external_id`。</li></ul> |
+| aws_s3_access_key                   | N/A            | 访问 S3 存储空间的 Access Key。                                 |
+| aws_s3_secret_key                   | N/A            | 访问 S3 存储空间的 Secret Key。                                 |
+| aws_s3_iam_role_arn                 | N/A            | 有访问 S3 存储空间权限 IAM Role 的 ARN。                         |
+| aws_s3_external_id                  | N/A            | 用于跨 AWS 账户访问 S3 存储空间的外部 ID。                        |
+
 #### 其他静态参数
 
 | 配置项                             | 默认值                                          | 描述                                                         |
@@ -392,6 +410,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |brpc_port|8060|BRPC 的端口，可以查看 BRPC 的一些网络统计信息。|
 |brpc_num_threads|-1|BRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。|
 |priority_networks|空字符串|以 CIDR 形式 10.10.10.0/24 指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。|
+|starlet_port|9070|StarRocks 存算分离集群用于 BE 心跳服务的端口。 |
 |heartbeat_service_port|9050|心跳服务端口（thrift），用户接收来自 FE 的心跳。|
 |heartbeat_service_thread_count|1|心跳线程数。|
 |create_tablet_worker_count|3|创建 tablet 的线程数。|
