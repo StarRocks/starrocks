@@ -86,7 +86,7 @@ template <class TaskExecutor, class MemGuard>
 Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     RETURN_IF_ERROR(task_status());
     if (_opts.init_partition_nums > 0) {
-        return _writer->as<PartitionedSpillerWriter*>()->flush(state, executor, guard);
+        return _writer->as<PartitionedSpillerWriter*>()->flush(state, true, executor, guard);
     } else {
         return _writer->as<RawSpillerWriter*>()->flush(state, executor, guard);
     }
@@ -256,7 +256,7 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
 template <class TaskExecutor, class MemGuard>
 Status PartitionedSpillerWriter::flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     if (_mem_tracker->consumption() > options().spill_mem_table_bytes_size) {
-        return flush(state, executor, guard);
+        return flush(state, false, executor, guard);
     }
     return Status::OK();
 }
@@ -426,63 +426,10 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
 }
 
 template <class TaskExecutor, class MemGuard>
-Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    // check need split partition
-    std::vector<SpilledPartition*> splitting_partitions;
-    if (options().splittable) {
-        for (const auto& [pid, partition] : _id_to_partitions) {
-            const auto& mem_table = partition->spill_writer->mem_table();
-            // partition not in memory
-            if (!partition->in_mem && partition->level < max_partition_level &&
-                mem_table->mem_usage() + partition->bytes > options().spill_mem_table_bytes_size) {
-                RETURN_IF_ERROR(mem_table->done());
-                partition->in_mem = false;
-                partition->mem_size = 0;
-                partition->bytes += mem_table->mem_usage();
-                partition->is_spliting = true;
-                splitting_partitions.emplace_back(partition);
-            }
-        }
-    }
-
-    //
-    std::vector<SpilledPartition*> spilling_partitions;
-    for (const auto& [pid, partition] : _id_to_partitions) {
-        const auto& mem_table = partition->spill_writer->mem_table();
-        if (!partition->is_spliting && (mem_table->is_full() || mem_table->mem_usage() > options().min_spilled_size)) {
-            RETURN_IF_ERROR(mem_table->done());
-            partition->in_mem = false;
-            partition->mem_size = 0;
-            spilling_partitions.emplace_back(partition);
-        }
-    }
-
-    // all of the partition is the small partition
-    if (spilling_partitions.empty()) {
-        // select partition
-        std::vector<SpilledPartition*> all_spillable_partitions;
-        for (const auto& [pid, partition] : _id_to_partitions) {
-            if (!partition->is_spliting) {
-                all_spillable_partitions.emplace_back(partition);
-            }
-        }
-
-        // order by mem_usage desc
-        std::sort(all_spillable_partitions.begin(), all_spillable_partitions.end(),
-                  [](SpilledPartition* left, SpilledPartition* right) {
-                      return left->spill_writer->mem_table()->mem_usage() >
-                             left->spill_writer->mem_table()->mem_usage();
-                  });
-        // select partitions to spill util half of mem_table
-        size_t accumulate_spill_bytes = 0;
-        for (auto partition : all_spillable_partitions) {
-            accumulate_spill_bytes += partition->spill_writer->mem_table()->mem_usage();
-            spilling_partitions.emplace_back(partition);
-            if (accumulate_spill_bytes > _mem_tracker->consumption() / 2) {
-                break;
-            }
-        }
-    }
+Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush, TaskExecutor&& executor,
+                                       MemGuard&& guard) {
+    std::vector<SpilledPartition*> splitting_partitions, spilling_partitions;
+    RETURN_IF_ERROR(_choose_partitions_to_flush(is_final_flush, splitting_partitions, spilling_partitions));
 
     if (spilling_partitions.empty() && splitting_partitions.empty()) {
         return Status::OK();
