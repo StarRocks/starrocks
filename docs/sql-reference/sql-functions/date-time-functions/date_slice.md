@@ -9,7 +9,7 @@ This function is supported from v2.5.
 ## Syntax
 
 ```Haskell
-DATE time_slice(DATE dt, INTERVAL N type[, boundary])
+DATE date_slice(DATE dt, INTERVAL N type[, boundary])
 ```
 
 ## Parameters
