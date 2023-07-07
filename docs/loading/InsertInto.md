@@ -2,7 +2,7 @@
 
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 
-Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md).
+Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md). From StarRocks v3.1 onwards, you can directly load data from files in an external source using the INSERT command and the TABLE keyword.
 
 StarRocks v2.4 further supports overwriting data into a table by using INSERT OVERWRITE. The INSERT OVERWRITE statement integrates the following operations to implement the overwriting function:
 
@@ -302,6 +302,74 @@ WITH LABEL insert_load_wikipedia_ow_3
     channel
 )
 SELECT event_time, channel FROM source_wiki_edit;
+```
+
+## Insert data directly from files in an external source using TABLE keyword
+
+From v3.1 onwards, StarRocks supports directly loading data from files in an external source using the INSERT command and the TABLE keyword, saving you from the trouble of creating an external table first.
+
+Currently, StarRocks supports the following data sources and file formats:
+
+- **Data sources**:
+  - AWS S3
+- **File formats**:
+  - Parquet
+  - ORC
+
+The following example inserts data rows from the Parquet file **parquet_file/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
+
+```Plain
+mysql> INSERT INTO insert_wiki_edit
+    ->     SELECT * FROM TABLE(
+    ->         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+    ->         "format" = "parquet",
+    ->         "aws.s3.access_key" = "xxxxxxxxxx",
+    ->         "aws.s3.secret_key" = "yyyyyyyyyy",
+    ->         "aws.s3.region" = "aa-bbbb-c"
+    -> );
+Query OK, 2 rows affected (0.03 sec)
+{'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
+```
+
+## Insert data into a table with generated columns
+
+A generated column is a special column whose data is derived from a pre-defined expression or evaluation based on other columns. Generated columns are especially useful when your query requests involve evaluations of expensive expressions, for example, querying a certain field from a JSON value, or querying the aggregation results of the ARRAY type. StarRocks evaluates the expression and stores the results in the generated columns while data is being loaded into the table, thereby avoiding the expression evaluation during queries and improving the query performance.
+
+You can load data into a table with generated columns using INSERT.
+
+The following example creates a table `insert_generated_columns` and inserts a row into it. The table contains two generated columns: `avg_array` and `get_string`. `avg_array` calculates the average value of ARRAY data in `data_array`, and `get_string` extracts the strings from the JSON path `a` in `data_json`.
+
+```SQL
+CREATE TABLE insert_generated_columns (
+  id           INT(11)           NOT NULL    COMMENT "ID",
+  data_array   ARRAY<INT(11)>    NOT NULL    COMMENT "ARRAY",
+  data_json    JSON              NOT NULL    COMMENT "JSON",
+  avg_array    DOUBLE            NULL 
+      AS array_avg(data_array)               COMMENT "Get the average of ARRAY",
+  get_string   VARCHAR(65533)    NULL 
+      AS get_json_string(json_string(data_json), '$.a') COMMENT "Extract JSON string"
+) ENGINE=OLAP 
+PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id);
+
+INSERT INTO insert_generated_columns 
+VALUES (1, [1,2], parse_json('{"a" : 1, "b" : 2}'));
+```
+
+> **NOTE**
+>
+> Directly loading data into generated columns is not supported.
+
+You can query the table to check the data within it.
+
+```Plain
+mysql> SELECT * FROM insert_generated_columns;
++------+------------+------------------+-----------+------------+
+| id   | data_array | data_json        | avg_array | get_string |
++------+------------+------------------+-----------+------------+
+|    1 | [1,2]      | {"a": 1, "b": 2} |       1.5 | 1          |
++------+------------+------------------+-----------+------------+
+1 row in set (0.02 sec)
 ```
 
 ## Load data asynchronously using INSERT

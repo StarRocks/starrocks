@@ -9,12 +9,14 @@ You can submit an asynchronous INSERT task using [SUBMIT TASK](../data-manipulat
 ## Syntax
 
 ```Bash
-INSERT {INTO | OVERWRITE} table_name
-[ PARTITION (<partition1_name>[, <partition2_name>, ...) ]
-[ TEMPORARY_PARTITION (<temporary_partition1_name>[, <temporary_partition2_name>, ...) ]
-[ WITH LABEL label]
-[ (column_name [, ...]) ]
-{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+INSERT { INTO | OVERWRITE } [db_name.]<table_name>
+[ PARTITION (<partition_name> [, ...) ]
+[ TEMPORARY_PARTITION (<temporary_partition_name>[, ...) ]
+[ WITH LABEL <label>]
+[ (<column_name>[, ...]) ]
+{ VALUES ( { <expression> | DEFAULT }[, ...] )
+  | <query> 
+  | TABLE <file_params> <auth_params> }
 ```
 
 ## Parameters
@@ -31,6 +33,9 @@ INSERT {INTO | OVERWRITE} table_name
 | expression    | Expression that assigns values to the column.                |
 | DEFAULT       | Assigns default value to the column.                         |
 | query         | Query statement whose result will be loaded into the target table. It can be any SQL statement supported by StarRocks. |
+| TABLE         | Inserts data from files in an external data source. Currently, StarRocks supports inserting Parquet and ORC files from AWS S3. This parameter has been supported from v3.1. |
+| file_params   | Parameters in the `"key" = "value"` pairs used to define the data file to insert, including: <ul><li>`path`: the URI used to access the file. </li><li>`format`: the format of the file. Valid values include `parquet` and `orc`.</li></ul> |
+| auth_params   | Parameters in the `"key" = "value"` pairs used for authentication to access the external data source. <br>AWS S3: <ul><li>`aws.s3.access_key`: The Access Key ID that you can use to access the Amazon S3 bucket. </li><li>`aws.s3.secret_key`: The Secret Access Key that you can use to access the Amazon S3 bucket. </li><li>`aws.s3.region`: The region in which your AWS S3 bucket resides. Example: `us-west-1`.</li></ul> |
 
 ## Return
 
