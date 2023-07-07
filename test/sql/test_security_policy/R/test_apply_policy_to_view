@@ -1,0 +1,58 @@
+-- name: test_apply_policy_to_view
+create database test_apply_policy_to_view;
+-- result:
+-- !result
+use test_apply_policy_to_view;
+-- result:
+-- !result
+create masking policy mp as (v1 bigint) returns bigint -> v1 + 1;
+-- result:
+-- !result
+create row access policy rp as (v1 bigint) returns boolean -> true;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+create view v as select * from t0;
+-- result:
+-- !result
+alter view v modify column v1 set masking policy mp;
+-- result:
+-- !result
+select * from starrocks.policy_references;
+-- result:
+test_apply_policy_to_view	mp	Column Masking	default_catalog	test_apply_policy_to_view	v	v1
+-- !result
+alter view v modify column v1 unset masking policy;
+-- result:
+-- !result
+select * from starrocks.policy_references;
+-- result:
+-- !result
+alter view v add row access policy rp;
+-- result:
+-- !result
+select * from starrocks.policy_references;
+-- result:
+test_apply_policy_to_view	rp	Row Access	default_catalog	test_apply_policy_to_view	v	None
+-- !result
+alter view v drop row access policy rp;
+-- result:
+-- !result
+select * from starrocks.policy_references;
+-- result:
+-- !result

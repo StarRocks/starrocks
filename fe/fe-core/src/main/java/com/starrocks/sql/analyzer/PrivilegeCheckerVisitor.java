@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadStmt;
@@ -936,8 +937,10 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         // 1. check if user can alter view in this db
         checkViewAction(context, statement.getTableName(), PrivilegeType.ALTER);
         // 2. check if user can query
-        AlterViewClause alterViewClause = (AlterViewClause) statement.getAlterClause();
-        check(alterViewClause.getQueryStatement(), context);
+        AlterClause alterClause = statement.getAlterClause();
+        if (alterClause instanceof AlterViewClause) {
+            check(((AlterViewClause) alterClause).getQueryStatement(), context);
+        }
         return null;
     }
 

@@ -4,9 +4,12 @@ package com.starrocks.epack.privilege;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.persist.AlterPolicyLog;
+import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
+import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
@@ -14,6 +17,8 @@ import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
+import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -22,6 +27,8 @@ import com.starrocks.sql.parser.SqlParser;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -32,11 +39,15 @@ public class SecurityPolicyMgr {
     private final Map<DbUID, Map<String, Policy>> nameToRowAccessPolicy;
     private final ReentrantReadWriteLock policyLock;
 
+    @SerializedName(value = "policyContextMap")
+    private final ConcurrentMap<TableUID, PolicyAppliedContext> policyContextMap;
+
     public SecurityPolicyMgr() {
         idToPolicy = new HashMap<>();
         nameToMaskingPolicy = new HashMap<>();
         nameToRowAccessPolicy = new HashMap<>();
         policyLock = new ReentrantReadWriteLock();
+        policyContextMap = new ConcurrentHashMap<>();
     }
 
     public void createMaskingPolicy(CreatePolicyStmt stmt) throws DdlException {
@@ -67,7 +78,7 @@ public class SecurityPolicyMgr {
                     stmt.getComment());
 
             registerPolicy(policy);
-            if (stmt.getPolicyType().equals(PolicyType.COLUMN_MASKING)) {
+            if (stmt.getPolicyType().equals(PolicyType.MASKING)) {
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateMaskingPolicy(policy);
             } else {
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateRowAccessPolicy(policy);
@@ -224,6 +235,15 @@ public class SecurityPolicyMgr {
         nameToPolicy.put(newName, policy);
     }
 
+    public Policy getPolicyById(Long policyId) {
+        policyLock.readLock().lock();
+        try {
+            return idToPolicy.get(policyId);
+        } finally {
+            policyLock.readLock().unlock();
+        }
+    }
+
     public Policy getPolicyByName(PolicyType policyType, PolicyName policyName, boolean isSetIfExists) {
         policyLock.readLock().lock();
         try {
@@ -248,6 +268,7 @@ public class SecurityPolicyMgr {
         return policy;
     }
 
+
     public Map<String, Policy> getOrCreateNamePolicyMapByDBUID(DbUID dbUID, PolicyType policyType) {
         policyLock.readLock().lock();
         try {
@@ -259,7 +280,7 @@ public class SecurityPolicyMgr {
 
     private Map<String, Policy> getOrCreateNamePolicyMapByDBUIDUnlocked(DbUID dbUID, PolicyType policyType) {
         Map<DbUID, Map<String, Policy>> nameToPolicy;
-        if (policyType.equals(PolicyType.COLUMN_MASKING)) {
+        if (policyType.equals(PolicyType.MASKING)) {
             nameToPolicy = nameToMaskingPolicy;
         } else {
             nameToPolicy = nameToRowAccessPolicy;
@@ -269,5 +290,134 @@ public class SecurityPolicyMgr {
             nameToPolicy.put(dbUID, new HashMap<>());
         }
         return nameToPolicy.get(dbUID);
+    }
+
+    public void applyMaskingPolicyContext(TableName tableName, String columnName,
+                                          WithColumnMaskingPolicy withColumnMaskingPolicy) {
+        TableUID tableUID;
+        tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+
+        Long policyId = withColumnMaskingPolicy.getPolicyId();
+        MaskingPolicyContext columnMaskingPolicyContext =
+                new MaskingPolicyContext(policyId, withColumnMaskingPolicy.getUsingColumns());
+
+        doApplyMaskingPolicyContext(tableUID, columnName, columnMaskingPolicyContext);
+        GlobalStateMgr.getCurrentState().getEditLog().logApplyMaskingPolicy(
+                new ApplyOrRevokeMaskingPolicyLog(tableUID, columnName, columnMaskingPolicyContext));
+    }
+
+    public void replayApplyMaskingPolicyContext(ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo) {
+        doApplyMaskingPolicyContext(applyMaskingPolicyInfo.getTable(), applyMaskingPolicyInfo.getColumnName(),
+                applyMaskingPolicyInfo.getColumnMaskingPolicyContext());
+    }
+
+    private void doApplyMaskingPolicyContext(TableUID tableUID, String columnName,
+                                             MaskingPolicyContext columnMaskingPolicyContext) {
+        policyLock.writeLock().lock();
+        try {
+            if (policyContextMap.containsKey(tableUID)) {
+                PolicyAppliedContext tableAppliedPolicyInfo = policyContextMap.get(tableUID);
+                tableAppliedPolicyInfo.applyMaskingPolicy(columnName, columnMaskingPolicyContext);
+            } else {
+                PolicyAppliedContext tableAppliedPolicyInfo = new PolicyAppliedContext();
+                tableAppliedPolicyInfo.applyMaskingPolicy(columnName, columnMaskingPolicyContext);
+                policyContextMap.put(tableUID, tableAppliedPolicyInfo);
+            }
+        } finally {
+            policyLock.writeLock().unlock();
+        }
+    }
+
+    public void revokeMaskingPolicyContext(String catalog, String dbName, String tblName, String columnName) {
+        TableUID tableUID = TableUID.generate(catalog, dbName, tblName);
+        doRevokeMaskingPolicyContext(tableUID, columnName);
+        GlobalStateMgr.getCurrentState().getEditLog().logRevokeMaskingPolicy(
+                new ApplyOrRevokeMaskingPolicyLog(tableUID, columnName, null));
+    }
+
+    public void replayRevokeMaskingPolicyContext(ApplyOrRevokeMaskingPolicyLog maskingPolicyInfo) {
+        doRevokeMaskingPolicyContext(maskingPolicyInfo.getTable(), maskingPolicyInfo.getColumnName());
+    }
+
+    private void doRevokeMaskingPolicyContext(TableUID tableUID, String columnName) {
+        policyContextMap.computeIfPresent(tableUID, (k, v) -> {
+            v.revokeMaskingPolicy(columnName);
+            return v;
+        });
+    }
+
+    public void applyRowAccessPolicyContext(TableName tableName, WithRowAccessPolicy withRowAccessPolicy) {
+        TableUID tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+        RowAccessPolicyContext rowAccessPolicyContext =
+                new RowAccessPolicyContext(withRowAccessPolicy.getPolicyId(), withRowAccessPolicy.getOnColumns());
+
+        doApplyRowAccessPolicyContext(tableUID, rowAccessPolicyContext);
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logApplyRowAccessPolicy(new ApplyOrRevokeRowAccessPolicyLog(tableUID, rowAccessPolicyContext));
+    }
+
+    public void replayApplyRowAccessPolicyContext(ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo) {
+        doApplyRowAccessPolicyContext(applyRowAccessPolicyInfo.getTable(),
+                applyRowAccessPolicyInfo.getRowAccessPolicyContext());
+    }
+
+    private void doApplyRowAccessPolicyContext(TableUID tableUID,
+                                               RowAccessPolicyContext rowAccessPolicyContext) {
+        policyLock.writeLock().lock();
+        try {
+            if (policyContextMap.containsKey(tableUID)) {
+                PolicyAppliedContext tableAppliedPolicyInfo = policyContextMap.get(tableUID);
+                tableAppliedPolicyInfo.addRowAccessPolicy(rowAccessPolicyContext);
+            } else {
+                PolicyAppliedContext tableAppliedPolicyInfo = new PolicyAppliedContext();
+                tableAppliedPolicyInfo.addRowAccessPolicy(rowAccessPolicyContext);
+                policyContextMap.put(tableUID, tableAppliedPolicyInfo);
+            }
+        } finally {
+            policyLock.writeLock().unlock();
+        }
+    }
+
+    public void revokeRowAccessPolicyContext(String catalog, String dbName, String tblName, Long policyId) {
+        TableUID tableUID = TableUID.generate(catalog, dbName, tblName);
+
+        policyContextMap.computeIfPresent(tableUID, (k, v) -> {
+            v.revokeRowAccessPolicy(policyId);
+            return v;
+        });
+
+        GlobalStateMgr.getCurrentState().getEditLog().logRevokeRowAccessPolicy(
+                new ApplyOrRevokeRowAccessPolicyLog(tableUID, new RowAccessPolicyContext(policyId, null)));
+    }
+
+    public void revokeALLRowAccessPolicyContext(String catalog, String dbName, String tblName) {
+        TableUID tableUID = TableUID.generate(catalog, dbName, tblName);
+        policyContextMap.computeIfPresent(tableUID, (k, v) -> {
+            v.clearRowAccessPolicy();
+            return v;
+        });
+
+        GlobalStateMgr.getCurrentState().getEditLog().logRevokeRowAccessPolicy(
+                new ApplyOrRevokeRowAccessPolicyLog(tableUID, new RowAccessPolicyContext(null, null)));
+    }
+
+    public void replayRevokeRowAccessPolicyContext(ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo) {
+        TableUID tableUID = applyRowAccessPolicyInfo.getTable();
+        if (applyRowAccessPolicyInfo.getRowAccessPolicyContext() == null) {
+            policyContextMap.computeIfPresent(tableUID, (k, v) -> {
+                v.clearRowAccessPolicy();
+                return v;
+            });
+        } else {
+            RowAccessPolicyContext rowAccessPolicyContext = applyRowAccessPolicyInfo.getRowAccessPolicyContext();
+            policyContextMap.computeIfPresent(tableUID, (k, v) -> {
+                v.revokeRowAccessPolicy(rowAccessPolicyContext.getPolicyId());
+                return v;
+            });
+        }
+    }
+
+    public ConcurrentMap<TableUID, PolicyAppliedContext> getPolicyContextMap() {
+        return policyContextMap;
     }
 }

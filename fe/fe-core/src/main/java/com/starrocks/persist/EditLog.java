@@ -60,6 +60,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.epack.persist.AlterPolicyLog;
+import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
+import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.DropWarehouseLog;
@@ -1070,6 +1072,28 @@ public class EditLog {
                 case OperationTypeEPack.OP_ALTER_POLICY_RENAME: {
                     AlterPolicyLog alterPolicyInfo = (AlterPolicyLog) journal.getData();
                     globalStateMgr.getSecurityPolicyManager().replayAlterPolicy(alterPolicyInfo);
+                    break;
+                }
+                case OperationTypeEPack.OP_APPLY_MASKING_POLICY: {
+                    ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo = (ApplyOrRevokeMaskingPolicyLog) journal.getData();
+                    globalStateMgr.getSecurityPolicyManager().replayApplyMaskingPolicyContext(applyMaskingPolicyInfo);
+                    break;
+                }
+                case OperationTypeEPack.OP_APPLY_ROW_ACCESS_POLICY: {
+                    ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo =
+                            (ApplyOrRevokeRowAccessPolicyLog) journal.getData();
+                    globalStateMgr.getSecurityPolicyManager().replayApplyRowAccessPolicyContext(applyRowAccessPolicyInfo);
+                    break;
+                }
+                case OperationTypeEPack.OP_REVOKE_MASKING_POLICY: {
+                    ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo = (ApplyOrRevokeMaskingPolicyLog) journal.getData();
+                    globalStateMgr.getSecurityPolicyManager().replayRevokeMaskingPolicyContext(applyMaskingPolicyInfo);
+                    break;
+                }
+                case OperationTypeEPack.OP_REVOKE_ROW_ACCESS_POLICY: {
+                    ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo =
+                            (ApplyOrRevokeRowAccessPolicyLog) journal.getData();
+                    globalStateMgr.getSecurityPolicyManager().replayRevokeRowAccessPolicyContext(applyRowAccessPolicyInfo);
                     break;
                 }
                 case OperationType.OP_MV_JOB_STATE: {
@@ -2089,6 +2113,22 @@ public class EditLog {
         AlterPolicyLog alterPolicyInfo = new AlterPolicyLog(policyName, policyType,
                 new AlterPolicyLog.PolicyRenameInfo(newPolicyName));
         logEdit(OperationTypeEPack.OP_ALTER_POLICY_RENAME, alterPolicyInfo);
+    }
+
+    public void logApplyMaskingPolicy(ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo) {
+        logEdit(OperationTypeEPack.OP_APPLY_MASKING_POLICY, applyMaskingPolicyInfo);
+    }
+
+    public void logApplyRowAccessPolicy(ApplyOrRevokeRowAccessPolicyLog applyMaskingPolicyInfo) {
+        logEdit(OperationTypeEPack.OP_APPLY_ROW_ACCESS_POLICY, applyMaskingPolicyInfo);
+    }
+
+    public void logRevokeMaskingPolicy(ApplyOrRevokeMaskingPolicyLog applyMaskingPolicyInfo) {
+        logEdit(OperationTypeEPack.OP_REVOKE_MASKING_POLICY, applyMaskingPolicyInfo);
+    }
+
+    public void logRevokeRowAccessPolicy(ApplyOrRevokeRowAccessPolicyLog applyMaskingPolicyInfo) {
+        logEdit(OperationTypeEPack.OP_REVOKE_ROW_ACCESS_POLICY, applyMaskingPolicyInfo);
     }
 
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {

@@ -1,0 +1,55 @@
+-- name: test_apply_policy_to_table
+create database test_apply_policy_to_table;
+-- result:
+-- !result
+use test_apply_policy_to_table;
+-- result:
+-- !result
+create masking policy mp as (v1 bigint) returns bigint -> v1 + 1;
+-- result:
+-- !result
+create row access policy rp as (v1 bigint) returns boolean -> true;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp;
+-- result:
+-- !result
+select * from starrocks.policy_references;
+-- result:
+test_apply_policy_to_table	mp	Column Masking	default_catalog	test_apply_policy_to_table	t0	v1
+-- !result
+alter table t0 modify column v1 unset masking policy;
+-- result:
+-- !result
+select * from starrocks.policy_references;
+-- result:
+-- !result
+alter table t0 add row access policy rp;
+-- result:
+-- !result
+select * from starrocks.policy_references;
+-- result:
+test_apply_policy_to_table	rp	Row Access	default_catalog	test_apply_policy_to_table	t0	None
+-- !result
+alter table t0 drop row access policy rp;
+-- result:
+-- !result
+select * from starrocks.policy_references;
+-- result:
+-- !result

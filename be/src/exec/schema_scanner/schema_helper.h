@@ -89,6 +89,10 @@ public:
     static Status get_grants_to(const std::string& ip, const int32_t port,
                                 const TGetGrantsToRolesOrUserRequest& request,
                                 TGetGrantsToRolesOrUserResponse* response, int timeout_ms);
+
+    static Status get_policy_references(const std::string& ip, const int32_t port,
+                                        const TGetPolicyReferencesRequest& request,
+                                        TGetPolicyReferenceResponse* response, int timeout_ms);
 };
 
 template <LogicalType SlotType>

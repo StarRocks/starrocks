@@ -19,6 +19,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.epack.sql.analyzer.AlterTableClauseVisitorEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterViewClause;
@@ -70,15 +71,20 @@ public class ViewAnalyzer {
             }
 
             AlterClause alterClause = stmt.getAlterClause();
-            AlterViewClause alterViewClause = (AlterViewClause) alterClause;
+            if (alterClause instanceof AlterViewClause) {
+                AlterViewClause alterViewClause = (AlterViewClause) alterClause;
 
-            Analyzer.analyze(alterViewClause.getQueryStatement(), context);
-
-            List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
-                    alterViewClause.getColWithComments());
-            alterViewClause.setColumns(viewColumns);
-            String viewSql = AstToSQLBuilder.toSQL(alterViewClause.getQueryStatement());
-            alterViewClause.setInlineViewDef(viewSql);
+                Analyzer.analyze(alterViewClause.getQueryStatement(), context);
+                List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
+                        alterViewClause.getColWithComments());
+                alterViewClause.setColumns(viewColumns);
+                String viewSql = AstToSQLBuilder.toSQL(alterViewClause.getQueryStatement());
+                alterViewClause.setInlineViewDef(viewSql);
+            } else {
+                AlterTableClauseVisitorEPack alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitorEPack();
+                alterTableClauseAnalyzerVisitor.setTable(table);
+                alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
+            }
             return null;
         }
 

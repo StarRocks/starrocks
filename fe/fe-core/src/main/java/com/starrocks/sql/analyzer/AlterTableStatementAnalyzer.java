@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.epack.sql.analyzer.AlterTableClauseVisitorEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -44,7 +45,7 @@ public class AlterTableStatementAnalyzer {
         if (alterClauseList == null || alterClauseList.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
         }
-        AlterTableClauseVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitor();
+        AlterTableClauseVisitorEPack alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitorEPack();
         alterTableClauseAnalyzerVisitor.setTable(table);
         for (AlterClause alterClause : alterClauseList) {
             alterTableClauseAnalyzerVisitor.analyze(alterClause, context);

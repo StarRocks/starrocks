@@ -72,6 +72,10 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
+import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
+import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
+import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
@@ -343,6 +347,8 @@ public class AlterJobMgr {
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             } else if (stmt.getSwapTable() != null) {
                 processSwap(db, materializedView, Collections.singletonList(stmt.getSwapTable()));
+            } else if (stmt.getOps() != null) {
+                processPolicy(mvName, stmt.getOps());
             } else {
                 throw new DdlException("Unsupported modification for materialized view");
             }
@@ -776,6 +782,12 @@ public class AlterJobMgr {
                 needProcessOutsideDatabaseLock = true;
             } else if (currentAlterOps.contains(AlterOpType.COMPACT)) {
                 needProcessOutsideDatabaseLock = true;
+            } else if (Sets.newHashSet(AlterOpType.APPLY_COLUMN_MASKING_POLICY,
+                    AlterOpType.REVOKE_COLUMN_MASKING_POLICY,
+                    AlterOpType.APPLY_ROW_ACCESS_POLICY,
+                    AlterOpType.REVOKE_ROW_ACCESS_POLICY,
+                    AlterOpType.REVOKE_ALL_ROW_ACCESS_POLICY).retainAll(currentAlterOps.getCurrentOps())) {
+                processPolicy(dbTableName, alterClauses);
             } else {
                 throw new DdlException("Invalid alter operations: " + currentAlterOps);
             }
@@ -981,29 +993,34 @@ public class AlterJobMgr {
                 throw new DdlException("The specified table [" + tableName + "] is not a view");
             }
 
+            AlterClause alterClause = stmt.getAlterClause();
+            if (alterClause instanceof AlterViewClause) {
+                AlterViewClause alterViewClause = (AlterViewClause) alterClause;
+                String inlineViewDef = alterViewClause.getInlineViewDef();
+                List<Column> newFullSchema = alterViewClause.getColumns();
+                long sqlMode = ctx.getSessionVariable().getSqlMode();
 
-            AlterViewClause alterViewClause = (AlterViewClause) stmt.getAlterClause();
-            String inlineViewDef = alterViewClause.getInlineViewDef();
-            List<Column> newFullSchema = alterViewClause.getColumns();
-            long sqlMode = ctx.getSessionVariable().getSqlMode();
+                View view = (View) table;
+                String viewName = view.getName();
 
-            View view = (View) table;
-            String viewName = view.getName();
+                view.setInlineViewDefWithSqlMode(inlineViewDef, ctx.getSessionVariable().getSqlMode());
+                try {
+                    view.init();
+                } catch (UserException e) {
+                    throw new DdlException("failed to init view stmt", e);
+                }
+                view.setNewFullSchema(newFullSchema);
 
-            view.setInlineViewDefWithSqlMode(inlineViewDef, ctx.getSessionVariable().getSqlMode());
-            try {
-                view.init();
-            } catch (UserException e) {
-                throw new DdlException("failed to init view stmt", e);
+                db.dropTable(viewName);
+                db.registerTableUnlocked(view);
+
+                AlterViewInfo alterViewInfo =
+                        new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
+                LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
+            } else {
+                processPolicy(dbTableName, Collections.singletonList(alterClause));
             }
-            view.setNewFullSchema(newFullSchema);
-
-            db.dropTable(viewName);
-            db.registerTableUnlocked(view);
-
-            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
-            GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
-            LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {
             db.writeUnlock();
         }
@@ -1179,6 +1196,46 @@ public class AlterJobMgr {
             partitionInfo.setIsInMemory(info.getPartitionId(), info.isInMemory());
         } finally {
             db.writeUnlock();
+        }
+    }
+
+    private void processPolicy(TableName tableName, List<AlterClause> alterClauses) {
+        for (AlterClause alterClause : alterClauses) {
+            switch (alterClause.getOpType()) {
+                case APPLY_COLUMN_MASKING_POLICY: {
+                    ApplyMaskingPolicyClause applyMaskingPolicyClause = (ApplyMaskingPolicyClause) alterClause;
+                    GlobalStateMgr.getCurrentState().getSecurityPolicyManager().applyMaskingPolicyContext(
+                            tableName,
+                            applyMaskingPolicyClause.getMaskingColumn(),
+                            applyMaskingPolicyClause.getWithColumnMaskingPolicy());
+                    break;
+                }
+                case REVOKE_COLUMN_MASKING_POLICY: {
+                    RevokeMaskingPolicyClause revokeMaskingPolicyClause = (RevokeMaskingPolicyClause) alterClause;
+                    GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeMaskingPolicyContext(
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
+                            revokeMaskingPolicyClause.getMaskingColumn());
+                    break;
+                }
+                case APPLY_ROW_ACCESS_POLICY: {
+                    ApplyRowAccessPolicyClause modifyRowAccessPolicyClause = (ApplyRowAccessPolicyClause) alterClause;
+                    GlobalStateMgr.getCurrentState().getSecurityPolicyManager().applyRowAccessPolicyContext(
+                            tableName, modifyRowAccessPolicyClause.getRowAccessPolicyContext());
+                    break;
+                }
+                case REVOKE_ROW_ACCESS_POLICY: {
+                    RevokeRowAccessPolicyClause revokeRowAccessPolicyClause = (RevokeRowAccessPolicyClause) alterClause;
+                    GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeRowAccessPolicyContext(
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
+                            revokeRowAccessPolicyClause.getPolicyId());
+                    break;
+                }
+                case REVOKE_ALL_ROW_ACCESS_POLICY: {
+                    GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeALLRowAccessPolicyContext(
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                    break;
+                }
+            }
         }
     }
 

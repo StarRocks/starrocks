@@ -240,7 +240,7 @@ public class AstToStringBuilder {
         public String visitCreatePolicyStatement(CreatePolicyStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("CREATE");
-            if (stmt.getPolicyType().equals(PolicyType.COLUMN_MASKING)) {
+            if (stmt.getPolicyType().equals(PolicyType.MASKING)) {
                 sb.append(" MASKING POLICY ");
             } else {
                 sb.append(" ROW ACCESS POLICY ");

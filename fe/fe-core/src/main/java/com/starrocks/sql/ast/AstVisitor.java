@@ -46,11 +46,15 @@ import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
+import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
+import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
+import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
@@ -996,6 +1000,24 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitPartitionRenameClause(PartitionRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    //Apply Policy clause
+
+    public R visitApplyMaskingPolicyClause(ApplyMaskingPolicyClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitRevokeMaskingPolicyClause(RevokeMaskingPolicyClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitApplyRowAccessPolicyClause(ApplyRowAccessPolicyClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitRevokeRowAccessPolicyClause(RevokeRowAccessPolicyClause clause, C context) {
         return visitNode(clause, context);
     }
 

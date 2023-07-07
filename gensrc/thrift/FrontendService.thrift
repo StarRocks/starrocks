@@ -1346,6 +1346,23 @@ struct TGetGrantsToRolesOrUserResponse {
     1: optional list<TGetGrantsToRolesOrUserItem> grants_to
 }
 
+struct TGetPolicyReferencesRequest {
+}
+
+struct TGetPolicyReferenceItem {
+    1: optional string policy_database
+    2: optional string policy_name
+    3: optional string policy_type
+    4: optional string ref_catalog
+    5: optional string ref_database
+    6: optional string ref_object_name
+    7: optional string ref_column
+}
+
+struct TGetPolicyReferenceResponse {
+    1: optional list<TGetPolicyReferenceItem> policy_reference
+}
+
 struct TGetProfileRequest {
     1: optional list<string> query_id
 }
@@ -1430,5 +1447,6 @@ service FrontendService {
 
     TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
+    TGetPolicyReferenceResponse getPolicyReference(1: TGetPolicyReferencesRequest request)
 }
 

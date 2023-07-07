@@ -53,6 +53,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.epack.persist.AlterPolicyLog;
+import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
+import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.DropWarehouseLog;
@@ -1030,6 +1032,16 @@ public class JournalEntity implements Writable {
             case OperationTypeEPack.OP_ALTER_POLICY_SET_COMMENT:
             case OperationTypeEPack.OP_ALTER_POLICY_RENAME:
                 data = AlterPolicyLog.read(in);
+                isRead = true;
+                break;
+            case OperationTypeEPack.OP_APPLY_MASKING_POLICY:
+            case OperationTypeEPack.OP_REVOKE_MASKING_POLICY:
+                data = ApplyOrRevokeMaskingPolicyLog.read(in);
+                isRead = true;
+                break;
+            case OperationTypeEPack.OP_APPLY_ROW_ACCESS_POLICY:
+            case OperationTypeEPack.OP_REVOKE_ROW_ACCESS_POLICY:
+                data = ApplyOrRevokeRowAccessPolicyLog.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_MV_JOB_STATE:

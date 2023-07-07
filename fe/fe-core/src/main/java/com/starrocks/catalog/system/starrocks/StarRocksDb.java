@@ -17,6 +17,7 @@ package com.starrocks.catalog.system.starrocks;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
+import com.starrocks.epack.catalog.system.starrocks.PolicyReferences;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -31,6 +32,7 @@ public class StarRocksDb extends Database {
         super.registerTableUnlocked(RoleEdges.create());
         super.registerTableUnlocked(GrantsTo.createGrantsToRoles());
         super.registerTableUnlocked(GrantsTo.createGrantsToUsers());
+        super.registerTableUnlocked(PolicyReferences.createPolicyReferences());
     }
 
     @Override

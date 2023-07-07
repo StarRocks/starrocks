@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -34,6 +35,7 @@ public class AlterMaterializedViewStmt extends DdlStmt {
     private final ModifyTablePropertiesClause modifyTablePropertiesClause;
     private final String status;
     private final SwapTableClause swapTable;
+    private List<AlterClause> ops;
 
     public static final String ACTIVE = "active";
     public static final String INACTIVE = "inactive";
@@ -80,6 +82,14 @@ public class AlterMaterializedViewStmt extends DdlStmt {
 
     public SwapTableClause getSwapTable() {
         return swapTable;
+    }
+
+    public List<AlterClause> getOps() {
+        return ops;
+    }
+
+    public void setOps(List<AlterClause> ops) {
+        this.ops = ops;
     }
 
     @Override

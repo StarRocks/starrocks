@@ -46,7 +46,7 @@ public class SecurityPolicyAnalyzer {
             normalizationPolicyName(session, policyName);
 
             SelectList selectList;
-            if (statement.getPolicyType().equals(PolicyType.COLUMN_MASKING)) {
+            if (statement.getPolicyType().equals(PolicyType.MASKING)) {
                 selectList = new SelectList(Lists.newArrayList(
                         new SelectListItem(statement.getExpression(), null)), false);
             } else {
@@ -69,7 +69,7 @@ public class SecurityPolicyAnalyzer {
             QueryStatement queryStatement = new QueryStatement(selectRelation);
             Analyzer.analyze(queryStatement, session);
 
-            if (statement.getPolicyType().equals(PolicyType.COLUMN_MASKING)) {
+            if (statement.getPolicyType().equals(PolicyType.MASKING)) {
                 Expr result = queryStatement.getQueryRelation().getOutputExpression().get(0);
                 //Check compatible between expr result type and return type
                 TypeManager.addCastExpr(result, statement.getReturnType().getType());

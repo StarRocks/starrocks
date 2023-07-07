@@ -81,6 +81,7 @@ import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.epack.catalog.system.starrocks.PolicyReferences;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.UnauthorizedException;
 import com.starrocks.http.rest.TransactionResult;
@@ -167,6 +168,8 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
+import com.starrocks.thrift.TGetPolicyReferenceResponse;
+import com.starrocks.thrift.TGetPolicyReferencesRequest;
 import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
@@ -2152,5 +2155,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetGrantsToRolesOrUserResponse getGrantsTo(TGetGrantsToRolesOrUserRequest request) {
         return GrantsTo.getGrantsTo(request);
+    }
+
+    @Override
+    public TGetPolicyReferenceResponse getPolicyReference(TGetPolicyReferencesRequest request) {
+        return PolicyReferences.getPolicyReference(request);
     }
 }

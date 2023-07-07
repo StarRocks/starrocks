@@ -59,6 +59,13 @@ public enum AlterOpType {
     // comment
     ALTER_COMMENT,
 
+    // Security Policy
+    APPLY_COLUMN_MASKING_POLICY,
+    REVOKE_COLUMN_MASKING_POLICY,
+    APPLY_ROW_ACCESS_POLICY,
+    REVOKE_ROW_ACCESS_POLICY,
+    REVOKE_ALL_ROW_ACCESS_POLICY,
+
     //Alter View
     ALTER_VIEW,
 

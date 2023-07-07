@@ -1287,10 +1287,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.columnNameWithComment().size() > 0) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
-        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-        AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
-
-        return new AlterViewStmt(targetTableName, alterClause, createPos(context));
+        if (context.queryStatement() != null) {
+            QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+            AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+            return new AlterViewStmt(targetTableName, alterClause, createPos(context));
+        } else {
+            if (context.applyMaskingPolicyClause() != null) {
+                return new AlterViewStmt(targetTableName, (AlterClause) visit(context.applyMaskingPolicyClause()),
+                        createPos(context));
+            } else if (context.applyRowAccessPolicyClause() != null) {
+                return new AlterViewStmt(targetTableName, (AlterClause) visit(context.applyRowAccessPolicyClause()),
+                        createPos(context));
+            } else {
+                throw new ParsingException("Not support statement", createPos(context));
+            }
+        }
     }
 
     @Override
