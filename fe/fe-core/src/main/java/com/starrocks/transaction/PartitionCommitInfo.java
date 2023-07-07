@@ -59,6 +59,8 @@ public class PartitionCommitInfo implements Writable {
     private List<String> invalidDictCacheColumns = Lists.newArrayList();
     @SerializedName(value = "validColumns")
     private List<String> validDictCacheColumns = Lists.newArrayList();
+    @SerializedName(value = "DictCollectedVersion")
+    private List<Long> dictCollectedVersions = Lists.newArrayList();
 
     public PartitionCommitInfo() {
 
@@ -73,13 +75,15 @@ public class PartitionCommitInfo implements Writable {
 
     public PartitionCommitInfo(long partitionId, long version, long visibleTime,
                                List<String> invalidDictCacheColumns,
-                               List<String> validDictCacheColumns) {
+                               List<String> validDictCacheColumns,
+                               List<Long> dictCollectedVersions) {
         super();
         this.partitionId = partitionId;
         this.version = version;
         this.versionTime = visibleTime;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
         this.validDictCacheColumns = validDictCacheColumns;
+        this.dictCollectedVersions = dictCollectedVersions;
     }
 
     @Override
@@ -128,6 +132,22 @@ public class PartitionCommitInfo implements Writable {
         return validDictCacheColumns;
     }
 
+<<<<<<< HEAD
+=======
+    public List<Long> getDictCollectedVersions() {
+        return dictCollectedVersions;
+    }
+
+    public void setCompactionScore(Quantiles compactionScore) {
+        this.compactionScore = compactionScore;
+    }
+
+    @Nullable
+    public Quantiles getCompactionScore() {
+        return compactionScore;
+    }
+
+>>>>>>> c11bead9a8 ([BugFix] Fix possible inconsistencies in the global dictionary (#26463))
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("partitionid=");

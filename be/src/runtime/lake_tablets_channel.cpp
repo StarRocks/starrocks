@@ -326,6 +326,29 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     if (slots == nullptr) {
         return Status::InvalidArgument(fmt::format("Unknown index_id: {}", _key.to_string()));
     }
+<<<<<<< HEAD
+=======
+    // init global dict info if needed
+    if (!is_incremental) {
+        for (auto& slot : params.schema().slot_descs()) {
+            GlobalDictMap global_dict;
+            if (slot.global_dict_words_size()) {
+                for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
+                    const std::string& dict_word = slot.global_dict_words(i);
+                    auto* data = _mem_pool->allocate(dict_word.size());
+                    RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
+                    memcpy(data, dict_word.data(), dict_word.size());
+                    Slice slice(data, dict_word.size());
+                    global_dict.emplace(slice, i);
+                }
+                GlobalDictsWithVersion<GlobalDictMap> dict;
+                dict.dict = std::move(global_dict);
+                dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+                _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
+            }
+        }
+    }
+>>>>>>> c11bead9a8 ([BugFix] Fix possible inconsistencies in the global dictionary (#26463))
 
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());

@@ -77,15 +77,21 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const override {
         return _global_dict_columns_valid_info;
     }
 
+=======
+>>>>>>> c11bead9a8 ([BugFix] Fix possible inconsistencies in the global dictionary (#26463))
     std::unique_ptr<Column> all_pks;
     vector<uint32_t> all_rssids;
 
     vector<std::unique_ptr<Column>> non_key_columns;
+<<<<<<< HEAD
     vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
+=======
+>>>>>>> c11bead9a8 ([BugFix] Fix possible inconsistencies in the global dictionary (#26463))
 };
 
 class RowsetMergerTest : public testing::Test {

@@ -27,7 +27,16 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
+<<<<<<< HEAD
         CompactionManager compactionManager = GlobalStateMgr.getCurrentState().getCompactionManager();
+=======
+        List<String> validDictCacheColumns = Lists.newArrayList();
+        List<Long> dictCollectedVersions = Lists.newArrayList();
+
+        long maxPartitionVersionTime = -1;
+        long tableId = table.getId();
+        CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
+>>>>>>> c11bead9a8 ([BugFix] Fix possible inconsistencies in the global dictionary (#26463))
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             Partition partition = table.getPartition(partitionCommitInfo.getPartitionId());
             long version = partitionCommitInfo.getVersion();
@@ -42,6 +51,29 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             } else {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime);
             }
+<<<<<<< HEAD
+=======
+
+            if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
+                for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+                    IDictManager.getInstance().removeGlobalDict(tableId, column);
+                }
+            }
+            if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
+                validDictCacheColumns = partitionCommitInfo.getValidDictCacheColumns();
+            }
+            if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
+                dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
+            }
+            maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
+        }
+
+        Preconditions.checkState(dictCollectedVersions.size() == validDictCacheColumns.size());
+        for (int i = 0; i < validDictCacheColumns.size(); i++) {
+            String columnName = validDictCacheColumns.get(i);
+            long collectedVersion = dictCollectedVersions.get(i);
+            IDictManager.getInstance().updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+>>>>>>> c11bead9a8 ([BugFix] Fix possible inconsistencies in the global dictionary (#26463))
         }
     }
 }

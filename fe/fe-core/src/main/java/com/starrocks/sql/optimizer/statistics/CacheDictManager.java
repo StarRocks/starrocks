@@ -229,7 +229,7 @@ public class CacheDictManager implements IDictManager {
     }
 
     @Override
-    public void updateGlobalDict(long tableId, String columnName, long versionTime) {
+    public void updateGlobalDict(long tableId, String columnName, long collectVersion, long versionTime) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
@@ -248,6 +248,12 @@ public class CacheDictManager implements IDictManager {
                 if (columnOptional.isPresent()) {
                     ColumnDict columnDict = columnOptional.get();
                     long lastVersion = columnDict.getVersionTime();
+                    long dictCollectVersion = columnDict.getCollectedVersionTime();
+                    if (collectVersion != dictCollectVersion) {
+                        LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
+                        removeGlobalDict(tableId, columnName);
+                        return;
+                    }
                     columnDict.updateVersionTime(versionTime);
                     LOG.info("update dict for table {} column {} from version {} to {}", tableId, columnName,
                             lastVersion, versionTime);

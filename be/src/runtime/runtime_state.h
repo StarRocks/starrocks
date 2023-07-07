@@ -41,6 +41,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "util/logging.h"
+#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -307,6 +308,8 @@ public:
 
     const vectorized::GlobalDictMaps& get_load_global_dict_map() const;
 
+    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
+
     using GlobalDictLists = std::vector<TGlobalDict>;
     Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     Status init_load_global_dict(const GlobalDictLists& global_dict_list);
@@ -332,7 +335,12 @@ private:
 
     Status create_error_log_file();
 
+<<<<<<< HEAD
     Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
+=======
+    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
+                              phmap::flat_hash_map<uint32_t, int64_t>* version);
+>>>>>>> c11bead9a8 ([BugFix] Fix possible inconsistencies in the global dictionary (#26463))
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -435,8 +443,14 @@ private:
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
 
+<<<<<<< HEAD
     vectorized::GlobalDictMaps _query_global_dicts;
     vectorized::GlobalDictMaps _load_global_dicts;
+=======
+    GlobalDictMaps _query_global_dicts;
+    GlobalDictMaps _load_global_dicts;
+    phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
+>>>>>>> c11bead9a8 ([BugFix] Fix possible inconsistencies in the global dictionary (#26463))
 
     pipeline::QueryContext* _query_ctx = nullptr;
 
