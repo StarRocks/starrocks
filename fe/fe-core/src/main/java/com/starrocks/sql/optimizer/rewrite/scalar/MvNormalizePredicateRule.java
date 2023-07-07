@@ -89,7 +89,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                             new BinaryPredicateOperator(BinaryType.GT, binary.getChild(0), constantOperator);
                     BinaryPredicateOperator ltPart =
                             new BinaryPredicateOperator(BinaryType.LT, binary.getChild(0), constantOperator);
-                    return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, gtPart, ltPart);
+                    return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, gtPart, ltPart);
                 default:
                     break;
             }

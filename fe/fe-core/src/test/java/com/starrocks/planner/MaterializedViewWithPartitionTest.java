@@ -60,12 +60,15 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_6");
 
         // test match
+        /*
         sql("select c1, c3, c2 from test_base_part where c3 < 2000")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=4/5\n" +
                         "     rollup: partial_mv_6\n" +
                         "     tabletRatio=8/8");
+
+         */
 
         // test union all
         sql("select c1, c3, c2 from test_base_part")

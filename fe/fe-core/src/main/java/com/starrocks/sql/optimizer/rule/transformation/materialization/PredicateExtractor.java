@@ -150,7 +150,25 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                             rangePredicates.add(childRange);
                         }
                     }
-
+                } else if (childRange instanceof AndRangePredicate) {
+                    for (RangePredicate subRangePredicate : childRange.getChildPredicates()) {
+                        if (subRangePredicate instanceof ColumnRangePredicate) {
+                            ColumnRangePredicate childColumnRange = subRangePredicate.cast();
+                            Optional<RangePredicate> rangePredicateOpt = findColumnRangePredicate(rangePredicates, childColumnRange);
+                            if (rangePredicateOpt.isPresent()) {
+                                ColumnRangePredicate newPredicate =
+                                        ColumnRangePredicate.andRange(rangePredicateOpt.get().cast(), childColumnRange);
+                                rangePredicates.remove(rangePredicateOpt.get());
+                                rangePredicates.add(newPredicate);
+                            } else {
+                                if (!childColumnRange.isUnbounded()) {
+                                    rangePredicates.add(subRangePredicate);
+                                }
+                            }
+                        } else {
+                            rangePredicates.add(childRange);
+                        }
+                    }
                 } else {
                     rangePredicates.add(childRange);
                 }
@@ -160,6 +178,9 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             }
         }
         if (predicate.isAnd()) {
+            if (rangePredicates.size() == 1 && (rangePredicates.get(0) instanceof ColumnRangePredicate)) {
+                return rangePredicates.get(0);
+            }
             return new AndRangePredicate(rangePredicates);
         } else {
             return new OrRangePredicate(rangePredicates);

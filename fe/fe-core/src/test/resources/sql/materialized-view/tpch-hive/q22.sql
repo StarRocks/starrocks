@@ -51,7 +51,7 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                                 ASSERT LE 1
                                     AGGREGATE ([GLOBAL] aggregate [{97: count=sum(97: count), 96: sum=sum(96: sum)}] group by [[]] having [null]
                                         EXCHANGE GATHER
-                                            AGGREGATE ([LOCAL] aggregate [{97: count=sum(88: c_count), 96: sum=sum(89: c_sum)}] group by [[]] having [null]
-                                                SCAN (mv[customer_agg_mv1] columns[86: c_acctbal, 87: substring_phone, 88: c_count, 89: c_sum] predicate[86: c_acctbal > 0.00 AND 87: substring_phone IN (21, 28, 24, 32, 35, 34, 37)])
+                                            AGGREGATE ([LOCAL] aggregate [{97: count=sum(91: c_count), 96: sum=sum(92: c_sum)}] group by [[]] having [null]
+                                                SCAN (mv[customer_agg_mv1] columns[89: c_acctbal, 90: substring_phone, 91: c_count, 92: c_sum] predicate[89: c_acctbal > 0.00 AND 90: substring_phone = 21 OR 90: substring_phone = 24 OR 90: substring_phone = 28 OR 90: substring_phone = 32 OR 90: substring_phone = 34 OR 90: substring_phone = 35 OR 90: substring_phone = 37])
 [end]
 
