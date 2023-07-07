@@ -70,8 +70,13 @@ from t_hash t0 join t_random t1 on t0.k1 = t1.k1;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv1;
 -- result:
+<<<<<<< HEAD
 mv1	CREATE MATERIALIZED VIEW `mv1` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM BUCKETS 64
+=======
+mv1	CREATE MATERIALIZED VIEW `mv1` (k1, v1)
+DISTRIBUTED BY RANDOM
+>>>>>>> 96ef16ce40 (fix test)
 REFRESH ASYNC
 PROPERTIES (
 "replication_num" = "1",
@@ -89,8 +94,13 @@ select k1, count(v1)  from t_random group by k1;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv2;
 -- result:
+<<<<<<< HEAD
 mv2	CREATE MATERIALIZED VIEW `mv2` (`k1`, `count(v1)`)
 DISTRIBUTED BY RANDOM BUCKETS 64
+=======
+mv2	CREATE MATERIALIZED VIEW `mv2` (k1, count(v1))
+DISTRIBUTED BY RANDOM
+>>>>>>> 96ef16ce40 (fix test)
 REFRESH ASYNC
 PROPERTIES (
 "replication_num" = "1",
@@ -110,8 +120,13 @@ from t_hash t0 join t1 on t0.k1 = t1.k1;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv3;
 -- result:
+<<<<<<< HEAD
 mv3	CREATE MATERIALIZED VIEW `mv3` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM BUCKETS 64
+=======
+mv3	CREATE MATERIALIZED VIEW `mv3` (k1, v1)
+DISTRIBUTED BY RANDOM
+>>>>>>> 96ef16ce40 (fix test)
 REFRESH ASYNC
 PROPERTIES (
 "replication_num" = "1",
@@ -130,8 +145,13 @@ from t_random t0 join t1 on t0.k1 = t1.k1;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv4;
 -- result:
+<<<<<<< HEAD
 mv4	CREATE MATERIALIZED VIEW `mv4` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM BUCKETS 64
+=======
+mv4	CREATE MATERIALIZED VIEW `mv4` (k1, v1)
+DISTRIBUTED BY RANDOM
+>>>>>>> 96ef16ce40 (fix test)
 REFRESH ASYNC
 PROPERTIES (
 "replication_num" = "1",
@@ -150,8 +170,13 @@ from t1 join t2 on t1.k1 = t2.k1;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv_part1;
 -- result:
+<<<<<<< HEAD
 mv_part1	CREATE MATERIALIZED VIEW `mv_part1` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM BUCKETS 2
+=======
+mv_part1	CREATE MATERIALIZED VIEW `mv_part1` (k1, v1)
+DISTRIBUTED BY RANDOM
+>>>>>>> 96ef16ce40 (fix test)
 REFRESH ASYNC
 PROPERTIES (
 "replication_num" = "1",
@@ -206,7 +231,7 @@ SHOW CREATE MATERIALIZED VIEW mv6;
 -- result:
 mv6	CREATE MATERIALIZED VIEW `mv6` (`k1`, `v1`, `v2`)
 PARTITION BY (`k1`)
-DISTRIBUTED BY RANDOM BUCKETS 2
+DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
 "replication_num" = "1",
