@@ -315,6 +315,7 @@
         + [STRUCT](./sql-reference/sql-statements/data-types/STRUCT.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
+    + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + Function Reference
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
