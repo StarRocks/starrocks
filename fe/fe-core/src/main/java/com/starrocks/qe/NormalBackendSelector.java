@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
@@ -41,7 +42,8 @@ public class NormalBackendSelector implements BackendSelector {
     private final boolean isLoad;
 
     public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                 FragmentScanRangeAssignment assignment, WorkerProvider workerProvider, boolean isLoad) {
+                                 FragmentScanRangeAssignment assignment, WorkerProvider workerProvider,
+                                 boolean isLoad) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
@@ -92,6 +94,7 @@ public class NormalBackendSelector implements BackendSelector {
             if (minLocation == null) {
                 workerProvider.reportBackendNotFoundException();
             }
+            Preconditions.checkNotNull(minLocation);
 
             // only enable for load now, The insert into select performance problem caused by data skew is the most serious
             if (isEnableScheduleByRowCnt(scanRangeLocations)) {

@@ -147,8 +147,8 @@ public class WorkerProvider {
      */
     public TNetworkAddress chooseBackend(Long backendID) throws UserException {
         ComputeNode backend = getBackend(backendID);
-
-        TNetworkAddress addr = checkNotNull(backend, false).getAddress();
+        backend = checkNotNull(backend, false);
+        TNetworkAddress addr = backend.getAddress();
         recordUsedWorker(backend.getId(), addr);
         return addr;
     }
@@ -168,7 +168,9 @@ public class WorkerProvider {
             worker = getNextWorker(availableID2Backend, WorkerProvider::getNextBackendIndex);
         }
 
-        TNetworkAddress addr = checkNotNull(worker, usedComputeNode).getAddress();
+        worker = checkNotNull(worker, usedComputeNode);
+
+        TNetworkAddress addr = worker.getAddress();
         recordUsedWorker(worker.getId(), addr);
         workerIdRef.setRef(worker.getId());
         return addr;
@@ -307,13 +309,13 @@ public class WorkerProvider {
 
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(systemInfoService.getIdComputeNode());
-        if (numUsedComputeNodes <= 0
-                || numUsedComputeNodes >= idToComputeNode.size()) {
+        if (numUsedComputeNodes <= 0 || numUsedComputeNodes >= idToComputeNode.size()) {
             return idToComputeNode;
         } else {
             Map<Long, ComputeNode> computeNodes = new HashMap<>(numUsedComputeNodes);
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode = getNextWorker(idToComputeNode, WorkerProvider::getNextComputeNodeIndex);
+                Preconditions.checkNotNull(computeNode);
                 if (!isWorkerAvailable(computeNode)) {
                     continue;
                 }
