@@ -289,7 +289,7 @@ public class OptimizerTest {
                 new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
         Assert.assertNotNull(expr2);
         MaterializationContext materializationContext2 = optimizer2.getContext().getCandidateMvs().iterator().next();
-        Assert.assertEquals("mv_4", materializationContext2.getMv().getName());
+        Assert.assertEquals("mv_3", materializationContext2.getMv().getName());
         ScalarOperator scalarOperator2  = materializationContext2.getMvPartialPartitionPredicate();
         if (scalarOperator2 != null) {
             Assert.assertTrue(scalarOperator2 instanceof CompoundPredicateOperator);
