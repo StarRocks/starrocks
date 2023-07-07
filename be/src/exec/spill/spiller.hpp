@@ -79,7 +79,7 @@ template <class TaskExecutor, class MemGuard>
 Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     RETURN_IF_ERROR(task_status());
     if (_opts.init_partition_nums > 0) {
-        return _writer->as<PartitionedSpillerWriter*>()->flush(state, executor, guard);
+        return _writer->as<PartitionedSpillerWriter*>()->flush(state, true, executor, guard);
     } else {
         return _writer->as<RawSpillerWriter*>()->flush(state, executor, guard);
     }
@@ -243,8 +243,13 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
 
 template <class TaskExecutor, class MemGuard>
 Status PartitionedSpillerWriter::flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+<<<<<<< HEAD
     if (_mem_tracker->consumption() > options().spill_file_size) {
         return flush(state, executor, guard);
+=======
+    if (_mem_tracker->consumption() > options().spill_mem_table_bytes_size) {
+        return flush(state, false, executor, guard);
+>>>>>>> 0789d1403 ([BugFix] fix memory usage issue of spillable hash join (#26025))
     }
     return Status::OK();
 }
@@ -364,6 +369,7 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
 }
 
 template <class TaskExecutor, class MemGuard>
+<<<<<<< HEAD
 Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     // check need split partition
     std::vector<SpilledPartition*> splitting_partitions;
@@ -393,6 +399,15 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& execu
             partition->mem_size = 0;
             spilling_partitions.emplace_back(partition);
         }
+=======
+Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush, TaskExecutor&& executor,
+                                       MemGuard&& guard) {
+    std::vector<SpilledPartition*> splitting_partitions, spilling_partitions;
+    RETURN_IF_ERROR(_choose_partitions_to_flush(is_final_flush, splitting_partitions, spilling_partitions));
+
+    if (spilling_partitions.empty() && splitting_partitions.empty()) {
+        return Status::OK();
+>>>>>>> 0789d1403 ([BugFix] fix memory usage issue of spillable hash join (#26025))
     }
 
     _running_flush_tasks++;
