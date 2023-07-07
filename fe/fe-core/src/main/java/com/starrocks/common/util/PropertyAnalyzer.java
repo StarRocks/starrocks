@@ -160,7 +160,13 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_DATACACHE_ENABLE = "datacache.enable";
     public static final String PROPERTIES_DATACACHE_PARTITION_DURATION = "datacache.partition_duration";
 
+    // Materialized View properties
     public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
+    // Randomized start interval
+    // 0(default value): automatically chosed between [0, min(300, INTERVAL/2))
+    // -1: disable randomize, use current time as start
+    // positive value: use [0, mv_randomize_start) as random interval
+    public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
