@@ -36,7 +36,7 @@ public class UnsupportedMVException extends SemanticException {
 
     @Override
     public String getMessage() {
-        StringBuilder builder = new StringBuilder("Unsupported MV: ");
+        StringBuilder builder = new StringBuilder("Getting analyzing error");
         if (pos == null || pos.isZero()) {
             // no position info. do nothing.
         } else if (pos.getLine() == pos.getEndLine() && pos.getCol() == pos.getEndCol()) {
@@ -49,6 +49,8 @@ public class UnsupportedMVException extends SemanticException {
         }
 
         if (StringUtils.isNotEmpty(getDetailMsg())) {
+            builder.append(". Detail message: ");
+            builder.append(detailMsg);
             builder.append(". Please use Asynchronous Materialized View instead");
         }
 
