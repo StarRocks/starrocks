@@ -2101,6 +2101,13 @@ public class Config extends ConfigBase {
     public static boolean enable_experimental_mv = true;
 
     /**
+     * Whether to support colocate mv index in olap table sink, tablet sink will only send chunk once
+     * if enabled to speed up the sync mv's transformation performance.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_colocate_mv_index = true;
+
+    /**
      * Each automatic partition will create a hidden partition, which is not displayed to the user by default.
      * Sometimes this display can be enabled to check problems.
      */
