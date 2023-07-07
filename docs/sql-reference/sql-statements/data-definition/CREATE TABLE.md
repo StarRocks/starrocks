@@ -83,7 +83,7 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 
 **AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
 
-**AS generation_expr**: specifies the generated column and its expression. [The generated column](../generated_column.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
+**AS generation_expr**: specifies the generated column and its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
 
 ### index_definition
 

@@ -46,7 +46,7 @@ DISTRIBUTED BY HASH(id);
 
 > **NOTICE**
 >
-> This operation is time-consuming and resource-intensive.
+> This operation is time-consuming and resource-intensive. Therefore, it is recommended to add generated columns at table creation. If it is unavoidable to use ALTER TABLE to add generated columns, it is recommended to evaluate the cost and time involved in advance.
 
 1. Create a table named `test_tbl2` with three regular columns `id`, `data_array`, and `data_json`. Insert a data row into the table.
 
@@ -86,7 +86,8 @@ DISTRIBUTED BY HASH(id);
 
     **NOTICE**:
 
-    Adding generated columns to Aggregate tables is not supported.
+    - Adding generated columns to Aggregate tables is not supported.
+    - Regular columns need to be defined before generated columns. When you use the ALTER TABLE ... ADD COLUMN ... statement to add a regular column without specifying the position of the new regular column, the system automatically places it before the generated columns. Moreover, you cannot use AFTER to explicitly place the regular column after a generated column.
 
 3. Query the table data.
 
@@ -144,7 +145,7 @@ During data loading, StarRocks automatically calculates the values for generated
 
 > **NOTICE**
 >
-> This operation is time-consuming and resource-intensive.
+> This operation is time-consuming and resource-intensive. If it is unavoidable to use ALTER TABLE to modify generated columns, it is recommended to evaluate the cost and time involved in advance.
 
 You can modify the data type and expression of a generated column.
 
@@ -227,6 +228,17 @@ You can modify the data type and expression of a generated column.
         +------+------------+------------------+---------+---------+
         1 row in set (0.01 sec)
         ```
+
+### Drop a generated column
+
+Drop column `newcol1` from the table `test_tbl3`
+
+```SQL
+ALTER TABLE test_tbl3 DROP COLUMN newcol1;
+```
+
+**NOTICE**:<br>
+If a generated colum references a regular column in the expression, you cannot directly drop or modify that regular column. Instead, you need to first drop the generated column and then drop or modify the regular column.
 
 ### Query rewrites
 
@@ -346,11 +358,3 @@ An error is returned by Stream Load if you perform partial updates without speci
       ```
 
 2. When partial column updates are performed by using [Stream Load](../../) with the `my_data2.csv` file, if the values for the `data_json` column are not provided in `my_data2.csv` and the `columns` parameter in the Stream Load job does not include the `data_json` column, even if the `data_json` column allows null values, an error is returned by Stream Load because the column `data_json` is referenced by the generated column `newcol2`.
-
-## Limits
-
-The following limits exit when a schema change is performed:
-
-- Adding or modifying generated columns by using ALTER TABLE is a time-consuming and resource-intensive operation. Therefore, it is recommended to add generated columns at table creation. If it is unavoidable to use ALTER TABLE to add or modify generated columns, it is recommended to evaluate the cost and time involved in advance.
-- Regular columns need to be defined before generated columns. When you use the ALTER TABLE ... ADD COLUMN ... statement to add a regular column without specifying the position of the new regular column, the system automatically places it before the generated columns. Moreover, you cannot use AFTER to explicitly place the regular column after a generated column.
-- If a regular column is referenced in the expression of a generated column, you cannot directly drop or modify that regular column. Instead, you need to first drop the generated column and then drop or modify the regular column.
