@@ -219,7 +219,7 @@ inline bool BitReader::GetAligned(int num_bytes, T* v) {
 //    return true;
 //}
 
-// Copy the same logic from arrow
+// Copy the same logic from arrow, we need to return false instead of DCHECK(false) when facing corrupted files
 inline bool BitReader::GetVlqInt(uint32_t* v) {
     uint32_t tmp = 0;
 
