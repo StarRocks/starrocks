@@ -1,15 +1,17 @@
 # 数据分布
 
-建表时，您需要通过设置分区和分桶，指定数据分布方式，并且建议您合理设置分区和分桶，实现数据均匀的分布。数据分布是指数据划分为子集，并按一定规则均衡地分布在不同节点上，能够有效裁剪数据扫描量，最大限度地利用集群的并发性能，从而提升查询性能。
+建表时，您可以通过设置合理的分区和分桶，实现数据均匀分布和查询性能提升。数据均匀分布是指数据按照一定规则划分为子集，并且均衡地分布在不同节点上。查询时能够有效裁剪数据扫描量，最大限度地利用集群的并发性能，从而提升查询性能。
+
 > **说明**
 >
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。如果自动设置分桶数量后性能未能达到预期，并且您比较熟悉分桶机制，则您也可以[手动设置分桶数量](#确定分桶数量)。
+> - 自 3.1 版本起，您在建表和新增分区时可以不设置分桶键。StarRocks 默认使用随机分桶，将数据随机地分布在分区的所有分桶中。更多信息，请参见[随机分桶](#随机分桶自-v31)。
+> - 自 2.5.7 版本起，您在建表和新增分区时无需手动设置分桶数量 (BUCKETS)。StarRocks 默认自动设置分桶数量，如果自动设置分桶数量后性能未能达到预期，并且您比较熟悉分桶机制，则您也可以[手动设置分桶数量](#确定分桶数量)。
 
 ## 数据分布概览
 
 ### 常见的数据分布方式
 
-现代分布式数据库中，常见的数据分布方式有如下四种：Round-Robin、Range、List 和 Hash。如下图所示：
+现代分布式数据库中，常见的数据分布方式有如下几种：Round-Robin、Range、List 和 Hash。如下图所示：
 
 ![数据分布方式](../assets/3.3.2-1.png)
 
@@ -21,17 +23,42 @@
 
 - Hash：通过哈希函数把数据映射到不同节点上。
 
-为了更灵活地划分数据，除了单独采用上述四种数据分布方式之一以外，您还可以根据具体的业务场景需求组合使用这些数据分布方式。常见的组合方式有 Hash+Hash、Range+Hash、Hash+List。
+为了更灵活地划分数据，除了单独采用上述数据分布方式之一以外，您还可以根据具体的业务场景需求组合使用这些数据分布方式。常见的组合方式有 Hash+Hash、Range+Hash、Hash+List。
 
 ### StarRocks 的数据分布方式
 
-StarRocks 支持如下两种数据分布方式：
+StarRocks 采用分区 + 分桶的两层分布方式来灵活地划分数据。
 
-- Hash 数据分布方式：一张表为一个分区，分区按照分桶键和分桶数量进一步进行数据划分。
+- 第一层为分区：支持 Range 分布，或者不分区（即全表只有一个分区）。
+- 第二层为分桶：在一个分区中，必须进行分桶。数据分布至分桶的方式有 Hash 和 Random 两种。分桶的数量可以由系统自动设置（推荐）或者由您手动指定。
 
-- Range+Hash 数据分布方式：一张表拆分成多个分区，每个分区按照分桶键和分桶数量进一步进行数据划分。
+> **说明**
+>
+> 除了常见的分布方式外， StarRocks 还支持了 Random 分布，简化分桶设置。
 
-采用 Hash 分布的建表语句如下，其中分桶键为 `site_id`：
+综上所述，StarRocks 支持 Random、Hash、Range + Random、Range + Hash 4 种数据分布方式。
+
+- Random 分布：一张表为一个分区，表中数据随机分布至不同分桶，适用于数据量不大且随时间增长缓慢的场景。**如果您没有设置数据分布方式，则 StarRocks 默认使用此数据分布方式。**
+
+- Hash 分布：一张表为一个分区，表中数据按照分桶键值和分桶数量进行划分。
+
+- Range + Random 分布：一张表的数据按照分区列值的范围划分成不同分区。同一分区的数据随机分布至不同分桶。
+
+- Range + Hash 分布：一张表的数据按照分区列值的范围划分成不同分区。每个分区的数据按照分桶键值和分桶数量进一步进行划分。
+
+例如，建表时不设置数据分布方式，则默认由 StarRocks 使用 Random 分布：
+
+```SQL
+CREATE TABLE site_access(
+    site_id INT DEFAULT '10',
+    city_code SMALLINT,
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(site_id, city_code, user_name); -- 没有设置分布方式
+```
+
+建表时设置数据分布方式为 Hash 分布：
 
 ```SQL
 CREATE TABLE site_access(
@@ -41,14 +68,10 @@ CREATE TABLE site_access(
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code, user_name)
-DISTRIBUTED BY HASH(site_id);
+DISTRIBUTED BY HASH(site_id); -- 设置分桶方式为 Hash 分桶，并且必须指定分桶键
 ```
 
-> **注意**
->
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](#确定分桶数量)。
-
-采用Range+Hash组合分布的建表语句如下，其中分区键为 `event_day`，分桶键为 `site_id`：
+建表时设置数据分布方式为 Range + Random 分布：
 
 ```SQL
 CREATE TABLE site_access(
@@ -59,18 +82,35 @@ CREATE TABLE site_access(
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY RANGE(event_day)
-(
+PARTITION BY RANGE(event_day)( -- 设置分区方式为 Range 分区
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-31")
+); -- 没有设置分桶方式，默认由 StarRocks 使用 Random 分桶
+```
+
+建表时设置数据分布方式为 Range + Hash 分布：
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+PARTITION BY RANGE(event_day)( -- 设置分区方式为 Range 分区
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
 )
-DISTRIBUTED BY HASH(site_id);
+DISTRIBUTED BY HASH(site_id); -- 设置分桶方式为 Hash 分桶，必须指定分桶键
 ```
 
 #### 分区
 
-分区用于将数据划分成不同的区间。分区的主要作用是将一张表按照分区键拆分成不同的管理单元，针对每一个管理单元选择相应的存储策略，比如副本数、分桶数、冷热策略和存储介质等。StarRocks 支持在一个集群内使用多种存储介质，您可以将新数据所在分区放在 SSD 盘上，利用 SSD 优秀的随机读写性能来提高查询性能，将旧数据存放在 SATA 盘上，以节省数据存储的成本。
+分区用于将数据划分成不同的区间。分区的主要作用是将一张表按照分区键拆分成不同的管理单元，针对每一个管理单元选择相应的存储策略，比如分桶数、冷热策略、存储介质、副本数等。StarRocks 支持在一个集群内使用多种存储介质，您可以将新数据所在分区放在 SSD 盘上，利用 SSD 优秀的随机读写性能来提高查询性能，将旧数据存放在 SATA 盘上，以节省数据存储的成本。
 
 业务系统中⼀般会选择根据时间进行分区，以优化大量删除过期数据带来的性能问题，同时也方便冷热数据分级存储。
 
@@ -80,17 +120,22 @@ DISTRIBUTED BY HASH(site_id);
 
 分区单位的选择，需要综合考虑数据量、查询特点、数据管理粒度等因素。
 
-实例1: 表单月数据量很小，可以按月分区，相比于按天分区，可以减少元数据数量，从而减少元数据管理和调度的资源消耗。
+示例 1: 表单月数据量很小，可以按月分区，相比于按天分区，可以减少元数据数量，从而减少元数据管理和调度的资源消耗。
 
-实例2: 表单月数据量很大，而大部分查询条件精确到天，如果按天分区，可以做有效的分区裁减，减少查询扫描的数据量。
+示例 2: 表单月数据量很大，而大部分查询条件精确到天，如果按天分区，可以做有效的分区裁减，减少查询扫描的数据量。
 
-实例3: 数据要求按天过期，可以按天分区。
+示例 3: 数据要求按天过期，可以按天分区。
 
 #### 分桶
 
-分区的下一级是分桶，StarRocks 采⽤ Hash 算法作为分桶算法。在同一分区内，分桶键哈希值相同的数据形成 Tablet，Tablet 以多副本冗余的形式存储，是数据均衡和恢复的最⼩单位。Tablet 的副本由一个单独的本地存储引擎管理，数据导入和查询最终都下沉到所涉及的 Tablet 副本上。
+一个分区按分桶方式被分成了多个桶 bucket，每个桶的数据称之为一个 tablet。
 
-**建表时，必须指定分桶键**。自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](#确定分桶数量)。
+分桶方式：StarRocks 支持[随机分桶](#随机分桶自-v31)（自 3.1 版本起） 和 [哈希分桶](#哈希分桶)。
+
+- 随机分桶，建表和新增分区时无需设置分桶键。在同一分区内，数据随机分布到不同的分桶中。
+- 哈希分桶，建表和新增分区时需要指定分桶键。在同一分区内，数据按照分桶键划分分桶后，所有分桶键的值相同的行会唯一分配到对应的一个分桶。
+
+分桶数量：默认由 StarRocks 自动设置分桶数量（自 v2.5.7 版本）。同时也支持您手动设置分桶数量。更多信息，请参见[确定分桶数量](#确定分桶数量)。
 
 ## 创建和管理分区
 
@@ -118,8 +163,7 @@ CREATE TABLE site_access(
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY RANGE(event_day)
-(
+PARTITION BY RANGE(event_day)(
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
@@ -299,24 +343,69 @@ SHOW PARTITIONS FROM site_access;
 
 ## 设置分桶
 
-### 选择分桶键
+### 随机分桶（自 v3.1）
 
-对每个分区的数据，StarRocks 会根据分桶键和分桶数量进行哈希分桶。
-假设存在列同时满足高基数和经常作为查询条件，则优先选择其为分桶键，进行哈希分桶。
-如果不存在这些同时满足两个条件的列，则需要根据查询进行判断。
+对每个分区的数据，StarRocks 将数据随机地分布在所有分桶中，适用于数据量不大，对查询性能要求不高的场景。如果您不设置分桶方式，则默认由 StarRocks 使用随机分桶，并且自动设置分桶数量。
+
+不过值得注意的是，如果查询海量数据且查询时经常使用一些列会作为条件列，随机分桶提供的查询性能可能不够理想。在该场景下建议您使用[哈希分桶](#哈希分桶)，当查询时经常使用这些列作为条件列时，只需要扫描和计算查询命中的少量分桶，则可以显著提高查询性能。
+
+**使用限制**
+
+- 仅支持明细模型表。
+- 不支持指定 [Colocation Group](../using_starrocks/Colocate_join.md)。
+- 不支持 [Spark Load](../loading/SparkLoad.md)。
+
+如下建表示例中，没有使用 `DISTRIBUTED BY xxx` 语句，即表示默认由 StarRocks 使用随机分桶，并且由 StarRocks 自动设置分桶数量。
+
+```SQL
+CREATE TABLE site_access1(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+DUPLICATE KEY(event_day,site_id,city_code,pv);
+```
+
+当然，如果您比较熟悉 StarRocks 的分桶机制，使用随机分桶建表时，也可以手动设置分桶数量。
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+DUPLICATE KEY(event_day,site_id,city_code,pv)
+DISTRIBUTED BY RANDOM BUCKETS 8; --手动设置分桶数量为 8
+```
+
+### 哈希分桶
+
+对每个分区的数据，StarRocks 会根据分桶键和[分桶数量](#确定分桶数量)进行哈希分桶。在哈希分桶中，使用特定的列值作为输入，通过哈希函数计算出一个哈希值，然后将数据根据该哈希值分配到相应的桶中。
+
+**优点**
+
+- 提高查询性能。相同分桶键值的行会被分配到一个分桶中，在查询时能减少扫描数据量。
+- 均匀分布数据。通过选取较高基数（唯一值的数量较多）的列作为分桶键，能更均匀的分布数据到每一个分桶中。
+
+**如何选择分桶键**
+
+假设存在列同时满足高基数和经常作为查询条件，则建议您选择其为分桶键，进行哈希分桶。 如果不存在这些同时满足两个条件的列，则需要根据查询进行判断。
 
 - 如果查询比较复杂，则建议选择高基数的列为分桶键，保证数据在各个分桶中尽量均衡，提高集群资源利用率。
 - 如果查询比较简单，则建议选择经常作为查询条件的列为分桶键，提高查询效率。
 
 并且，如果数据倾斜情况严重，您还可以使用多个列作为数据的分桶键，但是建议不超过 3 个列。
 
-**注意**
+**注意事项**
 
-- **建表时，必须指定分桶键**。
-- 作为分桶键的列，该列的值不能够更新。
+- **建表时，如果使用哈希分桶，则必须指定分桶键**。
 - 分桶键指定后不支持修改。
 
-还是以上述 Range+Hash 组合分布的建表语句为例：
+如下示例中，`site_access` 表采用 `site_id` 作为分桶键，其原因在于 `site_id` 为高基数列。此外，针对 `site_access` 表的查询请求，基本上都以站点作为查询过滤条件，采用 `site_id` 作为分桶键，还可以在查询时裁剪掉大量无关分桶。
 
 ```SQL
 CREATE TABLE site_access(
@@ -327,8 +416,7 @@ CREATE TABLE site_access(
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY RANGE(event_day)
-(
+PARTITION BY RANGE(event_day)(
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
@@ -336,7 +424,7 @@ PARTITION BY RANGE(event_day)
 DISTRIBUTED BY HASH(site_id);
 ```
 
-如上示例中，`site_access` 表采用 `site_id` 作为分桶键，其原因在于， `site_id` 为高基数列。此外，针对 `site_access` 表的查询请求，基本上都以站点作为查询过滤条件，采用 `site_id` 作为分桶键，还可以在查询时裁剪掉大量无关分桶。如下查询中，假设每个分区有 10 个分桶，则其中 9 个分桶被裁减，因而系统只需要扫描 `site_access` 表中 1/10 的数据：
+如下查询中，假设每个分区有 10 个分桶，则其中 9 个分桶被裁减，因而系统只需要扫描 `site_access` 表中 1/10 的数据：
 
 ```SQL
 select sum(pv)

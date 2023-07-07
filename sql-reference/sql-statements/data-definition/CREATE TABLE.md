@@ -14,7 +14,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [key_desc]
 [COMMENT "table comment"]
 [partition_desc]
-distribution_desc
+[distribution_desc]
 [rollup_index]
 [ORDER BY (column_definition1,...)]
 [PROPERTIES ("key"="value", ...)]
@@ -401,29 +401,50 @@ PARTITION BY RANGE (pay_dt) (
 
 ### **distribution_desc**
 
-语法：
+支持随机分桶（Random bucketing）和哈希分桶（Hash bucketing）。如果不指定分桶信息，则 StarRocks 默认使用随机分桶且自动设置分桶数量。
 
-```sql
-DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
-```
+* 随机分桶（自 v3.1）
 
-对每个分区的数据，StarRocks 会根据分桶键和分桶数量进行哈希分桶。
+  对每个分区的数据，StarRocks 将数据随机地分布在所有分桶中，而不受到特定列值的影响。并且如果选择由系统设置分桶数量，则您无需设置分桶信息。如果选择手动指定分桶数量，则语法如下：
 
-对于分桶键的选择，如果列是高基数且经常作为查询条件，则优先选择其为分桶键，进行哈希分桶。
-如果不存在同时满足两个条件的列，则需要根据查询进行判断。
+  ```SQL
+  DISTRIBUTED BY RANDOM BUCKETS <num>
+  ```
 
-* 如果查询比较复杂，则建议选择高基数的列为分桶键，保证数据在各个分桶中尽量均衡，提高集群资源利用率。
-* 如果查询比较简单，则建议选择经常作为查询条件的列为分桶键，提高查询效率。
-并且，如果数据倾斜情况严重，您还可以使用多个列作为数据的分桶键，但是建议不超过 3 个列。
+  不过值得注意的是，如果查询海量数据且查询时经常使用一些列会作为条件列，随机分桶提供的查询性能可能不够理想。在该场景下建议您使用哈希分桶，当查询时经常使用这些列作为条件列时，只需要扫描和计算查询命中的少量分桶，则可以显著提高查询性能。
 
-更多选择分桶键的信息，请参见[选择分桶键](../../../table_design/Data_distribution.md#选择分桶键).
+  **注意事项**
 
-**注意**
+  * 不支持主键模型表、更新模型表和聚合表。
+  * 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
+  * 不支持 [Spark Load](../../../loading/SparkLoad.md)。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
 
-* **建表时，必须指定分桶键**。
-* 作为分桶键的列，该列的值不支持更新。
-* 分桶键指定后不支持修改。
-* 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+  更多随机分桶的信息，请参见[随机分桶](../../../table_design/Data_distribution.md#随机分桶自-v31)。
+
+* 哈希分桶
+
+  语法：
+
+  ```SQL
+  DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
+  ```
+
+  对每个分区的数据，StarRocks 会根据分桶键和分桶数量进行哈希分桶。
+
+  对于分桶键的选择，如果列是高基数且经常作为查询条件，则优先选择其为分桶键，进行哈希分桶。
+  如果不存在同时满足两个条件的列，则需要根据查询进行判断。
+  * 如果查询比较复杂，则建议选择高基数的列为分桶键，保证数据在各个分桶中尽量均衡，提高集群资源利用率。
+  * 如果查询比较简单，则建议选择经常作为查询条件的列为分桶键，提高查询效率。
+  并且，如果数据倾斜情况严重，您还可以使用多个列作为数据的分桶键，但是建议不超过 3 个列。
+  更多选择分桶键的信息，请参见[选择分桶键](../../../table_design/Data_distribution.md#选择分桶键).
+
+  **注意事项**
+
+  * **建表时，必须指定分桶键**。
+  * 作为分桶键的列，该列的值不支持更新。
+  * 分桶键指定后不支持修改。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
 
 ### **ORDER BY**
 
