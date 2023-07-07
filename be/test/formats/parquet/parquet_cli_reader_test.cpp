@@ -116,7 +116,8 @@ TEST_F(ParquetCLIReaderTest, ReadArrowFuzzingParquetFiles) {
     std::vector<std::string> read_paths;
     {
         traverse_directory_add_parquet(read_paths, "./be/test/formats/parquet/arrow_fuzzing_data/fuzzing/");
-        traverse_directory_add_parquet(read_paths, "./be/test/formats/parquet/arrow_fuzzing_data/generated_simple_numerics/");
+        traverse_directory_add_parquet(read_paths,
+                                       "./be/test/formats/parquet/arrow_fuzzing_data/generated_simple_numerics/");
         read_paths.emplace_back("./be/test/formats/parquet/arrow_fuzzing_data/ARROW-17100.parquet");
     }
     std::set<std::string> ignore_dcheck_paths;
