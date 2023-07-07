@@ -77,7 +77,7 @@ public class PartitionUtil {
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
                                                   Table.TableType tableType) throws AnalysisException {
         Preconditions.checkState(values.size() == columns.size(),
-                String.format("columns size is %d, but values size is %d", columns.size(), values.size()));
+                "columns size is %s, but values size is %s", columns.size(), values.size());
 
         PartitionKey partitionKey = null;
         switch (tableType) {
