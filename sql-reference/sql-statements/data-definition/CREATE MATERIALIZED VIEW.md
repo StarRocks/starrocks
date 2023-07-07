@@ -56,19 +56,22 @@ SELECT select_expr[, select_expr ...]
 
 - select_expr（必填）
 
-  查询语句中所有的列，也即物化视图的 schema 中所有的列。该参数支持如下值：
+  构建同步物化视图的查询语句。
 
-  - 单列或聚合列：形如 `SELECT a, b, c FROM table_a` （适用于创建同步物化视图）或 `SELECT table_a.a, table_a.b, table_b.d,`（仅适用于 2.4 版本以上创建异步物化视图），其中 `a`、`b`、`c` 和 `d` 为基表的列名。如果您没有为物化视图指定列名，那么物化视图的列名也为 `a`、`b`、`c` 和 `d`。
-  - 表达式：形如 `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`，其中 `a+1`、`b+2` 和 `c*c` 为包含基表的列名的表达式，`x`、`y` 和 `z` 为物化视图的列名。
+  - 单列或聚合列：形如 `SELECT a, b, c FROM table_a`，其中 `a`、`b` 和 `c` 为基表的列名。如果您没有为物化视图指定列名，那么 StarRocks 自动为这些列命名。
+  - 表达式：形如 `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`，其中 `a+1`、`b+2` 和 `c*c` 为包含基表列名的表达式，`x`、`y` 和 `z` 为物化视图的列名。
 
-  - 同步物化视图仅支持在单列上使用聚合函数。不支持形如 `sum(a+b)` 形式的查询语句。
-  - 同步物化视图仅支持在单列使用一个聚合函数。不支持形如 `select sum(a), min(a) from table` 形式的查询语句。
-  - 使用聚合函数创建同步物化视图时，必须指定 GROUP BY 子句，并在 `select_expr` 中指定至少一个 GROUP BY 列。
-  - 同步物化视图不支持 JOIN、WHERE、以及 GROUP BY 的 HAVING 子句。
-
-  > **注意**
+  > **说明**
   >
-  > 该参数至少需包含一个单列，且所有涉及到的列，均只能出现一次。
+  > - 该参数至少需包含一个单列。
+  > - 同步物化视图仅支持在单列上使用聚合函数。不支持形如 `sum(a+b)` 形式的查询语句。
+  > - 使用聚合函数创建同步物化视图时，必须指定 GROUP BY 子句，并在 `select_expr` 中指定至少一个 GROUP BY 列。
+  > - 同步物化视图不支持 JOIN、WHERE、以及 GROUP BY 的 HAVING 子句。
+  > - 从 v3.1 开始，每个同步物化视图支持为基表的每一列使用多个聚合函数，支持形如 `select b, sum(a), min(a) from table group by b` 形式的查询语句。
+  > - 从 v3.1 开始，同步物化视图支持 SELECT 和聚合函数的复杂表达式，即形如 `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` 或 `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table` 的查询语句。同步物化视图的复杂表达式有以下限制：
+  >   - 每个复杂表达式必须有一个列名，并且基表所有同步物化视图中的不同复杂表达式的别名必须不同。例如，查询语句 `select b, sum(a + 1) as sum_a from table group by b` 和`select b, sum(a) as sum_a from table group by b` 不能同时用于为相同的基表创建同步物化视图。
+  >   - 每个复杂表达式只能引用一列。不支持形如 `a + b as col1` 形式的查询语句。
+  >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图重写。更多信息请参见[查询分析](../../../administration/Query_planning.md)。
 
 - GROUP BY（选填）
 
@@ -183,7 +186,7 @@ AS
 异步物化视图的分区表达式。目前仅支持在创建异步物化视图时使用一个分区表达式。该参数支持如下值：
 
 - `date_column`：用于分区的列的名称。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
-- date_trunc 函数：形如 PARTITION BY date_trunc("MONTH", 'dt')，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
+- date_trunc 函数：形如 PARTITION BY date_trunc("MONTH", 'dt')，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。从 v3.1 开始，您可以进一步使用 time_slice 或 date_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(` dt`, INTERVAL 7 DAY))`，其中 time_slice 或 date_slice 的类型必须比 `date_trunc` 的类型粒度更细。
 
 如不指定该参数，则默认物化视图为无分区。
 

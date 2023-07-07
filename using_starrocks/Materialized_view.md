@@ -293,6 +293,29 @@ GROUP BY order_date;
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                                    |
 | percentile_approx, percentile_union                    | percentile_union                                             |
 
+没有相应 GROUP BY 列的 DISTINCT 聚合无法使用 Aggregate Rollup 重写。但是，从 StarRocks v3.1 开始，如果使用 Aggregate Rollup 对应 DISTINCT 聚合函数的查询没有 GROUP BY 列，但有等价的谓词，该查询也可以被相关物化视图重写，因为 StarRocks 可以将等价谓词转换为 GROUP BY 常量表达式。
+
+在以下示例中，StarRocks 可以使用物化视图 `order_agg_mv1` 改写对应查询 Query：
+
+```SQL
+CREATE MATERIALIZED VIEW order_agg_mv1
+DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
+REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+AS
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list 
+GROUP BY order_date;
+
+
+-- Query
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list WHERE order_date='2023-07-03';
+```
+
 ### 基于 View Delta Join 场景改写查询
 
 StarRocks 支持基于异步物化视图 Delta Join 场景改写查询，即查询的表是物化视图基表的子集的场景。例如，`table_a INNER JOIN table_b` 形式的查询可以由 `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c` 形式的物化视图改写，其中 `table_b INNER JOIN/LEFT OUTER JOIN table_c` 是 Delta Join。此功能允许对这类查询进行透明加速，从而保持查询的灵活性并避免构建宽表的巨大成本。
