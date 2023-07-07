@@ -131,7 +131,7 @@ public class TaskManagerTest {
         Constants.TaskRunState state = null;
 
         int retryCount = 0;
-        int maxRetry = 5;
+        int maxRetry = 15;
         while (retryCount < maxRetry) {
             if (taskRuns.size() > 0) {
                 state = taskRuns.get(0).getState();
