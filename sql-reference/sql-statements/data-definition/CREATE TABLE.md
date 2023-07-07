@@ -30,7 +30,7 @@ distribution_desc
 语法：
 
 ```sql
-col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT]
+col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
 ```
 
 说明：
@@ -123,7 +123,9 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 * **DEFAULT <默认值>**：默认值为指定类型的值。例如，列类型为 VARCHAR，即可指定默认值为 `DEFAULT "beijing"`。当前不支持指定 ARRAY、BITMAP、JSON、HLL 和 BOOLEAN 类型为默认值。
 * **DEFAULT (<表达式>)**：默认值为指定函数返回的结果。目前仅支持 [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 表达式。
 
-* **AUTO_INCREMENT**：指定自增列。自增列的数据类型只支持 BIGINT，自增 ID 从 1 开始增加，自增步长为 1。有关自增列的详细说明，请参见 [AUTO_INCREMENT](../auto_increment.md)。
+**AUTO_INCREMENT**：指定自增列。自增列的数据类型只支持 BIGINT，自增 ID 从 1 开始增加，自增步长为 1。有关自增列的详细说明，请参见 [AUTO_INCREMENT](../auto_increment.md)。自 v3.0，StarRocks 支持该功能。
+
+**AS generation_expr**：指定生成列和其使用的表达式。[生成列](../generated_columns.md)用于预先计算并存储表达式的结果，可以加速包含复杂表达式的查询。自 v3.1，StarRocks 支持该功能。
 
 ### **index_definition**
 
