@@ -47,7 +47,7 @@ Release date: July 7, 2023
 
 #### Shared-data cluster
 
-- Optimized the data cache in [StarRocks shared-data clusters](../deployment/deploy_shared_data.md). The optimized data cache allows for specifying the range of hot data. It can also prevent queries against cold data from occupying the local disk cache, thereby ensuring the performance of queries against hot data.
+- Optimized the data cache in StarRocks shared-data clusters. The optimized data cache allows for specifying the range of hot data. It can also prevent queries against cold data from occupying the local disk cache, thereby ensuring the performance of queries against hot data.
 
 #### Materialized view
 
