@@ -32,7 +32,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 | cloud_native_meta_port              | 云原生元数据服务监听端口。默认值：`6090`。                   |
 | cloud_native_storage_type           | 您使用的存储类型。有效值：`S3`（默认）和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。 |
 | cloud_native_hdfs_url               | HDFS 存储的 URL，例如 `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。 |
-| aws_s3_path                         | 用于存储数据的 S3 存储空间路径，由 S3 存储桶的名称及其下的子路径（如有）组成。 |
+| aws_s3_path                         | 用于存储数据的 S3 存储空间路径，由 S3 存储桶的名称及其下的子路径（如有）组成，如 `testbucket/subpath`。 |
 | aws_s3_region                       | 需访问的 S3 存储空间的地区，如 `us-west-2`。                 |
 | aws_s3_endpoint                     | 访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。 |
 | aws_s3_use_aws_sdk_default_behavior | 是否使用 AWS SDK 默认的认证凭证。有效值：`true` 和 `false` (默认)。 |
@@ -59,9 +59,16 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # 如 testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # 如 us-west-2
     aws_s3_region = <region>
+
+    # 如 https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_aws_sdk_default_behavior = true
     ```
 
@@ -84,9 +91,16 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # 如 testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # 如 us-west-2
     aws_s3_region = <region>
+
+    # 如 https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     ```
 
@@ -96,9 +110,16 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # 如 testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # 如 us-west-2
     aws_s3_region = <region>
+
+    # 如 https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     aws_s3_iam_role_arn = <role_arn>
     ```
@@ -109,9 +130,16 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # 如 testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # 如 us-west-2
     aws_s3_region = <region>
+
+    # 如 https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     aws_s3_iam_role_arn = <role_arn>
     aws_s3_external_id = <external_id>
@@ -123,6 +151,8 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # 如 testbucket/subpath
   aws_s3_path = <s3_path>
 
   # 例如：us-east-1
@@ -141,6 +171,8 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # 如 testbucket/subpath
   aws_s3_path = <s3_path>
 
   # 例如：cn-zhangjiakou
@@ -159,6 +191,8 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # 如 testbucket/subpath
   aws_s3_path = <s3_path>
 
   # 例如：cn-north-4
@@ -177,6 +211,8 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # 如 testbucket/subpath
   aws_s3_path = <s3_path>
 
   # 例如：ap-beijing
@@ -195,6 +231,8 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # 如 testbucket/subpath
   aws_s3_path = <s3_path>
 
   # 例如：cn-beijing
@@ -213,6 +251,8 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # 如 testbucket/subpath
   aws_s3_path = <s3_path>
 
   # 例如：BEIJING
@@ -232,6 +272,8 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # 如 testbucket/subpath
   aws_s3_path = <s3_path>
 
   # 例如：us-east-1
@@ -250,6 +292,8 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # 如 testbucket/subpath
   aws_s3_path = <s3_path>
   
   # 例如：http://172.26.xx.xxx:7480
@@ -326,7 +370,7 @@ PROPERTIES (
 
 | **属性**                | **描述**                                                     |
 | ----------------------- | ------------------------------------------------------------ |
-| enable_storage_cache    | 是否启用本地磁盘缓存。默认值：`true`。<ul><li>当该属性设置为 `true` 时，数据会同时导入对象存储（或 HDFS）和本地磁盘（作为查询加速的缓存）。</li><li>当该属性设置为 `false` 时，数据仅导入到对象存储中。</li></ul>**说明**<br />如需启用本地磁盘缓存，必须在 BE 配置项 `starlet_cache_dir` 中指定磁盘目录。 |
+| enable_storage_cache    | 是否启用本地磁盘缓存。默认值：`true`。<ul><li>当该属性设置为 `true` 时，数据会同时导入对象存储（或 HDFS）和本地磁盘（作为查询加速的缓存）。</li><li>当该属性设置为 `false` 时，数据仅导入到对象存储中。</li></ul>**说明**<br />如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。 |
 | storage_cache_ttl       | 启用本地磁盘缓存后，StarRocks 在本地磁盘中缓存热数据的存活时间。过期数据将从本地磁盘中删除。如果将该值设置为 `-1`，则缓存数据不会过期。默认值：`2592000`（30 天）。<br />**注意**<br />当禁用本地磁盘缓存时，您无需设置该配置项。如果您禁用了本地磁盘缓存，并且将此项设置为除 `0` 以外的值，StarRocks 将出现未知行为。 |
 | enable_async_write_back | 是否允许数据异步写入对象存储。默认值：`false`。<ul><li>当该属性设置为 `true` 时，导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。</li><li>当该属性设置为 `false` 时，只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。</li></ul> |
 
