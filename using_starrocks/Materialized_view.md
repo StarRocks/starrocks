@@ -18,12 +18,11 @@
 
 StarRocks 2.4 之前的版本提供了一种同步更新的同步物化视图（Rollup），可以提供更好的数据新鲜度和更低的刷新成本。但是同步物化视图在场景上有诸多限制，只可基于单一基表创建，且仅支持有限的聚合算子。2.4 版本之后支持异步物化视图，可以基于多个基表创建，且支持更丰富的聚合算子。
 
-下表从支持的特性角度比较了 StarRocks 2.5、2.4 中的异步物化视图以及同步物化视图（Rollup）：
+下表从支持的特性角度比较了 StarRocks 中的异步物化视图以及同步物化视图（Rollup）：
 
 |                              | **单表聚合** | **多表关联** | **查询改写** | **刷新策略** | **基表** |
 | ---------------------------- | ----------- | ---------- | ----------- | ---------- | -------- |
-| **StarRocks 2.5 异步物化视图** | 是 | 是 | 是 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog</li><li>已有异步物化视图</li></ul> |
-| **StarRocks 2.4 异步物化视图** | 是 | 是 | 否 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持基于 Default Catalog 的多表构建 |
+| **异步物化视图** | 是 | 是 | 是 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog（v2.5）</li><li>已有异步物化视图（v2.5）</li><li>已有视图（v3.1）</li></ul> |
 | **同步物化视图（Rollup）** | 仅部分聚合函数 | 否 | 是 | 导入同步刷新 | 仅支持基于 Default Catalog 的单表构建 |
 
 ### 相关概念
@@ -32,7 +31,7 @@ StarRocks 2.4 之前的版本提供了一种同步更新的同步物化视图（
 
   物化视图的驱动表。
 
-  对于 StarRocks 的异步物化视图，基表可以是 [Default catalog](../data_source/catalog/default_catalog.md) 中的内部表、外部数据目录中的表（自 2.5 版本起支持），甚至是已有的异步物化视图（自 2.5 版本起支持）。StarRocks 支持在所有 [StarRocks 表类型](../table_design/table_types/table_types.md) 上创建异步物化视图。
+  对于 StarRocks 的异步物化视图，基表可以是 [Default catalog](../data_source/catalog/default_catalog.md) 中的内部表、外部数据目录中的表（自 2.5 版本起支持），甚至是已有的异步物化视图（自 2.5 版本起支持）或视图（自 3.1 版本起支持）。StarRocks 支持在所有 [StarRocks 表类型](../table_design/table_types/table_types.md) 上创建异步物化视图。
 
 - **刷新（Refresh）**
 
@@ -69,6 +68,7 @@ StarRocks 支持在以下数据源创建异步物化视图：
 - StarRocks 内部表。基表支持所有 StarRocks 表类型。
 - Hive Catalog、Hudi Catalog 和 Iceberg  Catalog 中的表。
 - 已有异步物化视图。
+- 已有视图。
 
 ### 准备工作
 
@@ -318,7 +318,7 @@ FROM order_list WHERE order_date='2023-07-03';
 
 ### 基于 View Delta Join 场景改写查询
 
-StarRocks 支持基于异步物化视图 Delta Join 场景改写查询，即查询的表是物化视图基表的子集的场景。例如，`table_a INNER JOIN table_b` 形式的查询可以由 `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c` 形式的物化视图改写，其中 `table_b INNER JOIN/LEFT OUTER JOIN table_c` 是 Delta Join。此功能允许对这类查询进行透明加速，从而保持查询的灵活性并避免构建宽表的巨大成本。
+StarRocks 支持基于异步物化视图 Delta Join 场景改写查询，即查询的表是物化视图基表的子集的场景。例如，`table_a INNER JOIN table_b` 形式的查询可以由 `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c` 形式的物化视图改写，其中 `table_b INNER JOIN/LEFT OUTER JOIN table_c` 是 Delta Join。此功能允许对这类查询进行透明加速，从而保持查询的灵活性并避免构建宽表的巨大成本。自 v3.1 起，StarRocks 支持基于 Hive Catalog 的 View Delta Join 查询改写。
 
 View Delta Join 查询只有在满足以下要求时才能被改写：
 
