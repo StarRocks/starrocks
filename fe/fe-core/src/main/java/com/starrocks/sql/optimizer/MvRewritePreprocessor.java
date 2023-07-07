@@ -80,14 +80,9 @@ public class MvRewritePreprocessor {
 
     public void prepareMvCandidatesForPlan() {
         Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
-
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
-        if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "No Related Async MVs for plan");
-            return;
-        }
         prepareRelatedMVs(queryTables, relatedMvs);
     }
 
@@ -171,14 +166,25 @@ public class MvRewritePreprocessor {
                 }
             }
         }
-        if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "No Related Sync MVs");
-            return;
-        }
         prepareRelatedMVs(queryTables, relatedMvs);
     }
 
     private void prepareRelatedMVs(Set<Table> queryTables, Set<MaterializedView> relatedMvs) {
+        String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
+        String queryIncludingMVNames = connectContext.getSessionVariable().getQueryincludingMVNames();
+        if (!Strings.isNullOrEmpty(queryExcludingMVNames) || !Strings.isNullOrEmpty(queryIncludingMVNames)) {
+            Set<String> queryExcludingMVNamesSet = Sets.newHashSet(queryExcludingMVNames.split(","));
+            Set<String> queryIncludingMVNamesSet = Sets.newHashSet(queryIncludingMVNames.split(","));
+            relatedMvs = relatedMvs.stream()
+                    .filter(mv -> queryIncludingMVNamesSet.contains(mv.getName()))
+                    .filter(mv -> !queryExcludingMVNamesSet.contains(mv.getName()))
+                    .collect(Collectors.toSet());
+        }
+        if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related MVs for the query plan");
+            return;
+        }
+
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
             try {
@@ -262,13 +268,8 @@ public class MvRewritePreprocessor {
         }
 
         // Add mv info into dump info
-        if (connectContext.isQueryDump()) {
+        if (connectContext.getDumpInfo() != null) {
             String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
-            connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
-            // build mv query logical plan
-            MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.COST_BASED);
-            mvOptimizer.optimize(mv, connectContext, optimizerConfig);
             connectContext.getDumpInfo().addTable(dbName, mv);
         }
 
