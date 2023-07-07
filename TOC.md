@@ -694,6 +694,7 @@
   + [编译 StarRocks](/developers/build-starrocks/Build_in_docker.md)
   + [使用 debuginfo 文件进行调试](/developers/debuginfo.md)
 + Release Notes
+  + [v3.1](/release_notes/release-3.1.md)
   + [v3.0](/release_notes/release-3.0.md)
   + [v2.5](/release_notes/release-2.5.md)
   + [v2.4](/release_notes/release-2.4.md)
