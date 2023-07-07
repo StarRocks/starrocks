@@ -48,7 +48,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 public class OptOlapPartitionPruner {
@@ -193,9 +194,15 @@ public class OptOlapPartitionPruner {
         return Pair.create(Utils.compoundAnd(scanPredicates), prunedPartitionPredicates);
     }
 
+<<<<<<< HEAD
     private static void putValueMapItem(TreeMap<LiteralExpr, Set<Long>> partitionValueToIds,
                                  Long partitionId,
                                  LiteralExpr value) {
+=======
+    private static void putValueMapItem(ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds,
+                                        Long partitionId,
+                                        LiteralExpr value) {
+>>>>>>> 3589fca705 ([Enhancement] Optimize the partition prune for hive table (#26598))
         Set<Long> partitionIdSet = partitionValueToIds.get(value);
         if (partitionIdSet == null) {
             partitionIdSet = new HashSet<>();
@@ -207,16 +214,30 @@ public class OptOlapPartitionPruner {
     private static List<Long> listPartitionPrune(ListPartitionInfo listPartitionInfo,
                                           LogicalOlapScanOperator olapScanOperator) {
 
-        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = new HashMap<>();
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
+                Maps.newConcurrentMap();
         Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = new HashMap<>();
 
         // single item list partition has only one column mapper
         Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
         if (literalExprValuesMap != null && literalExprValuesMap.size() > 0) {
+<<<<<<< HEAD
             TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
             literalExprValuesMap.forEach((partitionId, values) ->
                     values.forEach(value ->
                             putValueMapItem(partitionValueToIds, partitionId, value)));
+=======
+            ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
+            for (Map.Entry<Long, List<LiteralExpr>> entry : literalExprValuesMap.entrySet()) {
+                Long partitionId = entry.getKey();
+                if (!partitionIds.contains(partitionId)) {
+                    continue;
+                }
+                List<LiteralExpr> values = entry.getValue();
+                values.forEach(value ->
+                        putValueMapItem(partitionValueToIds, partitionId, value));
+            }
+>>>>>>> 3589fca705 ([Enhancement] Optimize the partition prune for hive table (#26598))
             // single item list partition has only one column
             Column column = listPartitionInfo.getPartitionColumns().get(0);
             ColumnRefOperator columnRefOperator = olapScanOperator.getColumnReference(column);
@@ -229,7 +250,7 @@ public class OptOlapPartitionPruner {
         if (multiLiteralExprValues != null && multiLiteralExprValues.size() > 0) {
             List<Column> columnList = listPartitionInfo.getPartitionColumns();
             for (int i = 0; i < columnList.size(); i++) {
-                TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
+                ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueToIds = new ConcurrentSkipListMap<>();
                 for (Map.Entry<Long, List<List<LiteralExpr>>> entry : multiLiteralExprValues.entrySet()) {
                     Long partitionId = entry.getKey();
                     List<List<LiteralExpr>> multiValues = entry.getValue();

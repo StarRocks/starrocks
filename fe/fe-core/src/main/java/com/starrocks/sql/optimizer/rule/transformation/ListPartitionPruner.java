@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 3589fca705 ([Enhancement] Optimize the partition prune for hive table (#26598))
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -29,7 +45,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
+<<<<<<< HEAD
 import java.util.TreeMap;
+=======
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.stream.Collectors;
+>>>>>>> 3589fca705 ([Enhancement] Optimize the partition prune for hive table (#26598))
 
 public class ListPartitionPruner implements PartitionPruner {
     private static final Logger LOG = LogManager.getLogger(ListPartitionPruner.class);
@@ -52,7 +74,7 @@ public class ListPartitionPruner implements PartitionPruner {
     //                1 -> set(1,5),
     //                2 -> set(2))
 
-    private final Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap;
+    private final Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap;
     // Store partitions with null partition values separately
     // partitionColumnName -> null partitionIds
     //
@@ -66,9 +88,16 @@ public class ListPartitionPruner implements PartitionPruner {
     private final Set<Long> allPartitions;
     private final List<ColumnRefOperator> partitionColumnRefs;
 
+<<<<<<< HEAD
     public ListPartitionPruner(Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
                                Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
                                List<ScalarOperator> partitionConjuncts) {
+=======
+    public ListPartitionPruner(
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
+            List<ScalarOperator> partitionConjuncts, List<Long> specifyPartitionIds) {
+>>>>>>> 3589fca705 ([Enhancement] Optimize the partition prune for hive table (#26598))
         this.columnToPartitionValuesMap = columnToPartitionValuesMap;
         this.columnToNullPartitions = columnToNullPartitions;
         this.partitionConjuncts = partitionConjuncts;
@@ -78,7 +107,7 @@ public class ListPartitionPruner implements PartitionPruner {
 
     private Set<Long> getAllPartitions() {
         Set<Long> allPartitions = Sets.newHashSet();
-        for (TreeMap<LiteralExpr, Set<Long>> partitionValuesMap : columnToPartitionValuesMap.values()) {
+        for (ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValuesMap : columnToPartitionValuesMap.values()) {
             for (Set<Long> partitions : partitionValuesMap.values()) {
                 allPartitions.addAll(partitions);
             }
@@ -184,9 +213,9 @@ public class ListPartitionPruner implements PartitionPruner {
     // string_col = '001' 3
     // will generate new partition value map
     // int_col = 1  [1, 2, 3]
-    private TreeMap<LiteralExpr, Set<Long>> getCastPartitionValueMap(CastOperator castOperator,
-                                                                     TreeMap<LiteralExpr, Set<Long>> partitionValueMap) {
-        TreeMap<LiteralExpr, Set<Long>> newPartitionValueMap = new TreeMap<>();
+    private ConcurrentNavigableMap<LiteralExpr, Set<Long>> getCastPartitionValueMap(CastOperator castOperator,
+                                            ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueMap) {
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> newPartitionValueMap = new ConcurrentSkipListMap<>();
 
         for (Map.Entry<LiteralExpr, Set<Long>> entry : partitionValueMap.entrySet()) {
             LiteralExpr literalExpr = null;
@@ -226,7 +255,7 @@ public class ListPartitionPruner implements PartitionPruner {
         ColumnRefOperator leftChild = Utils.extractColumnRef(binaryPredicate).get(0);
 
         Set<Long> matches = Sets.newHashSet();
-        TreeMap<LiteralExpr, Set<Long>> partitionValueMap = columnToPartitionValuesMap.get(leftChild);
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueMap = columnToPartitionValuesMap.get(leftChild);
         Set<Long> nullPartitions = columnToNullPartitions.get(leftChild);
 
         if (binaryPredicate.getChild(0) instanceof CastOperator && partitionValueMap != null) {
@@ -350,7 +379,7 @@ public class ListPartitionPruner implements PartitionPruner {
         ColumnRefOperator child = Utils.extractColumnRef(inPredicate).get(0);
 
         Set<Long> matches = Sets.newHashSet();
-        TreeMap<LiteralExpr, Set<Long>> partitionValueMap = columnToPartitionValuesMap.get(child);
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueMap = columnToPartitionValuesMap.get(child);
         Set<Long> nullPartitions = columnToNullPartitions.get(child);
         if (partitionValueMap == null || nullPartitions == null || partitionValueMap.isEmpty()) {
             return null;
