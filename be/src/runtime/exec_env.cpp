@@ -209,6 +209,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             config::pipeline_connector_scan_thread_num_per_cpu * std::thread::hardware_concurrency();
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
+<<<<<<< HEAD
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_without_workgroup;
     RETURN_IF_ERROR(ThreadPoolBuilder("con_scan_io")
                             .set_min_threads(0)
@@ -220,6 +221,15 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             std::move(connector_scan_worker_thread_pool_without_workgroup),
             std::make_unique<workgroup::PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
     _connector_scan_executor_without_workgroup->initialize(connector_num_io_threads);
+=======
+    if (config::hdfs_client_enable_hedged_read) {
+        // Set hdfs client hedged read pool size
+        config::hdfs_client_hedged_read_threadpool_size =
+                std::min(connector_num_io_threads * 2, config::hdfs_client_hedged_read_threadpool_size);
+        CHECK_GT(config::hdfs_client_hedged_read_threadpool_size, 0)
+                << "hdfs_client_hedged_read_threadpool_size should greater than 0";
+    }
+>>>>>>> 2918b0d1f9 ([Enhancement] Enable HDFS client's hedged read by default (#25666))
 
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
     RETURN_IF_ERROR(ThreadPoolBuilder("con_wg_scan_io")
