@@ -54,6 +54,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
@@ -392,6 +393,7 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        originStmt = LogUtil.removeCommentAndLineSeparator(originStmt);
 
         List<StatementBase> statements;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
@@ -638,6 +640,7 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        replaySql = LogUtil.removeCommentAndLineSeparator(replaySql);
         Map<String, Database> dbs = null;
         try {
             PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse");
