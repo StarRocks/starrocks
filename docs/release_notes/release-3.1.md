@@ -66,10 +66,10 @@ Release date: July 7, 2023
   - Supports using the `REFRESH MATERIALIZED VIEW WITH SYNC MODE` syntax to synchronously invoke materialized view refresh tasks.
 - Enhanced the use of asynchronous materialized views:
   - Supports using `ALTER MATERIALIZED VIEW {ACTIVE | INACTIVE}` to enable or disable a materialized view. Materialized views that are disabled (in the `INACTIVE` state) cannot be refreshed or used for query rewrite, but can be directly queried.
-  - Supports using `ALTER MATERIALIZED VIEW SWAP WITH` to replace a materialized view. Users can create a new materialized view and then perform an atomic replacement on an existing materialized view to implement schema changes on the existing materialized view.
+  - Supports using `ALTER MATERIALIZED VIEW SWAP WITH` to swap two materialized views. Users can create a new materialized view and then perform an atomic swap with an existing materialized view to implement schema changes on the existing materialized view.
 - Optimized synchronous materialized views:
   - Supports direct queries against synchronous materialized views using SQL hints `[_SYNC_MV_]`, allowing for walking around issues that some queries cannot be properly rewritten in rare circumstances.
-  - Supports more expressions, such as `CASE-WHEN`, `CAST`, and mathematical operations, which make materialized views suitable in more business scenarios.
+  - Supports more expressions, such as `CASE-WHEN`, `CAST`, and mathematical operations, which make materialized views suitable for more business scenarios.
 
 #### Data Lake analytics
 
