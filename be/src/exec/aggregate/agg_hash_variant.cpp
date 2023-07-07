@@ -217,7 +217,7 @@ size_t AggHashMapVariant::size() const {
 }
 
 bool AggHashMapVariant::need_expand(size_t increasement) const {
-    ssize_t capacity = this->capacity();
+    size_t capacity = this->capacity();
     // TODO: think about two-level hashmap
     size_t size = this->size() + increasement;
     // see detail implement in reset_growth_left
