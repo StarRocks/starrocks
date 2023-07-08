@@ -12,7 +12,7 @@ import java.lang.reflect.InvocationTargetException;
 
 /**
  * Modify from mockit.internal.util.ConstructorReflection JMockit v1.13
- * Util class to invoke constructor of specified class.
+ * Util class to invoke constructor of specified class. Test!
  */
 public final class ConstructorReflection {
 
