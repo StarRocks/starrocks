@@ -20,12 +20,10 @@ The overall idea is to write code on the MacBook,  then automatically synchroniz
 
 **Thrift 0.13**
 
-There is no 0.13 version of Thrift in brew repository, you can use the following command:
+There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install. 
 
 ```bash
-brew tap-new $USER/local-tap
-brew extract --version='0.13.0' thrift $USER/local-tap
-brew install thrift@0.13.0
+brew install alberttwong/thrift/thrift@0.13
 ```
 
 You can check whether Thrift is installed successfully with the following command:
