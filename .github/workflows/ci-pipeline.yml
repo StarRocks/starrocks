@@ -140,7 +140,7 @@ jobs:
           echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   clang-format:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     needs: be-checker
     name: Clang-Format
     env:
@@ -185,7 +185,7 @@ jobs:
           rm -rf ${{ github.workspace }}
 
   thirdparty-update:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     needs: [ be-checker, clang-format ]
     name: Thirdparty Update
     env:
@@ -224,7 +224,7 @@ jobs:
           rm -rf ${{ github.workspace }}
 
   be-ut:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     needs: [ be-checker, thirdparty-update ]
     timeout-minutes: 90
     name: BE UT
@@ -272,7 +272,7 @@ jobs:
           rm -rf ${{ github.workspace }}
 
   clang-tidy:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     needs: [ be-checker, thirdparty-update ]
     timeout-minutes: 90
     name: Clang-Tidy
@@ -405,7 +405,7 @@ jobs:
           level: error
 
   fe-ut:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     needs: fe-codestyle-check
     name: FE UT
     env:
@@ -504,7 +504,7 @@ jobs:
           rm -rf ${{ github.workspace }}
 
   build:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     needs: [be-checker, fe-checker, be-ut, fe-ut, thirdparty-update]
     name: BUILD
     env:
@@ -555,7 +555,7 @@ jobs:
           rm -rf ${{ github.workspace }}
 
   deploy:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     if: always() && needs.build.result == 'success'
     needs: build
     name: DEPLOY SR
@@ -601,7 +601,7 @@ jobs:
           rm -rf ${{ github.workspace }} 
 
   SQL-Tester:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     name: SQL-Tester
     needs: [ build, deploy ]
     if: always() && needs.deploy.result == 'success'
@@ -660,7 +660,7 @@ jobs:
           rm -rf ${{ github.workspace }}
 
   admit:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     name: ADMIT TEST
     needs: [ deploy, SQL-Tester ]
     if: always() && needs.deploy.result == 'success' && needs.SQL-Tester.result == 'success'
@@ -709,7 +709,7 @@ jobs:
           rm -rf ${{ github.workspace }}
 
   Teardown:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     name: Teardown
     needs: [ deploy, admit ]
     if: always() && needs.deploy.outputs.deploy_conf_file != ''
