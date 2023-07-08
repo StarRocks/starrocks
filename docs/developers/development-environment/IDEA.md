@@ -7,12 +7,10 @@ Even if you are not using macOS, you can also refer to this tutorial.
 
 **Thrift 0.13**
 
-If you installed Thrift directly with brew, you will find that there is no version 0.13, you can use the following command:
+There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install. 
 
 ```bash
-brew tap-new $USER/local-tap
-brew extract --version='0.13.0' thrift $USER/local-tap
-brew install thrift@0.13.0
+brew install alberttwong/thrift/thrift@0.13
 ```
 
 After installing Thrift successfully, you can check by executing following command:
