@@ -378,8 +378,6 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git";
-          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -443,6 +441,11 @@ jobs:
         id: run_ut
         shell: bash
         timeout-minutes: 60
+        env:
+          ALI_AK: ${{ secrets.ALI_AK }}
+          ALI_SK: ${{ secrets.ALI_SK }}
+          ALI_USER: ${{ secrets.ALI_USER }}
+          ALI_CR_PWD: ${{ secrets.ALI_CR_PWD }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
@@ -475,16 +478,16 @@ jobs:
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ -rf
-          ossutil64 --config-file ~/.ossutilconfig cp fe/fe-core/target/result/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
+          ossutil64 rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ -rf
+          ossutil64 cp fe/fe-core/target/result/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
 
       - name: Upload UT XML
         if: always()
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ -rf
-          ossutil64 --config-file ~/.ossutilconfig cp ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
+          ossutil64 rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ -rf
+          ossutil64 cp ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
 
       - name: Upload log
         if: always()
@@ -529,6 +532,11 @@ jobs:
         id: run_build
         shell: bash
         timeout-minutes: 90
+        env:
+          ALI_AK: ${{ secrets.ALI_AK }}
+          ALI_SK: ${{ secrets.ALI_SK }}
+          ALI_USER: ${{ secrets.ALI_USER }}
+          ALI_CR_PWD: ${{ secrets.ALI_CR_PWD }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
@@ -562,6 +570,8 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: ci-admit
+      ALI_AK: ${{ secrets.ALI_AK }}
+      ALI_SK: ${{ secrets.ALI_SK }}
     outputs:
       fe: ${{steps.deploy_sr.outputs.fe}}
       be: ${{steps.deploy_sr.outputs.be}}
@@ -651,8 +661,8 @@ jobs:
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ -rf
-          ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
+          ossutil64 rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ -rf
+          ossutil64 cp test/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
           
       - name: Clean ENV
         if: always()
@@ -700,8 +710,8 @@ jobs:
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ -rf
-          ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/result oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
+          ossutil64 rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ -rf
+          ossutil64 cp StarRocksTest/result oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
 
       - name: Clean ENV
         if: always()
