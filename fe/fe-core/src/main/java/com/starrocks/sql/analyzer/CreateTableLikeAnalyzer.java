@@ -54,6 +54,15 @@ public class CreateTableLikeAnalyzer {
             if (stmt.isSetIfNotExists()) {
                 parsedCreateTableStmt.setIfNotExists();
             }
+            if (stmt.getProperties() != null) {
+                parsedCreateTableStmt.updateProperties(stmt.getProperties());
+            }
+            if (stmt.getDistributionDesc() != null) {
+                parsedCreateTableStmt.setDistributionDesc(stmt.getDistributionDesc());
+            }
+            if (stmt.getPartitionDesc() != null) {
+                parsedCreateTableStmt.setPartitionDesc(stmt.getPartitionDesc());
+            }
 
             com.starrocks.sql.analyzer.Analyzer.analyze(parsedCreateTableStmt, context);
             stmt.setCreateTableStmt(parsedCreateTableStmt);
