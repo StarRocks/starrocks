@@ -1,4 +1,4 @@
-name: CI PIPELINE
+name: CI PIPELINE TEST
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ on:
       - main
 
 concurrency:
-  group: ${{ github.event.number }}
+  group: ${{ github.event.number }}-test
   cancel-in-progress: true
 
 
