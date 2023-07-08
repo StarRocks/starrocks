@@ -136,6 +136,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 
@@ -383,22 +384,22 @@ public class AlterJobMgr {
         int partitionTTL = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTL = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
-            properties.remove(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
-            properties.remove(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         int autoRefreshPartitionsLimit = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
             autoRefreshPartitionsLimit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
-            properties.remove(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
         }
         List<TableName> excludedTriggerTables = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
-            properties.remove(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+        }
+        int maxMVRewriteStaleness = INVALID;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
         }
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
@@ -459,7 +460,12 @@ public class AlterJobMgr {
             materializedView.setForeignKeyConstraints(foreignKeyConstraints);
             isChanged = true;
         }
-
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
+                    propClone.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND));
+            materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+            isChanged = true;
+        }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
         if (!properties.isEmpty()) {
             // set properties if there are no exceptions
@@ -583,6 +589,14 @@ public class AlterJobMgr {
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
             newMvRefreshScheme.setType(refreshType);
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
+
+            long maxChangedTableRefreshTime = log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values().stream()
+                    .map(x -> x.values().stream().map(
+                            MaterializedView.BasePartitionInfo::getLastRefreshTime).max(Long::compareTo))
+                    .map(x -> x.orElse(null)).filter(Objects::nonNull)
+                    .max(Long::compareTo)
+                    .orElse(System.currentTimeMillis());
+            newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
                     "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +

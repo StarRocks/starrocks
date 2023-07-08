@@ -73,6 +73,9 @@ public class MvRewritePreprocessor {
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
+        if (relatedMvs.isEmpty()) {
+            return;
+        }
 
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
@@ -97,14 +100,14 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        MaterializedView.MvRewriteContext mvRewriteContext = mv.getPlanContext();
-        if (mvRewriteContext == null) {
+        MaterializedView.MVRewriteContextCache mvRewriteContextCache = mv.getPlanContext();
+        if (mvRewriteContextCache == null) {
             // build mv query logical plan
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            mvRewriteContext = mvOptimizer.optimize(mv, connectContext);
-            mv.setPlanContext(mvRewriteContext);
+            mvRewriteContextCache = mvOptimizer.optimize(mv, connectContext);
+            mv.setPlanContext(mvRewriteContextCache);
         }
-        if (!mvRewriteContext.isValidMvPlan()) {
+        if (!mvRewriteContextCache.isValidMvPlan()) {
             return;
         }
 
@@ -121,7 +124,7 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        OptExpression mvPlan = mvRewriteContext.getLogicalPlan();
+        OptExpression mvPlan = mvRewriteContextCache.getLogicalPlan();
         ScalarOperator mvPartialPartitionPredicates = null;
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
             // when mv is partitioned and there are some refreshed partitions,
@@ -140,7 +143,7 @@ public class MvRewritePreprocessor {
                         baseTables, originQueryColumns, intersectingTables, mvPartialPartitionPredicates);
         List<ColumnRefOperator> mvOutputColumns = mv.getPlanContext().getOutputColumns();
         // generate scan mv plan here to reuse it in rule applications
-        LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext);
+        LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext, partitionNamesToRefresh);
         materializationContext.setScanMvOperator(scanMvOp);
         String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
         connectContext.getDumpInfo().addTable(dbName, mv);
@@ -172,7 +175,8 @@ public class MvRewritePreprocessor {
      * - original MV's predicates which can be deduced from MV opt expression and be used
      * for partition/distribution pruning.
      */
-    private LogicalOlapScanOperator createScanMvOperator(MaterializationContext mvContext) {
+    private LogicalOlapScanOperator createScanMvOperator(MaterializationContext mvContext,
+                                                         Set<String> excludedPartitions) {
         final MaterializedView mv = mvContext.getMv();
 
         final ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
@@ -207,7 +211,6 @@ public class MvRewritePreprocessor {
         // construct partition
         List<Long> selectPartitionIds = Lists.newArrayList();
         List<Long> selectTabletIds = Lists.newArrayList();
-        Set<String> excludedPartitions = mv.getPartitionNamesToRefreshForMv();
         List<String> selectedPartitionNames = Lists.newArrayList();
         for (Partition p : mv.getPartitions()) {
             if (!excludedPartitions.contains(p.getName()) && p.hasData()) {
