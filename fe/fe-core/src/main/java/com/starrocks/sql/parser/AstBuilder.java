@@ -1036,9 +1036,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateTableLikeStatement(StarRocksParser.CreateTableLikeStatementContext context) {
+        PartitionDesc partitionDesc = context.partitionDesc() == null ? null :
+                (PartitionDesc) visit(context.partitionDesc());
+        DistributionDesc distributionDesc = context.distributionDesc() == null ? null :
+                (DistributionDesc) visit(context.distributionDesc());
+        Map<String, String> properties = getProperties(context.properties());
+
         return new CreateTableLikeStmt(context.IF() != null,
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName(0))),
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName(1))),
+                partitionDesc, distributionDesc, properties,
                 createPos(context));
     }
 
