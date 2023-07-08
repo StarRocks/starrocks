@@ -405,6 +405,7 @@ public class FunctionSet {
     public static final String PERCENT_RANK = "percent_rank";
     public static final String NTILE = "ntile";
     public static final String ROW_NUMBER = "row_number";
+    public static final String ALLOCATE_SESSION = "allocate_session";
 
     // Other functions:
     public static final String HLL_HASH = "hll_hash";
@@ -551,6 +552,7 @@ public class FunctionSet {
             .add(FunctionSet.FIRST_VALUE)
             .add(FunctionSet.LAST_VALUE)
             .add(FunctionSet.FIRST_VALUE_REWRITE)
+            .add(FunctionSet.ALLOCATE_SESSION)
             .build();
 
     public static final Set<String> VARIANCE_FUNCTIONS = ImmutableSet.<String>builder()
@@ -987,6 +989,11 @@ public class FunctionSet {
         // Ntile
         addBuiltin(AggregateFunction.createAnalyticBuiltin(NTILE,
                 Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT));
+        // Allocate session
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(ALLOCATE_SESSION,
+                Lists.newArrayList(Type.BIGINT, Type.INT), Type.BIGINT, Type.BIGINT));
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(ALLOCATE_SESSION,
+                Lists.newArrayList(Type.INT, Type.INT), Type.BIGINT, Type.BIGINT));
 
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));

@@ -30,8 +30,8 @@ Before starting FEs, add the following configuration items in the FE configurati
 | ----------------------------------- | ------------------------------------------------------------ |
 | run_mode                            | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
 | cloud_native_meta_port              | The cloud-native meta service RPC port. Default: `6090`.     |
-| cloud_native_storage_type           | The type of object storage you use. Valid value: `S3` (Default). |
-| aws_s3_path                         | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it. |
+| cloud_native_storage_type           | The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (Preview feature, supported from v3.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default) and `AZBLOB`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. |
+| aws_s3_path                         | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`. |
 | aws_s3_endpoint                     | The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. |
 | aws_s3_region                       | The region in which your S3 bucket resides, for example, `us-west-2`. |
 | aws_s3_use_aws_sdk_default_behavior | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
@@ -40,6 +40,10 @@ Before starting FEs, add the following configuration items in the FE configurati
 | aws_s3_secret_key                   | The Secret Access Key used to access your S3 bucket.         |
 | aws_s3_iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
 | aws_s3_external_id                  | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
+| azure_blob_path                     | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
+| azure_blob_endpoint                 | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
+| azure_blob_shared_key               | The Shared Key used to authorize requests for your Azure Blob Storage.                     |
+| azure_blob_sas_token                | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.                |
 
 - If you use AWS S3
 
@@ -49,9 +53,16 @@ Before starting FEs, add the following configuration items in the FE configurati
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_aws_sdk_default_behavior = true
     ```
 
@@ -61,9 +72,16 @@ Before starting FEs, add the following configuration items in the FE configurati
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_access_key = <access_key>
     aws_s3_secret_key = <secret_key>
     ```
@@ -74,9 +92,16 @@ Before starting FEs, add the following configuration items in the FE configurati
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     ```
 
@@ -86,9 +111,16 @@ Before starting FEs, add the following configuration items in the FE configurati
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     aws_s3_iam_role_arn = <role_arn>
     ```
@@ -99,12 +131,53 @@ Before starting FEs, add the following configuration items in the FE configurati
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     aws_s3_iam_role_arn = <role_arn>
     aws_s3_external_id = <external_id>
+    ```
+
+- If you use Azure Blob Storage (Preview feature, supported from v3.1 onwards):
+
+  - If you use Shared Key to access Azure Blob Storage, add the following configuration items:
+
+    ```Plain
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = AZBLOB
+
+    # For example, testcontainer/subpath
+    azure_blob_path = <blob_path>
+
+    # For example, https://test.blob.core.windows.net
+    azure_blob_endpoint = <endpoint_url>
+
+    azure_blob_shared_key = <shared_key>
+    ```
+
+  - If you use shared access signatures (SAS) to access Azure Blob Storage, add the following configuration items:
+
+    ```Plain
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = AZBLOB
+
+    # For example, testcontainer/subpath
+    azure_blob_path = <blob_path>
+
+    # For example, https://test.blob.core.windows.net
+    azure_blob_endpoint = <endpoint_url>
+
+    azure_blob_sas_token = <sas_token>
     ```
 
 - If you use GCP Cloud Storage:
@@ -113,6 +186,8 @@ Before starting FEs, add the following configuration items in the FE configurati
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # For example, testbucket/subpath
   aws_s3_path = <s3_path>
 
   # For example: us-east-1
@@ -131,6 +206,8 @@ Before starting FEs, add the following configuration items in the FE configurati
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # For example, testbucket/subpath
   aws_s3_path = <s3_path>
 
   # For example: us-east-1
@@ -210,7 +287,7 @@ In addition to the regular table PROPERTIES, you need to specify the following P
 
 | **Property**            | **Description**                                              |
 | ----------------------- | ------------------------------------------------------------ |
-| enable_storage_cache    | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `starlet_cache_dir`. |
+| enable_storage_cache    | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. |
 | storage_cache_ttl       | The duration for which StarRocks caches the loaded data in the local disk if the local disk cache is enabled. The expired data is deleted from the local disk. If the value is set to `-1`, the cached data does not expire. Default: `2592000` (30 days).<br />**CAUTION**<br />If you disabled the local disk cache, you do not need to set this configuration item. Setting this item to a value other than `0` when the local disk cache is disabled will cause unexpected behaviors of StarRocks. |
 | enable_async_write_back | Whether to allow data to be written into object storage asynchronously. Default: `false`.<ul><li>When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.</li><li>When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.</li></ul> |
 

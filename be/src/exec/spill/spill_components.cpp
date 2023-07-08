@@ -260,6 +260,89 @@ void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partiti
     }
 }
 
+Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush,
+                                                             std::vector<SpilledPartition*>& partitions_need_split,
+                                                             std::vector<SpilledPartition*>& partitions_need_flush) {
+    // find partitions that need split first
+    if (options().splittable) {
+        for (const auto& [pid, partition] : _id_to_partitions) {
+            const auto& mem_table = partition->spill_writer->mem_table();
+            // partition not in memory
+            if (!partition->in_mem && partition->level < max_partition_level &&
+                mem_table->mem_usage() + partition->bytes > options().spill_mem_table_bytes_size) {
+                RETURN_IF_ERROR(mem_table->done());
+                partition->in_mem = false;
+                partition->mem_size = 0;
+                partition->bytes += mem_table->mem_usage();
+                partition->is_spliting = true;
+                partitions_need_split.emplace_back(partition);
+            }
+        }
+    }
+
+    // if the mem table of a partition is full, we flush it directly,
+    // otherwise, we treat it as a candidate
+    std::vector<SpilledPartition*> partitions_can_flush;
+    for (const auto& [pid, partition] : _id_to_partitions) {
+        const auto& mem_table = partition->spill_writer->mem_table();
+        if (partition->is_spliting) {
+            continue;
+        }
+        if (mem_table->is_full()) {
+            partition->in_mem = false;
+            partition->mem_size = 0;
+            partitions_need_flush.emplace_back(partition);
+        } else {
+            partitions_can_flush.emplace_back(partition);
+        }
+    }
+
+    // if this is not the final flush and we can find some partitions to flush, just return
+    if (!is_final_flush && !partitions_need_flush.empty()) {
+        return Status::OK();
+    }
+
+    if (is_final_flush) {
+        // for the final flush, we need to control the memory usage on hash join probe side,
+        // so we should ensure the partitions loaded in memory under a certain threshold.
+
+        // order by bytes desc
+        std::sort(partitions_can_flush.begin(), partitions_can_flush.end(),
+                  [](SpilledPartition* left, SpilledPartition* right) { return left->bytes > right->bytes; });
+        size_t in_mem_bytes = 0;
+        for (auto partition : partitions_can_flush) {
+            if (in_mem_bytes + partition->bytes > options().spill_mem_table_bytes_size) {
+                partition->in_mem = false;
+                partition->mem_size = 0;
+                partitions_need_flush.emplace_back(partition);
+                continue;
+            }
+            in_mem_bytes += partition->bytes;
+        }
+    } else {
+        // for the flush during hash join build process, our goal is to reduce memory usage,
+        // so only need to refer to the size of mem table for selection.
+
+        // order by mem usage desc
+        std::sort(partitions_can_flush.begin(), partitions_can_flush.end(),
+                  [](SpilledPartition* left, SpilledPartition* right) {
+                      return left->spill_writer->mem_table()->mem_usage() >
+                             right->spill_writer->mem_table()->mem_usage();
+                  });
+        size_t accumulate_spill_bytes = 0;
+        for (auto partition : partitions_can_flush) {
+            accumulate_spill_bytes += partition->spill_writer->mem_table()->mem_usage();
+            partition->in_mem = false;
+            partition->mem_size = 0;
+            partitions_need_flush.emplace_back(partition);
+            if (accumulate_spill_bytes > _mem_tracker->consumption() / 2) {
+                break;
+            }
+        }
+    }
+    return Status::OK();
+}
+
 // make shuffle public
 void PartitionedSpillerWriter::shuffle(std::vector<uint32_t>& dst, const SpillHashColumn* hash_column) {
     const auto& hashs = hash_column->get_data();

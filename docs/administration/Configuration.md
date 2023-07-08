@@ -6,7 +6,7 @@ This topic describes FE, BE, and system parameters. It also provides suggestions
 
 FE parameters are classified into dynamic parameters and static parameters.
 
-- Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid after you restart your FE.
+- Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid if you restart your FE. Therefore, we recommend that you also modify the configuration items in the `fe.conf` file to prevent the loss of modifications.
 
 - Static parameters can only be configured and adjusted in the FE configuration file **fe.conf**. **After you modify this file, you must restart your FE for the changes to take effect.**
 
@@ -35,6 +35,10 @@ You can configure or modify the settings of FE dynamic parameters using [ADMIN S
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
 ```
+
+> **NOTE**
+>
+> The configurations will be restored to the default values in the `fe.conf` file after the FE restarts. Therefore, we recommend that you also modify the configuration items in `fe.conf` to prevent the loss of modifications.
 
 #### Logging
 
@@ -273,6 +277,27 @@ This section provides an overview of the static parameters that you can configur
 | tablet_sched_storage_cooldown_second | -1              | The latency of automatic cooling starting from the time of table creation. The alias of this parameter is `storage_cooldown_second`. Unit: second. The default value `-1` specifies that automatic cooling is disabled. If you want to enable automatic cooling, set this parameter to a value greater than `-1`. |
 | tablet_stat_update_interval_second   | 300             | The time interval at which the FE retrieves tablet statistics from each BE. Unit: second. |
 
+#### StarRocks shared-data cluster
+
+| Parameter                           | Default         | Description                                                  |
+| ----------------------------------- | --------------- | ------------------------------------------------------------ |
+| run_mode                            | shared_nothing  | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
+| cloud_native_meta_port              | 6090            | The cloud-native meta service RPC port. Default: `6090`.     |
+| cloud_native_storage_type           | S3              | The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (Preview feature, supported from v3.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default) and `AZBLOB`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. |
+| aws_s3_path                         | N/A             | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`. |
+| aws_s3_endpoint                     | N/A             | The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. |
+| aws_s3_region                       | N/A             | The region in which your S3 bucket resides, for example, `us-west-2`. |
+| aws_s3_use_aws_sdk_default_behavior | false           | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
+| aws_s3_use_instance_profile         | false           | Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values: `true` and `false` (Default). <ul><li>If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws_s3_access_key` and `aws_s3_secret_key`. </li><li>If you use Instance Profile to access S3, you must specify this item as `true`. </li><li>If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws_s3_iam_role_arn`. </li><li>And if you use an external AWS account,  you must also specify `aws_s3_external_id`.</li></ul> |
+| aws_s3_access_key                   | N/A             | The Access Key ID used to access your S3 bucket.             |
+| aws_s3_secret_key                   | N/A             | The Secret Access Key used to access your S3 bucket.         |
+| aws_s3_iam_role_arn                 | N/A             | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
+| aws_s3_external_id                  | N/A             | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
+| azure_blob_path                     | N/A             | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
+| azure_blob_endpoint                 | N/A             | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
+| azure_blob_shared_key               | N/A             | The Shared Key used to authorize requests for your Azure Blob Storage.                     |
+| azure_blob_sas_token                | N/A             | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.                |
+
 #### Other FE static parameters
 
 | Parameter                          | Default                                         | Description                                                  |
@@ -393,6 +418,7 @@ BE static parameters are as follows.
 | brpc_num_threads | -1 | N/A | The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads. |
 | priority_networks | Empty string | N/A | The CIDR-formatted IP address that is used to specify the priority IP address of a BE node if the machine that hosts the BE node has multiple IP addresses. |
 | heartbeat_service_port | 9050 | N/A | The BE heartbeat service port, which is used to receive heartbeats from FEs. |
+| starlet_port | 9070 | N/A | The BE heartbeat service port for the StarRocks shared-data cluster. |
 | heartbeat_service_thread_count | 1 | N/A | The thread count of the BE heartbeat service. |
 | create_tablet_worker_count | 3 | N/A | The number of threads used to create a tablet. |
 | drop_tablet_worker_count | 3 | N/A | The number of threads used to drop a tablet. |

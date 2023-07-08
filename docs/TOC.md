@@ -315,6 +315,7 @@
         + [STRUCT](./sql-reference/sql-statements/data-types/STRUCT.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
+    + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + Function Reference
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
@@ -521,6 +522,7 @@
       + [time_slice](./sql-reference/sql-functions/date-time-functions/time_slice.md)
       + [time_to_sec](./sql-reference/sql-functions/date-time-functions/time_to_sec.md)
       + [timediff](./sql-reference/sql-functions/date-time-functions/timediff.md)
+      + [date_diff](./sql-reference/sql-functions/date-time-functions/date_diff.md)
       + [timestamp](./sql-reference/sql-functions/date-time-functions/timestamp.md)
       + [timestampadd](./sql-reference/sql-functions/date-time-functions/timestampadd.md)
       + [timestampdiff](./sql-reference/sql-functions/date-time-functions/timestampdiff.md)
@@ -651,6 +653,8 @@
     + Struct Functions
       + [named_struct](./sql-reference/sql-functions/struct-functions/named_struct.md)
       + [row](./sql-reference/sql-functions/struct-functions/row.md)
+    + Table Functions
+      + [generate_series](./sql-reference/sql-functions/table-functions/generate_series.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
@@ -701,6 +705,7 @@
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
 + Release Notes
+  + [v3.1](./release_notes/release-3.1.md)
   + [v3.0](./release_notes/release-3.0.md)
   + [v2.5](./release_notes/release-2.5.md)
   + [v2.4](./release_notes/release-2.4.md)

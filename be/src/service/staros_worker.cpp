@@ -81,7 +81,8 @@ absl::Status StarOSWorker::invalidate_fs(const ShardInfo& info) {
     if (!conf.ok()) {
         return conf.status();
     }
-    auto key = get_cache_key(*scheme, *conf);
+    std::string key_str = get_cache_key(*scheme, *conf);
+    CacheKey key(key_str);
     _fs_cache->erase(key);
     return absl::OkStatus();
 }
@@ -318,7 +319,8 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
 
 absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shared_filesystem(
         std::string_view scheme, const Configuration& conf) {
-    auto key = get_cache_key(scheme, conf);
+    std::string key_str = get_cache_key(scheme, conf);
+    CacheKey key(key_str);
 
     // Lookup LRU cache
     std::shared_ptr<fslib::FileSystem> fs;
@@ -354,7 +356,7 @@ absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shar
     return std::move(fs);
 }
 
-CacheKey StarOSWorker::get_cache_key(std::string_view scheme, const Configuration& conf) {
+std::string StarOSWorker::get_cache_key(std::string_view scheme, const Configuration& conf) {
     // Take the SHA-256 hash value as the cache key
     SHA256Digest sha256;
     sha256.update(scheme.data(), scheme.size());
@@ -363,8 +365,7 @@ CacheKey StarOSWorker::get_cache_key(std::string_view scheme, const Configuratio
         sha256.update(v.data(), v.size());
     }
     sha256.digest();
-    CacheKey key(sha256.hex());
-    return key;
+    return sha256.hex();
 }
 
 Status to_status(const absl::Status& absl_status) {

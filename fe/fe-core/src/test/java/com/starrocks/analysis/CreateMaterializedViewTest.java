@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.BaseTableInfo;
@@ -22,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -42,7 +44,6 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -50,6 +51,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
@@ -1471,7 +1473,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testCreateMvFromMv2() {
+    public void testCreateMvFromMv2() throws Exception {
         String sql1 = "create materialized view base_mv2 " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
@@ -1480,12 +1482,11 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, k2 from tbl1;";
-        try {
+        {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
         }
+
         String sql2 = "create materialized view mv_from_base_mv2 " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
@@ -1790,7 +1791,7 @@ public class CreateMaterializedViewTest {
 
     // ========== test colocate mv ==========
     @Test
-    public void testCreateColocateMvNormal() throws Exception {
+    public void testCreateColocateMvToExitGroup() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test.colocateTable\n" +
                 "(\n" +
                 "    k1 int,\n" +
@@ -1799,9 +1800,26 @@ public class CreateMaterializedViewTest {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"colocate_group1\"\n" +
                 ");");
 
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean isEnableColocateMVIndex() throws Exception {
+                OlapTable table = (OlapTable) testDb.getTable("colocateTable");
+
+                // If the table's colocate group is empty, return false
+                if (Strings.isNullOrEmpty(table.getColocateGroup())) {
+                    return false;
+                }
+
+                // If all indexes except the basic index are all colocate, we can use colocate mv index optimization.
+                return table.getIndexIdToMeta().values().stream()
+                        .filter(x -> x.getIndexId() != table.getBaseIndexId())
+                        .allMatch(MaterializedIndexMeta::isColocateMVIndex);
+            }
+        };
         String sql = "create materialized view colocateMv\n" +
                 "PROPERTIES (\n" +
                 "\"colocate_mv\" = \"true\"\n" +
@@ -1812,20 +1830,17 @@ public class CreateMaterializedViewTest {
             currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
             waitingRollupJobV2Finish();
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
-            String fullGroupName = testDb.getId() + "_" + testDb.getFullName() + ":" + "colocateMv";
-            System.out.println(fullGroupName);
+            String fullGroupName = testDb.getId() + "_" + "colocate_group1";
             long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
             Assert.assertNotEquals(-1, tableId);
 
-            OlapTable table = (OlapTable) testDb.getTable("colocateTable");
-            Assert.assertEquals(1, table.getColocateMaterializedViewNames().size());
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
             Assert.assertEquals(1, colocateTableIndex.getAllTableIds(groupId).size());
+            OlapTable table = (OlapTable) testDb.getTable("colocateTable");
+            Assert.assertTrue(table.isEnableColocateMVIndex());
 
             dropMv("colocateMv");
-            Assert.assertFalse(currentState.getColocateTableIndex().isColocateTable(tableId));
-            Assert.assertEquals(0, table.getColocateMaterializedViewNames().size());
-
+            Assert.assertTrue(currentState.getColocateTableIndex().isColocateTable(tableId));
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         } finally {
@@ -1834,7 +1849,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testCreateColocateMvToExitGroup() throws Exception {
+    public void testCreateColocateMvWithoutGroup() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test.colocateTable2\n" +
                 "(\n" +
                 "    k1 int,\n" +
@@ -1843,44 +1858,31 @@ public class CreateMaterializedViewTest {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"colocate_with\" = \"group2\"\n" +
+                "\"replication_num\" = \"1\"\n" +
                 ");");
+
+        ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
+        String fullGroupName = testDb.getId() + "_" + "group2";
+        long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
+        Assert.assertEquals(-1, tableId);
 
         String sql = "create materialized view colocateMv2\n" +
                 "PROPERTIES (\n" +
                 "\"colocate_mv\" = \"true\"\n" +
                 ")\n" +
                 "as select k1, k2 from colocateTable2;";
-        try {
+
+        Assert.assertThrows(AnalysisException.class, () -> {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
+        });
 
-            waitingRollupJobV2Finish();
-            ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
-            String fullGroupName = testDb.getId() + "_" + "group2";
-            long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
-            Assert.assertNotEquals(-1, tableId);
-
-            OlapTable table = (OlapTable) testDb.getTable("colocateTable2");
-            Assert.assertEquals(1, table.getColocateMaterializedViewNames().size());
-            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
-            Assert.assertEquals(1, colocateTableIndex.getAllTableIds(groupId).size());
-
-            dropMv("colocateMv2");
-            Assert.assertTrue(currentState.getColocateTableIndex().isColocateTable(tableId));
-            Assert.assertEquals(0, table.getColocateMaterializedViewNames().size());
-
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        } finally {
-            currentState.getColocateTableIndex().clear();
-        }
-
+        currentState.getColocateTableIndex().clear();
     }
 
     @Test
     public void testColocateMvAlterGroup() throws Exception {
+
         starRocksAssert.withTable("CREATE TABLE test.colocateTable3\n" +
                 "(\n" +
                 "    k1 int,\n" +
@@ -1893,6 +1895,22 @@ public class CreateMaterializedViewTest {
                 "\"colocate_with\" = \"group3\"\n" +
                 ");");
 
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean isEnableColocateMVIndex() throws Exception {
+                OlapTable table = (OlapTable) testDb.getTable("colocateTable3");
+
+                // If the table's colocate group is empty, return false
+                if (Strings.isNullOrEmpty(table.getColocateGroup())) {
+                    return false;
+                }
+
+                // If all indexes except the basic index are all colocate, we can use colocate mv index optimization.
+                return table.getIndexIdToMeta().values().stream()
+                        .filter(x -> x.getIndexId() != table.getBaseIndexId())
+                        .allMatch(MaterializedIndexMeta::isColocateMVIndex);
+            }
+        };
         String sql = "create materialized view colocateMv3\n" +
                 "PROPERTIES (\n" +
                 "\"colocate_mv\" = \"true\"\n" +
@@ -1918,8 +1936,8 @@ public class CreateMaterializedViewTest {
             Assert.assertNotEquals(-1, tableId);
 
             OlapTable table = (OlapTable) testDb.getTable("colocateTable3");
-            Assert.assertFalse(table.isInColocateMvGroup());
-            Assert.assertEquals(2, table.getColocateMaterializedViewNames().size());
+            Assert.assertTrue(table.isEnableColocateMVIndex());
+
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
             Assert.assertEquals(1, colocateTableIndex.getAllTableIds(groupId).size());
 
@@ -1928,9 +1946,8 @@ public class CreateMaterializedViewTest {
             StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
             stmtExecutor.execute();
 
-            Assert.assertEquals(2, table.getColocateMaterializedViewNames().size());
             Assert.assertEquals("groupNew", table.getColocateGroup());
-            Assert.assertFalse(table.isInColocateMvGroup());
+            Assert.assertTrue(table.isEnableColocateMVIndex());
             Assert.assertTrue(colocateTableIndex.isColocateTable(tableId));
 
             sql = "alter table colocateTable3 set (\"colocate_with\" = \"\")";
@@ -1938,22 +1955,18 @@ public class CreateMaterializedViewTest {
             stmtExecutor = new StmtExecutor(connectContext, statementBase);
             stmtExecutor.execute();
 
-            Assert.assertTrue(colocateTableIndex.isColocateTable(tableId));
-            Assert.assertTrue(table.isInColocateMvGroup());
-            groupId = colocateTableIndex.getGroup(tableId);
+            Assert.assertFalse(colocateTableIndex.isColocateTable(tableId));
+            Assert.assertFalse(table.isEnableColocateMVIndex());
             Assert.assertNotEquals("group1", table.getColocateGroup());
 
             dropMv("colocateMv4");
-            Assert.assertEquals(1, table.getColocateMaterializedViewNames().size());
             dropMv("colocateMv3");
             Assert.assertFalse(colocateTableIndex.isColocateTable(tableId));
-
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         } finally {
             currentState.getColocateTableIndex().clear();
         }
-
     }
 
     // ========== other test ==========
@@ -3026,6 +3039,78 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testRandomizeStart() throws Exception {
+        String sql = "create materialized view mv_test_randomize \n" +
+                "distributed by hash(k1) buckets 10\n" +
+                "refresh async every(interval 1 minute) " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'" +
+                ")\n" +
+                "as " +
+                "select tb1.k1, k2, " +
+                "array<int>[1,2,3] as type_array, " +
+                "map<int, int>{1:2} as type_map, " +
+                "parse_json('{\"a\": 1}') as type_json, " +
+                "row('c') as type_struct, " +
+                "array<json>[parse_json('{}')] as type_array_json " +
+                "from tbl1 tb1;";
+        long currentSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+        starRocksAssert.withMaterializedView(sql);
+        MaterializedView mv = getMv(testDb.getFullName(), "mv_test_randomize");
+        long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
+        Assert.assertTrue("difference is " + (startTime - currentSecond),
+                currentSecond <= startTime && startTime < currentSecond + 60);
+        starRocksAssert.dropMaterializedView("mv_test_randomize");
+
+        // manual disable it
+        sql = "create materialized view mv_test_randomize \n" +
+                "distributed by hash(k1) buckets 10\n" +
+                "refresh async every(interval 1 minute) " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1', " +
+                "'mv_randomize_start' = '-1'" +
+                ")\n" +
+                "as " +
+                "select tb1.k1, k2, " +
+                "array<int>[1,2,3] as type_array, " +
+                "map<int, int>{1:2} as type_map, " +
+                "parse_json('{\"a\": 1}') as type_json, " +
+                "row('c') as type_struct, " +
+                "array<json>[parse_json('{}')] as type_array_json " +
+                "from tbl1 tb1;";
+        currentSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+        starRocksAssert.withMaterializedView(sql);
+        mv = getMv(testDb.getFullName(), "mv_test_randomize");
+        startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
+        Assert.assertEquals(startTime, currentSecond);
+        starRocksAssert.dropMaterializedView("mv_test_randomize");
+
+        // manual specify it
+        sql = "create materialized view mv_test_randomize \n" +
+                "distributed by hash(k1) buckets 10\n" +
+                "refresh async every(interval 1 minute) " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1', " +
+                "'mv_randomize_start' = '2'" +
+                ")\n" +
+                "as " +
+                "select tb1.k1, k2, " +
+                "array<int>[1,2,3] as type_array, " +
+                "map<int, int>{1:2} as type_map, " +
+                "parse_json('{\"a\": 1}') as type_json, " +
+                "row('c') as type_struct, " +
+                "array<json>[parse_json('{}')] as type_array_json " +
+                "from tbl1 tb1;";
+        currentSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+        starRocksAssert.withMaterializedView(sql);
+        mv = getMv(testDb.getFullName(), "mv_test_randomize");
+        startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
+        Assert.assertTrue("difference is " + (startTime - currentSecond),
+                currentSecond <= startTime && startTime < currentSecond + 2);
+        starRocksAssert.dropMaterializedView("mv_test_randomize");
+    }
+
+    @Test
     public void testCreateMvWithTypes() throws Exception {
         String sql = "create materialized view mv_test_types \n" +
                 "distributed by hash(k1) buckets 10\n" +
@@ -3042,5 +3127,6 @@ public class CreateMaterializedViewTest {
                 "from tbl1 tb1;";
         starRocksAssert.withMaterializedView(sql);
     }
+
 }
 
