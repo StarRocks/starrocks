@@ -16,6 +16,11 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
     steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
       - uses: dorny/paths-filter@v2
         id: changes
         with:
@@ -27,8 +32,43 @@ jobs:
       - name: update image
         if: steps.changes.outputs.thirdparty == 'true'
         run: |
-          rm -rf ./elastic-service
-          cp -rf /var/lib/elastic-service ./elastic-service
-          cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER
+<<<<<<< HEAD
           
+=======
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  close_msg:
+    runs-on: self-hosted
+    if: github.event.pull_request.merged == true && github.base_ref == 'main'
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: commit_sha
+        id: commit_sha
+        run: |
+          set -x
+          commit_sha=`curl -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER} 2>/dev/null \
+            | jq .merge_commit_sha`
+          commit_sha=$(echo ${commit_sha//\"})
+          echo "commit_sha=${commit_sha}" >> $GITHUB_OUTPUT
+
+      - name: update merged coverage
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/upload_cov_after_merge.sh --pr ${PR_NUMBER} --commit ${{ steps.commit_sha.outputs.commit_sha }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+>>>>>>> 5a3acb9de ([Tool] Fix security issues (#26769))
