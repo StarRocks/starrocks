@@ -62,7 +62,6 @@ void create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDe
     TDescriptorTableBuilder table_desc_builder;
 
     TTupleDescriptorBuilder tuple_desc_builder;
-    int size = 0;
     for (int i = 0;; i++) {
         if (slot_descs[i].name == "") {
             break;
@@ -70,7 +69,6 @@ void create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDe
         TSlotDescriptorBuilder b2;
         b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
         tuple_desc_builder.add_slot(b2.build());
-        size += 1;
     }
     tuple_desc_builder.build(&table_desc_builder);
 
@@ -846,7 +844,7 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
     const char* filename = "orc_scanner_test_timestamp.orc";
     std::filesystem::remove(filename);
     ORC_UNIQUE_PTR<orc::OutputStream> outStream = orc::writeLocalFile(filename);
-    ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<c0:timestamp>"));
+    ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<c0:timestamp with local time zone>"));
 
     orc::WriterOptions writer_options;
     writer_options.setTimezoneName(write_tz);

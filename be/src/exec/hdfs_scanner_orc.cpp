@@ -18,11 +18,12 @@
 
 #include "exec/exec_node.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
-#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/orc_min_max_decoder.h"
+#include "formats/orc/utils.h"
+#include "gen_cpp/orc_proto.pb.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
