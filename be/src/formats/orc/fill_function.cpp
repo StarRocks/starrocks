@@ -839,8 +839,7 @@ static void fill_timestamp_column_with_null(orc::ColumnVectorBatch* cvb, ColumnP
             if (use_ns) {
                 ns = data->nanoseconds[from];
             }
-            OrcTimestampHelper::orc_ts_to_native_ts(&(values[i]), reader->tzinfo(), reader->tzoffset_in_seconds(),
-                                                    data->data[from], ns);
+            OrcTimestampHelper::orc_ts_to_native_ts(&(values[i]), reader->tzinfo(), 0, data->data[from], ns);
         }
     }
 
