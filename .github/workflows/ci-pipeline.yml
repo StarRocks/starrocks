@@ -39,7 +39,6 @@ jobs:
           path: ./pr_num.txt
           retention-days: 1
 
-
   doc-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
@@ -79,8 +78,7 @@ jobs:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
-
+          mkdir -p ${{ github.workspace }}
       - name: BRANCH INFO
         id: branch
         run: |
@@ -94,8 +92,6 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git"
-          git config --global user.email "wanpengfei91@163.com"
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -151,7 +147,7 @@ jobs:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
+          mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -180,6 +176,11 @@ jobs:
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
 
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
   thirdparty-update:
     runs-on: [self-hosted, normal]
     needs: [ be-checker, clang-format ]
@@ -196,7 +197,7 @@ jobs:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
+          mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -207,7 +208,7 @@ jobs:
         id: update-image
         run: |
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              rm -rf ./elastic-service && cp -rf /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+              rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
               ./bin/run-pr-update-image.sh
           fi
 
@@ -215,9 +216,10 @@ jobs:
         if: always()
         run: |
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              cd elastic-service
+              cd ci-tool && source lib/init.sh
               ./bin/elastic-cluster.sh --delete
           fi
+          rm -rf ${{ github.workspace }}/*
 
   be-ut:
     runs-on: [self-hosted, normal]
@@ -239,8 +241,7 @@ jobs:
         shell: bash
         timeout-minutes: 90
         run: |
-          set -ex
-          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
@@ -266,6 +267,7 @@ jobs:
         run: |
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+          rm -rf ${{ github.workspace }}/*
 
   clang-tidy:
     runs-on: [self-hosted, normal]
@@ -292,7 +294,7 @@ jobs:
         shell: bash
         timeout-minutes: 60
         run: |
-          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
@@ -310,6 +312,7 @@ jobs:
         run: |
           rm -f ${{ steps.run_clang_tidy.outputs.RES_FILE }}
           rm -f ${{ steps.run_clang_tidy.outputs.RES_LOG }}
+          rm -rf ${{ github.workspace }}/*
 
   fe-checker:
     runs-on: ubuntu-latest
@@ -348,7 +351,7 @@ jobs:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
+          mkdir -p ${{ github.workspace }}
 
       - uses: dorny/paths-filter@v2
         id: java-file
@@ -373,8 +376,6 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git";
-          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -409,7 +410,7 @@ jobs:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
+          mkdir -p ${{ github.workspace }}
 
       - name: BRANCH INFO
         id: branch
@@ -439,8 +440,7 @@ jobs:
         shell: bash
         timeout-minutes: 60
         run: |
-          set -ex
-          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
@@ -497,6 +497,8 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
+          rm -rf ${{ github.workspace }}/*
+
   build:
     runs-on: [self-hosted, normal]
     needs: [be-checker, fe-checker, be-ut, fe-ut, thirdparty-update]
@@ -524,7 +526,7 @@ jobs:
         shell: bash
         timeout-minutes: 90
         run: |
-          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
@@ -546,6 +548,7 @@ jobs:
         run: |
           rm -f ${{ steps.run_build.outputs.RES_FILE }}
           rm -f ${{ steps.run_build.outputs.RES_LOG }}
+          rm -rf ${{ github.workspace }}
 
   deploy:
     runs-on: [self-hosted, normal]
@@ -572,7 +575,7 @@ jobs:
       - name: Apply for resources
         id: apply_resource
         run: |
-          rm -rf ./elastic-service && cp -rf /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-cluster.sh --template ci-admit
           cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
           echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
@@ -580,13 +583,18 @@ jobs:
       - name: Deploy SR
         id: deploy_sr
         run: |
-          cd elastic-service
+          cd ci-tool && source lib/init.sh
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
           ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output oss://${bucket_prefix}-ci-release/${{steps.branch.outputs.branch}}/Release/pr/${{needs.build.outputs.build_output_tar}}
 
       - run: |
           echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/* 
 
   SQL-Tester:
     runs-on: [self-hosted, normal]
@@ -631,8 +639,7 @@ jobs:
 
       - name: Run Case (${{ needs.deploy.outputs.fe }})
         run: |
-          cd ${{ github.workspace }}
-          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/run-sql-tester.sh
 
       - name: Upload SQL-Tester XML
@@ -642,6 +649,11 @@ jobs:
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
           ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ -rf
           ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
+          
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
 
   admit:
     runs-on: [self-hosted, normal]
@@ -671,13 +683,12 @@ jobs:
         run: |
           echo "FE: ${{needs.deploy.outputs.fe}}, BE: ${{needs.deploy.outputs.be}}"
 
-          cd ${{ github.workspace }}
-          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
 
           cd ${{ github.workspace }}
           rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull
 
-          cd ${{ github.workspace }}/elastic-service
+          cd ${{ github.workspace }}/ci-tool
           ./bin/run-admit.sh
 
       - name: Upload Admit XML
@@ -687,6 +698,11 @@ jobs:
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
           ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ -rf
           ossutil64 --config-file ~/.ossutilconfig cp StarRocksTest/result oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
 
   Teardown:
     runs-on: [self-hosted, normal]
@@ -700,14 +716,15 @@ jobs:
     steps:
       - name: Backup SR Info
         run: |
-          rm -rf ./elastic-service && cp -rf /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE --repository ${{ github.repository }}
 
       - name: Clean ECS
         run: |
-          cd elastic-service
+          cd ci-tool && source lib/init.sh
           ./bin/elastic-cluster.sh --delete
 
-      - name: Clean TMP
+      - name: Clean
         run: |
           rm -f $CONF_FILE
+          rm -rf ${{ github.workspace }}/*

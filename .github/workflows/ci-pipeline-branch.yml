@@ -39,7 +39,6 @@ jobs:
           path: ./pr_num.txt
           retention-days: 1
 
-
   doc-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
@@ -79,7 +78,7 @@ jobs:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
+          mkdir -p ${{ github.workspace }}
 
       - name: BRANCH INFO
         id: branch
@@ -94,8 +93,6 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git"
-          git config --global user.email "wanpengfei91@163.com"
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -141,7 +138,7 @@ jobs:
           echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   clang-format:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     needs: be-checker
     name: Clang-Format
     env:
@@ -151,7 +148,7 @@ jobs:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
+          mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -180,8 +177,13 @@ jobs:
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
 
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
   thirdparty-update:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     needs: [ be-checker, clang-format ]
     name: Thirdparty Update
     env:
@@ -196,7 +198,7 @@ jobs:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
+          mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -207,7 +209,7 @@ jobs:
         id: update-image
         run: |
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              rm -rf ./elastic-service && cp -rf /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+              rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
               ./bin/run-pr-update-image.sh
           fi
 
@@ -215,13 +217,14 @@ jobs:
         if: always()
         run: |
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              cd elastic-service
+              cd ci-tool && source lib/init.sh
               ./bin/elastic-cluster.sh --delete
           fi
+          rm -rf ${{ github.workspace }}/*
 
   be-ut:
-    runs-on: [self-hosted, normal]
-    needs: [ be-checker, clang-format, thirdparty-update ]
+    runs-on: [self-hosted, safe]
+    needs: [ be-checker, thirdparty-update ]
     timeout-minutes: 90
     name: BE UT
     env:
@@ -239,8 +242,7 @@ jobs:
         shell: bash
         timeout-minutes: 90
         run: |
-          set -ex
-          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
@@ -266,6 +268,7 @@ jobs:
         run: |
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+          rm -rf ${{ github.workspace }}/*
 
   fe-checker:
     runs-on: ubuntu-latest
@@ -303,7 +306,7 @@ jobs:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
+          mkdir -p ${{ github.workspace }}
 
       - uses: dorny/paths-filter@v2
         id: java-file
@@ -328,8 +331,6 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git";
-          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -355,7 +356,7 @@ jobs:
           level: error
 
   fe-ut:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, safe]
     needs: fe-codestyle-check
     name: FE UT
     env:
@@ -364,7 +365,7 @@ jobs:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}/starrocks
+          mkdir -p ${{ github.workspace }}
 
       - name: BRANCH INFO
         id: branch
@@ -394,8 +395,7 @@ jobs:
         shell: bash
         timeout-minutes: 60
         run: |
-          set -ex
-          rm -rf ./elastic-service && ln -s /var/lib/elastic-service ./elastic-service && cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
@@ -452,3 +452,4 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
+          rm -rf ${{ github.workspace }}/*
