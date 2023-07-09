@@ -28,13 +28,24 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-// Cardinality-preserving bi-relation, two scan operator form a CPBIRel instance
+// Cardinality-preserving bi-relation, two scan operator form a CPBiRel instance
 // when their underlying OlapTable has {foreign,primary,unique} key constraints and
 // the join equality predicates can match these constraints.
 public class CPBiRel {
+    // CPBiRel is a bi-relation consisting OptExpression
+    // lhs->rhs means lhs and rhs joins on foreign key constraints or primary key. for an example:
+    // lineitem inner join orders on lineitem.l_orderkey = orders.o_orderkey
+    // The corresponding CPBiRel is lineitem->orders.
     private final OptExpression lhs;
     private final OptExpression rhs;
+
+    // if fromForeignKey is false, then it means CPBiRel originates from same tables joining on primary key;
+    // else it means CPBiRel originates from foreign key constraints.
     private final boolean fromForeignKey;
+    // leftToRight means the relative position of lhs and rhs in sub-plan. for examples:
+    // A left join B infers A->B: so leftToRight is true;
+    // B right join A infers A->B: so leftToRight is false;
+    // A inner join B infers B->A: so leftToRight is false.
     private final boolean leftToRight;
     private final Set<Pair<ColumnRefOperator, ColumnRefOperator>> pairs;
 
@@ -71,15 +82,16 @@ public class CPBiRel {
         return pairs;
     }
 
+    // check if referencing table's foreign key constraint aims at referenced Table
     public static boolean isForeignKeyConstraintReferenceToUniqueKey(
             ForeignKeyConstraint foreignKeyConstraint,
-            OlapTable rhsTable) {
-        if (foreignKeyConstraint.getParentTableInfo().getTableId() != rhsTable.getId()) {
+            OlapTable referencedTable) {
+        if (foreignKeyConstraint.getParentTableInfo().getTableId() != referencedTable.getId()) {
             return false;
         }
         Set<String> referencedColumnNames =
                 foreignKeyConstraint.getColumnRefPairs().stream().map(p -> p.second).collect(Collectors.toSet());
-        return rhsTable.getUniqueConstraints().stream()
+        return referencedTable.getUniqueConstraints().stream()
                 .anyMatch(uk -> new HashSet<>(uk.getUniqueColumns()).equals(referencedColumnNames));
     }
 

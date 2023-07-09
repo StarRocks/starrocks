@@ -315,7 +315,7 @@ public class TablePruningCTETest extends TablePruningTestBase {
         }
     }
     @Test
-    public void testRandomlyPermuteTPCHTables(){
+    public void testRandomlyPermuteTPCHTables() {
         String sql = "select\n" +
                 "  l_orderkey,\n" +
                 "  snation.n_name,\n" +

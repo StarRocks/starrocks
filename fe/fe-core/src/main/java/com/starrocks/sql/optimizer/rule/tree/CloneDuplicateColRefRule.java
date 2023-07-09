@@ -29,6 +29,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+// After tables pruned by {Cbo,Rbo}TablePruneRule, ProjectOperators may have several ColumnRefs
+// remapped to the same ColumnRef, for an example:
+// 1.ColumnRef(1)->ColumnRef(1);
+// 2.ColumnRef(2)->ColumnRef(1);
+// This would lead to that column shared by multiple SlotRefs in a Chunk during the plan executed in BE,
+// when some conjuncts apply to such chunks, the shared column may be write twice unexpectedly; at present,
+// BE does not support COW; so we substitute duplicate ColumnRef with CloneOperator to avoid this.
+// After this Rule applied, the ColumnRef remapping will convert to:
+// 1.ColumnRef(1)->ColumnRef(1);
+// 2.ColumnRef(2)->CloneOperator(ColumnRef(1)).
 public class CloneDuplicateColRefRule implements TreeRewriteRule {
     private static final Visitor VISITOR = new Visitor();
 

@@ -102,6 +102,10 @@ public class CboTablePruneRule extends TransformationRule {
             ColumnRefOperator rightCol = eqPredicate.getChild(1).cast();
             eqColRefPairs.add(Pair.create(leftCol, rightCol));
         }
+        if (joinType.isInnerJoin() &&
+                eqColRefPairs.stream().anyMatch(p -> p.first.isNullable() || p.second.isNullable())) {
+            return Collections.emptyList();
+        }
 
         List<CPBiRel> lhsToRhsBiRels =
                 CPBiRel.getCPBiRels(input.inputAt(0), input.inputAt(1), true);
@@ -151,7 +155,9 @@ public class CboTablePruneRule extends TransformationRule {
         Optional<ScalarOperator> optOtherJoinOnPredicate = otherOnPredicates.isEmpty() ?
                 Optional.empty() : Optional.of(Utils.compoundAnd(otherOnPredicates));
 
-        if (sameTableJoinUK) {
+        if (sameTableJoinUK && (joinType.isInnerJoin() ||
+                (joinType.isLeftOuterJoin() && rhsScanOp.getPredicate() == null && !rhsScanOp.hasLimit()) ||
+                (joinType.isRightOuterJoin() && lhsScanOp.getPredicate() == null && !lhsScanOp.hasLimit()))) {
             Map<Column, ColumnRefOperator> lhsColToColRef = lhsScanOp.getColumnMetaToColRefMap();
             Map<Column, ColumnRefOperator> rhsColToColRef = rhsScanOp.getColumnMetaToColRefMap();
             Map<ColumnRefOperator, ScalarOperator> rewriteMapping = Maps.newHashMap();
@@ -257,11 +263,6 @@ public class CboTablePruneRule extends TransformationRule {
     }
 
     List<OptExpression> handleLeftOrRightJoin(OptExpression joinOpt, OptExpression retainOpt, OptExpression pruneOpt) {
-        // if prune-side have a predicate, we do not pruned
-        if (pruneOpt.getOp().getPredicate() != null) {
-            return Collections.emptyList();
-        }
-
         Optional<Projection> joinProjection = Optional.ofNullable(joinOpt.getOp().getProjection());
         ColumnRefSet usedColRefSet =
                 joinProjection.map(Projection::getUsedColumns).orElse(joinOpt.getRowOutputInfo().getUsedColumnRefSet());

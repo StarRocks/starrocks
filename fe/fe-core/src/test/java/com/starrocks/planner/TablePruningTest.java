@@ -256,8 +256,8 @@ public class TablePruningTest extends TablePruningTestBase {
         };
         for (String sql : sqlList) {
             checkHashJoinCountWithOnlyRBO(sql, 1);
-            checkHashJoinCountWithOnlyCBO(sql, 1);
-            checkHashJoinCountWithBothRBOAndCBO(sql, 1);
+            checkHashJoinCountWithOnlyCBO(sql, 0);
+            checkHashJoinCountWithBothRBOAndCBO(sql, 0);
         }
     }
 
@@ -637,6 +637,78 @@ public class TablePruningTest extends TablePruningTestBase {
             int numHashJoins = (Integer) tc[1];
             String sql = String.format("select %s from %s", selectStmt, fromClause);
             checkHashJoinCountWithOnlyRBO(sql, numHashJoins);
+        }
+    }
+
+    @Test
+    public void testSameTablesLeftJoinOnTheSamePK() {
+        Object[][] cases = new Object[][] {
+                {"select 1 from customer a left join customer b on a.c_custkey = b.c_custkey", 0, 0},
+                {"select a.c_name from customer a left join customer b on a.c_custkey = b.c_custkey", 0, 0},
+                {"select murmur_hash3_32(a.c_name)+murmur_hash3_32(a.c_custkey) " +
+                        "from customer a left join customer b on a.c_custkey = b.c_custkey",
+                        0, 0},
+                {"select 1 from customer a right join customer b on a.c_custkey = b.c_custkey", 0, 0},
+                {"select b.c_name from customer a right join customer b on a.c_custkey = b.c_custkey", 0, 0},
+                {"select murmur_hash3_32(b.c_name)+murmur_hash3_32(b.c_custkey) " +
+                        "from customer a right join customer b on a.c_custkey = b.c_custkey",
+                        0, 0},
+
+                {"select b.c_name from customer a left join customer b on a.c_custkey = b.c_custkey", 1, 0},
+                {"select murmur_hash3_32(b.c_name)+murmur_hash3_32(b.c_custkey) " +
+                        "from customer a left join customer b on a.c_custkey = b.c_custkey",
+                        1, 0},
+                {"select a.c_name from customer a right join customer b on a.c_custkey = b.c_custkey", 1, 0},
+                {"select murmur_hash3_32(a.c_name)+murmur_hash3_32(a.c_custkey) " +
+                        "from customer a right join customer b on a.c_custkey = b.c_custkey",
+                        1, 0},
+
+                {"select 1 from " +
+                        "customer a left join " +
+                        "(select c_custkey from customer where c_name = 'USA') b " +
+                        "on a.c_custkey = b.c_custkey", 1, 0},
+                {"select a.c_name from " +
+                        "customer a left join " +
+                        "(select c_custkey from customer where c_name = 'USA') b " +
+                        "on a.c_custkey = b.c_custkey", 1, 0},
+                {"select coalesce(b.c_custkey,-1) as custkey from " +
+                        "customer a left join " +
+                        "(select c_custkey from customer where c_name = 'USA') b " +
+                        "on a.c_custkey = b.c_custkey", 1, 1},
+                {"select 1 from " +
+                        "customer a left join " +
+                        "(select c_custkey from customer limit 10) b " +
+                        "on a.c_custkey = b.c_custkey", 1, 1},
+                {"select a.c_name from " +
+                        "customer a left join " +
+                        "(select c_custkey from customer limit 10) b " +
+                        "on a.c_custkey = b.c_custkey", 1, 1},
+                {"select coalesce(b.c_custkey,-1) as custkey from " +
+                        "customer a left join " +
+                        "(select c_custkey from customer limit 10) b " +
+                        "on a.c_custkey = b.c_custkey", 1, 1},
+
+                {"select 1 from " +
+                        "customer a left join " +
+                        "(select c_custkey from customer where c_name = 'USA' limit 10) b " +
+                        "on a.c_custkey = b.c_custkey", 1, 1},
+                {"select a.c_name from " +
+                        "customer a left join " +
+                        "(select c_custkey from customer where c_name = 'USA' limit 10) b " +
+                        "on a.c_custkey = b.c_custkey", 1, 1},
+                {"select coalesce(b.c_custkey,-1) as custkey from " +
+                        "customer a left join " +
+                        "(select c_custkey from customer where c_name = 'USA' limit 10) b " +
+                        "on a.c_custkey = b.c_custkey", 1, 1},
+
+        };
+        for (Object[] tc : cases) {
+            String sql = (String) tc[0];
+            int rboNumHashJoins = (Integer) tc[1];
+            int cboNumHashJoins = (Integer) tc[2];
+            checkHashJoinCountWithOnlyRBO(sql, rboNumHashJoins);
+            checkHashJoinCountWithOnlyCBO(sql, cboNumHashJoins);
+            checkHashJoinCountWithBothRBOAndCBO(sql, cboNumHashJoins);
         }
     }
 }

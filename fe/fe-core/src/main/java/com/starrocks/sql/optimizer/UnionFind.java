@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+// UnionFind support equivalence inferring based on equivalence classes
 public class UnionFind<T> {
     private final Map<T, Integer> element2Group = Maps.newHashMap();
     private final Map<Integer, Set<T>> eqGroupMap = Maps.newHashMap();

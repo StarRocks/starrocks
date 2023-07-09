@@ -50,12 +50,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
-import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-// GPJoinGardener is used to analysis cardinality-preserving joins and prune unused
+// CPJoinGardener is used to analysis cardinality-preserving joins and prune unused
 // tables from cardinality-preserving joins.
 // Cardinality-preserving join means that joins' equality predicates match foreign key constraints bridging
 // its left child and right child.
@@ -147,6 +146,12 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                                     .flatMap(lhsScan -> CPBiRel.getCPBiRels(rhsScan, lhsScan, false).stream()
                                     )).collect(Collectors.toList());
             biRels.addAll(rightToLeftBiRels);
+        }
+        if (joinOp.getJoinType().isInnerJoin()) {
+            biRels = biRels.stream()
+                    .filter(biRel -> biRel.getPairs().stream()
+                            .allMatch(p -> !p.first.isNullable() && !p.second.isNullable()))
+                    .collect(Collectors.toList());
         }
         return biRels;
     }
@@ -260,11 +265,11 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                 continue;
             }
 
+            LogicalScanOperator lhsScanOp = biRel.getLhs().getOp().cast();
+            LogicalScanOperator rhsScanOp = biRel.getRhs().getOp().cast();
             Map<ColumnRefOperator, ColumnRefOperator> eqColumnRefs = Maps.newHashMap();
             // two ScanOperators access the same tables, which are joined together on PK/UK
-            if (!biRel.isFromForeignKey()) {
-                LogicalScanOperator lhsScanOp = biRel.getLhs().getOp().cast();
-                LogicalScanOperator rhsScanOp = biRel.getRhs().getOp().cast();
+            if (!biRel.isFromForeignKey() && joinType.isInnerJoin()) {
                 Set<Column> lhsColumns = lhsScanOp.getColumnMetaToColRefMap().keySet();
                 Set<Column> rhsColumns = rhsScanOp.getColumnMetaToColRefMap().keySet();
                 Preconditions.checkArgument(lhsColumns.equals(rhsColumns));
@@ -283,10 +288,8 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
 
             OptExpression lhsOpt = optExpression.inputAt(0);
             OptExpression rhsOpt = optExpression.inputAt(1);
-            RoaringBitmap lhsCardPreservingScanOps =
-                    cpScanOps.get(lhsOpt);
-            RoaringBitmap rhsCardPreservingScanOps =
-                    cpScanOps.get(rhsOpt);
+            RoaringBitmap lhsCardPreservingScanOps = cpScanOps.get(lhsOpt);
+            RoaringBitmap rhsCardPreservingScanOps = cpScanOps.get(rhsOpt);
 
             RoaringBitmap lhsScanOps = scanOps.get(lhsOpt);
             RoaringBitmap rhsScanOps = scanOps.get(rhsOpt);
@@ -294,9 +297,8 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
             scanOps.put(optExpression, RoaringBitmap.or(lhsScanOps, rhsScanOps));
 
             RoaringBitmap currCPScanOps;
-            if (!biRel.isFromForeignKey()) {
-                cpEdges.add(
-                        new CPEdge(biRel.getLhs(), biRel.getRhs(), false, eqColumnRefs));
+            if (!biRel.isFromForeignKey() && joinType.isInnerJoin()) {
+                cpEdges.add(new CPEdge(biRel.getLhs(), biRel.getRhs(), false, eqColumnRefs));
                 currCPScanOps = RoaringBitmap.or(lhsCardPreservingScanOps, rhsCardPreservingScanOps);
                 uniqueKeyColRefs.computeIfAbsent(biRel.getLhs(), (k) -> Sets.newHashSet())
                         .addAll(pairs.stream().map(p -> p.first).collect(Collectors.toList()));
