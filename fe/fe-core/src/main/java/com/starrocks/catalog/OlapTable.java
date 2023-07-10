@@ -60,7 +60,6 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
@@ -2279,11 +2278,7 @@ public class OlapTable extends Table {
             GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
         }
 
-        // register or remove table from DynamicPartition after table created
-        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), this);
-        DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), this);
-        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
-                getName(), DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
+        DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), this);
 
         if (Config.dynamic_partition_enable && getTableProperty().getDynamicPartitionProperty().getEnable()) {
             new Thread(() -> {
