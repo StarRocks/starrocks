@@ -1595,8 +1595,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         out.writeLong(totalTaskExcutionTimeMs);
         out.writeLong(committedTaskNum);
         out.writeLong(abortedTaskNum);
-        out.writeLong(taskConsumeSecond);
-        out.writeLong(taskTimeoutSecond);
 
         origStmt.write(out);
         out.writeInt(jobProperties.size());
@@ -1661,8 +1659,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         totalTaskExcutionTimeMs = in.readLong();
         committedTaskNum = in.readLong();
         abortedTaskNum = in.readLong();
-        taskConsumeSecond = in.readLong();
-        taskTimeoutSecond = in.readLong();
 
         origStmt = OriginStatement.read(in);
 
