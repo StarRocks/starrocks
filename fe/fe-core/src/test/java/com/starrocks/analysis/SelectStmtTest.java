@@ -271,7 +271,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testCatalogFunSupport() throws Exception {
+    void testCatalogFunSupport() throws Exception {
         String sql = "select catalog()";
         starRocksAssert.query(sql).explainQuery();
     }
@@ -352,7 +352,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testGroupByMultiColumnMultiCountDistinctWithSkewHint() throws Exception {
+    void testGroupByMultiColumnMultiCountDistinctWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql =
                 "select k1, k3, count(distinct [skew] k2), count(distinct k4) from db1.tbl1 group by k1, k3";
