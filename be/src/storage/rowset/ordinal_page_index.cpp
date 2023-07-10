@@ -111,16 +111,12 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
         _pages[1] = meta.root_page().root_page().offset() + meta.root_page().root_page().size();
         return Status::OK();
     }
-    // need to read index page
-    RandomAccessFileOptions file_opts{.skip_fill_local_cache = opts.skip_fill_local_cache};
-    ASSIGN_OR_RETURN(auto read_file, opts.fs->new_random_access_file(file_opts, opts.file_name));
 
     PageReadOptions page_opts;
-    page_opts.read_file = read_file.get();
+    page_opts.read_file = opts.read_file;
     page_opts.page_pointer = PagePointer(meta.root_page().root_page());
     page_opts.codec = nullptr; // ordinal index page uses NO_COMPRESSION right now
-    OlapReaderStatistics tmp_stats;
-    page_opts.stats = &tmp_stats;
+    page_opts.stats = opts.stats;
     page_opts.use_page_cache = opts.use_page_cache;
     page_opts.kept_in_memory = opts.kept_in_memory;
 
