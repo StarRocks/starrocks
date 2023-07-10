@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <parquet/api/writer.h>
 
 #include "util/slice.h"
 
 namespace starrocks::parquet {
+namespace {
 
 class MockOutputStream : public arrow::io::OutputStream {
 public:
@@ -25,28 +27,22 @@ public:
 
     ~MockOutputStream() override = default;
 
-    arrow::Status Write(const void* data, int64_t nbytes) override {
-        _counter++;
-        if (_counter == 3) { // return error when flush the 2nd column chunk
-            return arrow::Status::IOError("mock io error");
-        }
-        // std::cout << "write " << _counter << " times data = " << Slice(reinterpret_cast<const uint8_t*>(data), nbytes)
-        //           << std::endl;
-        return arrow::Status::OK();
-    }
+    MOCK_METHOD(arrow::Status, Write, (const void* data, int64_t nbytes), (override));
 
     arrow::Status Close() override { return arrow::Status::OK(); }
 
     arrow::Result<int64_t> Tell() const override { return arrow::Result<int64_t>(0); }
 
     bool closed() const override { return false; }
-
-private:
-    int _counter{0};
 };
 
-TEST(ArrowParquetWriterTest, basic_test) {
+using ::testing::Return;
+
+TEST(ArrowParquetWriterTest, Normal) {
     auto sink = std::make_shared<MockOutputStream>();
+
+    EXPECT_CALL(*sink, Write).WillRepeatedly(Return(arrow::Status::OK()));
+
     auto node = ::parquet::schema::GroupNode::Make(
             "schema", ::parquet::Repetition::REQUIRED,
             {
@@ -58,27 +54,69 @@ TEST(ArrowParquetWriterTest, basic_test) {
     auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
     auto writer = ::parquet::ParquetFileWriter::Open(sink, schema);
 
-    auto* rg_writer = writer->AppendBufferedRowGroup();
+    {
+        auto* rg_writer = writer->AppendBufferedRowGroup();
+        std::vector<int32_t> data = {0, 1, 2};
 
-    std::vector<int32_t> data = {0, 1, 2};
+        auto* col_writer = rg_writer->column(0);
+        auto* typed_col_writer = dynamic_cast<::parquet::TypedColumnWriter<::parquet::Int32Type>*>(col_writer);
+        typed_col_writer->WriteBatch(3, nullptr, nullptr, data.data());
 
-    auto* col_writer = rg_writer->column(0);
-    auto* typed_col_writer = dynamic_cast<::parquet::TypedColumnWriter<::parquet::Int32Type>*>(col_writer);
-    typed_col_writer->WriteBatch(3, nullptr, nullptr, data.data());
+        col_writer = rg_writer->column(1);
+        typed_col_writer = dynamic_cast<::parquet::TypedColumnWriter<::parquet::Int32Type>*>(col_writer);
+        typed_col_writer->WriteBatch(3, nullptr, nullptr, data.data());
 
-    col_writer = rg_writer->column(1);
-    typed_col_writer = dynamic_cast<::parquet::TypedColumnWriter<::parquet::Int32Type>*>(col_writer);
-    typed_col_writer->WriteBatch(3, nullptr, nullptr, data.data());
-
-    try {
-        rg_writer->Close();
-    } catch (const ::parquet::ParquetException& e) {
-        std::cout << "exception: " << e.what() << std::endl;
-        // writer.release();
+        try {
+            rg_writer->Close();
+        } catch (const ::parquet::ParquetException& e) {
+            std::cout << "exception: " << e.what() << std::endl;
+        }
     }
-    if (writer) {
-        writer->Close();
-    }
+
+    writer->Close();
 }
 
+TEST(ArrowParquetWriterTest, Exception) {
+    auto sink = std::make_shared<MockOutputStream>();
+
+    EXPECT_CALL(*sink, Write)
+            .WillOnce(Return(arrow::Status::OK()))
+            .WillOnce(Return(arrow::Status::OK()))
+            .WillOnce(Return(arrow::Status::IOError("io error"))) // error when flush 2nd column chunk
+            .WillRepeatedly(Return(arrow::Status::OK()));
+
+    auto node = ::parquet::schema::GroupNode::Make(
+            "schema", ::parquet::Repetition::REQUIRED,
+            {
+                    ::parquet::schema::PrimitiveNode::Make("id1", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::Type::INT32),
+                    ::parquet::schema::PrimitiveNode::Make("id2", ::parquet::Repetition::REQUIRED,
+                                                           ::parquet::Type::INT32),
+            });
+    auto schema = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    auto writer = ::parquet::ParquetFileWriter::Open(sink, schema);
+
+    {
+        auto* rg_writer = writer->AppendBufferedRowGroup();
+        std::vector<int32_t> data = {0, 1, 2};
+
+        auto* col_writer = rg_writer->column(0);
+        auto* typed_col_writer = dynamic_cast<::parquet::TypedColumnWriter<::parquet::Int32Type>*>(col_writer);
+        typed_col_writer->WriteBatch(3, nullptr, nullptr, data.data());
+
+        col_writer = rg_writer->column(1);
+        typed_col_writer = dynamic_cast<::parquet::TypedColumnWriter<::parquet::Int32Type>*>(col_writer);
+        typed_col_writer->WriteBatch(3, nullptr, nullptr, data.data());
+
+        try {
+            rg_writer->Close();
+        } catch (const ::parquet::ParquetException& e) {
+            std::cout << "exception: " << e.what() << std::endl;
+        }
+    }
+
+    writer->Close();
+}
+
+} // namespace
 } // namespace starrocks::parquet
