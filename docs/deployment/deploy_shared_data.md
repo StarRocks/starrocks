@@ -9,7 +9,6 @@ Compared to the classic StarRocks architecture, separation of storage and comput
 - Inexpensive and seamlessly scalable storage.
 - Elastic scalable compute. Because data is no longer stored in BE nodes, scaling can be done without data migration or shuffling across nodes.
 - Local disk cache for hot data to boost query performance.
-- Adjustable time-to-live (TTL) for cached hot data. StarRocks automatically removes the expired cached data to save the local disk space.
 - Asynchronous data ingestion into object storage, allowing a significant improvement in loading performance.
 
 The architecture of the shared-data StarRocks cluster is as follows:
@@ -49,7 +48,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use the default authentication credential of AWS SDK to access S3, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -68,7 +67,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use IAM user-based credential (Access Key and Secret Key) to access S3, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -88,7 +87,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use Instance Profile to access S3, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -107,7 +106,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use Assumed Role to access S3, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -127,7 +126,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use Assumed Role to access S3 from an external AWS account, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -150,7 +149,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use Shared Key to access Azure Blob Storage, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = AZBLOB
@@ -166,7 +165,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use shared access signatures (SAS) to access Azure Blob Storage, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = AZBLOB
@@ -182,7 +181,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 - If you use GCP Cloud Storage:
 
-  ```Plain
+  ```Properties
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
@@ -202,7 +201,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 - If you use MinIO:
 
-  ```Plain
+  ```Properties
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
@@ -224,14 +223,14 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 **Before starting BEs**, add the following configuration items in the BE configuration file **be.conf**:
 
-```Plain
+```Properties
 starlet_port = <starlet_port>
 storage_root_path = <storage_root_path>
 ```
 
 | **Configuration item** | **Description**                |
 | ---------------------- | ------------------------------ |
-| starlet_port           | The BE heartbeat service port. Default value: `9070`.|
+| starlet_port           | The BE heartbeat service port for the StarRocks shared-data cluster. Default value: `9070`.|
 | storage_root_path      | The storage volume directory that the local cached data depends on and the medium type of the storage. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. Default value: `${STARROCKS_HOME}/storage`. |
 
 > **NOTE**
@@ -249,12 +248,9 @@ After connecting to your shared-data StarRocks cluster, create a database and th
 - Duplicate Key table
 - Aggregate table
 - Unique Key table
+- Primary Key table (Currently, the primary key persistent index is not supported.)
 
-> **NOTE**
->
-> Currently, Primary Key table is not supported on StarRocks shared-data clusters.
-
-The following example creates a database `cloud_db` and a table `detail_demo` based on Duplicate Key table type, enables the local disk cache, sets the cache expiration time to 30 days, and disables asynchronous data ingestion into object storage:
+The following example creates a database `cloud_db` and a table `detail_demo` based on Duplicate Key table type, enables the local disk cache, sets the hot data validity duration to one month, and disables asynchronous data ingestion into object storage:
 
 ```SQL
 CREATE DATABASE cloud_db;
@@ -273,22 +269,18 @@ CREATE TABLE IF NOT EXISTS detail_demo (
 DUPLICATE KEY(recruit_date, region_num)
 DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
-    "enable_storage_cache" = "true",
-    "storage_cache_ttl" = "2592000",
+    "datacache.enable" = "true",
+    "datacache.partition_duration" = "1 MONTH",
     "enable_async_write_back" = "false"
 );
 ```
-
-> **NOTICE**
->
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 In addition to the regular table PROPERTIES, you need to specify the following PROPERTIES when creating a table for shared-data StarRocks cluster:
 
 | **Property**            | **Description**                                              |
 | ----------------------- | ------------------------------------------------------------ |
-| enable_storage_cache    | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. |
-| storage_cache_ttl       | The duration for which StarRocks caches the loaded data in the local disk if the local disk cache is enabled. The expired data is deleted from the local disk. If the value is set to `-1`, the cached data does not expire. Default: `2592000` (30 days).<br />**CAUTION**<br />If you disabled the local disk cache, you do not need to set this configuration item. Setting this item to a value other than `0` when the local disk cache is disabled will cause unexpected behaviors of StarRocks. |
+| datacache.enable        | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. |
+| datacache.partition_duration | The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.<br />**NOTE**<br />This property is available only when `datacache.enable` is set to `true`. |
 | enable_async_write_back | Whether to allow data to be written into object storage asynchronously. Default: `false`.<ul><li>When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.</li><li>When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.</li></ul> |
 
 ### View table information
