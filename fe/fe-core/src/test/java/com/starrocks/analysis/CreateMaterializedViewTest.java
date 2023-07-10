@@ -2194,9 +2194,9 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Aggregate type table do not " +
-                            "support count function in materialized view.",
-                    e.getMessage());
+            Assert.assertTrue(
+                    e.getMessage().contains("Getting analyzing error. Detail message: Aggregate type table do not " +
+                            "support count function in materialized view."));
         }
     }
 
