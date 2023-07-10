@@ -330,9 +330,9 @@ Status IcebergTableSinkOperator::partition_value_to_string(Column* column, std::
                         partition_value = arg.to_string();
                     } else if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t> ||
                                          std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> ||
-                                         std::is_same_v<T, uint24_t> || std::is_same_v<T, uint24_t> ||
-                                         std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
-                                         std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+                                         std::is_same_v<T, uint24_t> || std::is_same_v<T, int32_t> ||
+                                         std::is_same_v<T, uint32_t> || std::is_same_v<T, int64_t> ||
+                                         std::is_same_v<T, uint64_t>) {
                         partition_value = std::to_string(arg);
                     } else {
                         not_support = true;
