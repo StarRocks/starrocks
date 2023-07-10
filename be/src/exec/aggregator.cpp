@@ -517,7 +517,7 @@ Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<Statu
         if (chunk_with_st.ok()) {
             if (!chunk_with_st.value()->is_empty()) {
                 RETURN_IF_ERROR(spiller->spill(state, chunk_with_st.value(), *io_executor,
-                                               TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+                                               RESOURCE_TLS_MEMTRACER_GUARD(state)));
             }
         } else if (chunk_with_st.status().is_end_of_file()) {
             return Status::OK();

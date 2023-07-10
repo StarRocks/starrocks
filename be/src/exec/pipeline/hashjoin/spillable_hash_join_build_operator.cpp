@@ -78,20 +78,18 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     }
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-        auto& spiller = _join_builder->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+        return _join_builder->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
     auto io_executor = _join_builder->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
-        auto& spiller = _join_builder->spiller();
-        return spiller->set_flush_all_call_back(
+        return _join_builder->spiller()->set_flush_all_call_back(
                 [this]() {
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
     publish_runtime_filters(state);
