@@ -475,7 +475,7 @@ jobs:
           verbose: true
 
       - name: Upload Result
-        if: always()
+        if: steps.run_ut.outcome == 'success'
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
