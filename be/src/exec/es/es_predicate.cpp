@@ -223,7 +223,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
                 return Status::InternalError("build disjuncts failed: number of childs is not 2");
             }
             Expr* expr = conjunct->get_child(1);
-            ASSIGN_OR_RETURN(auto expr_value, _context->evaluate(expr, nullptr));
+            ASSIGN_OR_RETURN(auto expr_value, _context->evaluate(expr, nullptr))
             auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value), _timezone));
             std::vector<ExtLiteral*> query_conditions;
             query_conditions.emplace_back(literal);
@@ -245,7 +245,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             // conjunct->get_child(0)->node_type() == TExprNodeType::FUNCTION_CALL, at present doris on es can not support push down function
             RETURN_ERROR_IF_EXPR_IS_NOT_SLOTREF(conjunct->get_child(0));
 
-            ColumnRef* column_ref = const_cast<ColumnRef*>(
+            auto* column_ref = const_cast<ColumnRef*>(
                     down_cast<const ColumnRef*>(Expr::expr_without_cast(conjunct->get_child(0))));
 
             const SlotDescriptor* slot_desc = get_slot_desc(column_ref->slot_id());
@@ -253,14 +253,13 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             if (slot_desc == nullptr) {
                 return Status::InternalError("build disjuncts failed: no SLOT_REF child");
             }
-            bool is_not_null = fname == "is_not_null_pred" ? true : false;
+            bool is_not_null = fname == "is_not_null_pred";
             std::string col = slot_desc->col_name();
             if (_field_context.find(col) != _field_context.end()) {
                 col = _field_context[col];
             }
             // use TExprNodeType::IS_NULL_PRED for BooleanQueryBuilder translate
-            ExtIsNullPredicate* predicate =
-                    new ExtIsNullPredicate(TExprNodeType::IS_NULL_PRED, col, slot_desc->type(), is_not_null);
+            auto* predicate = new ExtIsNullPredicate(TExprNodeType::IS_NULL_PRED, col, slot_desc->type(), is_not_null);
             _disjuncts.push_back(predicate);
         } else if (fname == "like") {
             if (conjunct->children().size() != 2) {
@@ -322,13 +321,13 @@ Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) 
     return Status::OK();
 }
 
-#define BUILD_INPRED_VALUES(TYPE)                                                                                   \
-    case TYPE: {                                                                                                    \
-        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                   \
-            in_pred_values.emplace_back(new VExtLiteral(                                                            \
-                    slot_desc->type().type, vectorized::ColumnHelper::create_const_column<TYPE>(v, 1), _timezone)); \
-        }));                                                                                                        \
-        break;                                                                                                      \
+#define BUILD_INPRED_VALUES(TYPE)                                                                                    \
+    case TYPE: {                                                                                                     \
+        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                    \
+            in_pred_values.emplace_back(_pool->add(new VExtLiteral(                                                  \
+                    slot_desc->type().type, vectorized::ColumnHelper::create_const_column<TYPE>(v, 1), _timezone))); \
+        }));                                                                                                         \
+        break;                                                                                                       \
     }
 
 Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
@@ -345,7 +344,7 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
         }
 
         std::vector<ExtLiteral*> in_pred_values;
-        const Predicate* pred = static_cast<const Predicate*>(conjunct);
+        const auto* pred = static_cast<const Predicate*>(conjunct);
 
         const Expr* expr = Expr::expr_without_cast(pred->get_child(0));
         if (expr->node_type() != TExprNodeType::SLOT_REF) {
@@ -366,18 +365,18 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
         bool is_not_in = false;
         // insert in list to ExtLiteral
         switch (expr->type().type) {
-            BUILD_INPRED_VALUES(TYPE_BOOLEAN);
-            BUILD_INPRED_VALUES(TYPE_INT);
-            BUILD_INPRED_VALUES(TYPE_TINYINT);
-            BUILD_INPRED_VALUES(TYPE_SMALLINT);
-            BUILD_INPRED_VALUES(TYPE_BIGINT);
-            BUILD_INPRED_VALUES(TYPE_LARGEINT);
-            BUILD_INPRED_VALUES(TYPE_FLOAT);
-            BUILD_INPRED_VALUES(TYPE_DOUBLE);
-            BUILD_INPRED_VALUES(TYPE_DATE);
-            BUILD_INPRED_VALUES(TYPE_DATETIME);
-            BUILD_INPRED_VALUES(TYPE_CHAR);
-            BUILD_INPRED_VALUES(TYPE_VARCHAR);
+            BUILD_INPRED_VALUES(TYPE_BOOLEAN)
+            BUILD_INPRED_VALUES(TYPE_INT)
+            BUILD_INPRED_VALUES(TYPE_TINYINT)
+            BUILD_INPRED_VALUES(TYPE_SMALLINT)
+            BUILD_INPRED_VALUES(TYPE_BIGINT)
+            BUILD_INPRED_VALUES(TYPE_LARGEINT)
+            BUILD_INPRED_VALUES(TYPE_FLOAT)
+            BUILD_INPRED_VALUES(TYPE_DOUBLE)
+            BUILD_INPRED_VALUES(TYPE_DATE)
+            BUILD_INPRED_VALUES(TYPE_DATETIME)
+            BUILD_INPRED_VALUES(TYPE_CHAR)
+            BUILD_INPRED_VALUES(TYPE_VARCHAR)
         default:
             DCHECK(false) << "unsupported type:" << expr->type().type;
             return Status::InternalError("unsupported type to push down to ES");
