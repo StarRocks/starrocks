@@ -91,4 +91,9 @@ public class SubfieldExpr extends Expr {
     public Expr clone() {
         return new SubfieldExpr(this);
     }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return children.get(0).isSelfMonotonic();
+    }
 }

@@ -21,10 +21,11 @@
 
 namespace starrocks {
 
-MapColumnIterator::MapColumnIterator(std::unique_ptr<ColumnIterator> nulls, std::unique_ptr<ColumnIterator> offsets,
-                                     std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values,
-                                     std::vector<ColumnAccessPath*> paths)
-        : _nulls(std::move(nulls)),
+MapColumnIterator::MapColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> nulls,
+                                     std::unique_ptr<ColumnIterator> offsets, std::unique_ptr<ColumnIterator> keys,
+                                     std::unique_ptr<ColumnIterator> values, std::vector<ColumnAccessPath*> paths)
+        : _reader(reader),
+          _nulls(std::move(nulls)),
           _offsets(std::move(offsets)),
           _keys(std::move(keys)),
           _values(std::move(values)),
@@ -269,6 +270,12 @@ Status MapColumnIterator::seek_to_ordinal(ordinal_t ord) {
     size_t element_ordinal = _offsets->element_ordinal();
     RETURN_IF_ERROR(_keys->seek_to_ordinal(element_ordinal));
     RETURN_IF_ERROR(_values->seek_to_ordinal(element_ordinal));
+    return Status::OK();
+}
+
+Status MapColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                                     const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
+    row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
 

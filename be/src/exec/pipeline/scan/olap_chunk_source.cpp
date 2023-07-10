@@ -182,8 +182,8 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     }
 
     {
-        ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
-                                                                      *_params.global_dictmaps);
+        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
+                                                                     *_params.global_dictmaps);
         not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool);
     }
 
