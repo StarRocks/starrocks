@@ -38,7 +38,7 @@ TEST_F(IcebergTableSinkTest, TestDateValueToString) {
         data_column->append_datum(datum);
     }
     std::string date_partition_value;
-    auto st = pipeline::IcebergTableSinkOperator::partition_value_to_string(data_column, date_partition_value);
+    auto st = pipeline::IcebergTableSinkOperator::partition_value_to_string(data_column.get(), date_partition_value);
     ASSERT_OK(st);
     ASSERT_EQ("2023-07-09", date_partition_value);
 }
@@ -50,7 +50,7 @@ TEST_F(IcebergTableSinkTest, TestIntValueToString) {
     ASSERT_EQ(1, count);
 
     std::string int32_partition_value;
-    auto st = pipeline::IcebergTableSinkOperator::partition_value_to_string(int32_col, int32_partition_value);
+    auto st = pipeline::IcebergTableSinkOperator::partition_value_to_string(int32_col.get(), int32_partition_value);
     ASSERT_OK(st);
     ASSERT_EQ("33", int32_partition_value);
 }
@@ -60,7 +60,7 @@ TEST_F(IcebergTableSinkTest, TestStringValueToString) {
     string_col->append("hello");
 
     std::string string_partition_value;
-    auto st = pipeline::IcebergTableSinkOperator::partition_value_to_string(string_col, string_partition_value);
+    auto st = pipeline::IcebergTableSinkOperator::partition_value_to_string(string_col.get(), string_partition_value);
     ASSERT_OK(st);
     ASSERT_EQ("hello", string_partition_value);
 }
@@ -71,7 +71,7 @@ TEST_F(IcebergTableSinkTest, TestFloatValueToString) {
     float_column->append_numbers(values.data(), values.size() * sizeof(float));
 
     std::string float_partition_value;
-    auto st = pipeline::IcebergTableSinkOperator::partition_value_to_string(float_column, float_partition_value);
+    auto st = pipeline::IcebergTableSinkOperator::partition_value_to_string(float_column.get(), float_partition_value);
     ASSERT_TRUE(st.is_not_supported());
     ASSERT_EQ("Partition value can't be float-4", st.message());
 }
