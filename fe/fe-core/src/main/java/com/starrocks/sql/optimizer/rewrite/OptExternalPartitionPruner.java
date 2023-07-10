@@ -212,8 +212,10 @@ public class OptExternalPartitionPruner {
                 partitionColumnRefOperators.add(partitionColumnRefOperator);
             }
 
-            context.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(),
-                    hmsTable.getTableName()).setPartitionNames(new ArrayList<>());
+            if (context.getDumpInfo() != null) {
+                context.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(),
+                        hmsTable.getTableName()).setPartitionNames(new ArrayList<>());
+            }
 
             Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
             if (!hmsTable.isUnPartitioned()) {

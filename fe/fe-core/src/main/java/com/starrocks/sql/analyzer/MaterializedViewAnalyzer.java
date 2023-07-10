@@ -151,7 +151,7 @@ public class MaterializedViewAnalyzer {
                 return;
             }
 
-            if (isExternalTableFromResource(table)) {
+            if (!FeConstants.isReplayFromQueryDump && isExternalTableFromResource(table)) {
                 throw new SemanticException(
                         "Only supports creating materialized views based on the external table " +
                                 "which created by catalog", tableNameInfo.getPos());
