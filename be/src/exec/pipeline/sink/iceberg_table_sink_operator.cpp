@@ -117,12 +117,7 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
             }
 
             std::string partition_value;
-            if (column->is_nullable()) {
-                const auto* nullable_column = down_cast<NullableColumn*>(column.get());
-                RETURN_IF_ERROR(partition_value_to_string(nullable_column->data_column(), partition_value));
-            } else {
-                RETURN_IF_ERROR(partition_value_to_string(column, partition_value));
-            }
+            RETURN_IF_ERROR(partition_value_to_string(ColumnHelper::get_data_column(column.get()), partition_value));
             partition_column_values.emplace_back(partition_value);
         }
 
@@ -319,9 +314,8 @@ void IcebergTableSinkOperator::add_iceberg_commit_info(starrocks::parquet::Async
     state->update_num_rows_load_sink(iceberg_data_file.record_count);
 }
 
-Status IcebergTableSinkOperator::partition_value_to_string(const ColumnPtr& column, std::string& partition_value) {
+Status IcebergTableSinkOperator::partition_value_to_string(Column* column, std::string& partition_value) {
     auto v = column->get(0);
-
     if (column->is_date()) {
         partition_value = v.get_date().to_string();
         return Status::OK();
@@ -334,7 +328,11 @@ Status IcebergTableSinkOperator::partition_value_to_string(const ColumnPtr& colu
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (std::is_same_v<T, Slice>) {
                         partition_value = arg.to_string();
-                    } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>) {
+                    } else if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t> ||
+                                         std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> ||
+                                         std::is_same_v<T, uint24_t> || std::is_same_v<T, uint24_t> ||
+                                         std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
+                                         std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
                         partition_value = std::to_string(arg);
                     } else {
                         not_support = true;
