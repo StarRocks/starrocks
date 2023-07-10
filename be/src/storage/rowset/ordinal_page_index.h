@@ -112,7 +112,16 @@ private:
     void _reset();
 
     size_t _mem_usage() const {
+<<<<<<< HEAD
         return sizeof(OrdinalIndexReader) + (_num_pages + 1) * sizeof(ordinal_t) + _num_pages * sizeof(PagePointer);
+=======
+        if (_num_pages == 0) {
+            return sizeof(OrdinalIndexReader);
+        } else {
+            return sizeof(OrdinalIndexReader) + (_num_pages + 1) * sizeof(ordinal_t) +
+                   (_num_pages + 1) * sizeof(uint64_t);
+        }
+>>>>>>> 302fc134a ([BugFix] Fix the mem statistics bug of ordinal index (#26819))
     }
 
     Status _do_load(fs::BlockManager* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
