@@ -44,7 +44,6 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -151,9 +150,8 @@ public class TableFunctionTable extends Table {
             }
             HdfsUtil.parseFile(path, new BrokerDesc(properties), fileStatuses);
         } catch (UserException e) {
-            Throwable root = ExceptionUtils.getRootCause(e);
-            LOG.error("access remote storage failed", e);
-            throw new DdlException("failed to parse files: " + e.getMessage(), e);
+            LOG.error("parse files error", e);
+            throw new DdlException("failed to parse files", e);
         }
 
         if (fileStatuses.isEmpty()) {

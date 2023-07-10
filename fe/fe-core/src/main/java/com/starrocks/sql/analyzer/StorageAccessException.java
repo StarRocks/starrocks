@@ -42,6 +42,8 @@ public class StorageAccessException extends RuntimeException {
             builder.append("Error message: ").append(s3Exception.getErrorMessage()).append(". ");
         } else if (rootCause instanceof DdlException) {
             builder.append("Error message: ").append(rootCause.getMessage());
+        } else {
+            builder.append("Unknown error");
         }
         // TODO: translate error message of other storage systems
         return builder.toString();
