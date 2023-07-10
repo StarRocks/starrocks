@@ -24,12 +24,6 @@
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
-
-// This is a mock test for synchronization between SinkIOBuffer and its underlying execution queue.
-// Query-related context (including SinkIOBuffer) would only be destroyed after SinkIOBuffer becomes finished.
-// Although we do not guarantee SinkIOBuffer outlives execution queue, we can still avoid use-after-free problem by
-// skipping stop task in consumer thread.
-
 namespace {
 
 class DerivedSinkIOBuffer : public SinkIOBuffer {

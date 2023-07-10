@@ -17,12 +17,12 @@
 
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
+#include "exec/pipeline/query_context.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
-#include "exec/pipeline/query_context.h"
 
 namespace starrocks::pipeline {
 
@@ -48,7 +48,8 @@ public:
 // which needs to be solved by a new adaptive io task scheduler.
 class SinkIOBuffer {
 public:
-    SinkIOBuffer(int32_t num_sinkers, FragmentContext* fragment_ctx) : _num_result_sinkers(num_sinkers), _fragment_ctx(fragment_ctx) {}
+    SinkIOBuffer(int32_t num_sinkers, FragmentContext* fragment_ctx)
+            : _num_result_sinkers(num_sinkers), _fragment_ctx(fragment_ctx) {}
 
     virtual ~SinkIOBuffer() = default;
 

@@ -16,7 +16,6 @@
 
 #include <utility>
 
-#include "column/chunk.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -94,13 +93,13 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         _sender->close(final_status);
         _sender.reset();
 
-        _runtime_state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
-                                                         state->fragment_instance_id());
+        _runtime_state->exec_env()->result_mgr()->cancel_at_time(
+                time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
     }
     SinkIOBuffer::close(state);
 }
 
-Status FileSinkIOBuffer::_write_chunk(ChunkPtr chunk)  {
+Status FileSinkIOBuffer::_write_chunk(ChunkPtr chunk) {
     if (!_is_writer_opened) {
         RETURN_IF_ERROR(_writer->open(_runtime_state));
         _is_writer_opened = true;
