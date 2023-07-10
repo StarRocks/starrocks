@@ -1228,12 +1228,15 @@ public class Config extends ConfigBase {
     public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
 
     /**
+<<<<<<< HEAD
      * enable replicated storage as default table engine
      */
     @ConfField(mutable = true)
     public static boolean enable_replicated_storage_as_default_engine = true;
 
     /**
+=======
+>>>>>>> 2bb0d6b0a8 ([BugFix] Add invalid tablet meta cleaner (#26509))
      * FOR DiskAndTabletLoadBalancer:
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance
@@ -1298,10 +1301,23 @@ public class Config extends ConfigBase {
     public static boolean enable_metric_calculator = true;
 
     /**
+<<<<<<< HEAD
      * the max routine load job num, including NEED_SCHEDULED, RUNNING, PAUSE
      */
     @ConfField(mutable = true)
     public static int max_routine_load_job_num = 100;
+=======
+     * enable replicated storage as default table engine
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_replicated_storage_as_default_engine = true;
+
+    /**
+     * enable schedule insert query by row count
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_schedule_insert_query_by_row_count = true;
+>>>>>>> 2bb0d6b0a8 ([BugFix] Add invalid tablet meta cleaner (#26509))
 
     /**
      * the max concurrent routine load task num of a single routine load job
