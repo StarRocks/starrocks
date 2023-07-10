@@ -82,6 +82,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
@@ -2164,21 +2165,6 @@ public class OlapTable extends Table {
         return !tempPartitions.isEmpty();
     }
 
-    public void setStorageVolume(String storageVolume) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, storageVolume);
-        tableProperty.buildStorageVolume();
-    }
-
-    public String getStorageVolume() {
-        if (tableProperty == null) {
-            return RunMode.allowCreateLakeTable() ? "default" : "local";
-        }
-        return tableProperty.getStorageVolume();
-    }
-
     public void setCompressionType(TCompressionType compressionType) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -2450,15 +2436,14 @@ public class OlapTable extends Table {
         properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
 
         Map<String, String> tableProperty = getTableProperty().getProperties();
-        if (tableProperty != null) {
-            if (tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                        tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
-            }
-            if (tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
-                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
-                        tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME));
-            }
+        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        }
+        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        String storageVolumeId = svm.getStorageVolumeIdOfTable(id);
+        if (storageVolumeId != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, svm.getStorageVolumeName(storageVolumeId));
         }
         return properties;
     }

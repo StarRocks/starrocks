@@ -56,7 +56,6 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
-import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -202,33 +201,15 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Cannot create table " +
                             "without persistent volume in current run mode \"" + runMode + "\"");
                 }
-                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-                StorageVolume sv = null;
-                if (volume.isEmpty()) {
-                    String dbStorageVolumeId = svm.getStorageVolumeIdOfDb(db.getId());
-                    if (dbStorageVolumeId != null) {
-                        sv = svm.getStorageVolume(dbStorageVolumeId);
-                    } else {
-                        sv = svm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-                    }
-                } else if (volume.equals(StorageVolumeMgr.DEFAULT)) {
-                    sv = svm.getDefaultStorageVolume();
-                } else {
-                    sv = svm.getStorageVolumeByName(volume);
-                }
-                if (sv == null) {
-                    throw new DdlException("Unknown storage volume \"" + volume + "\"");
-                }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                String storageVolumeId = sv.getId();
-                metastore.setLakeStorageInfo(table, storageVolumeId, properties);
-                if (!svm.bindTableToStorageVolume(sv.getId(), table.getId())) {
-                    throw new DdlException(String.format("Storage volume with id %s not exists", storageVolumeId));
+                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                if (table.isCloudNativeTable() && !svm.bindTableToStorageVolume(volume, db.getId(), tableId)) {
+                    throw new DdlException(String.format("Storage volume %s not exists", volume));
                 }
-                table.setStorageVolume(sv.getName());
+                String storageVolumeId = svm.getStorageVolumeIdOfTable(tableId);
+                metastore.setLakeStorageInfo(table, storageVolumeId, properties);
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                table.setStorageVolume(StorageVolumeMgr.LOCAL);
             }
         } else {
             throw new DdlException("Unrecognized engine \"" + stmt.getEngineName() + "\"");
@@ -558,9 +539,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             // process lake table colocation properties, after partition and tablet creation
             colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* expectLakeTable */);
         } catch (DdlException e) {
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(tableId);
-            }
+            GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(tableId);
             throw e;
         }
 

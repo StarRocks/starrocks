@@ -362,10 +362,7 @@ public class GrantsTo {
                             continue;
                         }
                     } else {
-                        String storageVolumeName = storageVolumeMgr.getStorageVolume(storageVolumeId).getName();
-                        if (storageVolumeName == null) {
-                            continue;
-                        }
+                        String storageVolumeName = storageVolumeMgr.getStorageVolumeName(storageVolumeId);
                         objects.add(Lists.newArrayList(null, null, storageVolumeName));
                     }
                 }

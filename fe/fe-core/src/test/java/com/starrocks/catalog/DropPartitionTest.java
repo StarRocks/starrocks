@@ -137,8 +137,8 @@ public class DropPartitionTest {
             }
 
             @Mock
-            public boolean bindTableToStorageVolume(String svId, long tableId) {
-                return true;
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
             }
         };
 
