@@ -33,6 +33,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -227,6 +228,12 @@ public class DynamicPartitionUtil {
             }
         }
         return true;
+    }
+
+    public static void registerOrRemovePartitionScheduleInfo(long dbId, OlapTable olapTable) {
+        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(dbId, olapTable);
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
+                olapTable.getName(), DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
     }
 
     public static void registerOrRemoveDynamicPartitionTable(long dbId, OlapTable olapTable) {

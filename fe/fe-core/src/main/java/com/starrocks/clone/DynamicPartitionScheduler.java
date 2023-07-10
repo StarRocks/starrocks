@@ -270,6 +270,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
             Long tableId = tableInfo.second;
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
+                LOG.warn("Automatically removes the schedule because database does not exist, dbId: {}", dbId);
                 iterator.remove();
                 continue;
             }
@@ -286,6 +287,16 @@ public class DynamicPartitionScheduler extends MasterDaemon {
                 if (olapTable == null
                         || !olapTable.dynamicPartitionExists()
                         || !olapTable.getTableProperty().getDynamicPartitionProperty().getEnable()) {
+                    if (olapTable == null) {
+                        LOG.warn("Automatically removes the schedule because table does not exist, " +
+                                "tableId: {}", tableId);
+                    } else if (!olapTable.dynamicPartitionExists()) {
+                        LOG.warn("Automatically removes the schedule because " +
+                                "table[{}] does not have dynamic partition", olapTable.getName());
+                    } else {
+                        LOG.warn("Automatically removes the schedule because table[{}] " +
+                                "does not enable dynamic partition", olapTable.getName());
+                    }
                     iterator.remove();
                     continue;
                 }
@@ -305,6 +316,8 @@ public class DynamicPartitionScheduler extends MasterDaemon {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
                 if (rangePartitionInfo.getPartitionColumns().size() != 1) {
                     // currently only support partition with single column.
+                    LOG.warn("Automatically removes the schedule because " +
+                            "table[{}] has more than one partition column", olapTable.getName());
                     iterator.remove();
                     continue;
                 }
