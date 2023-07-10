@@ -129,21 +129,26 @@ public class LakeMaterializedViewTest {
         };
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
+            S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
+                    .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
+                    .setCredential(AwsCredentialInfo.newBuilder()
+                            .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
+            FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
+                    .setFsKey("1").setFsType(FileStoreType.S3)
+                    .setS3FsInfo(s3FileStoreInfo).build();
             @Mock
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
-                S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
-                        .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
-                        .setCredential(AwsCredentialInfo.newBuilder()
-                                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
-                FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
-                        .setFsKey("1").setFsType(FileStoreType.S3)
-                        .setS3FsInfo(s3FileStoreInfo).build();
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
 
             @Mock
-            public boolean bindTableToStorageVolume(String svId, long tableId) {
-                return true;
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
             }
         };
 

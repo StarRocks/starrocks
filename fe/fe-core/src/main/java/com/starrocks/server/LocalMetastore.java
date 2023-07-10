@@ -92,7 +92,6 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.starrocks.StarRocksDb;
-import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AlreadyExistsException;
@@ -212,7 +211,6 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -383,17 +381,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 id = getNextId();
                 Database db = new Database(id, dbName);
                 String storageVolumeId = "";
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                    // In shared data mode, storage volume needs to be bound to db before creating db.
-                    String volume = StorageVolumeMgr.DEFAULT;
-                    if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
-                        volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
-                    }
-                    storageVolumeId = getStorageVolumeId(volume);
-                    if (!GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                            .bindDbToStorageVolume(storageVolumeId, id)) {
-                        throw new DdlException(String.format("Storage volume with id %s not exists", storageVolumeId));
-                    }
+                String volume = StorageVolumeMgr.DEFAULT;
+                if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                    volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+                }
+                if (!GlobalStateMgr.getCurrentState().getStorageVolumeMgr().bindDbToStorageVolume(volume, id)) {
+                    throw new DdlException(String.format("Storage volume %s not exists", volume));
                 }
                 unprotectCreateDb(db);
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db, storageVolumeId);
@@ -435,10 +428,7 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             Database db = new Database(createDbInfo.getId(), createDbInfo.getDbName());
             unprotectCreateDb(db);
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                stateMgr.getStorageVolumeMgr()
-                        .replayBindDbToStorageVolume(createDbInfo.getStorageVolumeId(), db.getId());
-            }
+            stateMgr.getStorageVolumeMgr().replayBindDbToStorageVolume(createDbInfo.getStorageVolumeId(), db.getId());
             LOG.info("finish replay create db, name: {}, id: {}", db.getOriginName(), db.getId());
         } finally {
             unlock();
@@ -496,9 +486,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // 5. unbind db from storage volume
             StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                storageVolumeMgr.unbindDbToStorageVolume(db.getId());
-            }
+            storageVolumeMgr.unbindDbToStorageVolume(db.getId());
 
             DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
             GlobalStateMgr.getCurrentState().getEditLog().logDropDb(info);
@@ -549,9 +537,7 @@ public class LocalMetastore implements ConnectorMetadata {
             final Cluster cluster = defaultCluster;
             cluster.removeDb(dbName, db.getId());
 
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                stateMgr.getStorageVolumeMgr().unbindDbToStorageVolume(db.getId());
-            }
+            stateMgr.getStorageVolumeMgr().unbindDbToStorageVolume(db.getId());
 
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
@@ -630,6 +616,12 @@ public class LocalMetastore implements ConnectorMetadata {
             if (!recycleBin.recoverTable(db, tableName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
+
+            Table recoverTable = db.getTable(tableName);
+            if (recoverTable instanceof OlapTable) {
+                DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), (OlapTable) recoverTable);
+            }
+
         } finally {
             db.writeUnlock();
         }
@@ -820,7 +812,7 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             onCreate(db, table, storageVolumeId, stmt.isSetIfNotExists());
         } catch (DdlException e) {
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (table.isCloudNativeTable()) {
                 GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
             }
             throw e;
@@ -2076,14 +2068,13 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 } // end for partitions
 
-                DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(dbId, olapTable);
+                DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), olapTable);
             }
         }
 
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isCloudNativeTable()) {
-            String storageVolumeId = info.getStorageVolumeId();
+        if (table.isCloudNativeTable()) {
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                    .replayBindTableToStorageVolume(storageVolumeId, table.getId());
+                    .replayBindTableToStorageVolume(info.getStorageVolumeId(), table.getId());
         }
     }
 
@@ -3462,9 +3453,8 @@ public class LocalMetastore implements ConnectorMetadata {
             tableProperty.buildDynamicProperty();
         }
 
-        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), table);
-        stateMgr.getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
-                table.getName(), DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
+        DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), table);
+
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
         GlobalStateMgr.getCurrentState().getEditLog().logDynamicPartition(info);
@@ -4705,20 +4695,6 @@ public class LocalMetastore implements ConnectorMetadata {
         if (oldId != null) {
             tableIdToIncrementId.replace(tableId, id);
         }
-    }
-
-    private String getStorageVolumeId(String volume) throws DdlException {
-        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-        StorageVolume sv = null;
-        if (volume.equals(StorageVolumeMgr.DEFAULT)) {
-            sv = svm.getDefaultStorageVolume();
-        } else {
-            sv = svm.getStorageVolumeByName(volume);
-        }
-        if (sv == null) {
-            throw new DdlException("Unknown storage volume \"" + volume + "\"");
-        }
-        return sv.getId();
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {

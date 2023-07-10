@@ -30,6 +30,10 @@ bool SpillProcessOperator::is_finished() const {
     return _channel->is_finished();
 }
 
+void SpillProcessOperator::close(RuntimeState* state) {
+    SourceOperator::close(state);
+}
+
 StatusOr<ChunkPtr> SpillProcessOperator::pull_chunk(RuntimeState* state) {
     if (!_channel->current_task()) {
         bool res = _channel->acquire_spill_task();

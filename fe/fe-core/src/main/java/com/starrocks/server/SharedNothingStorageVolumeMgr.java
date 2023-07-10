@@ -114,4 +114,39 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
             idToSV.remove(log.getId());
         }
     }
+
+    @Override
+    public boolean bindDbToStorageVolume(String svKey, long dbId) {
+        return true;
+    }
+
+    @Override
+    public void replayBindDbToStorageVolume(String svId, long dbId) {
+
+    }
+
+    @Override
+    public void unbindDbToStorageVolume(long dbId) {
+
+    }
+
+    @Override
+    public boolean bindTableToStorageVolume(String svKey, long dbId, long tableId) {
+        return true;
+    }
+
+    @Override
+    public void replayBindTableToStorageVolume(String svId, long tableId) {
+
+    }
+
+    @Override
+    public void unbindTableToStorageVolume(long tableId) {
+
+    }
+
+    @Override
+    public String createOrUpdateBuiltinStorageVolume() {
+        return "";
+    }
 }

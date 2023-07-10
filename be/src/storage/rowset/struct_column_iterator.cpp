@@ -16,13 +16,14 @@
 
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
 
 namespace starrocks {
 
 class StructColumnIterator final : public ColumnIterator {
 public:
-    StructColumnIterator(std::unique_ptr<ColumnIterator> null_iter,
+    StructColumnIterator(ColumnReader* _reader, std::unique_ptr<ColumnIterator> null_iter,
                          std::vector<std::unique_ptr<ColumnIterator>> field_iters, std::vector<uint8_t> access_flags);
 
     ~StructColumnIterator() override = default;
@@ -41,30 +42,31 @@ public:
 
     /// for vectorized engine
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
-        CHECK(false) << "array column does not has zone map index";
-        return Status::OK();
-    }
+                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override;
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
 private:
+    ColumnReader* _reader;
+
     std::unique_ptr<ColumnIterator> _null_iter;
     std::vector<std::unique_ptr<ColumnIterator>> _field_iters;
     std::vector<uint8_t> _access_flags;
 };
 
-StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(std::unique_ptr<ColumnIterator> null_iter,
+StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(ColumnReader* _reader,
+                                                             std::unique_ptr<ColumnIterator> null_iter,
                                                              std::vector<std::unique_ptr<ColumnIterator>> field_iters,
                                                              std::vector<uint8_t> access_flags) {
-    return std::make_unique<StructColumnIterator>(std::move(null_iter), std::move(field_iters),
+    return std::make_unique<StructColumnIterator>(_reader, std::move(null_iter), std::move(field_iters),
                                                   std::move(access_flags));
 }
 
-StructColumnIterator::StructColumnIterator(std::unique_ptr<ColumnIterator> null_iter,
+StructColumnIterator::StructColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
                                            std::vector<std::unique_ptr<ColumnIterator>> field_iters,
                                            std::vector<uint8_t> access_flags)
-        : _null_iter(std::move(null_iter)),
+        : _reader(reader),
+          _null_iter(std::move(null_iter)),
           _field_iters(std::move(field_iters)),
           _access_flags(std::move(access_flags)) {}
 
@@ -200,6 +202,12 @@ Status StructColumnIterator::seek_to_ordinal(ordinal_t ord) {
     for (auto& iter : _field_iters) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(ord));
     }
+    return Status::OK();
+}
+
+Status StructColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                                        const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
+    row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
 

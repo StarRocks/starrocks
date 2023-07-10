@@ -14,7 +14,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [key_desc]
 [COMMENT "table comment"]
 [partition_desc]
-distribution_desc
+[distribution_desc]
 [rollup_index]
 [ORDER BY (column_definition1,...)]
 [PROPERTIES ("key"="value", ...)]
@@ -185,7 +185,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 ### key_desc
 
-Syntax: 
+Syntax:
 
 ```SQL
 key_type(k1[,k2 ...])
@@ -272,30 +272,52 @@ For more information, see [Data distribution](../../../table_design/Data_distrib
 
 ### distribution_desc
 
-Syntax:
+StarRocks supports hash bucketing and random bucketing. If you do not configure bucketing, StarRocks uses random bucketing and automatically sets the number of buckets by default.
 
-```SQL
-DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
-```
+- Random bucketing (since v3.1)
 
-Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that meets the following two requirements as the bucketing column.
+  For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. And if you want StarRocks to automatically determine the number of buckets, you do not need to specify any bucketing configurations. If you choose to manually specify the number of buckets, the syntax is as follows:
 
-- High cardinality column such as ID
-- Column that is often used as a filter in queries
+  ```SQL
+  DISTRIBUTED BY RANDOM BUCKETS <num>
+  ```
+  
+  However, note that the query performance provided by random bucketing may not be ideal when you query massive amounts of data and frequently use certain columns as conditional columns. In this scenario, it is recommended to use hash bucketing. Because only a small number of buckets need to be scanned and computed, significantly improving query performance.
 
-If such a column does not exist, you can determine the bucketing column according to the complexity of queries.
+  **Precautions**
+  - You can only use random bucketing to create Duplicate Key tables.
+  - You can not specify a [Colocation Group](../../../using_starrocks/Colocate_join.md) for a table bucketed randomly.
+  - [Spark Load](../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
-- If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
-- If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
+  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31).
 
-If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md).
+- Hash bucketing
 
-**Precautions**:
+  Syntax:
 
-- **When you create a table, you must specify the bucketing columns**.
-- The values of bucketing columns cannot be updated.
-- Bucketing columns cannot be modified after they are specified.
-- Since StarRocks 2.5, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
+  ```SQL
+  DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
+  ```
+
+  Data in partitions can be subdivided into buckets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that meets the following two requirements as the bucketing column.
+
+  - High cardinality column such as ID
+  - Column that is often used as a filter in queries
+
+  If such a column does not exist, you can determine the bucketing column according to the complexity of queries.
+
+  - If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
+  - If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
+
+  If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md).
+
+  **Precautions**:
+
+  - **When you create a table, you must specify its bucketing columns**.
+  - The values of bucketing columns cannot be updated.
+  - Bucketing columns cannot be modified after they are specified.
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ### ORDER BY
 
@@ -480,13 +502,13 @@ To [use your StarRocks Shared-data cluster](../../../deployment/deploy_shared_da
 
 ```SQL
 PROPERTIES (
-    "enable_storage_cache" = "{ true | false }",
-    "storage_cache_ttl" = "<integer_value>",
+    "datacache.enable" = "{ true | false }",
+    "datacache.partition_duration" = "<string_value>",
     "enable_async_write_back" = "{ true | false }"
 )
 ```
 
-- `enable_storage_cache`: Whether to enable the local disk cache. Default: `true`.
+- `datacache.enable`: Whether to enable the local disk cache. Default: `true`.
 
   - When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).
   - When this property is set to `false`, the data is loaded only into the object storage.
@@ -495,11 +517,11 @@ PROPERTIES (
   >
   > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/Configuration.md#be-configuration-items).
 
-- `storage_cache_ttl`: The duration for which StarRocks caches the loaded data in the local disk if the local disk cache is enabled. The expired data is deleted from the local disk. If the value is set to `-1`, the cached data does not expire. Default: `2592000` (30 days).
+- `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
 
-> **CAUTION**
->
-> If you disabled the local disk cache, you do not need to set this configuration item. Setting this item to a value other than `0` when the local disk cache is disabled will cause unexpected behaviors of StarRocks.
+  > **NOTE**
+  >
+  > This property is available only when `datacache.enable` is set to `true`.
 
 - `enable_async_write_back`: Whether to allow data to be written into object storage asynchronously. Default: `false`.
 
