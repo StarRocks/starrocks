@@ -731,6 +731,9 @@ public class InsertPlanner {
             String columnName = targetColumnNames.get(i);
             if (icebergTable.getPartitionColumnNames().contains(columnName)) {
                 Expr expr = listItems.get(i).getExpr();
+                if (expr instanceof NullLiteral) {
+                    throw new SemanticException("partition value can't be null");
+                }
                 if (!expr.isConstant()) {
                     return false;
                 }
