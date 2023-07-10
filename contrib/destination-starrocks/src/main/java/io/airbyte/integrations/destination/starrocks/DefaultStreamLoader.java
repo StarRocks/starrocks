@@ -147,7 +147,7 @@ public class DefaultStreamLoader implements StreamLoader {
         } catch (StreamLoadFailException e) {
             throw e;
         }  catch (Exception e) {
-            LOG.error("error response from stream load: \n" + responseBody);
+            LOG.error(responseBody);
             String errorMsg = String.format("Stream load failed because of unknown exception, db: %s, table: %s, " +
                     "label: %s", database, loadTable, label);
             throw new StreamLoadFailException(errorMsg, e);
