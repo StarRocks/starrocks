@@ -20,15 +20,17 @@
 
 namespace starrocks {
 
-ArrayColumnIterator::ArrayColumnIterator(std::unique_ptr<ColumnIterator> null_iterator,
+ArrayColumnIterator::ArrayColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iterator,
                                          std::unique_ptr<ColumnIterator> array_size_iterator,
                                          std::unique_ptr<ColumnIterator> element_iterator)
-        : _null_iterator(std::move(null_iterator)),
+        : _reader(reader),
+          _null_iterator(std::move(null_iterator)),
           _array_size_iterator(std::move(array_size_iterator)),
           _element_iterator(std::move(element_iterator)) {}
 
-ArrayColumnIterator::ArrayColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
-                                         ColumnIterator* element_iterator) {
+ArrayColumnIterator::ArrayColumnIterator(ColumnReader* reader, ColumnIterator* null_iterator,
+                                         ColumnIterator* array_size_iterator, ColumnIterator* element_iterator) {
+    _reader = reader;
     _null_iterator.reset(null_iterator);
     _array_size_iterator.reset(array_size_iterator);
     _element_iterator.reset(element_iterator);
@@ -210,6 +212,12 @@ Status ArrayColumnIterator::seek_to_ordinal(ordinal_t ord) {
     RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(ord));
     size_t element_ordinal = _array_size_iterator->element_ordinal();
     RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
+    return Status::OK();
+}
+
+Status ArrayColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                                       const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
+    row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
 

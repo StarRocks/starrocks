@@ -1378,7 +1378,7 @@ Status SegmentIterator::_rewrite_predicates() {
     }
 
     for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
-        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps, &disable_dict_rewrites);
+        GlobalDictPredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps, &disable_dict_rewrites);
         RETURN_IF_ERROR(crewriter.rewrite_predicate(&_obj_pool));
     }
 
