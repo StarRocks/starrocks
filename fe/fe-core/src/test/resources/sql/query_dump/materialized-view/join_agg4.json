@@ -1,0 +1,116 @@
+{
+  "statement":"select l.LO_CUSTKEY, sum(l.LO_REVENUE), max(l.LO_REVENUE), min(l.LO_REVENUE), avg(l.LO_REVENUE), bitmap_union(to_bitmap(l.LO_REVENUE)), hll_union(hll_hash(l.LO_REVENUE)), percentile_union(percentile_hash(l.LO_REVENUE)) from hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.lineorder as l inner join hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.customer as c on  l.LO_CUSTKEY=c.C_CUSTKEY where l.LO_CUSTKEY > 5 group by l.LO_CUSTKEY limit 5;\n",
+  "table_meta":{
+    "ssb_1g_csv.lineorder":"CREATE EXTERNAL TABLE `lineorder` (\n  `lo_orderkey` bigint(20) NULL COMMENT \"\",\n  `lo_linenumber` int(11) NULL COMMENT \"\",\n  `lo_custkey` int(11) NULL COMMENT \"\",\n  `lo_partkey` int(11) NULL COMMENT \"\",\n  `lo_suppkey` int(11) NULL COMMENT \"\",\n  `lo_orderdate` int(11) NULL COMMENT \"\",\n  `lo_orderpriority` varchar(16) NULL COMMENT \"\",\n  `lo_shippriority` int(11) NULL COMMENT \"\",\n  `lo_quantity` int(11) NULL COMMENT \"\",\n  `lo_extendedprice` int(11) NULL COMMENT \"\",\n  `lo_ordtotalprice` int(11) NULL COMMENT \"\",\n  `lo_discount` int(11) NULL COMMENT \"\",\n  `lo_revenue` int(11) NULL COMMENT \"\",\n  `lo_supplycost` int(11) NULL COMMENT \"\",\n  `lo_tax` int(11) NULL COMMENT \"\",\n  `lo_commitdate` int(11) NULL COMMENT \"\",\n  `lo_shipmode` varchar(11) NULL COMMENT \"\"\n) ENGINE=HIVE \nPROPERTIES (\n\"database\" = \"ssb_1g_csv\",\n\"table\" = \"lineorder\",\n\"resource\" = \"hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0\"\n);",
+    "ssb_1g_csv.customer":"CREATE EXTERNAL TABLE `customer` (\n  `c_custkey` int(11) NULL COMMENT \"\",\n  `c_name` varchar(26) NULL COMMENT \"\",\n  `c_address` varchar(41) NULL COMMENT \"\",\n  `c_city` varchar(11) NULL COMMENT \"\",\n  `c_nation` varchar(16) NULL COMMENT \"\",\n  `c_region` varchar(13) NULL COMMENT \"\",\n  `c_phone` varchar(16) NULL COMMENT \"\",\n  `c_mktsegment` varchar(11) NULL COMMENT \"\"\n) ENGINE=HIVE \nPROPERTIES (\n\"database\" = \"ssb_1g_csv\",\n\"table\" = \"customer\",\n\"resource\" = \"hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0\"\n);",
+    "ssb_1g_csv.supplier":"CREATE EXTERNAL TABLE `supplier` (\n  `s_suppkey` int(11) NULL COMMENT \"\",\n  `s_name` varchar(26) NULL COMMENT \"\",\n  `s_address` varchar(26) NULL COMMENT \"\",\n  `s_city` varchar(11) NULL COMMENT \"\",\n  `s_nation` varchar(16) NULL COMMENT \"\",\n  `s_region` varchar(13) NULL COMMENT \"\",\n  `s_phone` varchar(16) NULL COMMENT \"\"\n) ENGINE=HIVE \nPROPERTIES (\n\"database\" = \"ssb_1g_csv\",\n\"table\" = \"supplier\",\n\"resource\" = \"hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0\"\n);",
+    "ssb_1g_csv.part":"CREATE EXTERNAL TABLE `part` (\n  `p_partkey` int(11) NULL COMMENT \"\",\n  `p_name` varchar(23) NULL COMMENT \"\",\n  `p_mfgr` varchar(7) NULL COMMENT \"\",\n  `p_category` varchar(8) NULL COMMENT \"\",\n  `p_brand` varchar(10) NULL COMMENT \"\",\n  `p_color` varchar(12) NULL COMMENT \"\",\n  `p_type` varchar(26) NULL COMMENT \"\",\n  `p_size` int(11) NULL COMMENT \"\",\n  `p_container` varchar(11) NULL COMMENT \"\"\n) ENGINE=HIVE \nPROPERTIES (\n\"database\" = \"ssb_1g_csv\",\n\"table\" = \"part\",\n\"resource\" = \"hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0\"\n);",
+    "ssb_1g_csv.dates":"CREATE EXTERNAL TABLE `dates` (\n  `d_datekey` int(11) NULL COMMENT \"\",\n  `d_date` varchar(20) NULL COMMENT \"\",\n  `d_dayofweek` varchar(10) NULL COMMENT \"\",\n  `d_month` varchar(11) NULL COMMENT \"\",\n  `d_year` int(11) NULL COMMENT \"\",\n  `d_yearmonthnum` int(11) NULL COMMENT \"\",\n  `d_yearmonth` varchar(9) NULL COMMENT \"\",\n  `d_daynuminweek` int(11) NULL COMMENT \"\",\n  `d_daynuminmonth` int(11) NULL COMMENT \"\",\n  `d_daynuminyear` int(11) NULL COMMENT \"\",\n  `d_monthnuminyear` int(11) NULL COMMENT \"\",\n  `d_weeknuminyear` int(11) NULL COMMENT \"\",\n  `d_sellingseason` varchar(14) NULL COMMENT \"\",\n  `d_lastdayinweekfl` int(11) NULL COMMENT \"\",\n  `d_lastdayinmonthfl` int(11) NULL COMMENT \"\",\n  `d_holidayfl` int(11) NULL COMMENT \"\",\n  `d_weekdayfl` int(11) NULL COMMENT \"\"\n) ENGINE=HIVE \nPROPERTIES (\n\"database\" = \"ssb_1g_csv\",\n\"table\" = \"dates\",\n\"resource\" = \"hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0\"\n);",
+    "test_mv_async_db_d68fd462_fe15_11ed_a492_00163e0b9de0.line_order_flat_mv":"CREATE MATERIALIZED VIEW `line_order_flat_mv` (`LO_ORDERKEY`, `LO_ORDERDATE`, `LO_LINENUMBER`, `LO_CUSTKEY`, `LO_PARTKEY`, `LO_SUPPKEY`, `LO_ORDERPRIORITY`, `LO_SHIPPRIORITY`, `LO_QUANTITY`, `LO_EXTENDEDPRICE`, `LO_ORDTOTALPRICE`, `LO_DISCOUNT`, `LO_REVENUE`, `C_NAME`, `C_ADDRESS`, `C_CITY`, `C_NATION`, `C_REGION`, `S_NAME`, `S_ADDRESS`, `S_CITY`, `P_NAME`, `P_MFGR`, `P_CATEGORY`, `P_BRAND`, `P_COLOR`, `D_DATE`, `D_DAYOFWEEK`, `D_MONTH`, `D_YEAR`, `D_YEARMONTHNUM`, `D_YEARMONTH`, `D_DAYNUMINWEEK`, `D_DAYNUMINMONTH`, `D_DAYNUMINYEAR`, `D_MONTHNUMINYEAR`, `D_WEEKNUMINYEAR`)\nDISTRIBUTED BY HASH(`LO_ORDERDATE`, `LO_ORDERKEY`) BUCKETS 48 \nREFRESH MANUAL\nPROPERTIES (\n\"replication_num\" = \"1\",\n\"replicated_storage\" = \"true\",\n\"force_external_table_query_rewrite\" = \"true\",\n\"unique_constraints\" = \"hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.customer.c_custkey;hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.supplier.s_suppkey;hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.part.p_partkey;hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.dates.d_datekey\",\n\"foreign_key_constraints\" = \"hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.lineorder(lo_custkey) REFERENCES hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.customer(c_custkey);hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.lineorder(lo_suppkey) REFERENCES hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.supplier(s_suppkey);hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.lineorder(lo_partkey) REFERENCES hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.part(p_partkey);hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.lineorder(lo_orderdate) REFERENCES hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0.ssb_1g_csv.dates(d_datekey)\",\n\"storage_medium\" = \"HDD\"\n)\nAS SELECT `l`.`LO_ORDERKEY`, `l`.`LO_ORDERDATE`, `l`.`LO_LINENUMBER`, `l`.`LO_CUSTKEY`, `l`.`LO_PARTKEY`, `l`.`LO_SUPPKEY`, `l`.`LO_ORDERPRIORITY`, `l`.`LO_SHIPPRIORITY`, `l`.`LO_QUANTITY`, `l`.`LO_EXTENDEDPRICE`, `l`.`LO_ORDTOTALPRICE`, `l`.`LO_DISCOUNT`, `l`.`LO_REVENUE`, `c`.`C_NAME`, `c`.`C_ADDRESS`, `c`.`C_CITY`, `c`.`C_NATION`, `c`.`C_REGION`, `s`.`S_NAME`, `s`.`S_ADDRESS`, `s`.`S_CITY`, `p`.`P_NAME`, `p`.`P_MFGR`, `p`.`P_CATEGORY`, `p`.`P_BRAND`, `p`.`P_COLOR`, `d`.`D_DATE`, `d`.`D_DAYOFWEEK`, `d`.`D_MONTH`, `d`.`D_YEAR`, `d`.`D_YEARMONTHNUM`, `d`.`D_YEARMONTH`, `d`.`D_DAYNUMINWEEK`, `d`.`D_DAYNUMINMONTH`, `d`.`D_DAYNUMINYEAR`, `d`.`D_MONTHNUMINYEAR`, `d`.`D_WEEKNUMINYEAR`\nFROM `hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0`.`ssb_1g_csv`.`lineorder` AS `l` INNER JOIN `hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0`.`ssb_1g_csv`.`customer` AS `c` ON `l`.`LO_CUSTKEY` = `c`.`C_CUSTKEY` INNER JOIN `hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0`.`ssb_1g_csv`.`supplier` AS `s` ON `l`.`LO_SUPPKEY` = `s`.`S_SUPPKEY` INNER JOIN `hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0`.`ssb_1g_csv`.`part` AS `p` ON `l`.`LO_PARTKEY` = `p`.`P_PARTKEY` INNER JOIN `hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0`.`ssb_1g_csv`.`dates` AS `d` ON `l`.`LO_ORDERDATE` = `d`.`D_DATEKEY`;"
+  },
+  "hms_table":{
+    "hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0%ssb_1g_csv%supplier":[
+      {
+        "type":"hive"
+      },
+      "{\"OutputRowCount\":\"1.0\",\"PartitionColumns\":[],\"DataColumns\":[\"s_suppkey\",\"s_name\",\"s_address\",\"s_city\",\"s_nation\",\"s_region\",\"s_phone\"],\"PartitionNames\":[]}"
+    ],
+    "hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0%ssb_1g_csv%part":[
+      {
+        "type":"hive"
+      },
+      "{\"OutputRowCount\":\"1.0\",\"PartitionColumns\":[],\"DataColumns\":[\"p_partkey\",\"p_name\",\"p_mfgr\",\"p_category\",\"p_brand\",\"p_color\",\"p_type\",\"p_size\",\"p_container\"],\"PartitionNames\":[]}"
+    ],
+    "hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0%ssb_1g_csv%lineorder":[
+      {
+        "type":"hive"
+      },
+      "{\"OutputRowCount\":\"1.0\",\"PartitionColumns\":[],\"DataColumns\":[\"lo_orderkey\",\"lo_linenumber\",\"lo_custkey\",\"lo_partkey\",\"lo_suppkey\",\"lo_orderdate\",\"lo_orderpriority\",\"lo_shippriority\",\"lo_quantity\",\"lo_extendedprice\",\"lo_ordtotalprice\",\"lo_discount\",\"lo_revenue\",\"lo_supplycost\",\"lo_tax\",\"lo_commitdate\",\"lo_shipmode\"],\"PartitionNames\":[]}"
+    ],
+    "hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0%ssb_1g_csv%dates":[
+      {
+        "type":"hive"
+      },
+      "{\"OutputRowCount\":\"1.0\",\"PartitionColumns\":[],\"DataColumns\":[\"d_datekey\",\"d_date\",\"d_dayofweek\",\"d_month\",\"d_year\",\"d_yearmonthnum\",\"d_yearmonth\",\"d_daynuminweek\",\"d_daynuminmonth\",\"d_daynuminyear\",\"d_monthnuminyear\",\"d_weeknuminyear\",\"d_sellingseason\",\"d_lastdayinweekfl\",\"d_lastdayinmonthfl\",\"d_holidayfl\",\"d_weekdayfl\"],\"PartitionNames\":[]}"
+    ],
+    "hive_catalog_delta_d690388a_fe15_11ed_a492_00163e0b9de0%ssb_1g_csv%customer":[
+      {
+        "type":"hive"
+      },
+      "{\"OutputRowCount\":\"1.0\",\"PartitionColumns\":[],\"DataColumns\":[\"c_custkey\",\"c_name\",\"c_address\",\"c_city\",\"c_nation\",\"c_region\",\"c_phone\",\"c_mktsegment\"],\"PartitionNames\":[]}"
+    ]
+  },
+  "table_row_count":{
+    "test_mv_async_db_d68fd462_fe15_11ed_a492_00163e0b9de0.line_order_flat_mv":{
+      "line_order_flat_mv":6001215
+    }
+  },
+  "session_variables":"{\"enable_show_all_variables\":false,\"partial_update_mode\":\"auto\",\"cbo_cte_reuse\":true,\"full_sort_max_buffered_bytes\":16777216,\"character_set_connection\":\"utf8\",\"cbo_use_correlated_join_estimate\":true,\"enable_insert_strict\":true,\"enable_connector_adaptive_io_tasks\":true,\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":28800,\"enable_hive_metadata_cache_with_insert\":false,\"cbo_cte_reuse_rate_v2\":1.15,\"transmission_encode_level\":7,\"character_set_results\":\"utf8\",\"transaction_isolation\":\"REPEATABLE-READ\",\"enable_global_runtime_filter\":true,\"enable_load_profile\":false,\"enable_plan_validation\":true,\"load_transmission_compression_type\":\"NO_COMPRESSION\",\"cbo_enable_low_cardinality_optimize\":true,\"scan_use_query_mem_ratio\":0.3,\"enable_rewrite_simple_agg_to_meta_scan\":false,\"new_planner_optimize_timeout\":3000000,\"enable_outer_join_reorder\":true,\"enable_adaptive_sink_dop\":true,\"force_schedule_local\":false,\"hudi_mor_force_jni_reader\":false,\"full_sort_late_materialization\":false,\"enable_profile\":false,\"cbo_enable_greedy_join_reorder\":true,\"load_mem_limit\":0,\"range_pruner_max_predicate\":100,\"spillable_operator_mask\":-1,\"sql_safe_updates\":0,\"runtime_filter_early_return_selectivity\":0.05,\"enable_local_shuffle_agg\":true,\"rpc_http_min_size\":2147482624,\"disable_function_fold_constants\":false,\"cbo_debug_alive_backend_number\":0,\"global_runtime_filter_probe_min_size\":102400,\"scan_or_to_union_limit\":4,\"enable_parallel_merge\":true,\"select_ratio_threshold\":0.15,\"nested_mv_rewrite_max_level\":3,\"query_delivery_timeout\":300,\"net_write_timeout\":60,\"cbo_prune_shuffle_column_rate\":0.1,\"collation_database\":\"utf8_general_ci\",\"spill_mem_table_size\":104857600,\"hash_join_push_down_right_table\":true,\"new_planner_agg_stage\":0,\"use_compute_nodes\":-1,\"collation_connection\":\"utf8_general_ci\",\"pipeline_sink_dop\":0,\"resource_group\":\"\",\"broadcast_row_limit\":15000000,\"enable_populate_block_cache\":true,\"profile_limit_fold\":true,\"spill_operator_max_bytes\":1048576000,\"exec_mem_limit\":2147483648,\"enable_sort_aggregate\":false,\"cbo_max_reorder_node_use_dp\":10,\"query_cache_force_populate\":false,\"runtime_filter_on_exchange_node\":false,\"disable_join_reorder\":false,\"enable_rule_based_materialized_view_rewrite\":true,\"enable_hive_column_stats\":true,\"enable_groupby_use_output_alias\":false,\"connector_scan_use_query_mem_ratio\":0.3,\"net_buffer_length\":16384,\"cbo_prune_subfield\":true,\"forward_to_leader\":false,\"count_distinct_column_buckets\":1024,\"full_sort_max_buffered_rows\":1024000,\"query_cache_agg_cardinality_limit\":5000000,\"query_timeout\":300,\"connector_io_tasks_slow_io_latency_ms\":50,\"cbo_max_reorder_node\":50,\"cboPushDownAggregateMode_v1\":-1,\"window_partition_mode\":1,\"enable_deliver_batch_fragments\":true,\"enable_tablet_internal_parallel_v2\":true,\"enable_distinct_column_bucketization\":false,\"enable_big_query_log\":true,\"interpolate_passthrough\":true,\"enable_incremental_mv\":false,\"analyze_mv\":\"sample\",\"runtime_filter_scan_wait_time\":20,\"SQL_AUTO_IS_NULL\":false,\"enable_sync_materialized_view_rewrite\":true,\"event_scheduler\":\"OFF\",\"prefer_compute_node\":false,\"enable_strict_type\":false,\"max_pipeline_dop\":64,\"broadcast_right_table_scale_factor\":10,\"group_concat_max_len\":65535,\"parse_tokens_limit\":3500000,\"chunk_size\":4096,\"runtime_join_filter_push_down_limit\":1024000,\"global_runtime_filter_probe_min_selectivity\":0.5,\"query_mem_limit\":0,\"enable_filter_unused_columns_in_scan_stage\":true,\"big_query_log_cpu_second_threshold\":480,\"enable_scan_block_cache\":false,\"enable_materialized_view_single_table_view_delta_rewrite\":false,\"div_precision_increment\":4,\"runtime_adaptive_dop_max_block_rows_per_driver_seq\":16384,\"log_rejected_record_num\":0,\"auto_increment_increment\":1,\"sql_dialect\":\"StarRocks\",\"cbo_push_down_distinct_below_window\":true,\"sql_mode_v2\":32,\"big_query_log_scan_rows_threshold\":1000000000,\"character_set_client\":\"utf8\",\"autocommit\":true,\"hdfs_backend_selector_scan_range_shuffle\":false,\"enable_column_expr_predicate\":true,\"pipeline_profile_level\":1,\"parallel_fragment_exec_instance_num\":1,\"max_scan_key_num\":-1,\"enable_runtime_adaptive_dop\":false,\"cbo_cte_max_limit\":10,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"storage_engine\":\"olap\",\"hive_partition_stats_sample_size\":3000,\"enable_optimizer_trace_log\":false,\"enable_mv_planner\":false,\"spill_operator_min_bytes\":10485760,\"cbo_enable_dp_join_reorder\":true,\"tx_visible_wait_timeout\":10,\"enable_materialized_view_view_delta_rewrite\":true,\"cbo_max_reorder_node_use_exhaustive\":4,\"enable_sql_digest\":false,\"spill_mem_table_num\":2,\"profile_timeout\":2,\"cbo_push_down_aggregate\":\"global\",\"enable_spill\":false,\"spill_encode_level\":7,\"pipeline_dop\":0,\"enable_query_dump\":false,\"single_node_exec_plan\":false,\"join_implementation_mode_v2\":\"auto\",\"global_runtime_filter_build_max_size\":67108864,\"sql_select_limit\":9223372036854775807,\"enable_materialized_view_rewrite\":true,\"statistic_collect_parallel\":1,\"enable_rewrite_sum_by_associative_rule\":true,\"query_cache_hot_partition_num\":3,\"enable_prune_complex_types\":true,\"query_cache_type\":0,\"disable_colocate_join\":false,\"max_parallel_scan_instance_num\":-1,\"query_cache_entry_max_rows\":409600,\"max_pushdown_conditions_per_column\":-1,\"enable_mv_optimizer_trace_log\":false,\"connector_io_tasks_per_scan_operator\":16,\"default_table_compression\":\"lz4_frame\",\"enable_materialized_view_union_rewrite\":true,\"runtime_adaptive_dop_max_output_amplification_factor\":0,\"sql_quote_show_create\":true,\"scan_or_to_union_threshold\":50000000,\"enable_exchange_pass_through\":true,\"runtime_profile_report_interval\":10,\"query_cache_entry_max_bytes\":4194304,\"innodb_read_only\":true,\"spill_mem_limit_threshold\":0.8,\"cbo_reorder_threshold_use_exhaustive\":6,\"enable_exchange_perf\":false,\"enable_predicate_reorder\":false,\"workgroup_id\":0,\"enable_query_cache\":false,\"enable_rewrite_groupingsets_to_union_all\":false,\"transmission_compression_type\":\"NO_COMPRESSION\",\"interactive_timeout\":3600,\"use_page_cache\":true,\"max_allowed_packet\":33554432,\"big_query_log_scan_bytes_threshold\":10737418240,\"collation_server\":\"utf8_general_ci\",\"time_zone\":\"Asia/Shanghai\",\"enable_multicolumn_global_runtime_filter\":false,\"character_set_server\":\"utf8\",\"tablet_internal_parallel_mode\":\"auto\",\"enable_pipeline\":true,\"cbo_use_nth_exec_plan\":0,\"io_tasks_per_scan_operator\":4,\"spill_mode\":\"auto\",\"parallel_exchange_instance_num\":-1,\"enable_shared_scan\":false,\"enable_query_debug_trace\":false,\"allow_default_partition\":false}",
+  "column_statistics":{
+    "test_mv_async_db_d68fd462_fe15_11ed_a492_00163e0b9de0.line_order_flat_mv":{
+      "LO_CUSTKEY":"[1.0, 29999.0, 0.0, 4.0, 17766.0] ESTIMATE",
+      "LO_REVENUE":"[82890.0, 1.029595E7, 0.0, 4.0, 195128.0] ESTIMATE"
+    },
+    "ssb_1g_csv.supplier":{
+      "s_city":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_name":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_address":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_suppkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "ssb_1g_csv.lineorder":{
+      "lo_orderpriority":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_custkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_partkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_revenue":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_quantity":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_orderkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_suppkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_orderdate":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_linenumber":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_shippriority":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_ordtotalprice":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_extendedprice":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "lo_discount":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "ssb_1g_csv.customer":{
+      "c_custkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "c_nation":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "c_address":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "c_name":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "c_region":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "c_city":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "ssb_1g_csv.part":{
+      "p_partkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_category":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_name":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_brand":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_color":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_mfgr":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "ssb_1g_csv.dates":{
+      "d_daynuminmonth":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_daynuminweek":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_weeknuminyear":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_yearmonthnum":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_datekey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_daynuminyear":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_date":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_yearmonth":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_dayofweek":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_month":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_monthnuminyear":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "d_year":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    }
+  },
+  "be_number":1,
+  "be_core_stat":{
+    "numOfHardwareCoresPerBe":"{\"11001\":104}",
+    "cachedAvgNumOfHardwareCores":104
+  },
+  "exception":[
+
+  ],
+  "version":"UNKNOWN",
+  "commit_version":"UNKNOWN"
+}

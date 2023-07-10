@@ -365,21 +365,23 @@ public class QueryAnalyzer {
 
             node.setColumns(columns.build());
             String dbName = node.getName().getDb();
+            if (session.getDumpInfo() != null) {
+                session.getDumpInfo().addTable(dbName, table);
 
-            session.getDumpInfo().addTable(dbName, table);
-            if (table.isHiveTable()) {
-                HiveTable hiveTable = (HiveTable) table;
-                Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
-                        getResource(hiveTable.getResourceName());
-                if (resource != null) {
-                    session.getDumpInfo().addResource(resource);
+                if (table.isHiveTable()) {
+                    HiveTable hiveTable = (HiveTable) table;
+                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
+                            hiveTable.getTableName());
+                    HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
+                            hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                    hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
+                    hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
+                    Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
+                            getResource(hiveTable.getResourceName());
+                    if (resource != null) {
+                        session.getDumpInfo().addResource(resource);
+                    }
                 }
-                session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
-                        hiveTable.getTableName());
-                HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
-                        hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
-                hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
-                hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
             }
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
@@ -686,8 +688,11 @@ public class QueryAnalyzer {
                 fields.add(field);
             }
 
-            String dbName = node.getName().getDb();
-            session.getDumpInfo().addView(dbName, view);
+            if (session.getDumpInfo() != null) {
+                String dbName = node.getName().getDb();
+                session.getDumpInfo().addView(dbName, view);
+            }
+
             Scope viewScope = new Scope(RelationId.of(node), new RelationFields(fields));
             node.setScope(viewScope);
             return viewScope;
