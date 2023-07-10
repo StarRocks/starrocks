@@ -107,13 +107,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "2014-12-21 12:34:56");
 
         sql = "select day_of_week(timestamp '2022-03-06 01:02:03');";
-        assertPlanContains(sql, "dayofweek('2022-03-06 01:02:03')");
+        assertPlanContains(sql, "dayofweek_iso('2022-03-06 01:02:03')");
 
         sql = "select dow(timestamp '2022-03-06 01:02:03');";
-        assertPlanContains(sql, "dayofweek('2022-03-06 01:02:03')");
+        assertPlanContains(sql, "dayofweek_iso('2022-03-06 01:02:03')");
 
         sql = "select dow(date '2022-03-06');";
-        assertPlanContains(sql, "dayofweek('2022-03-06 00:00:00')");
+        assertPlanContains(sql, "dayofweek_iso('2022-03-06 00:00:00')");
 
         sql = "select day_of_month(timestamp '2022-03-06 01:02:03');";
         assertPlanContains(sql, "dayofmonth('2022-03-06 01:02:03')");
@@ -132,6 +132,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select doy(date '2022-03-06');";
         assertPlanContains(sql, "dayofyear('2022-03-06 00:00:00')");
+
+        sql = "select week_of_year(timestamp '2023-01-01 00:00:00');";
+        assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
+
+        sql = "select week(timestamp '2023-01-01');";
+        assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
+
+        sql = "select week_of_year(date '2023-01-01');";
+        assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
+
+        sql = "select week(date '2023-01-01');";
+        assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
     }
 
     @Test

@@ -871,7 +871,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
         try {
-            return new DateLiteral(node.getValue(), Type.DATETIME);
+            String value = node.getValue();
+            if (value.length() <= 10) {
+                value += " 00:00:00";
+            }
+            return new DateLiteral(value, Type.DATETIME);
         } catch (AnalysisException e) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }
