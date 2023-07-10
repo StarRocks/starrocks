@@ -502,13 +502,13 @@ To [use your StarRocks Shared-data cluster](../../../deployment/deploy_shared_da
 
 ```SQL
 PROPERTIES (
-    "enable_storage_cache" = "{ true | false }",
-    "storage_cache_ttl" = "<integer_value>",
+    "datacache.enable" = "{ true | false }",
+    "datacache.partition_duration" = "<string_value>",
     "enable_async_write_back" = "{ true | false }"
 )
 ```
 
-- `enable_storage_cache`: Whether to enable the local disk cache. Default: `true`.
+- `datacache.enable`: Whether to enable the local disk cache. Default: `true`.
 
   - When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).
   - When this property is set to `false`, the data is loaded only into the object storage.
@@ -517,11 +517,11 @@ PROPERTIES (
   >
   > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/Configuration.md#be-configuration-items).
 
-- `storage_cache_ttl`: The duration for which StarRocks caches the loaded data in the local disk if the local disk cache is enabled. The expired data is deleted from the local disk. If the value is set to `-1`, the cached data does not expire. Default: `2592000` (30 days).
+- `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
 
-> **CAUTION**
->
-> If you disabled the local disk cache, you do not need to set this configuration item. Setting this item to a value other than `0` when the local disk cache is disabled will cause unexpected behaviors of StarRocks.
+  > **NOTE**
+  >
+  > This property is available only when `datacache.enable` is set to `true`.
 
 - `enable_async_write_back`: Whether to allow data to be written into object storage asynchronously. Default: `false`.
 
