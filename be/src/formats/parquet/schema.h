@@ -138,38 +138,20 @@ public:
     }
 
 private:
-    //    void leaf_to_field(const tparquet::SchemaElement& t_schema, const LevelInfo& cur_level_info, bool is_nullable,
-    //                       ParquetField* field);
-
     Status leaf_to_field(const tparquet::SchemaElement* t_schema, const LevelInfo& cur_level_info, bool is_nullable,
                          ParquetField* field);
-
-    //    Status list_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
-    //                         ParquetField* field, size_t* next_pos);
 
     Status list_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
                          ParquetField* field, size_t* next_pos);
 
-    //    Status map_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
-    //                        ParquetField* field, size_t* next_pos);
-
     Status map_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
                         ParquetField* field, size_t* next_pos);
-
-    //    Status group_to_struct_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos,
-    //                                 LevelInfo cur_level_info, ParquetField* field, size_t* next_pos);
 
     Status group_to_struct_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos,
                                  LevelInfo cur_level_info, ParquetField* field, size_t* next_pos);
 
-    //    Status group_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
-    //                          ParquetField* field, size_t* next_pos);
-
     Status group_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
                           ParquetField* field, size_t* next_pos);
-
-    //    Status node_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
-    //                         ParquetField* field, size_t* next_pos);
 
     Status node_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
                          ParquetField* field, size_t* next_pos);
