@@ -2061,7 +2061,64 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     @Override
+<<<<<<< HEAD
     public void onCreate() {
+=======
+    public void onReload() {
+        analyzePartitionInfo();
+    }
+
+    @Override
+    public void onCreate(Database db) {
+        super.onCreate(db);
+
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        if (colocateTableIndex.isColocateTable(getId())) {
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            ColocatePersistInfo colocatePersistInfo =
+                    ColocatePersistInfo.createForAddTable(groupId, getId(), backendsPerBucketSeq);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
+        }
+
+        DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), this);
+
+        if (Config.dynamic_partition_enable && getTableProperty().getDynamicPartitionProperty().getEnable()) {
+            new Thread(() -> {
+                try {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
+                            .executeDynamicPartitionForTable(db.getId(), getId());
+                } catch (Exception ex) {
+                    LOG.warn("Some problems were encountered in the process of triggering " +
+                            "the execution of dynamic partitioning", ex);
+                }
+            }, "BackgroundDynamicPartitionThread").start();
+        }
+    }
+
+    private void analyzePartitionInfo() {
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return;
+        }
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        // currently, automatic partition only supports one expression
+        Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+        // for Partition slot ref, the SlotDescriptor is not serialized, so should recover it here.
+        // the SlotDescriptor is used by toThrift, which influences the execution process.
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        partitionExpr.collect(SlotRef.class, slotRefs);
+        Preconditions.checkState(slotRefs.size() == 1);
+        if (slotRefs.get(0).getSlotDescriptorWithoutCheck() == null) {
+            for (int i = 0; i < fullSchema.size(); i++) {
+                Column column = fullSchema.get(i);
+                if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                    SlotDescriptor slotDescriptor =
+                            new SlotDescriptor(new SlotId(i), column.getName(), column.getType(), column.isAllowNull());
+                    slotRefs.get(0).setDesc(slotDescriptor);
+                }
+            }
+        }
+>>>>>>> 036da87525 ([BugFix] Fix & Optimizing Partition Scheduling (#26813))
     }
 
     @Override
