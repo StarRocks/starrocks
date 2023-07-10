@@ -52,7 +52,7 @@ public class DeletePlanTest extends PlanTestBase {
     }
 
     private static String getDeleteExecPlan(String originStmt) throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
                         .get(0);
