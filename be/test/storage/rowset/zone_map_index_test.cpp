@@ -90,11 +90,13 @@ protected:
         }
 
         IndexReadOptions opts;
-        opts.fs = _fs.get();
-        opts.file_name = filename;
+        ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename))
+        opts.read_file = rfile.get();
         opts.use_page_cache = true;
         opts.kept_in_memory = false;
-        opts.skip_fill_local_cache = false;
+        opts.skip_fill_data_cache = false;
+        OlapReaderStatistics stats;
+        opts.stats = &stats;
         ZoneMapIndexReader column_zone_map;
         ASSIGN_OR_ABORT(auto r, column_zone_map.load(opts, index_meta.zone_map_index()));
         ASSERT_TRUE(r);
@@ -150,11 +152,13 @@ TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
     }
 
     IndexReadOptions opts;
-    opts.fs = _fs.get();
-    opts.file_name = filename;
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename))
+    opts.read_file = rfile.get();
     opts.use_page_cache = true;
     opts.kept_in_memory = false;
-    opts.skip_fill_local_cache = false;
+    opts.skip_fill_data_cache = false;
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
     ZoneMapIndexReader column_zone_map;
     ASSIGN_OR_ABORT(auto r, column_zone_map.load(opts, index_meta.zone_map_index()));
     ASSERT_TRUE(r);
