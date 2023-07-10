@@ -93,6 +93,8 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -138,7 +140,7 @@ jobs:
           echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   clang-format:
-    runs-on: [self-hosted, safe]
+    runs-on: [self-hosted, normal]
     needs: be-checker
     name: Clang-Format
     env:
@@ -164,6 +166,8 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -183,7 +187,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   thirdparty-update:
-    runs-on: [self-hosted, safe]
+    runs-on: [self-hosted, normal]
     needs: [ be-checker, clang-format ]
     name: Thirdparty Update
     env:
@@ -223,7 +227,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   be-ut:
-    runs-on: [self-hosted, safe]
+    runs-on: [self-hosted, normal]
     needs: [ be-checker, thirdparty-update ]
     timeout-minutes: 90
     name: BE UT
@@ -331,6 +335,8 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -356,7 +362,7 @@ jobs:
           level: error
 
   fe-ut:
-    runs-on: [self-hosted, safe]
+    runs-on: [self-hosted, normal]
     needs: fe-codestyle-check
     name: FE UT
     env:
@@ -382,6 +388,8 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
