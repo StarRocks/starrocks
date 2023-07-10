@@ -117,7 +117,12 @@ private:
     void _reset();
 
     size_t _mem_usage() const {
-        return sizeof(OrdinalIndexReader) + (_num_pages + 1) * sizeof(ordinal_t) + (_num_pages + 1) * sizeof(uint64_t);
+        if (_num_pages == 0) {
+            return sizeof(OrdinalIndexReader);
+        } else {
+            return sizeof(OrdinalIndexReader) + (_num_pages + 1) * sizeof(ordinal_t) +
+                   (_num_pages + 1) * sizeof(uint64_t);
+        }
     }
 
     Status _do_load(const IndexReadOptions& opts, const OrdinalIndexPB& meta, ordinal_t num_values);
