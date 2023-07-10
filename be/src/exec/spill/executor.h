@@ -90,7 +90,7 @@ struct IOTaskExecutor {
     workgroup::ScanExecutor* pool;
     workgroup::WorkGroupPtr wg;
 
-    IOTaskExecutor(workgroup::ScanExecutor* pool_, workgroup::WorkGroupPtr wg_) : pool(pool_), wg(wg_) {}
+    IOTaskExecutor(workgroup::ScanExecutor* pool_, workgroup::WorkGroupPtr wg_) : pool(pool_), wg(std::move(wg_)) {}
 
     template <class Func>
     Status submit(Func&& func) {
@@ -113,5 +113,7 @@ struct SyncTaskExecutor {
 
 #define RESOURCE_TLS_MEMTRACER_GUARD(state, ...) \
     spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(), ##__VA_ARGS__)
+
+#define TRACKER_WITH_SPILLER_GUARD(state, spiller) RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this())
 
 } // namespace starrocks::spill
