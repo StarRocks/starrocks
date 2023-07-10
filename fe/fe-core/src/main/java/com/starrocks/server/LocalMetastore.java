@@ -4020,7 +4020,6 @@ public class LocalMetastore implements ConnectorMetadata {
         for (long id : info.getBackendList()) {
             final Backend backend = stateMgr.getClusterInfo().getBackend(id);
             backend.setDecommissioned(false);
-            backend.clearClusterName();
             backend.setBackendState(Backend.BackendState.free);
         }
     }
