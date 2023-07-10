@@ -2443,7 +2443,7 @@ public class GlobalStateMgr {
             List<String> colDef = Lists.newArrayList();
             for (Column column : table.getBaseSchema()) {
                 StringBuilder colSb = new StringBuilder();
-                colSb.append(column.getName());
+                colSb.append("`" + column.getName() + "`");
                 if (!Strings.isNullOrEmpty(column.getComment())) {
                     colSb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
                 }
