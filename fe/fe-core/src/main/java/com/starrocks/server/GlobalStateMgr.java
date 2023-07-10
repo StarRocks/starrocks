@@ -1299,9 +1299,7 @@ public class GlobalStateMgr {
             throw t;
         }
 
-        if (RunMode.allowCreateLakeTable()) {
-            createOrUpdateBuiltinStorageVolume();
-        }
+        createOrUpdateBuiltinStorageVolume();
     }
 
     // start all daemon threads only running on Master
@@ -4035,10 +4033,10 @@ public class GlobalStateMgr {
 
     public void createOrUpdateBuiltinStorageVolume() {
         try {
-            ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
-            String builtinStorageVolumeId = storageVolumeMgr
-                    .getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
-            authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
+            String builtinStorageVolumeId = storageVolumeMgr.createOrUpdateBuiltinStorageVolume();
+            if (!builtinStorageVolumeId.isEmpty()) {
+                authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
+            }
         } catch (DdlException | AlreadyExistsException e) {
             LOG.warn("Failed to create or update builtin storage volume", e);
         } catch (PrivilegeException e) {
