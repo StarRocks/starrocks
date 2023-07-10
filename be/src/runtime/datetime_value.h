@@ -224,6 +224,9 @@ public:
     // Convert this datetime value to string by the format string
     bool to_format_string(const char* format, int len, char* to) const;
 
+    // Convert this datetime value to string by the joda format string
+    bool to_joda_format_string(const char* format, int len, char* to) const;
+
     // compute the length of data format pattern
     static int compute_format_len(const char* format, int len);
 
