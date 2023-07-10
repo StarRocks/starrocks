@@ -622,6 +622,8 @@
       + [money_format](./sql-reference/sql-functions/string-functions/money_format.md)
       + [null_or_empty](./sql-reference/sql-functions/string-functions/null_or_empty.md)
       + [parse_url](./sql-reference/sql-functions/string-functions/parse_url.md)
+      + [url_encode](./sql-reference/sql-functions/string-functions/url_encode.md)
+      + [url_decode](./sql-reference/sql-functions/string-functions/url_decode.md)
       + [repeat](./sql-reference/sql-functions/string-functions/repeat.md)
       + [replace](./sql-reference/sql-functions/string-functions/replace.md)
       + [reverse](./sql-reference/sql-functions/string-functions/reverse.md)

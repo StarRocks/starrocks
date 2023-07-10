@@ -431,6 +431,37 @@ public:
      */
     DEFINE_VECTORIZED_FN(strcmp);
 
+    /**
+     * params are one strings. Returns string for url encode string,
+     *
+     * @param: [string_value, string_value]
+     * @paramType: [StringColumn, StringColumn]
+     * @return: StringColumn
+     */
+    DEFINE_VECTORIZED_FN(url_encode);
+    static std::string url_encode_func(const std::string &value);
+
+    /**
+     * params are one strings. Returns string for url decode string,
+     *
+     * @param: [string_value, string_value]
+     * @paramType: [StringColumn, StringColumn]
+     * @return: StringColumn
+     */
+    DEFINE_VECTORIZED_FN(url_decode);
+    static std::string url_decode_func(const std::string &value);
+
+    /**
+     * Compare two strings. Returns 0 if lhs and rhs compare equal,
+     * -1 if lhs appears before rhs in lexicographical order,
+     * 1 if lhs appears after rhs in lexicographical order.
+     *
+     * @param: [string_value, string_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: IntColumn
+     */
+    DEFINE_VECTORIZED_FN(url_decode);
+
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
 private:
