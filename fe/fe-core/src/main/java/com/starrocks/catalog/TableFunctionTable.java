@@ -15,6 +15,7 @@
 
 package com.starrocks.catalog;
 
+import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
@@ -45,6 +46,9 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -54,6 +58,8 @@ import java.util.Map;
 import java.util.concurrent.Future;
 
 public class TableFunctionTable extends Table {
+
+    private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
 
     public static final String FAKE_PATH = "fake://";
     public static final String PROPERTY_PATH = "path";
@@ -147,7 +153,15 @@ public class TableFunctionTable extends Table {
             }
             HdfsUtil.parseFile(path, new BrokerDesc(properties), fileStatuses);
         } catch (UserException e) {
-            throw new DdlException("failed to parse files: " + e.getMessage());
+            Throwable root = ExceptionUtils.getRootCause(e);
+            LOG.error("access remote storage failed", e);
+            if (root instanceof AmazonS3Exception) {
+                AmazonS3Exception s3Exception = (AmazonS3Exception) root;
+                throw new DdlException(String.format("access storage failed: %s, detailed message: %s",
+                        s3Exception.getErrorCode(), s3Exception.getErrorMessage()));
+            } else {
+                throw new DdlException("failed to parse files: " + e.getMessage());
+            }
         }
 
         if (fileStatuses.isEmpty()) {
