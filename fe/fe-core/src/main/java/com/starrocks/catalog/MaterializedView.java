@@ -51,6 +51,7 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -1024,6 +1025,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(entry.getKey())
                         .append("\" = \"").append(entry.getValue()).append("\"");
+            }
+        }
+
+        if (isCloudNativeMaterializedView()) {
+            StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+            String storageVolumeId = svm.getStorageVolumeIdOfTable(id);
+            if (storageVolumeId != null) {
+                String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(storageVolumeId);
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                        PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME).append("\" = \"").append(volume).append("\"");
             }
         }
 
