@@ -2083,7 +2083,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
     return StringFunctions::url_encode_func(str.to_string());
 }
 
-std::string StringFunctions::url_encode_func(const std::string &value) {
+std::string StringFunctions::url_encode_func(const std::string& value) {
     std::ostringstream escaped;
     escaped.fill('0');
     escaped << std::hex;
@@ -2096,7 +2096,7 @@ std::string StringFunctions::url_encode_func(const std::string &value) {
         }
 
         escaped << std::uppercase;
-        escaped << '%' << std::setw(2) << int((unsigned char) c);
+        escaped << '%' << std::setw(2) << int((unsigned char)c);
         escaped << std::nouppercase;
     }
     return escaped.str();
@@ -2110,7 +2110,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(url_decodeImpl, str) {
     return StringFunctions::url_decode_func(str.to_string());
 }
 
-std::string StringFunctions::url_decode_func(const std::string &value) {
+std::string StringFunctions::url_decode_func(const std::string& value) {
     std::string ret;
     char ch;
     int i, ii;

@@ -439,7 +439,7 @@ public:
      * @return: StringColumn
      */
     DEFINE_VECTORIZED_FN(url_encode);
-    static std::string url_encode_func(const std::string &value);
+    static std::string url_encode_func(const std::string& value);
 
     /**
      * params are one strings. Returns string for url decode string,
@@ -449,7 +449,7 @@ public:
      * @return: StringColumn
      */
     DEFINE_VECTORIZED_FN(url_decode);
-    static std::string url_decode_func(const std::string &value);
+    static std::string url_decode_func(const std::string& value);
 
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
