@@ -338,6 +338,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
     public boolean executeDynamicPartitionForTable(Long dbId, Long tableId) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
+            LOG.warn("Automatically removes the schedule because database does not exist, dbId: {}", dbId);
             return true;
         }
 
@@ -352,6 +353,16 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             // Only OlapTable has DynamicPartitionProperty
             if (olapTable == null || !olapTable.dynamicPartitionExists() ||
                     !olapTable.getTableProperty().getDynamicPartitionProperty().getEnable()) {
+                if (olapTable == null) {
+                    LOG.warn("Automatically removes the schedule because table does not exist, " +
+                            "tableId: {}", tableId);
+                } else if (!olapTable.dynamicPartitionExists()) {
+                    LOG.warn("Automatically removes the schedule because " +
+                            "table[{}] does not have dynamic partition", olapTable.getName());
+                } else {
+                    LOG.warn("Automatically removes the schedule because table[{}] " +
+                            "does not enable dynamic partition", olapTable.getName());
+                }
                 return true;
             }
 
@@ -370,6 +381,8 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             if (rangePartitionInfo.getPartitionColumns().size() != 1) {
                 // currently only support partition with single column.
+                LOG.warn("Automatically removes the schedule because " +
+                        "table[{}] has more than one partition column", olapTable.getName());
                 return true;
             }
 
