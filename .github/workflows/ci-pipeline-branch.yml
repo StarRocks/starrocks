@@ -100,6 +100,8 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -171,6 +173,8 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -338,6 +342,8 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -389,6 +395,8 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
