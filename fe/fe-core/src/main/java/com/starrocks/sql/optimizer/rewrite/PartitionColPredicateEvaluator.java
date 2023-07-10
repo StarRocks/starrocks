@@ -17,12 +17,14 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
+import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionKeyDiscreteDomain;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -218,10 +220,23 @@ public class PartitionColPredicateEvaluator {
             for (int i = 0; i < candidateNum; i++) {
                 Range<PartitionKey> range = candidateRanges.get(i);
                 if (range.isConnected(predicateRange) && !range.intersection(predicateRange).isEmpty()) {
-                    bitSet.set(i);
+                    if (isCanonicalType(partitionColumn.getType())) {
+                        // try to canonical predicate
+                        Range intersectedRange = range.intersection(predicateRange);
+                        Range canonicalRange = intersectedRange.canonical(new PartitionKeyDiscreteDomain());
+                        if (!canonicalRange.isEmpty()) {
+                            bitSet.set(i);
+                        }
+                    } else {
+                        bitSet.set(i);
+                    }
                 }
             }
             return bitSet;
+        }
+
+        private boolean isCanonicalType(Type columnType) {
+            return columnType.isInt() || columnType.isLargeint() || columnType.isBigint();
         }
 
         private BitSet createAllTrueBitSet() {

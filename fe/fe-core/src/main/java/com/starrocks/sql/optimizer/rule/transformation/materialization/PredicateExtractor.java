@@ -154,7 +154,8 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                     for (RangePredicate subRangePredicate : childRange.getChildPredicates()) {
                         if (subRangePredicate instanceof ColumnRangePredicate) {
                             ColumnRangePredicate childColumnRange = subRangePredicate.cast();
-                            Optional<RangePredicate> rangePredicateOpt = findColumnRangePredicate(rangePredicates, childColumnRange);
+                            Optional<RangePredicate> rangePredicateOpt =
+                                    findColumnRangePredicate(rangePredicates, childColumnRange);
                             if (rangePredicateOpt.isPresent()) {
                                 ColumnRangePredicate newPredicate =
                                         ColumnRangePredicate.andRange(rangePredicateOpt.get().cast(), childColumnRange);
