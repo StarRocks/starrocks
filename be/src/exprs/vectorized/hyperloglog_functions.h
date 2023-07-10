@@ -40,4 +40,4 @@ public:
     DEFINE_VECTORIZED_FN(hll_deserialize);
 };
 
-} // namespace starrocks
+} // namespace starrocks::vectorized
