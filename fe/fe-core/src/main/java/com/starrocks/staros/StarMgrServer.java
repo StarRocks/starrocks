@@ -126,10 +126,6 @@ public class StarMgrServer {
         if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("HDFS")) {
             // HDFS related configuration
             com.staros.util.Config.HDFS_URL = Config.cloud_native_hdfs_url;
-            if (com.staros.util.Config.HDFS_URL.isEmpty()) {
-                LOG.error("The configuration item \"cloud_native_hdfs_url\" is empty.");
-                System.exit(-1);
-            }
         } else if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("S3")) {
             // AWS related configuration
             String[] bucketAndPrefix = getBucketAndPrefix();
@@ -137,16 +133,8 @@ public class StarMgrServer {
             com.staros.util.Config.S3_PATH_PREFIX = bucketAndPrefix[1];
             com.staros.util.Config.S3_REGION = Config.aws_s3_region;
             com.staros.util.Config.S3_ENDPOINT = Config.aws_s3_endpoint;
-            if (com.staros.util.Config.S3_BUCKET.isEmpty()) {
-                LOG.error("The configuration item \"aws_s3_path = {}\" is invalid, s3 bucket is empty.", Config.aws_s3_path);
-                System.exit(-1);
-            }
             // aws credential related configuration
             String credentialType = getAwsCredentialType();
-            if (credentialType == null) {
-                LOG.error("Invalid aws credential configuration.");
-                System.exit(-1);
-            }
             com.staros.util.Config.AWS_CREDENTIAL_TYPE = credentialType;
             com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_ID = Config.aws_s3_access_key;
             com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_SECRET = Config.aws_s3_secret_key;
@@ -162,14 +150,6 @@ public class StarMgrServer {
             com.staros.util.Config.AZURE_BLOB_CLIENT_SECRET = Config.azure_blob_client_secret;
             com.staros.util.Config.AZURE_BLOB_CLIENT_CERTIFICATE_PATH = Config.azure_blob_client_certificate_path;
             com.staros.util.Config.AZURE_BLOB_AUTHORITY_HOST = Config.azure_blob_authority_host;
-            if (com.staros.util.Config.AZURE_BLOB_ENDPOINT.isEmpty()) {
-                LOG.error("The configuration item \"azure_blob_endpoint\" is empty.");
-                System.exit(-1);
-            }
-            if (com.staros.util.Config.AZURE_BLOB_PATH.isEmpty()) {
-                LOG.error("The configuration item \"azure_blob_path\" is empty.");
-                System.exit(-1);
-            }
         } else {
             LOG.error(
                     "The configuration item \"cloud_native_storage_type = {}\" is invalid, must be HDFS or S3 or AZBLOB.",
@@ -330,14 +310,14 @@ public class StarMgrServer {
 
         if (Config.aws_s3_access_key.isEmpty() || Config.aws_s3_secret_key.isEmpty()) {
             // invalid credential configuration
-            return null;
+            return "";
         }
 
         if (Config.aws_s3_iam_role_arn.isEmpty()) {
             return "simple";
         }
 
-        //assume_role with ak sk, not supported now, just return null
-        return null;
+        //assume_role with ak sk, not supported now, just return empty string
+        return "";
     }
 }
