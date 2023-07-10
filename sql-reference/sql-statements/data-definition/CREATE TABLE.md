@@ -633,13 +633,13 @@ PROPERTIES (
 
 ```SQL
 PROPERTIES (
-    "enable_storage_cache" = "{ true | false }",
-    "storage_cache_ttl" = "<integer_value>",
+    "datacache.enable" = "{ true | false }",
+    "datacache.partition_duration" = "<string_value>",
     "enable_async_write_back" = "{ true | false }"
 )
 ```
 
-* `enable_storage_cache`：是否启用本地磁盘缓存。默认值：`true`。
+* `datacache.enable`：是否启用本地磁盘缓存。默认值：`true`。
 
   * 当该属性设置为 `true` 时，数据会同时导入对象存储（或 HDFS）和本地磁盘（作为查询加速的缓存）。
   * 当该属性设置为 `false` 时，数据仅导入到对象存储中。
@@ -648,11 +648,11 @@ PROPERTIES (
   >
   > 如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。更多信息，请参见 [BE 配置项](../../../administration/Configuration.md#be-配置项)
 
-* `storage_cache_ttl`：启用本地磁盘缓存后，StarRocks 在本地磁盘中缓存热数据的存活时间。过期数据将从本地磁盘中删除。如果将该值设置为 `-1`，则缓存数据不会过期。默认值：`2592000`（30 天）。
+* `datacache.partition_duration`：热数据的有效期。当启用本地磁盘缓存时，所有数据都会导入至本地磁盘缓存中。当缓存满时，StarRocks 会从缓存中删除最近较少使用（Less recently used）的数据。当有查询需要扫描已删除的数据时，StarRocks 会检查该数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据导入至缓存中。如果数据不在有效期内，StarRocks 不会将其导入至缓存中。该属性为字符串，您可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如，`7 DAY` 和 `12 HOUR`。如果不指定，StarRocks 将所有数据都作为热数据进行缓存。
 
-> **注意**
->
-> 当禁用本地磁盘缓存时，您无需设置该配置项。如果您禁用了本地磁盘缓存，并且将此项设置为除 `0` 以外的值，StarRocks 将出现未知行为。
+  > **说明**
+  >
+  > 仅当 `datacache.enable` 设置为 `true` 时，此属性可用。
 
 * `enable_async_write_back`：是否允许数据异步写入对象存储。默认值：`false`。
 
