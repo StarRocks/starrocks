@@ -1,5 +1,7 @@
 # Elasticsearch catalog
 
+StarRocks 自 3.1 版本起支持 Elasticsearch Catalog。
+
 StarRocks 与 Elasticsearch 都是目前流行的分析系统。StarRocks 擅长大规模分布式计算，且支持通过外部表查询 Elasticsearch。Elasticsearch 擅长全文检索。两者结合提供了一个更完善的 OLAP 解决方案。基于 Elasticsearch Catalog，您可以直接通过 StarRocks 使用 SQL 分析 Elasticsearch 集群内所有的索引数据，并且无需数据迁移。
 
 区别于其他数据源的 Catalog，Elasticsearch Catalog 创建后，下面只有一个名为 `default` 的数据库 (Database)，每一个 Elasticsearch 索引 (Index) 自动映射一张数据表 (Table)，并且都会自动挂载在 `default` 数据库下面。
@@ -35,7 +37,7 @@ Elasticsearch Catalog 的属性。支持如下属性：
 | **参数**             | **是否必须** | **默认值** | **说明**                                                     |
 | -------------------- | ------------ | ---------- | ------------------------------------------------------------ |
 | hosts                | 是           | 无         | Elasticsearch 集群连接地址，用于获取 Elasticsearch 版本号以及索引的分片分布信息，可指定一个或多个。StarRocks 是根据 `GET /_nodes/http` API 返回的地址和 Elasticsearch 集群进行通讯，所以 `hosts` 参数值必须和 `GET /_nodes/http` 返回的地址一致，否则可能导致 BE 无法和 Elasticsearch 集群进行正常的通讯。 |
-| index                | 是           | 无         | StarRocks 中的表对应的 Elasticsearch 索引的名字，可以是索引的别名。支持通配符匹配，比如设置 `index` 为 `hello*`，则 StarRocks 会匹配到所有以 `hello` 开头的索引。 |
+| index                | 是           | 无         | StarRocks 中的表对应的 Elasticsearch 索引的名字，可以是索引的别名。支持通配符匹配 (`*`)，比如设置 `index` 为 `hello*`，则 StarRocks 会匹配到所有以 `hello` 开头的索引。 |
 | type                 | 是           | 无         | 数据源的类型。创建 Elasticsearch Catalog 时，必须设置为 `es`。 |
 | user                 | 否           | 空         | 开启 HTTP Basic 认证的 Elasticsearch 集群的用户名，需要确保该用户有访问 `/cluster/state/ nodes/http` 等路径权限和对索引的读取权限。 |
 | password             | 否           | 空         | 对应用户的密码信息。                                         |

@@ -26,7 +26,7 @@
 - 支持[随机分桶](../table_design/Data_distribution.md#设置分桶)（Random Bucketing）功能，建表时无需选择分桶键，可以简化建表语句。然而在大数据、高性能要求场景中，建议继续使用 Hash 分桶方式。
 - 支持在 [INSERT INTO](../loading/InsertInto.md) 语句中使用 Table Function 功能，从 AWS S3 或 HDFS 直接导入 Parquet 或 ORC 格式文件的数据，简化导入过程。
 - 支持[生成列（Generated Column）](../sql-reference/sql-statements/generated_columns.md)功能，自动计算生成列表达式的值并存储，且在查询时可自动改写，以提升查询性能。
-- 支持 MAP、STRUCT 字段类型，并且在 ARRAY、MAP、STRUCT 类型中支持了 Fast Decimal 类型。
+- 支持 [MAP](../sql-reference/sql-statements/data-types/Map.md)、[STRUCT](../sql-reference/sql-statements/data-types/STRUCT.md) 字段类型，并且在 ARRAY、MAP、STRUCT 类型中支持了 Fast Decimal 类型。
 
 #### SQL 语句和函数
 
@@ -41,7 +41,7 @@
 <!--- 窗口函数：cume_dist、percent_rank
 - 模糊匹配函数：ilike
 - 工具函数：isnotnull-->
-- 表格函数（TABLE function）：[generate_series](../sql-reference/sql-functions/table-functions/generate_series.md)
+- 表格函数（Table function）：[generate_series](../sql-reference/sql-functions/table-functions/generate_series.md)
 
 ### 功能优化
 
@@ -106,8 +106,8 @@
 
 修复了如下问题：
 
-- 执行 Routine Load 时，无法正常处理重连 kafka 的请求。[#23477](https://github.com/StarRocks/starrocks/issues/23477)
-- SQL 查询中涉及多张表、并且含有 WHERE 子句时，如果这些 SQL 查询的语义相同但给定表顺序不同，则有些 SQL 查询不能改写成对相关物化视图的使用。[#22875](https://github.com/StarRocks/starrocks/issues/22875)
+- 执行 Routine Load 时，无法正常处理重连 Kafka 的请求。[#23477](https://github.com/StarRocks/starrocks/issues/23477)
+- SQL 查询中涉及多张表、并且含有 `WHERE` 子句时，如果这些 SQL 查询的语义相同但给定表顺序不同，则有些 SQL 查询不能改写成对相关物化视图的使用。[#22875](https://github.com/StarRocks/starrocks/issues/22875)
 - 查询包含 `GROUP BY` 子句时，会返回重复的数据结果。[#19640](https://github.com/StarRocks/starrocks/issues/19640)
 - 调用 lead() 或 lag() 函数可能会导致 BE 意外退出。[#22945](https://github.com/StarRocks/starrocks/issues/22945)
 - 根据 External Catalog 外表物化视图重写部分分区查询失败。[#19011](https://github.com/StarRocks/starrocks/issues/19011)
