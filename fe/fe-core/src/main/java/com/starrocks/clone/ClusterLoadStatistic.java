@@ -26,7 +26,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
-import com.starrocks.clone.BackendLoadStatistic.LoadScore;
 import com.starrocks.common.Config;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -37,7 +36,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /*
@@ -164,66 +162,6 @@ public class ClusterLoadStatistic {
         } else {
             Collections.sort(beStats, BackendLoadStatistic.SSD_COMPARATOR);
         }
-    }
-
-    /*
-     * Check whether the cluster can be more balance if we migrate a tablet with size 'tabletSize' from
-     * `srcBeId` to 'destBeId'
-     * 1. recalculate the load score of src and dest be after migrate the tablet.
-     * 2. if the summary of the diff between the new score and average score becomes smaller, we consider it
-     *    as more balance.
-     */
-    public boolean isMoreBalanced(long srcBeId, long destBeId, long tabletId, long tabletSize,
-                                  TStorageMedium medium) {
-        double currentSrcBeScore;
-        double currentDestBeScore;
-
-        BackendLoadStatistic srcBeStat = null;
-        Optional<BackendLoadStatistic> optSrcBeStat = beLoadStatistics.stream().filter(
-                t -> t.getBeId() == srcBeId).findFirst();
-        if (optSrcBeStat.isPresent()) {
-            srcBeStat = optSrcBeStat.get();
-        } else {
-            return false;
-        }
-
-        BackendLoadStatistic destBeStat = null;
-        Optional<BackendLoadStatistic> optDestBeStat = beLoadStatistics.stream().filter(
-                t -> t.getBeId() == destBeId).findFirst();
-        if (optDestBeStat.isPresent()) {
-            destBeStat = optDestBeStat.get();
-        } else {
-            return false;
-        }
-
-        if (!srcBeStat.hasMedium(medium) || !destBeStat.hasMedium(medium)) {
-            return false;
-        }
-
-        currentSrcBeScore = srcBeStat.getLoadScore(medium);
-        currentDestBeScore = destBeStat.getLoadScore(medium);
-
-        LoadScore newSrcBeScore = BackendLoadStatistic.calcSore(srcBeStat.getTotalUsedCapacityB(medium) - tabletSize,
-                srcBeStat.getTotalCapacityB(medium), srcBeStat.getReplicaNum(medium) - 1,
-                avgUsedCapacityPercentMap.get(medium), avgReplicaNumPercentMap.get(medium));
-
-        LoadScore newDestBeScore = BackendLoadStatistic.calcSore(destBeStat.getTotalUsedCapacityB(medium) + tabletSize,
-                destBeStat.getTotalCapacityB(medium), destBeStat.getReplicaNum(medium) + 1,
-                avgUsedCapacityPercentMap.get(medium), avgReplicaNumPercentMap.get(medium));
-
-        double currentDiff = Math.abs(currentSrcBeScore - avgLoadScoreMap.get(medium)) +
-                Math.abs(currentDestBeScore - avgLoadScoreMap.get(medium));
-        double newDiff = Math.abs(newSrcBeScore.score - avgLoadScoreMap.get(medium)) +
-                Math.abs(newDestBeScore.score - avgLoadScoreMap.get(medium));
-
-        LOG.debug("after migrate {}(size: {}) from {} to {}, medium: {}, the load score changed."
-                        + " src: {} -> {}, dest: {}->{}, average score: {}. current diff: {}, new diff: {},"
-                        + " more balanced: {}",
-                tabletId, tabletSize, srcBeId, destBeId, medium, currentSrcBeScore, newSrcBeScore.score,
-                currentDestBeScore, newDestBeScore.score, avgLoadScoreMap.get(medium), currentDiff, newDiff,
-                (newDiff < currentDiff));
-
-        return newDiff < currentDiff;
     }
 
     public List<List<String>> getClusterStatistic(TStorageMedium medium) {

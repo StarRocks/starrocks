@@ -309,6 +309,10 @@ public class Table extends MetaObject implements Writable {
         return null;
     }
 
+    public Partition getPartition(long partitionId) {
+        return null;
+    }
+
     public Set<String> getDistributionColumnNames() {
         return Collections.emptySet();
     }
