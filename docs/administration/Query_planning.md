@@ -195,7 +195,7 @@ By removing the specific expressions (only keep the operators), the query plan c
 
 ## Query hint
 
-Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Hints only take effect within a single query.
+Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. currently, StarRocks supports two types of hints: variable-setting hint and join hint. Hints only take effect within a single query.
 
 ### Variable-Setting hint
 
