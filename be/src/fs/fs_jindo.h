@@ -112,83 +112,61 @@ public:
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
                                                                   const std::string& path) override;
 
-    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
-        return Status::NotSupported("JindoFileSystem::new_writable_file");
-    }
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override;
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
-                                                              const std::string& path) override {
-        return Status::NotSupported("JindoFileSystem::new_writable_file");
-    }
+                                                              const std::string& path) override;
 
-    Status path_exists(const std::string& path) override {
-        return Status::NotSupported("JindoFileSystem::path_exists");
-    }
+    Status path_exists(const std::string& path) override;
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {
         return Status::NotSupported("JindoFileSystem::get_children");
     }
 
-    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
-        return Status::NotSupported("JindoFileSystem::iterate_dir");
-    }
+    Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
 
-    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
-        return Status::NotSupported("JindoFileSystem::iterate_dir2");
-    }
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
 
-    Status delete_file(const std::string& path) override {
-        return Status::NotSupported("JindoFileSystem::delete_file");
-    }
+    Status delete_file(const std::string& path) override;
 
-    Status create_dir(const std::string& dirname) override {
-        return Status::NotSupported("JindoFileSystem::create_dir");
-    }
+    Status create_dir(const std::string& dirname) override;
 
-    Status create_dir_if_missing(const std::string& dirname, bool* created) override {
-        return Status::NotSupported("JindoFileSystem::create_dir_if_missing");
-    }
+    Status create_dir_if_missing(const std::string& dirname, bool* created) override;
 
-    Status create_dir_recursive(const std::string& dirname) override {
-        return Status::NotSupported("JindoFileSystem::create_dir_recursive");
-    }
+    Status create_dir_recursive(const std::string& dirname) override;
 
-    Status delete_dir(const std::string& dirname) override {
-        return Status::NotSupported("JindoFileSystem::delete_dir");
-    }
+    Status delete_dir(const std::string& dirname) override;
 
-    Status delete_dir_recursive(const std::string& dirname) override {
-        return Status::NotSupported("JindoFileSystem::delete_dir_recursive");
-    }
+    Status delete_dir_recursive(const std::string& dirname) override;
 
-    Status sync_dir(const std::string& dirname) override { return Status::NotSupported("JindoFileSystem::sync_dir"); }
+    Status sync_dir(const std::string& dirname) override;
 
-    StatusOr<bool> is_directory(const std::string& path) override {
-        return Status::NotSupported("JindoFileSystem::is_directory");
-    }
+    StatusOr<bool> is_directory(const std::string& path) override;
 
     Status canonicalize(const std::string& path, std::string* file) override {
         return Status::NotSupported("JindoFileSystem::canonicalize");
     }
 
-    StatusOr<uint64_t> get_file_size(const std::string& path) override {
-        return Status::NotSupported("JindoFileSystem::get_file_size");
-    }
+    StatusOr<uint64_t> get_file_size(const std::string& path) override;
 
-    StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
-        return Status::NotSupported("JindoFileSystem::get_file_modified_time");
-    }
+    StatusOr<uint64_t> get_file_modified_time(const std::string& path) override;
 
-    Status rename_file(const std::string& src, const std::string& target) override {
-        return Status::NotSupported("JindoFileSystem::rename_file");
-    }
+    Status rename_file(const std::string& src, const std::string& target) override;
 
     Status link_file(const std::string& old_path, const std::string& new_path) override {
         return Status::NotSupported("JindoFileSystem::link_file");
     }
 
+    StatusOr<SpaceInfo> space(const std::string& path) override;
+
 private:
     FSOptions _options;
+
+    Status create_dir_internal(const std::string& dirname, bool recursive);
+
+    Status remove_internal(const std::string& dirname, bool recursive);
+
+    StatusOr<JdoFileStatus_t> get_file_status(const std::string& path);
 };
 
 } // namespace starrocks

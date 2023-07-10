@@ -20,25 +20,11 @@
 #include <string>
 
 #include "io/seekable_input_stream.h"
+#include "jindo_utils.h"
 #include "jindosdk/jdo_api.h"
 #include "jindosdk/jdo_defines.h"
 
 namespace starrocks::io {
-inline Status check_jindo_status(JdoContext_t jdo_ctx) {
-    int32_t code = jdo_getCtxErrorCode(jdo_ctx);
-    if (UNLIKELY(code != 0)) {
-        std::string error_msg;
-        const char* msg = jdo_getCtxErrorMsg(jdo_ctx);
-        if (msg != nullptr) {
-            error_msg.assign(msg);
-        }
-        jdo_freeContext(jdo_ctx);
-        std::string message = fmt::format("code={}, message={}", code, error_msg);
-        LOG(ERROR) << message;
-        return Status::IOError(message);
-    }
-    return Status::OK();
-}
 
 class JindoInputStream final : public SeekableInputStream {
 public:
@@ -46,7 +32,7 @@ public:
             : _jindo_client(std::move(client)), _file_path(std::move(file_path)) {
         JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
         _open_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_READ_ONLY, 0777);
-        check_jindo_status(jdo_ctx);
+        io::check_jindo_status(jdo_ctx);
         jdo_freeContext(jdo_ctx);
     }
 

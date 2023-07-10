@@ -25,9 +25,15 @@
 #include "common/s3_uri.h"
 #include "common/status.h"
 #include "io/jindo_input_stream.h"
+#include "io/jindo_output_stream.h"
+#include "io/jindo_utils.h"
 #include "jindosdk/jdo_api.h"
+#include "jindosdk/jdo_cap_def.h"
+#include "jindosdk/jdo_file_status.h"
+#include "jindosdk/jdo_list_directory_result.h"
 #include "jindosdk/jdo_login_user.h"
 #include "jindosdk/jdo_options.h"
+#include "output_stream_adapter.h"
 
 using namespace fmt::literals;
 
@@ -259,6 +265,326 @@ StatusOr<std::unique_ptr<SequentialFile>> JindoFileSystem::new_sequential_file(c
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
     auto input_stream = std::make_shared<io::JindoInputStream>(std::move(client), path);
     return std::make_unique<SequentialFile>(std::move(input_stream), path);
+}
+
+StatusOr<std::unique_ptr<WritableFile>> JindoFileSystem::new_writable_file(const std::string& path) {
+    return new_writable_file(WritableFileOptions(), path);
+}
+
+StatusOr<std::unique_ptr<WritableFile>> JindoFileSystem::new_writable_file(const WritableFileOptions& opts,
+                                                                           const std::string& path) {
+    if (!path.empty() && path.back() == '/') {
+        return Status::NotSupported(fmt::format("Jindo: cannot create file with name ended with '/': {}", path));
+    }
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid OSS URI {}", path));
+    }
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
+    auto output_stream = std::make_unique<io::JindoOutputStream>(std::move(client), path);
+    return std::make_unique<OutputStreamAdapter>(std::move(output_stream), path);
+}
+
+Status JindoFileSystem::path_exists(const std::string& path) {
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", path));
+    }
+
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
+    auto jdo_ctx = jdo_createContext1(client);
+    bool result = jdo_exists(jdo_ctx, path.c_str());
+    Status status = io::check_jindo_status(jdo_ctx);
+    if (UNLIKELY(!status.ok())) {
+        LOG(ERROR) << "Failed to get jdo_exists for " << path;
+        return Status::IOError(path);
+    }
+    jdo_freeContext(jdo_ctx);
+    return result ? Status::OK() : Status::NotFound(path);
+}
+
+Status JindoFileSystem::iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) {
+    Status status = path_exists(dir);
+    if (!status.ok()) {
+        return status;
+    }
+
+    S3URI uri;
+    if (!uri.parse(dir)) {
+        return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", dir));
+    }
+    std::string ndir = dir;
+    if (ndir.at(ndir.size() - 1) != '/') {
+        ndir.append("/");
+    }
+    JdoListDirectoryResult_t listResult;
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
+    auto jdo_ctx = jdo_createContext1(client);
+    jdo_listDirectory(jdo_ctx, ndir.c_str(), false, &listResult);
+    status = io::check_jindo_status(jdo_ctx);
+    if (UNLIKELY(!status.ok())) {
+        LOG(ERROR) << "Failed to execute jdo_listDirectory for " << dir;
+        return Status::IOError(dir);
+    }
+    jdo_freeContext(jdo_ctx);
+
+    auto num_entries = jdo_getListDirectoryResultSize(listResult);
+    for (int i = 0; i < num_entries; i++) {
+        auto info = jdo_getListDirectoryFileStatus(listResult, i);
+        if (info == nullptr) {
+            continue;
+        }
+        auto full_name = jdo_getFileStatusName(info);
+        std::string file_name;
+        if (full_name != nullptr) {
+            file_name.assign(full_name);
+        } else {
+            continue;
+        }
+        file_name = file_name.substr(ndir.size(), file_name.size() - ndir.size());
+        if (file_name.back() == '/') {
+            file_name.pop_back();
+        }
+        if (!cb(file_name)) {
+            return Status::OK();
+        }
+    }
+    jdo_freeListDirectoryResult(listResult);
+    return Status::OK();
+}
+
+Status JindoFileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
+    Status status = path_exists(dir);
+    if (!status.ok()) {
+        return status;
+    }
+
+    S3URI uri;
+    if (!uri.parse(dir)) {
+        return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", dir));
+    }
+    std::string ndir = dir;
+    if (ndir.at(ndir.size() - 1) != '/') {
+        ndir.append("/");
+    }
+    JdoListDirectoryResult_t listResult;
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
+    auto jdo_ctx = jdo_createContext1(client);
+    jdo_listDirectory(jdo_ctx, ndir.c_str(), false, &listResult);
+    status = io::check_jindo_status(jdo_ctx);
+    if (UNLIKELY(!status.ok())) {
+        LOG(ERROR) << "Failed to execute jdo_listDirectory for " << dir;
+        return Status::IOError(dir);
+    }
+    jdo_freeContext(jdo_ctx);
+
+    auto num_entries = jdo_getListDirectoryResultSize(listResult);
+    for (int i = 0; i < num_entries; i++) {
+        auto info = jdo_getListDirectoryFileStatus(listResult, i);
+        if (info == nullptr) {
+            continue;
+        }
+        auto full_name = jdo_getFileStatusName(info);
+        std::string file_name;
+        if (full_name != nullptr) {
+            file_name.assign(full_name);
+        } else {
+            continue;
+        }
+        file_name = file_name.substr(ndir.size(), file_name.size() - ndir.size());
+        if (file_name.back() == '/') {
+            file_name.pop_back();
+        }
+
+        DirEntry entry;
+        entry.name = file_name;
+        entry.size = jdo_getFileStatusFileSize(info);
+        entry.mtime = jdo_getFileStatusMtime(info);
+        entry.is_dir = jdo_getFileStatusFileType(info) == JDO_FILE_TYPE_DIRECTORY;
+        if (!cb(entry)) {
+            return Status::OK();
+        }
+    }
+    jdo_freeListDirectoryResult(listResult);
+    return Status::OK();
+}
+
+Status JindoFileSystem::remove_internal(const std::string& path, bool recursive) {
+    Status status = path_exists(path);
+    if (!status.ok()) {
+        return status;
+    }
+
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", path));
+    }
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
+    auto jdo_ctx = jdo_createContext1(client);
+    bool result = jdo_remove(jdo_ctx, path.c_str(), recursive);
+    status = io::check_jindo_status(jdo_ctx);
+    if (UNLIKELY(!status.ok())) {
+        LOG(ERROR) << "Failed to execute jdo_remove for " << path;
+        return Status::IOError(path);
+    }
+    jdo_freeContext(jdo_ctx);
+    return result ? Status::OK() : Status::IOError(path);
+}
+
+Status JindoFileSystem::delete_file(const std::string& path) {
+    return remove_internal(path, false);
+}
+
+Status JindoFileSystem::create_dir_internal(const std::string& dirname, bool recursive) {
+    Status status = path_exists(dirname);
+    if (status.ok()) {
+        return Status::AlreadyExist(dirname);
+    }
+
+    S3URI uri;
+    if (!uri.parse(dirname)) {
+        return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", dirname));
+    }
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
+    auto jdo_ctx = jdo_createContext1(client);
+    bool result = jdo_mkdir(jdo_ctx, dirname.c_str(), recursive, 777);
+    status = io::check_jindo_status(jdo_ctx);
+    if (UNLIKELY(!status.ok())) {
+        LOG(ERROR) << "Failed to execute jdo_mkdir for " << dirname;
+        return Status::IOError(dirname);
+    }
+    jdo_freeContext(jdo_ctx);
+    return result ? Status::OK() : Status::IOError(dirname);
+}
+
+Status JindoFileSystem::create_dir(const std::string& dirname) {
+    Status status = create_dir_internal(dirname, false);
+    return status;
+}
+
+Status JindoFileSystem::create_dir_if_missing(const std::string& dirname, bool* created) {
+    Status status = create_dir_internal(dirname, false);
+    if (created != nullptr) {
+        *created = status.ok();
+    }
+    if (status.is_already_exist()) {
+        status = Status::OK();
+    }
+    return status;
+}
+
+Status JindoFileSystem::create_dir_recursive(const std::string& dirname) {
+    Status status = create_dir_internal(dirname, true);
+    if (status.is_already_exist()) {
+        status = Status::OK();
+    }
+    return status;
+}
+
+Status JindoFileSystem::delete_dir(const std::string& dirname) {
+    return remove_internal(dirname, false);
+}
+
+Status JindoFileSystem::delete_dir_recursive(const std::string& dirname) {
+    return remove_internal(dirname, true);
+}
+
+Status JindoFileSystem::sync_dir(const std::string& dirname) {
+    // check if 'path' is a directory
+    ASSIGN_OR_RETURN(const bool is_dir, is_directory(dirname))
+    if (is_dir) {
+        return Status::OK();
+    } else {
+        return Status::IOError(fmt::format("{} is not a directory", dirname));
+    }
+}
+
+StatusOr<JdoFileStatus_t> JindoFileSystem::get_file_status(const std::string& path) {
+    Status status = path_exists(path);
+    if (!status.ok()) {
+        return status;
+    }
+
+    S3URI uri;
+    if (!uri.parse(path)) {
+        return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", path));
+    }
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
+
+    auto jdo_ctx = jdo_createContext1(client);
+    bool has_cap_of_symlink = jdo_hasCapOf(jdo_ctx, path.c_str(), JDO_STORE_SYMLINK);
+    status = io::check_jindo_status(jdo_ctx);
+    if (UNLIKELY(!status.ok())) {
+        LOG(ERROR) << "Failed to execute jdo_hasCapOf for " << path;
+        return Status::IOError(path);
+    }
+
+    JdoFileStatus_t file_status;
+    if (!has_cap_of_symlink) {
+        jdo_getFileStatus(jdo_ctx, path.c_str(), &file_status);
+    } else {
+        jdo_getFileLinkStatus(jdo_ctx, path.c_str(), &file_status);
+    }
+    status = io::check_jindo_status(jdo_ctx);
+    if (UNLIKELY(!status.ok())) {
+        LOG(ERROR) << "Failed to execute jdo_getFileStatus for " << path;
+        return Status::IOError(path);
+    }
+    jdo_freeContext(jdo_ctx);
+    return file_status;
+}
+
+StatusOr<bool> JindoFileSystem::is_directory(const std::string& path) {
+    ASSIGN_OR_RETURN(auto file_status, get_file_status(path))
+    return jdo_getFileStatusFileType(file_status) == JDO_FILE_TYPE_DIRECTORY;
+}
+
+StatusOr<uint64_t> JindoFileSystem::get_file_size(const std::string& path) {
+    ASSIGN_OR_RETURN(auto file_status, get_file_status(path))
+    return jdo_getFileStatusFileSize(file_status);
+}
+
+StatusOr<uint64_t> JindoFileSystem::get_file_modified_time(const std::string& path) {
+    ASSIGN_OR_RETURN(auto file_status, get_file_status(path))
+    return jdo_getFileStatusMtime(file_status);
+}
+
+Status JindoFileSystem::rename_file(const std::string& src, const std::string& target) {
+    Status status = path_exists(src);
+    if (!status.ok()) {
+        return status;
+    }
+    status = path_exists(target);
+    if (status.ok()) {
+        return Status::AlreadyExist(target);
+    }
+
+    S3URI uri;
+    if (!uri.parse(src)) {
+        return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", src));
+    }
+    ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
+    auto jdo_ctx = jdo_createContext1(client);
+    bool result = jdo_rename(jdo_ctx, src.c_str(), target.c_str());
+    status = io::check_jindo_status(jdo_ctx);
+    if (UNLIKELY(!status.ok())) {
+        LOG(ERROR) << "Failed to execute jdo_rename from " << src << " to " << target;
+        return Status::IOError(src);
+    }
+    jdo_freeContext(jdo_ctx);
+    return result ? Status::OK() : Status::IOError(src);
+}
+
+StatusOr<SpaceInfo> JindoFileSystem::space(const std::string& path) {
+    // check if 'path' is a directory
+    ASSIGN_OR_RETURN(const bool is_dir, is_directory(path))
+    if (is_dir) {
+        return SpaceInfo{.capacity = std::numeric_limits<int64_t>::max(),
+                         .free = std::numeric_limits<int64_t>::max(),
+                         .available = std::numeric_limits<int64_t>::max()};
+    } else {
+        return Status::IOError(fmt::format("{} is not a directory", path));
+    }
 }
 
 std::unique_ptr<FileSystem> new_fs_jindo(const FSOptions& options) {

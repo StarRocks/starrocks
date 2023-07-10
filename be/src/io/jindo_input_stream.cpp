@@ -27,13 +27,13 @@ StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
     if (_offset >= _size) {
         return 0;
     }
-
+    char* buffer = static_cast<char*>(out);
     int64_t bytes_to_read = count;
     int64_t bytes_read = 0;
     int64_t bytes = 0;
     while (bytes_to_read > 0) {
         JdoContext_t jdo_read_ctx = jdo_createContext2(_jindo_client, _open_handle);
-        bytes = jdo_pread(jdo_read_ctx, static_cast<char*>(out), bytes_to_read, _offset);
+        bytes = jdo_pread(jdo_read_ctx, buffer + bytes_read, bytes_to_read, _offset);
         Status read_status = check_jindo_status(jdo_read_ctx);
         if (UNLIKELY(!read_status.ok())) {
             LOG(ERROR) << fmt::format("Failed to read the file {}, offset = {}, length = {}", _file_path, _offset,
