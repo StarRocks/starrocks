@@ -54,11 +54,12 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Collections;
-import java.util.Iterator;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.sql.common.SyncPartitionUtils.PartitionRange.PARTITION_RANGE_COMPARATOR;
 import static com.starrocks.sql.common.TimeUnitUtils.DAY;
 import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
 import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
@@ -78,6 +79,44 @@ public class SyncPartitionUtils {
     }
 
     private static final String DEFAULT_PREFIX = "p";
+
+    static class PartitionRange implements Comparable<PartitionRange> {
+        private final Range<PartitionKey> partitionKeyRange;
+        private final String partitionName;
+        PartitionRange(String partitionName, Range<PartitionKey> partitionKeyRange) {
+            this.partitionName = partitionName;
+            this.partitionKeyRange = partitionKeyRange;
+        }
+
+        public Range<PartitionKey> getPartitionKeyRange() {
+            return partitionKeyRange;
+        }
+
+        public String getPartitionName() {
+            return partitionName;
+        }
+
+        @Override
+        public int compareTo(PartitionRange o) {
+            if (isInteract(o)) {
+                return 0;
+            } else {
+                return this.partitionKeyRange.lowerEndpoint().compareTo(o.partitionKeyRange.lowerEndpoint());
+            }
+        }
+
+        public boolean isInteract(PartitionRange o) {
+            return this.partitionKeyRange.upperEndpoint().compareTo(o.partitionKeyRange.lowerEndpoint()) > 0 &&
+                    this.partitionKeyRange.lowerEndpoint().compareTo(o.partitionKeyRange.upperEndpoint()) < 0;
+        }
+
+        public static final Comparator<PartitionRange> PARTITION_RANGE_COMPARATOR =  new Comparator<PartitionRange>() {
+            @Override
+            public int compare(PartitionRange a, PartitionRange b) {
+                return a.compareTo(b);
+            }
+        };
+    }
 
     public static RangePartitionDiff calcSyncSameRangePartition(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                 Map<String, Range<PartitionKey>> mvRangeMap) {
@@ -187,22 +226,40 @@ public class SyncPartitionUtils {
     public static Map<String, Set<String>> generatePartitionRefMap(Map<String, Range<PartitionKey>> srcRangeMap,
                                                                    Map<String, Range<PartitionKey>> dstRangeMap) {
         Map<String, Set<String>> result = Maps.newHashMap();
-        for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
-            Iterator<Map.Entry<String, Range<PartitionKey>>> dstIter = dstRangeMap.entrySet().iterator();
-            result.put(srcEntry.getKey(), Sets.newHashSet());
-            while (dstIter.hasNext()) {
-                Map.Entry<String, Range<PartitionKey>> dstEntry = dstIter.next();
-                Range<PartitionKey> dstRange = dstEntry.getValue();
-                int upperLowerCmp = srcEntry.getValue().upperEndpoint().compareTo(dstRange.lowerEndpoint());
-                if (upperLowerCmp <= 0) {
-                    continue;
-                }
-                int lowerUpperCmp = srcEntry.getValue().lowerEndpoint().compareTo(dstRange.upperEndpoint());
-                if (lowerUpperCmp >= 0) {
-                    continue;
-                }
-                Set<String> dstNames = result.get(srcEntry.getKey());
-                dstNames.add(dstEntry.getKey());
+        srcRangeMap.keySet().stream().forEach(x -> result.put(x, Sets.newHashSet()));
+        if (dstRangeMap.isEmpty()) {
+            return result;
+        }
+
+        List<SyncPartitionUtils.PartitionRange> sortedSrcRangeMap = Lists.newArrayList();
+        List<SyncPartitionUtils.PartitionRange> sortedDstRangeMap = Lists.newArrayList();
+        for (Map.Entry<String, Range<PartitionKey>> e : srcRangeMap.entrySet()) {
+            sortedSrcRangeMap.add(new SyncPartitionUtils.PartitionRange(e.getKey(), e.getValue()));
+        }
+        for (Map.Entry<String, Range<PartitionKey>> e : dstRangeMap.entrySet()) {
+            sortedDstRangeMap.add(new SyncPartitionUtils.PartitionRange(e.getKey(), e.getValue()));
+        }
+        Collections.sort(sortedSrcRangeMap, PARTITION_RANGE_COMPARATOR);
+        Collections.sort(sortedDstRangeMap, PARTITION_RANGE_COMPARATOR);
+
+        for (SyncPartitionUtils.PartitionRange srcRange : sortedSrcRangeMap) {
+            int mid = Collections.binarySearch(sortedDstRangeMap, srcRange);
+            if (mid < 0) {
+                continue;
+            }
+            Set<String> addedSet = result.get(srcRange.getPartitionName());
+            addedSet.add(sortedDstRangeMap.get(mid).getPartitionName());
+
+            int lower = mid - 1;
+            while (lower >= 0 && sortedDstRangeMap.get(lower).isInteract(srcRange)) {
+                addedSet.add(sortedDstRangeMap.get(lower).getPartitionName());
+                lower--;
+            }
+
+            int higher = mid + 1;
+            while (higher < sortedDstRangeMap.size() && sortedDstRangeMap.get(higher).isInteract(srcRange)) {
+                addedSet.add(sortedDstRangeMap.get(higher).getPartitionName());
+                higher++;
             }
         }
         return result;
