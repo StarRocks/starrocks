@@ -1,4 +1,4 @@
-# Bulk load using Apache Spark™
+# Load data in bulk using Spark Load
 
 This load uses external Apache Spark™ resources to pre-process imported data, which improves import performance and saves compute resources. It is mainly used for **initial migration** and **large data import** into StarRocks (data volume up to TB level).
 
