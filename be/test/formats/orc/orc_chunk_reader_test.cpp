@@ -912,6 +912,7 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
 }
 
 TEST_F(OrcChunkReaderTest, TestTimestamp) {
+    // clang-format off
     const std::vector<int64_t> orc_values = {
             // 2021.5.25 1:18:40 GMT
             // 2021.5.25 9:18:40 Asia/Shanghai
@@ -927,6 +928,7 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
             // before unix epoch, time conversion is totoally a mess.
             -8444232248
     };
+    // clang-format on
     {
         // Instant Timestamp
         const std::vector<std::string> exp_values = {
@@ -935,7 +937,8 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
                 "1702-06-01 04:01:35",
         };
         ObjectPool pool;
-        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values, true);
+        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values,
+                                                      true);
         EXPECT_EQ(res.size(), orc_values.size());
         for (size_t i = 0; i < res.size(); i++) {
             std::string o = res[i].to_string();
@@ -951,7 +954,8 @@ TEST_F(OrcChunkReaderTest, TestTimestamp) {
                 "1702-05-31 19:55:52",
         };
         ObjectPool pool;
-        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values, false);
+        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values,
+                                                      false);
         EXPECT_EQ(res.size(), orc_values.size());
         for (size_t i = 0; i < res.size(); i++) {
             std::string o = res[i].to_string();
