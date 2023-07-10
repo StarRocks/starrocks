@@ -414,7 +414,8 @@ public class DatabaseTransactionMgr {
             return waiter;
         }
         // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
-        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
+        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())
+                && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
 
