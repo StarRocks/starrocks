@@ -140,7 +140,7 @@ jobs:
           echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   clang-format:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, light]
     needs: be-checker
     name: Clang-Format
     env:
@@ -430,7 +430,7 @@ jobs:
           verbose: true
 
       - name: Upload Result
-        if: always()
+        if: steps.run_ut.outcome == 'success'
         run: |
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
