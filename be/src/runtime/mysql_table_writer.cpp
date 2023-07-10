@@ -133,7 +133,7 @@ Status MysqlTableWriter::_build_viewers(Columns& columns) {
 Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* sql) {
     _stmt_buffer.clear();
     int num_cols = _viewers.size();
-    fmt::format_to(_stmt_buffer, "INSERT INTO {} VALUES ", _mysql_tbl);
+    fmt::format_to(std::back_inserter(_stmt_buffer), "INSERT INTO {} VALUES ", _mysql_tbl);
 
     for (int i = from; i < to; ++i) {
         if (i != from) {
@@ -147,24 +147,24 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
                         constexpr LogicalType type = ViewerType::TYPE;
 
                         if (viewer.is_null(i)) {
-                            fmt::format_to(_stmt_buffer, "NULL");
+                            fmt::format_to(std::back_inserter(_stmt_buffer), "NULL");
                             return;
                         }
 
                         if constexpr (type == TYPE_DECIMALV2) {
-                            fmt::format_to(_stmt_buffer, "{}", viewer.value(i).to_string());
+                            fmt::format_to(std::back_inserter(_stmt_buffer), "{}", viewer.value(i).to_string());
                         } else if constexpr (lt_is_decimal<type>) {
                             const auto& data_type = _output_expr_ctxs[col]->root()->type();
                             using CppType = RunTimeCppType<type>;
-                            fmt::format_to(_stmt_buffer, "{}",
+                            fmt::format_to(std::back_inserter(_stmt_buffer), "{}",
                                            DecimalV3Cast::to_string<CppType>(viewer.value(i), data_type.precision,
                                                                              data_type.scale));
                         } else if constexpr (lt_is_date<type>) {
                             int y, m, d;
                             viewer.value(i).to_date(&y, &m, &d);
-                            fmt::format_to(_stmt_buffer, "'{}'", date::to_string(y, m, d));
+                            fmt::format_to(std::back_inserter(_stmt_buffer), "'{}'", date::to_string(y, m, d));
                         } else if constexpr (lt_is_datetime<type>) {
-                            fmt::format_to(_stmt_buffer, "'{}'", viewer.value(i).to_string());
+                            fmt::format_to(std::back_inserter(_stmt_buffer), "'{}'", viewer.value(i).to_string());
                         } else if constexpr (lt_is_string<type>) {
                             auto slice = viewer.value(i);
                             _escape_buffer.resize(slice.size * 2 + 1);
@@ -175,11 +175,11 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
                             _stmt_buffer.append(_escape_buffer.data(), _escape_buffer.data() + sz);
                             _stmt_buffer.push_back('"');
                         } else if constexpr (type == TYPE_TINYINT || type == TYPE_BOOLEAN) {
-                            fmt::format_to(_stmt_buffer, "{}", (int32_t)viewer.value(i));
+                            fmt::format_to(std::back_inserter(_stmt_buffer), "{}", (int32_t)viewer.value(i));
                         } else if constexpr (type == TYPE_JSON) {
-                            fmt::format_to(_stmt_buffer, "{}", *viewer.value(i));
+                            fmt::format_to(std::back_inserter(_stmt_buffer), "{}", *viewer.value(i));
                         } else {
-                            fmt::format_to(_stmt_buffer, "{}", viewer.value(i));
+                            fmt::format_to(std::back_inserter(_stmt_buffer), "{}", viewer.value(i));
                         }
                     },
                     _viewers[col]);

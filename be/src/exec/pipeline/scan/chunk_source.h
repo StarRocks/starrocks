@@ -65,6 +65,8 @@ public:
     void pin_chunk_token(ChunkBufferTokenPtr chunk_token);
     void unpin_chunk_token();
 
+    virtual bool reach_limit() { return false; }
+
     // Used to print custom error msg in be.out when coredmp
     // Don't do heavey work, it calls frequently
     virtual const std::string get_custom_coredump_msg() const { return ""; }
@@ -96,6 +98,7 @@ protected:
     BalancedChunkBuffer& _chunk_buffer;
     Status _status = Status::OK();
     ChunkBufferTokenPtr _chunk_token;
+    std::atomic<bool> _reach_limit = false;
 
 private:
     // _scan_timer = _io_task_wait_timer + _io_task_exec_timer

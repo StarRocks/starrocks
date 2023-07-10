@@ -72,6 +72,7 @@
     + [Hudi catalog](./data_source/catalog/hudi_catalog.md)
     + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [JDBC catalog](./data_source/catalog/jdbc_catalog.md)
+    + [Elasticsearch catalog](./data_source/catalog/elasticsearch_catalog.md)
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External table](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
@@ -312,9 +313,9 @@
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [MAP](./sql-reference/sql-statements/data-types/Map.md)
         + [STRUCT](./sql-reference/sql-statements/data-types/STRUCT.md)
-
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
+    + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + Function Reference
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
@@ -361,6 +362,7 @@
       + [array_difference](./sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_distinct](./sql-reference/sql-functions/array-functions/array_distinct.md)
       + [array_filter](./sql-reference/sql-functions/array-functions/array_filter.md)
+      + [array_generate](./sql-reference/sql-functions/array-functions/array_generate.md)
       + [array_intersect](./sql-reference/sql-functions/array-functions/array_intersect.md)
       + [array_join](./sql-reference/sql-functions/array-functions/array_join.md)
       + [array_length](./sql-reference/sql-functions/array-functions/array_length.md)
@@ -531,6 +533,7 @@
       + [week_iso](./sql-reference/sql-functions/date-time-functions/week_iso.md)
       + [weekofyear](./sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [weeks_add](./sql-reference/sql-functions/date-time-functions/weeks_add.md)
+      + [day_of_week_iso](./sql-reference/sql-functions/date-time-functions/day_of_week_iso.md)
       + [weeks_diff](./sql-reference/sql-functions/date-time-functions/weeks_diff.md)
       + [weeks_sub](./sql-reference/sql-functions/date-time-functions/weeks_sub.md)
       + [year](./sql-reference/sql-functions/date-time-functions/year.md)
@@ -645,9 +648,12 @@
       + [percentile_hash](./sql-reference/sql-functions/percentile-functions/percentile_hash.md)
       + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + Scalar Functions
-      + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
+      + [hll_cardinality](./sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Struct Functions
-      + [row](/sql-reference/sql-functions/struct-functions/row.md)
+      + [named_struct](./sql-reference/sql-functions/struct-functions/named_struct.md)
+      + [row](./sql-reference/sql-functions/struct-functions/row.md)
+    + Table Functions
+      + [generate_series](./sql-reference/sql-functions/table-functions/generate_series.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)

@@ -61,6 +61,12 @@ void NJJoinBuildInputChannel::finalize() {
     }
 }
 
+void NJJoinBuildInputChannel::close() {
+    _accumulator.reset();
+    _input_chunks.clear();
+    _spiller.reset();
+}
+
 Status SpillableNLJoinChunkStream::prefetch(RuntimeState* state, spill::IOTaskExecutor& executor) {
     return _reader->trigger_restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
 }
@@ -235,7 +241,10 @@ Status NLJoinContext::finish_one_right_sinker(int32_t sinker_id, RuntimeState* s
         } else {
             _notify_runtime_filter_collector(state);
         }
-        _input_channel.clear();
+
+        for (auto& channel : _input_channel) {
+            channel->close();
+        }
 
         _all_right_finished = true;
     }

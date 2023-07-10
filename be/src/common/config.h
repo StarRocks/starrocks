@@ -515,17 +515,13 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 // Max pulsar consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
 
-// The size of thread pool for routine load task.
-// this should be larger than FE config 'max_routine_load_task_num_per_be' (default 5).
-CONF_Int32(routine_load_thread_pool_size, "10");
-
-// kafka reqeust timeout
+// kafka request timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
 
-// pulsar reqeust timeout
+// pulsar request timeout
 CONF_Int32(routine_load_pulsar_timeout_second, "10");
 
-// Is set to true, index loading failure will not causing BE exit,
+// Is set to true, index loading failure will not cause BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
 // CONF_Bool(auto_recover_index_loading_failure, "false");
 
@@ -569,6 +565,10 @@ CONF_mInt32(path_scan_interval_second, "86400");
 CONF_mInt32(storage_flood_stage_usage_percent, "95"); // 95%
 // The min bytes that should be left of a data dir
 CONF_mInt64(storage_flood_stage_left_capacity_bytes, "107374182400"); // 100GB
+// When choosing storage root path for tablet creation, disks with usage larger than the
+// average value by `storage_high_usage_disk_protect_ratio` won't be chosen at first.
+CONF_mDouble(storage_high_usage_disk_protect_ratio, "0.1"); // 10%
+
 // Number of thread for flushing memtable per store.
 CONF_mInt32(flush_thread_num_per_store, "2");
 
@@ -582,21 +582,21 @@ CONF_Int64(brpc_max_body_size, "2147483648");
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 
 // Max number of txns for every txn_partition_map in txn manager.
-// this is a self protection to avoid too many txns saving in manager.
+// this is a self-protection to avoid too many txns saving in manager.
 CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 
 // The tablet map shard size, the value must be power of two.
-// this is a an enhancement for better performance to manage tablet.
+// this is an enhancement for better performance to manage tablet.
 CONF_Int32(tablet_map_shard_size, "32");
 
 CONF_String(plugin_path, "${STARROCKS_HOME}/plugin");
 
 // txn_map_lock shard size, the value is 2^n, n=0,1,2,3,4
-// this is a an enhancement for better performance to manage txn.
+// this is an enhancement for better performance to manage txn.
 CONF_Int32(txn_map_shard_size, "128");
 
 // txn_lock shard size, the value is 2^n, n=0,1,2,3,4
-// this is a an enhancement for better performance to commit and publish txn.
+// this is an enhancement for better performance to commit and publish txn.
 CONF_Int32(txn_shard_size, "1024");
 
 // Whether to continue to start be when load tablet from header failed.
@@ -642,7 +642,7 @@ CONF_mInt16(storage_format_version, "2");
 // 1 for LZ4_NULL
 CONF_mInt16(null_encoding, "0");
 
-// Do pre-aggregate if effect great than the factor, factor range:[1-100].
+// Do pre-aggregate if effect greater than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
 
 #ifdef __x86_64__
@@ -750,6 +750,18 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 // https://github.com/aws/aws-sdk-cpp/issues/587
 // https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
 CONF_Bool(object_storage_endpoint_path_style_access, "false");
+// Socket connect timeout for object storage.
+// Default is -1, indicate to use the default value in sdk (1000ms)
+// Unless you are very far away from your the data center you are talking to, 1000ms is more than sufficient.
+CONF_Int64(object_storage_connect_timeout_ms, "-1");
+// Request timeout for object storage
+// Default is -1, indicate to use the default value in sdk.
+// For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be
+// below "lowSpeedLimit" for the library to consider it too slow and abort.
+// Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
+// value is greater than 0 and less than 1000.
+// When it's 0, low speed limit check will be disabled.
+CONF_Int64(object_storage_request_timeout_ms, "-1");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
@@ -760,7 +772,6 @@ CONF_mBool(orc_coalesce_read_enable, "true");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
-CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
@@ -835,6 +846,12 @@ CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
+// TODO: support runtime change
+CONF_Bool(starlet_use_star_cache, "false");
+CONF_Int32(starlet_star_cache_mem_size_percent, "0");
+CONF_Int32(starlet_star_cache_disk_size_percent, "60");
+CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
+CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -842,6 +859,9 @@ CONF_mBool(lake_print_delete_log, "true");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
+CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
+CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
+CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -985,5 +1005,7 @@ CONF_mInt32(primary_key_limit_size, "128");
 // You could enable this config to speed up the point lookup query,
 // otherwise, StarRocks will use zone map for one column filter
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
+
+CONF_mBool(enable_http_stream_load_limit, "false");
 
 } // namespace starrocks::config

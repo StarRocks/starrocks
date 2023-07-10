@@ -12,7 +12,7 @@ coalesce(expr1,...);
 
 ## Parameters
 
-`expr1`: the input expressions, which must evaluate to compatible data types. The supported data types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DATETIME, DATE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128, VARCHAR, BITMAP, PERCENTILE, HLL, and TIME.
+`expr1`: the input expressions, which must evaluate to compatible data types.
 
 ## Return value
 

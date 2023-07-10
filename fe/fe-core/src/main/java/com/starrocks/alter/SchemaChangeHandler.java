@@ -600,6 +600,11 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             int sortKeyIdx = targetIndexSchema.indexOf(oneCol.get());
             sortKeyIdxes.add(sortKeyIdx);
+            Type t = oneCol.get().getType();
+            if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
+                    t.isDatetime())) {
+                throw new DdlException("Sort key column[" + colName + "] type not supported: " + t);
+            }
         }
     }
 
@@ -1207,17 +1212,15 @@ public class SchemaChangeHandler extends AlterHandler {
         getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
     }
 
-    public Optional<Long> getMinActiveTxnId() {
-        long minId = Long.MAX_VALUE;
+    public Optional<Long> getActiveTxnIdOfTable(long tableId) {
         Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
         for (AlterJobV2 job : alterJobV2Map.values()) {
-            AlterJobV2.JobState jobState = job.getJobState();
-            if (jobState == AlterJobV2.JobState.FINISHED || jobState == AlterJobV2.JobState.CANCELLED) {
-                continue;
+            AlterJobV2.JobState state = job.getJobState();
+            if (job.getTableId() == tableId && state != AlterJobV2.JobState.FINISHED && state != AlterJobV2.JobState.CANCELLED) {
+                return job.getTransactionId();
             }
-            minId = Math.min(minId, job.getTransactionId().orElse(Long.MAX_VALUE));
         }
-        return minId == Long.MAX_VALUE ? Optional.empty() : Optional.of(minId);
+        return Optional.empty();
     }
 
     @VisibleForTesting

@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -132,7 +133,7 @@ public class CompoundPredicateOperator extends PredicateOperator {
         return Objects.hash(opType, type, h);
     }
 
-    public static ScalarOperator or(List<ScalarOperator> nodes) {
+    public static ScalarOperator or(Collection<ScalarOperator> nodes) {
         return Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, nodes);
     }
 
@@ -140,7 +141,7 @@ public class CompoundPredicateOperator extends PredicateOperator {
         return Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, Arrays.asList(nodes));
     }
 
-    public static ScalarOperator and(List<ScalarOperator> nodes) {
+    public static ScalarOperator and(Collection<ScalarOperator> nodes) {
         return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, nodes);
     }
 

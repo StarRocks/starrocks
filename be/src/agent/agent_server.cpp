@@ -536,13 +536,15 @@ void AgentServer::Impl::publish_cluster_state(TAgentResult& t_agent_result, cons
 }
 
 void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
+    Status st;
     switch (type) {
     case TTaskType::CLONE:
-        _thread_pool_clone->update_max_threads(new_val);
+        st = _thread_pool_clone->update_max_threads(new_val);
         break;
     default:
         break;
     }
+    LOG_IF(ERROR, !st.ok()) << st;
 }
 
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {

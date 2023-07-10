@@ -371,7 +371,7 @@ Status HashJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
             }
         }
     } else {
-        if (!_build_eos) {
+        if (_right_table_has_remain) {
             if (_join_type == TJoinOp::RIGHT_OUTER_JOIN || _join_type == TJoinOp::RIGHT_ANTI_JOIN ||
                 _join_type == TJoinOp::FULL_OUTER_JOIN) {
                 // fetch the remain data of hash table
@@ -518,6 +518,10 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     }
     lhs_operators.emplace_back(std::move(probe_op));
 
+    if (limit() != -1) {
+        lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
     // Use ChunkAccumulateOperator, when any following condition occurs:
     // - not left outer join,
     // - left outer join, with conjuncts or runtime filters.
@@ -525,10 +529,6 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
                                  !_other_join_conjunct_ctxs.empty() || lhs_operators.back()->has_runtime_filters();
     if (need_accumulate_chunk) {
         may_add_chunk_accumulate_operator(lhs_operators, context, id());
-    }
-
-    if (limit() != -1) {
-        lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
     return lhs_operators;
@@ -716,29 +716,19 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
 Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     ScopedTimer<MonotonicStopWatch> probe_timer(_probe_timer);
 
-    while (!_build_eos) {
+    while (_right_table_has_remain) {
         TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain)));
 
         eval_join_runtime_filters(chunk);
-
-        if ((*chunk)->num_rows() <= 0) {
-            // right table already have no remain data
-            _build_eos = true;
-            eos = true;
-            return Status::OK();
-        }
-
         if (!_conjunct_ctxs.empty()) {
             RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+        }
 
-            if (check_chunk_zero_and_create_new(chunk)) {
-                _build_eos = !_right_table_has_remain;
-                continue;
-            }
+        if (check_chunk_zero_and_create_new(chunk)) {
+            continue;
         }
 
         eos = false;
-        _build_eos = !_right_table_has_remain;
         return Status::OK();
     }
 

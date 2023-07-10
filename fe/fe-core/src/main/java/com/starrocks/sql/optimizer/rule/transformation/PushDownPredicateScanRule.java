@@ -52,6 +52,8 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
     public static final PushDownPredicateScanRule FILE_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_FILE_SCAN);
+    public static final PushDownPredicateScanRule PAIMON_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
     public static final PushDownPredicateScanRule SCHEMA_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final PushDownPredicateScanRule ES_SCAN = new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
@@ -78,16 +80,19 @@ public class PushDownPredicateScanRule extends TransformationRule {
 
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
+        // simplify case-when
+        if (context.getSessionVariable().isEnableSimplifyCaseWhen()) {
+            predicates = scalarOperatorRewriter.rewrite(predicates, Lists.newArrayList(
+                    SimplifiedCaseWhenRule.INSTANCE,
+                    PruneTediousPredicateRule.INSTANCE
+            ));
+        }
+
         ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
         predicates = rangeExtractor.rewriteOnlyColumn(Utils.compoundAnd(Utils.extractConjuncts(predicates)
                 .stream().map(rangeExtractor::rewriteOnlyColumn).collect(Collectors.toList())));
         Preconditions.checkState(predicates != null);
 
-        // simplify case-when
-        predicates = scalarOperatorRewriter.rewrite(predicates, Lists.newArrayList(
-                SimplifiedCaseWhenRule.INSTANCE,
-                PruneTediousPredicateRule.INSTANCE
-        ));
         predicates = scalarOperatorRewriter.rewrite(predicates,
                 ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
         predicates = Utils.transTrue2Null(predicates);

@@ -359,11 +359,12 @@ FragmentMgr::FragmentMgr(ExecEnv* exec_env)
     });
     // TODO(zc): we need a better thread-pool
     // now one user can use all the thread pool, others have no resource.
-    ThreadPoolBuilder("fragment_mgr")
-            .set_min_threads(config::fragment_pool_thread_num_min)
-            .set_max_threads(config::fragment_pool_thread_num_max)
-            .set_max_queue_size(config::fragment_pool_queue_size)
-            .build(&_thread_pool);
+    auto st = ThreadPoolBuilder("fragment_mgr")
+                      .set_min_threads(config::fragment_pool_thread_num_min)
+                      .set_max_threads(config::fragment_pool_thread_num_max)
+                      .set_max_queue_size(config::fragment_pool_queue_size)
+                      .build(&_thread_pool);
+    CHECK(st.ok()) << st;
 }
 
 FragmentMgr::~FragmentMgr() {

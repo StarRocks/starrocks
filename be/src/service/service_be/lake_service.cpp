@@ -86,14 +86,15 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 auto score = compaction_score(*metadata);
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
+                VLOG(5) << "Publish version success. tablet_id=" << tablet_id << " txn_id=" << txns[0]
+                        << " version=" << new_version;
             } else {
                 LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                             << " txn_id=" << txns[0];
+                             << " txn_id=" << txns[0] << " version=" << new_version;
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
             latch.count_down();
-            VLOG(5) << "Published version. tablet_id=" << tablet_id << " txn_id=" << txns[0];
         };
 
         auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
@@ -577,10 +578,7 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
                              ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-
-    // The BE process already has enough threads. I don't want to create more threads, so I directly use
-    // the thread pool for creating local tablet's replica.
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::CREATE);
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DROP);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("vacuum thread pool is null");
         return;
@@ -604,9 +602,6 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
                                   ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-
-    // The BE process already has enough threads. I don't want to create more threads, so I directly use
-    // the thread pool for dropping local tablet's replica.
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DROP);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("full vacuum thread pool is null");

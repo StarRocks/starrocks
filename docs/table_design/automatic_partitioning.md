@@ -155,7 +155,7 @@ PROPERTIES("replication_num" = "1");
   - When you configure automatic partitioning, you can only use the function `date_trunc` rather than `time_slice`.
   - The syntax for creating multiple partitions all at a time only supports an interval of `1`.
   - After a table that supports automatic partitioning is created, you can use `ALTER TABLE ADD PARTITION` to add partitions for that table. And the statement `ALTER TABLE ADD PARTITION` also has the above limits.
-- Currently, StarRocks's shared-data mode does not support this feature.
+- Since version 3.1, StarRocks's shared-data mode supports automatic partitioning.
 - Currently, using CTAS to create a table that supports automatic partitioning is not supported.
 - Currently, using Spark Load to load data to tables that support automatic partitioning is not supported.
 - If you use automatic partitioning, you can only roll back your StarRocks cluster to version 2.5.4 or later.

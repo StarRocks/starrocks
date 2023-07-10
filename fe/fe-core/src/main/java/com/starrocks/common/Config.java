@@ -873,8 +873,8 @@ public class Config extends ConfigBase {
      * Currently, it only limits the load task of broker load, pending and loading phases.
      * It should be less than 'max_running_txn_num_per_db'
      */
-    @ConfField
-    public static int async_load_task_pool_size = 2;
+    @ConfField(mutable = true, aliases = {"async_load_task_pool_size"})
+    public static int max_broker_load_job_concurrency = 2;
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
@@ -1306,11 +1306,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_metric_calculator = true;
 
-    /**
-     * the max routine load job num, including NEED_SCHEDULED, RUNNING, PAUSE
-     */
-    @ConfField(mutable = true)
-    public static int max_routine_load_job_num = 100;
 
     /**
      * the max concurrent routine load task num of a single routine load job
@@ -1320,12 +1315,10 @@ public class Config extends ConfigBase {
 
     /**
      * the max concurrent routine load task num per BE.
-     * This is to limit the num of routine load tasks sending to a BE, and it should also less
-     * than BE config 'routine_load_thread_pool_size'(default 10),
-     * which is the routine load task thread pool size on BE.
+     * This is to limit the num of routine load tasks sending to a BE.
      */
     @ConfField(mutable = true)
-    public static int max_routine_load_task_num_per_be = 5;
+    public static int max_routine_load_task_num_per_be = 16;
 
     /**
      * max load size for each routine load task
@@ -2190,13 +2183,13 @@ public class Config extends ConfigBase {
     @ConfField
     public static int experimental_lake_publish_version_threads = 16;
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
-    @ConfField
+    @ConfField(comment = "how many partitions can autovacuum be executed simultaneously at most")
     public static int lake_autovacuum_parallel_partitions = 8;
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "the minimum delay between autovacuum runs on any given partition")
     public static long lake_autovacuum_partition_naptime_seconds = 180;
 
     @ConfField(mutable = true, comment = "History versions within this time range will not be deleted by auto vacuum.\n" +
