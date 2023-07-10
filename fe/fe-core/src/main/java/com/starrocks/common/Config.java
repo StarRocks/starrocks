@@ -1246,18 +1246,6 @@ public class Config extends ConfigBase {
     public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
 
     /**
-     * enable replicated storage as default table engine
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_replicated_storage_as_default_engine = true;
-
-    /**
-     * enable schedule insert query by row count
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_schedule_insert_query_by_row_count = true;
-
-    /**
      * FOR DiskAndTabletLoadBalancer:
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance
@@ -1321,6 +1309,17 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_metric_calculator = true;
 
+    /**
+     * enable replicated storage as default table engine
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_replicated_storage_as_default_engine = true;
+
+    /**
+     * enable schedule insert query by row count
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_schedule_insert_query_by_row_count = true;
 
     /**
      * the max concurrent routine load task num of a single routine load job
