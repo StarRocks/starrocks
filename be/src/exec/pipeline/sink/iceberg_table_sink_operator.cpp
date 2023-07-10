@@ -113,6 +113,9 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         const std::vector<std::string>& partition_column_names = _iceberg_table->partition_column_names();
         std::vector<std::string> partition_column_values;
         for (const ColumnPtr& column : partitions_columns) {
+            if (column->has_null()) {
+                return Status::NotSupported("Partition value can't be null.");
+            }
             partition_column_values.emplace_back(_value_to_string(column));
         }
 
