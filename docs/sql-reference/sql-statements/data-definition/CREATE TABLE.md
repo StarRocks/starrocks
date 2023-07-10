@@ -185,7 +185,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 ### key_desc
 
-Syntax: 
+Syntax:
 
 ```SQL
 key_type(k1[,k2 ...])
