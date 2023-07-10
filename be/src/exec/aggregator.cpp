@@ -522,7 +522,7 @@ Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<Statu
         if (chunk_with_st.ok()) {
             if (!chunk_with_st.value()->is_empty()) {
                 RETURN_IF_ERROR(spiller->spill(state, chunk_with_st.value(), *io_executor,
-                                               RESOURCE_TLS_MEMTRACER_GUARD(state)));
+                                               TRACKER_WITH_SPILLER_GUARD(state, spiller)));
             }
         } else if (chunk_with_st.status().is_end_of_file()) {
             // chunk_provider return eos means provider has output all data from hash_map/hash_set.

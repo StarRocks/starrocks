@@ -61,7 +61,7 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(spiller->flush(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
+    RETURN_IF_ERROR(spiller->flush(state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
     spiller->set_flush_all_call_back(
             [&, state]() {
                 RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
@@ -69,7 +69,7 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
                 _spill_channel->set_finishing();
                 return Status::OK();
             },
-            state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+            state, executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
 
     return Status::OK();
 }
