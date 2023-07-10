@@ -18,7 +18,7 @@ You can obtain the Spark connector JAR file in the following ways:
 
 The naming format of the Spark connector JAR file is `starrocks-spark-connector-${spark_version}_${scala_version}-${connector_version}.jar`.
 
-For example, you install Spark 3.2 and Scala 2.12 in your environment, and you want to use Spark connector 1.1.0. You can use `starrocks-spark-connector-3.2_2.12-1.1.0.jar`.
+For example, if you install Spark 3.2 and Scala 2.12 in your environment and you want to use Spark connector 1.1.0, you can use `starrocks-spark-connector-3.2_2.12-1.1.0.jar`.
 
 > **NOTICE**
 >
