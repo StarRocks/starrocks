@@ -44,12 +44,12 @@ import java.util.stream.Collectors;
 public class PublishVersionTask extends AgentTask {
     private static final Logger LOG = LogManager.getLogger(PublishVersionTask.class);
 
-    private long transactionId;
-    private List<TPartitionVersionInfo> partitionVersionInfos;
-    private List<Long> errorTablets;
+    private final long transactionId;
+    private final List<TPartitionVersionInfo> partitionVersionInfos;
+    private final List<Long> errorTablets;
     private Set<Long> errorReplicas;
-    private long commitTimestamp;
-    private TransactionState txnState = null;
+    private final long commitTimestamp;
+    private final TransactionState txnState;
     private Span span;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
@@ -58,7 +58,7 @@ public class PublishVersionTask extends AgentTask {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
         this.partitionVersionInfos = partitionVersionInfos;
-        this.errorTablets = new ArrayList<Long>();
+        this.errorTablets = new ArrayList<>();
         this.isFinished = false;
         this.commitTimestamp = commitTimestamp;
         this.txnState = state;
@@ -87,10 +87,6 @@ public class PublishVersionTask extends AgentTask {
         return txnState;
     }
 
-    public List<TPartitionVersionInfo> getPartitionVersionInfos() {
-        return partitionVersionInfos;
-    }
-
     public synchronized List<Long> getErrorTablets() {
         return errorTablets;
     }
@@ -116,17 +112,13 @@ public class PublishVersionTask extends AgentTask {
         }
     }
 
-    public boolean isFinished() {
-        return isFinished;
-    }
-
     private Set<Long> collectErrorReplicas() {
         TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
         Set<Long> errorReplicas = Sets.newHashSet();
         List<Long> errorTablets = this.getErrorTablets();
         if (errorTablets != null && !errorTablets.isEmpty()) {
             for (long tabletId : errorTablets) {
-                // tablet inverted index also contains rollingup index
+                // tablet inverted index also contains rollup index
                 // if tablet meta not found, skip it because tablet is dropped from fe
                 if (tablets.getTabletMeta(tabletId) == null) {
                     continue;
@@ -151,7 +143,7 @@ public class PublishVersionTask extends AgentTask {
         List<Long> tabletIds = tabletVersions.stream().map(tv -> tv.tablet_id).collect(Collectors.toList());
         List<Replica> replicas = tablets.getReplicasOnBackendByTabletIds(tabletIds, backendId);
         if (replicas == null) {
-            LOG.warn("backend not found backendid={}", backendId);
+            LOG.warn("backend not found or no replicas on backend, backendid={}", backendId);
             return;
         }
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
