@@ -101,6 +101,9 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select date '2021-01-01'";
         assertPlanContains(sql, "'2021-01-01'");
+
+        sql = "select timestamp '2023-07-01'";
+        assertPlanContains(sql, "'2023-07-01 00:00:00'");
     }
 
     @Test
@@ -1003,7 +1006,7 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "      cast('2023-01-01' AS date)\n" +
                 "    )\n" +
                 "  );";
-        assertPlanContains(sql, "-1 * CAST(if(3: dayofweek = 7, 0, 3: dayofweek) AS BIGINT)");
+        assertPlanContains(sql, "-1 * CAST(if(3: dayofweek_iso = 7, 0, 3: dayofweek_iso) AS BIGINT)");
     }
 
     @Test
