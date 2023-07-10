@@ -127,7 +127,7 @@ template <PrimitiveType Type>
 class RandomValueExpr final : public Expr {
 public:
     RandomValueExpr(const TExprNode& t, size_t size, std::default_random_engine& re) : Expr(t), _re(re) { _init(size); }
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return col; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return col; }
 
     typename RunTimeColumnType<Type>::Container get_data() { return col->get_data(); }
 
@@ -160,7 +160,7 @@ template <PrimitiveType Type>
 class MakeNullableExpr final : public Expr {
 public:
     MakeNullableExpr(const TExprNode& t, size_t size, Expr* inner) : Expr(t), _inner(inner) { init(); }
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return _col; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _col; }
     Expr* clone(ObjectPool* pool) const override { return nullptr; }
 
     ColumnPtr get_col_ptr() { return _col; }

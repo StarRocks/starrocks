@@ -82,7 +82,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     //  output in row engine, but we need set output scale in vectorized engine?
     if (_fn.name.function_name == "round" && _type.type == TYPE_DOUBLE) {
         if (_children[1]->is_constant()) {
-            ColumnPtr ptr = _children[1]->evaluate(context, nullptr);
+            ASSIGN_OR_RETURN(ColumnPtr ptr, _children[1]->evaluate_checked(context, nullptr));
             _output_scale =
                     std::static_pointer_cast<Int32Column>(std::static_pointer_cast<ConstColumn>(ptr)->data_column())
                             ->get_data()[0];
@@ -114,7 +114,8 @@ bool VectorizedFunctionCallExpr::is_constant() const {
     return Expr::is_constant();
 }
 
-ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, vectorized::Chunk* ptr) {
+StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::ExprContext* context,
+                                                                 vectorized::Chunk* ptr) {
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
 
     Columns args;

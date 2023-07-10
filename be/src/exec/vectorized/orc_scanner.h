@@ -35,7 +35,7 @@ private:
 
     ChunkPtr _create_src_chunk();
 
-    ChunkPtr _transfer_chunk(ChunkPtr& src);
+    StatusOr<ChunkPtr> _transfer_chunk(ChunkPtr& src);
 
     ChunkPtr _materialize(ChunkPtr& src, ChunkPtr& cast);
 

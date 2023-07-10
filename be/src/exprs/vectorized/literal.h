@@ -17,7 +17,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedLiteral(*this)); }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
 
     std::string debug_string() const override;
 

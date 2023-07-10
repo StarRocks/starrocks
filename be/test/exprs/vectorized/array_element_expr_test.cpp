@@ -16,7 +16,7 @@ class FakeConstExpr : public starrocks::Expr {
 public:
     explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
 
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return _column; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
 
     Expr* clone(ObjectPool*) const override { return nullptr; }
 
