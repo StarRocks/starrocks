@@ -42,7 +42,6 @@
 namespace starrocks {
 
 class ExprContext;
-class MysqlRowBuffer;
 class BufferControlBlock;
 class RuntimeProfile;
 using TFetchDataResultPtr = std::unique_ptr<TFetchDataResult>;
