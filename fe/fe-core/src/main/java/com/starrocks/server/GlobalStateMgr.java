@@ -116,6 +116,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -759,6 +760,12 @@ public class GlobalStateMgr {
             this.autovacuumDaemon = new AutovacuumDaemon();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
+        }
+        try {
+            storageVolumeMgr.validateStorageVolumeConfig();
+        } catch (InvalidConfException e) {
+            LOG.error(e.getMessage());
+            System.exit(-1);
         }
 
         GlobalStateMgr gsm = this;
@@ -4033,7 +4040,7 @@ public class GlobalStateMgr {
 
     public void createOrUpdateBuiltinStorageVolume() {
         try {
-            String builtinStorageVolumeId = storageVolumeMgr.createOrUpdateBuiltinStorageVolume();
+            String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
             if (!builtinStorageVolumeId.isEmpty()) {
                 authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
             }

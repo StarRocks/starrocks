@@ -19,6 +19,7 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
@@ -227,8 +228,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public String createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
-        if (Config.cloud_native_storage_type.isEmpty()) {
+    public String createBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
+        if (!Config.enable_volume_from_conf) {
             return "";
         }
 
@@ -238,17 +239,86 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
             if (sv != null) {
-                updateStorageVolume(BUILTIN_STORAGE_VOLUME, params, Optional.empty(), "");
                 return sv.getId();
-            } else {
-                String svId = createStorageVolume(BUILTIN_STORAGE_VOLUME,
-                        Config.cloud_native_storage_type, locations, params, Optional.of(true), "");
-                if (getDefaultStorageVolumeId().isEmpty()) {
-                    setDefaultStorageVolume(BUILTIN_STORAGE_VOLUME);
-                }
-                return svId;
             }
+            String svId = createStorageVolume(BUILTIN_STORAGE_VOLUME,
+                    Config.cloud_native_storage_type, locations, params, Optional.of(true), "");
+            if (getDefaultStorageVolumeId().isEmpty()) {
+                setDefaultStorageVolume(BUILTIN_STORAGE_VOLUME);
+            }
+            return svId;
         }
+    }
+
+    public void validateStorageVolumeConfig() throws InvalidConfException {
+        switch (Config.cloud_native_storage_type.toLowerCase()) {
+            case "s3":
+                String[] bucketAndPrefix = getBucketAndPrefix();
+                String bucket = bucketAndPrefix[0];
+                if (bucket.isEmpty()) {
+                    throw new InvalidConfException(
+                            String.format("The configuration item \"aws_s3_path = %s\" is invalid, s3 bucket is empty.",
+                                    Config.aws_s3_path));
+                }
+                String credentialType = getAwsCredentialType();
+                if (credentialType == null) {
+                    throw new InvalidConfException("Invalid aws credential configuration.");
+                }
+                break;
+            case "hdfs":
+                if (Config.cloud_native_hdfs_url.isEmpty()) {
+                    throw new InvalidConfException("The configuration item \"cloud_native_hdfs_url\" is empty.");
+                }
+                break;
+            case "azblob":
+                if (Config.azure_blob_endpoint.isEmpty()) {
+                    throw new InvalidConfException("The configuration item \"azure_blob_endpoint\" is empty.");
+                }
+                if (Config.azure_blob_path.isEmpty()) {
+                    throw new InvalidConfException("The configuration item \"azure_blob_path\" is empty.");
+                }
+                break;
+            default:
+                throw new InvalidConfException(String.format(
+                        "The configuration item \"cloud_native_storage_type = %s\" is invalid, must be HDFS or S3 or AZBLOB.",
+                        Config.cloud_native_storage_type));
+        }
+    }
+
+    private String[] getBucketAndPrefix() {
+        int index = Config.aws_s3_path.indexOf('/');
+        if (index < 0) {
+            return new String[] {Config.aws_s3_path, ""};
+        }
+
+        return new String[] {Config.aws_s3_path.substring(0, index),
+                Config.aws_s3_path.substring(index + 1)};
+    }
+
+    private String getAwsCredentialType() {
+        if (Config.aws_s3_use_aws_sdk_default_behavior) {
+            return "default";
+        }
+
+        if (Config.aws_s3_use_instance_profile) {
+            if (Config.aws_s3_iam_role_arn.isEmpty()) {
+                return "instance_profile";
+            }
+
+            return "assume_role";
+        }
+
+        if (Config.aws_s3_access_key.isEmpty() || Config.aws_s3_secret_key.isEmpty()) {
+            // invalid credential configuration
+            return null;
+        }
+
+        if (Config.aws_s3_iam_role_arn.isEmpty()) {
+            return "simple";
+        }
+
+        //assume_role with ak sk, not supported now, just return null
+        return null;
     }
 
     private List<String> parseLocationsFromConfig() {
