@@ -72,8 +72,8 @@ Status BloomFilterIndexReader::_do_load(const IndexReadOptions& opts, const Bloo
     _algorithm = meta.algorithm();
     _hash_strategy = meta.hash_strategy();
     const IndexedColumnMetaPB& bf_index_meta = meta.bloom_filter();
-    _bloom_filter_reader = std::make_unique<IndexedColumnReader>(opts, bf_index_meta);
-    RETURN_IF_ERROR(_bloom_filter_reader->load());
+    _bloom_filter_reader = std::make_unique<IndexedColumnReader>(bf_index_meta);
+    RETURN_IF_ERROR(_bloom_filter_reader->load(opts));
     return Status::OK();
 }
 
@@ -84,10 +84,10 @@ void BloomFilterIndexReader::_reset() {
     _bloom_filter_reader.reset();
 }
 
-Status BloomFilterIndexReader::new_iterator(std::unique_ptr<BloomFilterIndexIterator>* iterator) {
+Status BloomFilterIndexReader::new_iterator(const IndexReadOptions& opts,
+                                            std::unique_ptr<BloomFilterIndexIterator>* iterator) {
     std::unique_ptr<IndexedColumnIterator> bf_iter;
-    IndexReadOptions options;
-    RETURN_IF_ERROR(_bloom_filter_reader->new_iterator(&bf_iter, options));
+    RETURN_IF_ERROR(_bloom_filter_reader->new_iterator(opts, &bf_iter));
     iterator->reset(new BloomFilterIndexIterator(this, std::move(bf_iter)));
     return Status::OK();
 }

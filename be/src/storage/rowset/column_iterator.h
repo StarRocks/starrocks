@@ -54,6 +54,7 @@ struct ColumnIteratorOptions {
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
+    bool fill_data_cache = true;
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;

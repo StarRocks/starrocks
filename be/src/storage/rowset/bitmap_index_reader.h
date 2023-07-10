@@ -71,7 +71,7 @@ public:
 
     // create a new column iterator. Client should delete returned iterator
     // REQUIRES: the index data has been successfully `load()`ed into memory.
-    Status new_iterator(BitmapIndexIterator** iterator, const IndexReadOptions& opts);
+    Status new_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator);
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     int64_t bitmap_nums() { return _bitmap_column_reader->num_values(); }
