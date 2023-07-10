@@ -197,9 +197,9 @@ By removing the specific expressions (only keep the operators), the query plan c
 
 Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Hints only take effect within a single query.
 
-### System variable hint
+### Variable-Setting hint
 
-You can set one or more system variable hints by using the `/*+ ... */` comment syntax in SELECT and SUBMIT TASK statements, or in SELECT clauses that are included in other statements such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
+You can set one or more the `SET_VAR` hint by using the `/*+ SET_VAR(var_name = value) */` syntax in SELECT and SUBMIT TASK statements, or in SELECT clauses that are included in other statements such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
 
 #### Syntax
 
