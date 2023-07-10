@@ -52,7 +52,7 @@ static ThreadPool* get_thread_pool(TTaskType::type type) {
     return as->get_thread_pool(type);
 }
 
-static int get_queued_tasks(TTaskType::type type) {
+static int get_num_queued_tasks(TTaskType::type type) {
     auto tp = get_thread_pool(type);
     if (UNLIKELY(tp == nullptr)) {
         return 0;
@@ -60,7 +60,7 @@ static int get_queued_tasks(TTaskType::type type) {
     return tp->num_queued_tasks();
 }
 
-static int get_active_tasks(TTaskType::type type) {
+static int get_num_active_tasks(TTaskType::type type) {
     auto tp = get_thread_pool(type);
     if (UNLIKELY(tp == nullptr)) {
         return 0;
@@ -68,31 +68,31 @@ static int get_active_tasks(TTaskType::type type) {
     return tp->active_threads();
 }
 
-static int get_publish_queued_tasks(void*) {
-    return get_queued_tasks(TTaskType::PUBLISH_VERSION);
+static int get_num_publish_queued_tasks(void*) {
+    return get_num_queued_tasks(TTaskType::PUBLISH_VERSION);
 }
 
-static int get_publish_active_tasks(void*) {
-    return get_active_tasks(TTaskType::PUBLISH_VERSION);
+static int get_num_publish_active_tasks(void*) {
+    return get_num_active_tasks(TTaskType::PUBLISH_VERSION);
 }
 
-static int get_vacuum_queued_tasks(void*) {
-    return get_queued_tasks(TTaskType::DROP);
+static int get_num_vacuum_queued_tasks(void*) {
+    return get_num_queued_tasks(TTaskType::DROP);
 }
 
-static int get_vacuum_active_tasks(void*) {
-    return get_active_tasks(TTaskType::DROP);
+static int get_num_vacuum_active_tasks(void*) {
+    return get_num_active_tasks(TTaskType::DROP);
 }
 
 static bvar::PassiveStatus<int> g_publish_version_queued_tasks("lake_publish_version_queued_tasks",
-                                                               get_publish_queued_tasks, nullptr);
+                                                               get_num_publish_queued_tasks, nullptr);
 static bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_active_tasks",
-                                                               get_publish_active_tasks, nullptr);
+                                                               get_num_publish_active_tasks, nullptr);
 static bvar::Adder<int64_t> g_publish_version_failed_tasks("lake_publish_version_failed_tasks");
 static bvar::LatencyRecorder g_publish_tablet_version_latency("lake_publish_tablet_version");
 static bvar::LatencyRecorder g_publish_tablet_version_queuing_latency("lake_putlish_tablet_version_queuing");
-static bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_vacuum_queued_tasks, nullptr);
-static bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_vacuum_active_tasks, nullptr);
+static bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
+static bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
