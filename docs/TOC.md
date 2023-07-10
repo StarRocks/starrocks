@@ -54,7 +54,7 @@
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
   + Load data using Apache Spark™
     + [Load data using Spark Connector](./loading/Spark-connector-starrocks.md)
-    + [Bulk load using Spark Load](./loading/SparkLoad.md)
+    + [Load data in bulk using Spark Load](./loading/SparkLoad.md)
   + [Load data using INSERT](./loading/InsertInto.md)
   + [Load data using Stream Load transaction interface](./loading/Stream_Load_transaction_interface.md)
   + [Realtime synchronization from MySQL](./loading/Flink_cdc_load.md)
