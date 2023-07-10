@@ -332,6 +332,107 @@ HASH_JOIN_NODE (id=2):(Active: 996.337ms, % non-child: 52.05%)
 - RowsReturnedRate: 440.114K /sec
 ```
 
+## Query Hint
+
+ StarRocks 支持提示（Hint）功能。Hint 是一种指令或注释，显式地向查询优化器建议如何执行查询。目前支持两种 Hint：系统变量 Hint 和 Join Hint。Hint 仅在单个查询范围内生效。
+
+### 系统变量 Hint
+
+在 SELECT、SUBMIT TASK 语句中通过 `/*+ ... */` 注释的形式设置一个或多个[系统变量](../reference/System_variable.md) Hint。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用系统变量 Hint。
+
+#### 语法
+
+```SQL
+[...] SELECT [/*+ SET_VAR(key=value [, key = value]*) */] ...
+SUBMIT [/*+ SET_VAR(key=value [, key = value]*) */] TASK ...
+```
+
+#### 示例
+
+在聚合查询语句中通过系统变量 `streaming_preaggregation_mode` 和 `new_planner_agg_stage` 来设置聚合方式。
+
+```SQL
+SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
+```
+
+在 SUBMIT TASK 语句中通过系统变量 `query_timeout` 来设置查询执行超时时间。
+
+```SQL
+SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK 
+    AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
+```
+
+创建物化视图时在 SELECT 子句中通过系统变量 `query_timeout` 来设置查询执行超时时间。
+
+```SQL
+CREATE MATERIALIZED VIEW mv 
+    PARTITION BY dt 
+    DISTRIBUTED BY HASH(`key`) 
+    BUCKETS 10 
+    REFRESH ASYNC 
+    AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
+```
+
+### Join Hint
+
+针对多表关联查询，优化器一般会主动选择最优的 Join 执行方式。在特殊情况下，您也可以使用 Join Hint 显式地向优化器建议 Join 执行方式、以及禁用 Join Reorder。目前 Join Hint 支持的 Join 执行方式有 Shuffle Join、Broadcast Join、Bucket Shuffle Join 和 Colocate Join。
+
+当您使用 Join Hint 建议 Join 的执行方式后，优化器不会进行 Join Reorder，因此您需要确保右表为较小的表。并且当您所建议的 Join 执行方式为 [Colocate Join](../using_starrocks/Colocate_join.md) 或者 Bucket Shuffle Join 时，您需要确保表的数据分布情况满足这两种 Join 执行方式的要求，否则所建议的 Join 执行方式不生效。
+
+#### 语法
+
+```SQL
+... JOIN { [BROADCAST] | [SHUFFLE] | [BUCKET] | [COLOCATE] | [UNREORDER]} ...
+```
+
+> **说明**
+>
+> 使用 Join Hint 时大小写不敏感。
+
+#### 示例
+
+* Shuffle Join
+
+  如果需要将表 A、B 中分桶键取值相同的数据行 Shuffle 到相同机器上，再进行 Join 操作，则您可以设置 Join Hint 为 Shuffle Join。
+
+  ```SQL
+  select k1 from t1 join [SHUFFLE] t2 on t1.k1 = t2.k2 group by t2.k2;
+  ```
+
+* Broadcast Join
+  
+  如果表 A 是个大表，表 B 是个小表，则您可以设置 Join Hint 为 Broadcast Join。表 B 的数据全量广播到表 A 数据所在的机器上，再进行 Join 操作。Broadcast Join 相比较于 Shuffle Join，节省了 Shuffle 表 A 数据的开销。
+
+  ```SQL
+  select k1 from t1 join [BROADCAST] t2 on t1.k1 = t2.k2 group by t2.k2;
+  ```
+
+* Bucket Shuffle Join
+  
+  如果关联查询中 Join 等值表达式命中表 A 的分桶键 ，尤其是在表 A 和表 B 均是大表的情况下，您可以设置 Join Hint 为 Bucket Shuffle Join。表 B 数据会按照表 A 数据的分布方式，Shuffle 到表 A 数据所在机器上，再进行 Join 操作。Bucket Shuffle Join 是在 Broadcast Join 的基础上进一步优化，Shuffle B 表的数据量全局只有一份，比 Broadcast Join 少传输了很多倍数据量。
+
+  ```SQL
+  select k1 from t1 join [BUCKET] t2 on t1.k1 = t2.k2 group by t2.k2;
+  ```
+
+* Colocate Join
+  
+  如果建表时指定表 A 和 B 属于同一个 Colocation Group，则表 A 和表 B 分桶键取值相同的数据行一定分布在相同 BE 节点上。当关联查询中 Join 等值表达式命中表 A 和 B 的分桶键，则您可以设置 Join Hint 为 Colocate Join。 具有相同键值的数据直接在本地 Join，减少数据在节点间的传输耗时，从而提高查询性能。
+
+  ```SQL
+  select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
+  ```
+
+### 查看实际的 Join 执行方式
+
+通过 `EXPLAIN` 命令来查看 Join Hint 是否生效。如果返回结果所显示的 Join 执行方式符合 Join Hint，则表示 Join Hint 生效。
+
+```SQL
+EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
+```
+
+![8-9](../assets/8-9.png)
+
 ## 查看 SQL 指纹
 
 StarRocks 支持规范化慢查询中 SQL 语句，归类并计算各个类型 SQL 语句的 MD5 哈希值。
