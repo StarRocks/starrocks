@@ -434,8 +434,8 @@ public:
     /**
      * params are one strings. Returns string for url encode string,
      *
-     * @param: [string_value, string_value]
-     * @paramType: [StringColumn, StringColumn]
+     * @param: [string_value]
+     * @paramType: [StringColumn]
      * @return: StringColumn
      */
     DEFINE_VECTORIZED_FN(url_encode);
@@ -444,8 +444,8 @@ public:
     /**
      * params are one strings. Returns string for url decode string,
      *
-     * @param: [string_value, string_value]
-     * @paramType: [StringColumn, StringColumn]
+     * @param: [string_value]
+     * @paramType: [StringColumn]
      * @return: StringColumn
      */
     DEFINE_VECTORIZED_FN(url_decode);
