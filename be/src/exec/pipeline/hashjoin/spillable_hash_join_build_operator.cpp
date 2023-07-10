@@ -62,17 +62,33 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         _join_builder->spiller()->cancel();
     }
 
+<<<<<<< HEAD
     auto io_executor = _join_builder->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         _join_builder->spill_channel()->set_finishing();
         return _join_builder->spiller()->set_flush_all_call_back(
+=======
+    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+        auto& spiller = _join_builder->spiller();
+        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+    };
+
+    auto io_executor = _join_builder->spill_channel()->io_executor();
+    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+        auto& spiller = _join_builder->spiller();
+        return spiller->set_flush_all_call_back(
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
                 [this]() {
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
+<<<<<<< HEAD
                 state, *io_executor,
                 spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
+=======
+                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
     };
 
     Status ret_status;

@@ -107,13 +107,19 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         return accumulated;
     }
 
+    auto& spiller = _aggregator->spiller();
+
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(auto chunk, _aggregator->spiller()->restore(
                                              state, *executor,
                                              spill::ResourceMemTrackerGuard(tls_mem_tracker,
                                                                             state->query_ctx()->weak_from_this())));
 
+=======
+        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, *executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
         if (chunk->is_empty()) {
             return chunk;
         }

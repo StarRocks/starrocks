@@ -36,6 +36,15 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
     // ugly code
     // TODO: FIXME after refactor cancel
     auto io_executor = _aggregator->spill_channel()->io_executor();
+<<<<<<< HEAD
+=======
+    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+        auto spiller = _aggregator->spiller();
+        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+    };
+
+    _aggregator->ref();
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         _aggregator->spill_channel()->set_finishing();
         RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::set_finishing(state));
@@ -43,8 +52,17 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
                 state, *io_executor,
                 spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
         return _aggregator->spiller()->set_flush_all_call_back(
+<<<<<<< HEAD
                 []() { return Status::OK(); }, state, *io_executor,
                 spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
+=======
+                [this, state]() {
+                    auto defer = DeferOp([&]() { _aggregator->unref(state); });
+                    RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::set_finishing(state));
+                    return Status::OK();
+                },
+                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _aggregator->spiller()));
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
     };
 
     if (_aggregator->spill_channel()->is_working()) {
@@ -233,11 +251,16 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
 
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(auto chunk, _aggregator->spiller()->restore(
                                              state, *executor,
                                              spill::ResourceMemTrackerGuard(tls_mem_tracker,
                                                                             state->query_ctx()->weak_from_this())));
 
+=======
+        auto& spiller = _aggregator->spiller();
+        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, *executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
         if (chunk->is_empty()) {
             return chunk;
         }

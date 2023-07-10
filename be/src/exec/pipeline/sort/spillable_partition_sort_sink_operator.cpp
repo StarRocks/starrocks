@@ -78,8 +78,12 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                     _is_finished = true;
                     return Status::OK();
                 },
+<<<<<<< HEAD
                 state, *io_executor,
                 spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
+=======
+                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _chunks_sorter->spiller()));
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
     };
 
     Status ret_status;

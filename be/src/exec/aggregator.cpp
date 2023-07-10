@@ -521,9 +521,14 @@ Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<Statu
         auto chunk_with_st = chunk_provider();
         if (chunk_with_st.ok()) {
             if (!chunk_with_st.value()->is_empty()) {
+<<<<<<< HEAD
                 RETURN_IF_ERROR(spiller->spill(
                         state, chunk_with_st.value(), *io_executor,
                         spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
+=======
+                RETURN_IF_ERROR(spiller->spill(state, chunk_with_st.value(), *io_executor,
+                                               TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
             }
         } else if (chunk_with_st.status().is_end_of_file()) {
             // chunk_provider return eos means provider has output all data from hash_map/hash_set.

@@ -99,10 +99,9 @@ bool SpillableHashJoinProbeOperator::has_output() const {
             if (_current_reader[i]->has_output_data()) {
                 return true;
             } else if (!_current_reader[i]->has_restore_task()) {
-                auto query_ctx = runtime_state()->query_ctx()->weak_from_this();
-                auto wreader = std::weak_ptr(_current_reader[i]);
-                auto guard = spill::ResourceMemTrackerGuard(tls_mem_tracker, std::move(query_ctx), std::move(wreader));
-                _current_reader[i]->trigger_restore(runtime_state(), *_executor, guard);
+                _current_reader[i]->trigger_restore(
+                        runtime_state(), *_executor,
+                        RESOURCE_TLS_MEMTRACER_GUARD(runtime_state(), std::weak_ptr(_current_reader[i])));
             }
         }
     }
@@ -226,9 +225,14 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         }
         probe_partition->num_rows += size;
     };
+<<<<<<< HEAD
     RETURN_IF_ERROR(_probe_spiller->partitioned_spill(
             state, chunk, hash_column.get(), partition_processer, executor,
             spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
+=======
+    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, executor,
+                                                      TRACKER_WITH_SPILLER_GUARD(state, _probe_spiller)));
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
 
     return Status::OK();
 }
@@ -250,6 +254,11 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
         auto chunk_st = reader->restore(state, spill::SyncTaskExecutor{}, spill::MemTrackerGuard(tls_mem_tracker));
         if (chunk_st.ok() && chunk_st.value() != nullptr && !chunk_st.value()->is_empty()) {
             RETURN_IF_ERROR(builder->append_chunk(state, std::move(chunk_st.value())));
+<<<<<<< HEAD
+=======
+            hash_table_mem_usage = builder->hash_table_mem_usage();
+            COUNTER_ADD(metrics.build_partition_peak_memory_usage, hash_table_mem_usage - old_mem_usage);
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
         } else if (chunk_st.status().is_end_of_file()) {
             RETURN_IF_ERROR(builder->build(state));
             finish = true;
@@ -321,10 +330,17 @@ Status SpillableHashJoinProbeOperator::_restore_probe_partition(RuntimeState* st
     for (size_t i = 0; i < _probers.size(); ++i) {
         // probe partition has been processed
         if (_probe_read_eofs[i]) continue;
+<<<<<<< HEAD
         RETURN_IF_ERROR(_current_reader[i]->trigger_restore(
                 state, *_executor,
                 spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(),
                                                std::weak_ptr(_current_reader[i]))));
+=======
+        if (!_current_reader[i]->has_restore_task()) {
+            RETURN_IF_ERROR(_current_reader[i]->trigger_restore(
+                    state, *_executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_current_reader[i]))));
+        }
+>>>>>>> 298f16f5b ([BugFix] Fix use-after-free when set_call_back (#26738))
         if (_current_reader[i]->has_output_data()) {
             auto chunk_st = _current_reader[i]->restore(
                     state, *_executor,
