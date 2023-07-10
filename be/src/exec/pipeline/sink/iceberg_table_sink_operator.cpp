@@ -101,7 +101,8 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         }
 
         _partition_writers[ICEBERG_UNPARTITIONED_TABLE_LOCATION]->append_chunk(chunk.get(), state);
-        return Status::OK();
+    } else if (_is_static_partition_insert && !_partition_writers.empty()) {
+        _partition_writers.begin()->second->append_chunk(chunk.get(), state);
     } else {
         Columns partitions_columns;
         partitions_columns.resize(_partition_expr.size());
@@ -133,9 +134,8 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         } else {
             partition_writer->second->append_chunk(chunk.get(), state);
         }
-
-        return Status::OK();
     }
+    return Status::OK();
 }
 
 std::string IcebergTableSinkOperator::_get_partition_location(const std::vector<std::string>& names,
@@ -181,11 +181,13 @@ IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, Fra
           _file_format(thrift_sink.file_format),
           _compression_codec(thrift_sink.compression_type),
           _cloud_conf(thrift_sink.cloud_configuration),
-          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)),
+          is_static_partition_insert(thrift_sink.is_static_partition_sink) {
     DCHECK(thrift_sink.__isset.location);
     DCHECK(thrift_sink.__isset.file_format);
     DCHECK(thrift_sink.__isset.compression_type);
     DCHECK(thrift_sink.__isset.cloud_configuration);
+    DCHECK(thrift_sink.__isset.is_static_partition_sink);
 }
 
 Status IcebergTableSinkOperatorFactory::prepare(RuntimeState* state) {
