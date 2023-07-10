@@ -30,10 +30,9 @@ class ExportSinkIOBuffer final : public SinkIOBuffer {
 public:
     ExportSinkIOBuffer(const TExportSink& t_export_sink, std::vector<ExprContext*>& output_expr_ctxs,
                        int32_t num_sinkers, FragmentContext* fragment_ctx)
-            : SinkIOBuffer(num_sinkers),
+            : SinkIOBuffer(num_sinkers, fragment_ctx),
               _t_export_sink(t_export_sink),
-              _output_expr_ctxs(output_expr_ctxs),
-              _fragment_ctx(fragment_ctx) {}
+              _output_expr_ctxs(output_expr_ctxs) {}
 
     ~ExportSinkIOBuffer() override = default;
 
@@ -42,7 +41,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+    Status _write_chunk(ChunkPtr chunk) override;
 
     Status _open_file_writer();
 
@@ -51,7 +50,6 @@ private:
     TExportSink _t_export_sink;
     const std::vector<ExprContext*> _output_expr_ctxs;
     std::unique_ptr<FileBuilder> _file_builder;
-    FragmentContext* _fragment_ctx;
 };
 
 Status ExportSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
@@ -59,19 +57,8 @@ Status ExportSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_p
     if (!_is_prepared.compare_exchange_strong(expected, true)) {
         return Status::OK();
     }
-    _state = state;
 
-    bthread::ExecutionQueueOptions options;
-    options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
-    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
-                                                       &ExportSinkIOBuffer::execute_io_task, this);
-    if (ret != 0) {
-        _exec_queue_id.reset();
-        return Status::InternalError("start execution queue error");
-    }
-
-    return Status::OK();
+    return SinkIOBuffer::prepare(state, parent_profile);
 }
 
 void ExportSinkIOBuffer::close(RuntimeState* state) {
@@ -82,42 +69,12 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    DeferOp op([&]() {
-        --_num_pending_chunks;
-        DCHECK(_num_pending_chunks >= 0);
-    });
-
-    if (_is_finished) {
-        return;
-    }
-
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 1) {
-            close(_state);
-        }
-        return;
-    }
-
+Status ExportSinkIOBuffer::_write_chunk(ChunkPtr chunk) {
     if (_file_builder == nullptr) {
-        if (Status status = _open_file_writer(); !status.ok()) {
-            LOG(WARNING) << "open file write failed, error: " << status.to_string();
-            _fragment_ctx->cancel(status);
-            return;
-        }
+        RETURN_IF_ERROR(_open_file_writer());
     }
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 1);
-        close(_state);
-        return;
-    }
-    if (Status status = _file_builder->add_chunk(chunk.get()); !status.ok()) {
-        LOG(WARNING) << "add chunk to file builder failed, error: " << status.to_string();
-        _fragment_ctx->cancel(status);
-        return;
-    }
+
+    return _file_builder->add_chunk(chunk.get());
 }
 
 Status ExportSinkIOBuffer::_open_file_writer() {
@@ -157,7 +114,7 @@ Status ExportSinkIOBuffer::_open_file_writer() {
                                     .line_terminated_by = _t_export_sink.row_delimiter},
             std::move(output_file), _output_expr_ctxs);
 
-    _state->add_export_output_file(file_path);
+    _runtime_state->add_export_output_file(file_path);
     return Status::OK();
 }
 

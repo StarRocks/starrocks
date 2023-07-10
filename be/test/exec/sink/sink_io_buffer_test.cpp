@@ -17,7 +17,7 @@
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
-#include <future>
+#include <string>
 #include <thread>
 
 #include "testutil/assert.h"
@@ -31,101 +31,75 @@ namespace starrocks::pipeline {
 // skipping stop task in consumer thread.
 
 namespace {
-bthread::ExecutionQueueId<ChunkPtr> _execq_id;
-std::promise<void> _promise;
 
-class MockSinkIOBuffer : public SinkIOBuffer {
+class DerivedSinkIOBuffer : public SinkIOBuffer {
 public:
-    MockSinkIOBuffer(int num_sinkers) : SinkIOBuffer(num_sinkers) {}
-
-    static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
-        if (iter.is_queue_stopped()) {
-            // block until SinkIOBuffer is destroyed
-            _promise.get_future().wait();
-        }
-
-        if (iter.is_queue_stopped()) { // skip stop task
-            return 0;
-        }
-
-        auto* sink_io_buffer = static_cast<MockSinkIOBuffer*>(meta);
-        // calling dummy() causes use-after-free if we do not skip stop task
-        sink_io_buffer->dummy();
-        for (; iter; ++iter) {
-            sink_io_buffer->_process_chunk(iter);
-        }
-        return 0;
-    }
+    DerivedSinkIOBuffer(int num_sinkers, bool inject_error = false)
+            : SinkIOBuffer(num_sinkers, nullptr), _inject_error(inject_error) {}
 
     Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) override {
-        int ret =
-                bthread::execution_queue_start<ChunkPtr>(&_execq_id, nullptr, &MockSinkIOBuffer::execute_io_task, this);
-        _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>(_execq_id);
-        EXPECT_TRUE(ret == 0);
-        if (ret != 0) {
-            return Status::InternalError("start execution queue error");
+        bool expected = false;
+        if (!_is_prepared.compare_exchange_strong(expected, true)) {
+            return Status::OK();
+        }
+
+        return SinkIOBuffer::prepare(state, parent_profile);
+    }
+
+    void close(RuntimeState* state) override { SinkIOBuffer::close(state); }
+
+    Status _write_chunk(ChunkPtr chunk) override {
+        if (_inject_error) {
+            return Status::IOError("io error");
         }
         return Status::OK();
     }
 
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override {
-        DeferOp op([&]() {
-            --_num_pending_chunks;
-            DCHECK(_num_pending_chunks >= 0);
-        });
-
-        // close is already done, just skip
-        if (_is_finished) {
-            return;
-        }
-
-        // cancelling has happened but close is not invoked
-        if (_is_cancelled && !_is_finished) {
-            if (_num_pending_chunks == 1) {
-                close(_state);
-            }
-            return;
-        }
-
-        const auto& chunk = *iter;
-        if (chunk == nullptr) {
-            // this is the last chunk
-            EXPECT_EQ(_num_pending_chunks, 1);
-            close(_state);
-            return;
-        }
-
-        // handle this chunk
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    ALWAYS_NOINLINE void dummy() { std::cout << _num_pending_chunks << std::endl; }
+private:
+    const bool _inject_error{false};
 };
 
-TEST(SinkIOBufferTest, test_basic) {
-    {
-        auto sink_buffer = std::make_unique<MockSinkIOBuffer>(10);
-        ASSERT_OK(sink_buffer->prepare(nullptr, nullptr));
+class TestSinkIOBuffer : public ::testing::Test, public testing::WithParamInterface<std::tuple<int, bool>> {};
 
-        auto chunk = std::make_shared<Chunk>();
-        ASSERT_OK(sink_buffer->append_chunk(nullptr, chunk));
-        ASSERT_OK(sink_buffer->append_chunk(nullptr, chunk));
-        ASSERT_OK(sink_buffer->append_chunk(nullptr, nullptr)); // append close marker
+TEST_P(TestSinkIOBuffer, MultiThread) {
+    auto [num_sinkers, inject_error] = GetParam();
+    auto sink_buffer = std::make_unique<DerivedSinkIOBuffer>(num_sinkers, inject_error);
 
-        // wait until consumer thread finished all non-stop tasks
-        while (!sink_buffer->is_finished()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
+    // prepare
+    std::vector<std::thread> threads;
+    for (int i = 0; i < num_sinkers; i++) {
+        threads.emplace_back([&]() { ASSERT_OK(sink_buffer->prepare(nullptr, nullptr)); });
+    }
+    for (auto& thread : threads) {
+        thread.join();
     }
 
-    {
-        // after sink buffer is destroyed, signal the consumer thread to execute stop task
-        _promise.set_value();
-        // wait until execution queue is destroyed
-        int r = bthread::execution_queue_join(_execq_id);
-        ASSERT_EQ(r, 0);
+    // running
+    threads.clear();
+    for (int i = 0; i < num_sinkers; i++) {
+        threads.emplace_back([&]() {
+            auto chunk = std::make_shared<Chunk>();
+            ASSERT_OK(sink_buffer->append_chunk(nullptr, chunk));
+            ASSERT_OK(sink_buffer->append_chunk(nullptr, chunk));
+            ASSERT_OK(sink_buffer->set_finishing());
+        });
     }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    // check closed
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ASSERT_TRUE(sink_buffer->is_finished());
 }
-} // namespace
 
+INSTANTIATE_TEST_SUITE_P(TestSinkIOBuffer, TestSinkIOBuffer,
+                         testing::Combine(testing::Values(1, 3, 10), testing::Values(true, false)),
+                         [](const testing::TestParamInfo<TestSinkIOBuffer::ParamType>& info) {
+                             std::stringstream ss;
+                             ss << std::get<0>(info.param) << "_" << std::get<1>(info.param);
+                             return ss.str();
+                         });
+
+} // namespace
 } // namespace starrocks::pipeline

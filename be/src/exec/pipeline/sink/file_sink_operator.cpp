@@ -33,10 +33,9 @@ class FileSinkIOBuffer final : public SinkIOBuffer {
 public:
     FileSinkIOBuffer(std::vector<ExprContext*>& output_expr_ctxs, std::shared_ptr<ResultFileOptions> file_opts,
                      int32_t num_sinkers, FragmentContext* const fragment_ctx)
-            : SinkIOBuffer(num_sinkers),
+            : SinkIOBuffer(num_sinkers, fragment_ctx),
               _output_expr_ctxs(output_expr_ctxs),
-              _file_opts(std::move(file_opts)),
-              _fragment_ctx(fragment_ctx) {}
+              _file_opts(std::move(file_opts)) {}
 
     ~FileSinkIOBuffer() override = default;
 
@@ -45,7 +44,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+    Status _write_chunk(ChunkPtr chunk) override;
 
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -54,8 +53,6 @@ private:
     std::shared_ptr<BufferControlBlock> _sender;
 
     bool _is_writer_opened = false;
-
-    FragmentContext* const _fragment_ctx;
 };
 
 Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
@@ -65,21 +62,10 @@ Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_pro
     }
 
     RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(), 1024, &_sender));
-
-    _state = state;
     _writer = std::make_shared<FileResultWriter>(_file_opts.get(), _output_expr_ctxs, parent_profile);
     RETURN_IF_ERROR(_writer->init(state));
 
-    bthread::ExecutionQueueOptions options;
-    options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
-    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
-                                                       &FileSinkIOBuffer::execute_io_task, this);
-    if (ret != 0) {
-        _exec_queue_id.reset();
-        return Status::InternalError("start execution queue error");
-    }
-    return Status::OK();
+    return SinkIOBuffer::prepare(state, parent_profile);
 }
 
 void FileSinkIOBuffer::close(RuntimeState* state) {
@@ -108,57 +94,19 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         _sender->close(final_status);
         _sender.reset();
 
-        _state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
+        _runtime_state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
                                                          state->fragment_instance_id());
     }
     SinkIOBuffer::close(state);
 }
 
-void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    DeferOp op([&]() {
-        --_num_pending_chunks;
-        DCHECK(_num_pending_chunks >= 0);
-    });
-
-    // close is already done, just skip
-    if (_is_finished) {
-        return;
-    }
-
-    // cancelling has happened but close is not invoked
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 1) {
-            close(_state);
-        }
-        return;
-    }
-
+Status FileSinkIOBuffer::_write_chunk(ChunkPtr chunk)  {
     if (!_is_writer_opened) {
-        if (Status status = _writer->open(_state); !status.ok()) {
-            status = status.clone_and_prepend("open file writer failed, error");
-            LOG(WARNING) << status;
-            _fragment_ctx->cancel(status);
-            close(_state);
-            return;
-        }
+        RETURN_IF_ERROR(_writer->open(_runtime_state));
         _is_writer_opened = true;
     }
 
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 1);
-        close(_state);
-        return;
-    }
-
-    if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
-        status = status.clone_and_prepend("add chunk to file writer failed, error");
-        LOG(WARNING) << status;
-        _fragment_ctx->cancel(status);
-        close(_state);
-        return;
-    }
+    return _writer->append_chunk(chunk.get());
 }
 
 Status FileSinkOperator::prepare(RuntimeState* state) {

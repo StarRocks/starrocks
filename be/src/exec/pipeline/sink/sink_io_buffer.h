@@ -17,10 +17,12 @@
 
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
+#include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
+#include "exec/pipeline/query_context.h"
 
 namespace starrocks::pipeline {
 
@@ -35,11 +37,6 @@ public:
         bool ret = ExecEnv::GetInstance()->pipeline_sink_io_pool()->try_offer([fn, args]() { fn(args); });
         return ret ? 0 : -1;
     }
-
-private:
-    SinkIOExecutor() = default;
-
-    ~SinkIOExecutor() override = default;
 };
 
 // SinkIOBuffer accepts input from all sink operators, it uses an execution queue to asynchronously process chunks one by one.
@@ -51,16 +48,25 @@ private:
 // which needs to be solved by a new adaptive io task scheduler.
 class SinkIOBuffer {
 public:
-    SinkIOBuffer(int32_t num_sinkers) : _num_result_sinkers(num_sinkers) {}
+    SinkIOBuffer(int32_t num_sinkers, FragmentContext* fragment_ctx) : _num_result_sinkers(num_sinkers), _fragment_ctx(fragment_ctx) {}
 
     virtual ~SinkIOBuffer() = default;
 
-    virtual Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) = 0;
-
-    virtual Status append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-        if (Status status = get_io_status(); !status.ok()) {
-            return status;
+    virtual Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
+        _runtime_state = state;
+        bthread::ExecutionQueueOptions options;
+        options.executor = SinkIOExecutor::instance();
+        _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
+        int r = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options, &execute_io_task, this);
+        if (r != 0) {
+            _exec_queue_id.reset();
+            return Status::InternalError("start execution queue error");
         }
+
+        return Status::OK();
+    }
+
+    Status append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
         if (bthread::execution_queue_execute(*_exec_queue_id, chunk) != 0) {
             return Status::InternalError("submit io task failed");
         }
@@ -68,28 +74,41 @@ public:
         return Status::OK();
     }
 
-    virtual bool need_input() { return _num_pending_chunks < kExecutionQueueSizeLimit; }
+    bool need_input() { return _num_pending_chunks < kExecutionQueueSizeLimit; }
 
-    virtual Status set_finishing() {
-        if (--_num_result_sinkers == 0) {
-            // when all writes are over, we add a nullptr as a special mark to trigger close
-            if (bthread::execution_queue_execute(*_exec_queue_id, nullptr) != 0) {
-                return Status::InternalError("submit task failed");
-            }
-            ++_num_pending_chunks;
+    Status set_finishing() {
+        int ns = _num_result_sinkers.fetch_sub(1);
+        if (ns > 1) {
+            return Status::OK();
         }
-        return Status::OK();
+
+        if (ns == 1) {
+            // when all writes are over, stop the execution queue
+            int r = bthread::execution_queue_stop(*_exec_queue_id);
+            if (r != 0) {
+                LOG(WARNING) << "stop execution queue error";
+                return Status::InternalError("stop execution queue error");
+            }
+            return Status::OK();
+        }
+
+        CHECK(false); // unreachable
     }
 
-    virtual bool is_finished() { return _is_finished && _num_pending_chunks == 0; }
+    bool is_finished() { return _is_closed && _num_pending_chunks == 0; }
 
-    virtual void cancel_one_sinker() { _is_cancelled = true; }
+    void cancel_one_sinker() { _is_cancelled = true; }
 
     virtual void close(RuntimeState* state) {
+        DCHECK(_num_pending_chunks == 0);
+        DCHECK(_num_result_sinkers == 0);
+
         if (_exec_queue_id != nullptr) {
-            bthread::execution_queue_stop(*_exec_queue_id);
+            // bthread::execution_queue_join(*_exec_queue_id);
+            _exec_queue_id.reset();
         }
-        _is_finished = true;
+
+        _is_closed = true;
     }
 
     inline void set_io_status(const Status& status) {
@@ -105,33 +124,64 @@ public:
     }
 
     static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
+        auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
         if (iter.is_queue_stopped()) {
+            sink_io_buffer->close(sink_io_buffer->_runtime_state);
             return 0;
         }
-        auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(sink_io_buffer->_state->query_mem_tracker_ptr().get());
-        for (; iter; ++iter) {
-            sink_io_buffer->_process_chunk(iter);
-            (*iter).reset();
+
+        if (sink_io_buffer->_runtime_state) {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(sink_io_buffer->_runtime_state->query_mem_tracker_ptr().get());
+            for (; iter; ++iter) {
+                sink_io_buffer->_process_chunk(iter);
+                (*iter).reset();
+            }
+        } else {
+            for (; iter; ++iter) {
+                sink_io_buffer->_process_chunk(iter);
+                (*iter).reset();
+            }
         }
         return 0;
     }
 
 protected:
-    virtual void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) = 0;
+    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
+        DeferOp op([&]() {
+            auto nc = _num_pending_chunks.fetch_sub(1);
+            DCHECK(nc >= 1);
+        });
+
+        if (_is_cancelled) {
+            return;
+        }
+
+        auto st = _write_chunk((*iter));
+        if (!st.ok()) {
+            set_io_status(st);
+            _is_cancelled = true;
+            if (_fragment_ctx != nullptr) {
+                _fragment_ctx->cancel(st);
+            }
+        }
+    }
+
+    virtual Status _write_chunk(ChunkPtr chunk) = 0;
 
     std::unique_ptr<bthread::ExecutionQueueId<ChunkPtr>> _exec_queue_id;
 
-    std::atomic_int32_t _num_result_sinkers = 0;
-    std::atomic_int64_t _num_pending_chunks = 0;
+    CACHELINE_ALIGNED std::atomic_int32_t _num_result_sinkers = 0;
+    CACHELINE_ALIGNED std::atomic_int64_t _num_pending_chunks = 0;
+
     std::atomic_bool _is_prepared = false;
     std::atomic_bool _is_cancelled = false;
-    std::atomic_bool _is_finished = false;
+    std::atomic_bool _is_closed = false;
 
     mutable std::shared_mutex _io_status_mutex;
     Status _io_status;
 
-    RuntimeState* _state = nullptr;
+    FragmentContext* const _fragment_ctx;
+    RuntimeState* _runtime_state = nullptr;
 
     static const int32_t kExecutionQueueSizeLimit = 64;
 };
