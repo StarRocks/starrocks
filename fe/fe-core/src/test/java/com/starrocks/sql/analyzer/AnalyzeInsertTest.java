@@ -172,7 +172,6 @@ public class AnalyzeInsertTest {
         analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=1) values (1)",
                 "Must include all 2 partition columns in the partition clause.");
 
-
         analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=1, p2=\"aaffsssaa\") values (1)",
                 "Type[array<date>] not supported.");
 
@@ -192,6 +191,8 @@ public class AnalyzeInsertTest {
             }
         };
 
+        analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)",
+                "partition value can't be null.");
         analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=222) values (1)");
     }
 }
