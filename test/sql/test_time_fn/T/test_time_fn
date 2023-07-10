@@ -222,14 +222,6 @@ values ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'hour'),
        ('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'millisecond');
 select date_diff(d0,d1,t) from test_data_diff order by t;
 
--- name: test_url_encode
-select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
-select url_encode(NULL);
-
---name: test_url_decode
-select url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy');
-select url_decode(NULL);
-
 -- name: test_makedate
 CREATE TABLE IF NOT EXISTS `makedate_test` (
   `id` int,

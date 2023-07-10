@@ -235,3 +235,23 @@ select split_part(c1, "##", -3) from t1;
 -- result:
 abc
 -- !result
+
+-- name: test_url_encode
+select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
+-- result:
+https%3A%2F%2Fdocs.starrocks.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy
+-- !result
+select url_encode(NULL);
+-- result:
+None
+-- !result
+
+--name: test_url_decode
+select url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy');
+-- result:
+https://docs.starrocks.io/en-us/latest/quick_start/Deploy
+-- !result
+select url_decode(NULL);
+-- result:
+None
+-- !result
