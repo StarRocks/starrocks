@@ -314,6 +314,7 @@ public class TablePruningCTETest extends TablePruningTestBase {
             checkHashJoinCountWithBothRBOAndCBO(items, q, numHashJoins);
         }
     }
+
     @Test
     public void testRandomlyPermuteTPCHTables() {
         String sql = "select\n" +

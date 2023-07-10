@@ -54,6 +54,14 @@ public class TablePruningTest extends TablePruningTestBase {
             }
         });
 
+        getSqlList("sql/ssb/", "lineorder0").forEach(createTblSql -> {
+            try {
+                starRocksAssert.withTable(createTblSql);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+
         String ssbViewFmt = "create view lineorder_flat_%s as\n" +
                 "select\n" +
                 "   `lo_orderdate`,\n" +
@@ -244,6 +252,50 @@ public class TablePruningTest extends TablePruningTestBase {
     }
 
     @Test
+    public void testViewSsbPruneBasedOnUniqueKeys() {
+        String fromClause0 = "lineorder0 l\n" +
+                "   left join customer c on (c.c_custkey = l.lo_custkey)\n" +
+                "   left join supplier s  on (s.s_suppkey = l.lo_suppkey)\n" +
+                "   left join part p on (p.p_partkey = l.lo_partkey)";
+
+        String fromClause1 =
+                "(select t1.*,p.* from part p right join \n" +
+                        "(select t0.*, s.*  from supplier s right join \n" +
+                        "(select c.*, l.* from customer c right join lineorder0 l \n" +
+                        "   on (c.c_custkey = l.lo_custkey)) t0\n" +
+                        "   on (s.s_suppkey = t0.lo_suppkey)) t1\n" +
+                        "   on (p.p_partkey = t1.lo_partkey)) t2";
+
+        String[] whereClauses = {
+                "lo_custkey > 10",
+                "lo_custkey > 10 and lo_custkey > 10",
+                "lo_custkey > 10 and lo_custkey > 10 and lo_partkey > 10",
+        };
+
+        Object[][] items = new Object[][] {
+                {"1", 0, 0},
+                {"lo_orderdate", 0, 0},
+                {"lo_orderdate,c_address", 1, 1},
+                {"lo_orderdate,s_name", 1, 1},
+                {"lo_orderdate,c_address,s_name", 2, 2},
+                {"c_address,s_name", 2, 2},
+        };
+        List<Object[]> cases = Stream.of(fromClause0, fromClause1).flatMap(fromClause -> Stream.of(whereClauses).flatMap(
+                whereClause -> Stream.of(items).map(tc -> new Object[] {
+                        String.format("select %s from %s where %s", tc[0], fromClause, whereClause), tc[1], tc[2]}))).collect(
+                Collectors.toList());
+
+
+        for (Object[] tc : cases) {
+            String sql = (String) tc[0];
+            int rboNumHashJoins = (Integer) tc[1];
+            int cboNumHashJoins = (Integer) tc[2];
+            checkHashJoinCountWithOnlyCBO(sql, cboNumHashJoins);
+            checkHashJoinCountWithBothRBOAndCBO(sql, rboNumHashJoins);
+        }
+    }
+
+    @Test
     public void testOuterJoinContainsIrreducibleConstantPredicate() {
         String[] sqlList = {
                 "select l.*\n" +
@@ -427,7 +479,6 @@ public class TablePruningTest extends TablePruningTestBase {
 
         queryList.forEach(q -> {
             try {
-                String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, q);
                 checkHashJoinCountWithBothRBOAndCBO(q, 0);
             } catch (Exception e) {
                 Assert.fail("Query=" + q + " failed to plan");
