@@ -6,7 +6,7 @@ Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执�
 
 为保证正常访问 Hive 内的数据，StarRocks 集群必须集成以下两个关键组件：
 
-- 对象存储或分布式文件系统，如 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、Google GCS、或 HDFS
+- 对象存储或分布式文件系统，如 AWS S3、阿里云 OSS、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、Google GCS、或 HDFS
 
 - 元数据服务，如 Hive Metastore（以下简称 HMS）或 AWS Glue
 
