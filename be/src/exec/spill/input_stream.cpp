@@ -378,6 +378,10 @@ StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream(const SerdePtr& serde, 
 
 StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, const SerdePtr& serde, Spiller* spiller,
                                                        const SortExecExprs* sort_exprs, const SortDescs* sort_descs) {
+    if (_blocks.empty()) {
+        return as_unordered_stream(serde, spiller);
+    }
+
     auto stream = std::make_shared<OrderedInputStream>(_blocks, state);
     RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs, spiller));
     return stream;

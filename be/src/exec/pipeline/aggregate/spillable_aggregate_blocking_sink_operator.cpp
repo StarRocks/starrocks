@@ -57,7 +57,8 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     auto io_executor = _aggregator->spill_channel()->io_executor();
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-        return _aggregator->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+        auto& spiller = _aggregator->spiller();
+        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     _aggregator->ref();
@@ -68,7 +69,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _aggregator->spiller()));
     };
 
     SpillProcessTasksBuilder task_builder(state, io_executor);

@@ -45,7 +45,8 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
 
     auto io_executor = _aggregator->spill_channel()->io_executor();
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-        return _aggregator->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+        auto spiller = _aggregator->spiller();
+        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     _aggregator->ref();
@@ -56,7 +57,7 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
                     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _aggregator->spiller()));
     };
 
     SpillProcessTasksBuilder task_builder(state, io_executor);
@@ -240,9 +241,8 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
 
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
-        ASSIGN_OR_RETURN(auto chunk,
-                         _aggregator->spiller()->restore(state, *executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
-
+        auto& spiller = _aggregator->spiller();
+        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, *executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
         if (chunk->is_empty()) {
             return chunk;
         }
