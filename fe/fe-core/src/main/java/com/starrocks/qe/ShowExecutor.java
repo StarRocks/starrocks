@@ -203,7 +203,6 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
-import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.Warehouse;
@@ -992,8 +991,8 @@ public class ShowExecutor {
         }
         String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeIdOfDb(db.getId());
         if (!Strings.isNullOrEmpty(storageVolumeId)) {
-            StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolume(storageVolumeId);
-            createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(sv.getName()).append("\")");
+            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(storageVolumeId);
+            createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
         rows.add(Lists.newArrayList(showStmt.getDb(), createSqlBuilder.toString()));
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
