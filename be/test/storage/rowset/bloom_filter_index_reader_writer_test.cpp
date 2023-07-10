@@ -57,10 +57,10 @@ protected:
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
 
-        _opts.fs = _fs.get();
         _opts.use_page_cache = true;
         _opts.kept_in_memory = false;
-        _opts.skip_fill_local_cache = false;
+        _opts.skip_fill_data_cache = false;
+        _opts.stats = &_stats;
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
@@ -97,12 +97,14 @@ protected:
     void get_bloom_filter_reader_iter(const std::string& file_name, const ColumnIndexMetaPB& meta,
                                       std::unique_ptr<RandomAccessFile>* rfile, BloomFilterIndexReader** reader,
                                       std::unique_ptr<BloomFilterIndexIterator>* iter) {
-        _opts.file_name = kTestDir + "/" + file_name;
+        auto filename = kTestDir + "/" + file_name;
+        ASSIGN_OR_ABORT(*rfile, _fs->new_random_access_file(filename))
+        _opts.read_file = (*rfile).get();
 
         *reader = new BloomFilterIndexReader();
         ASSIGN_OR_ABORT(auto r, (*reader)->load(_opts, meta.bloom_filter_index()));
         ASSERT_TRUE(r);
-        ASSERT_OK((*reader)->new_iterator(iter));
+        ASSERT_OK((*reader)->new_iterator(_opts, iter));
     }
 
     template <LogicalType Type>
@@ -166,6 +168,7 @@ protected:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     IndexReadOptions _opts;
+    OlapReaderStatistics _stats;
 };
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_int) {

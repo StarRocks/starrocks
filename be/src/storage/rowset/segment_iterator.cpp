@@ -486,9 +486,11 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
     iter_opts.use_page_cache = _opts.use_page_cache;
-    RandomAccessFileOptions opts{.skip_fill_local_cache = _skip_fill_data_cache()};
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
+    iter_opts.fill_data_cache = _opts.fill_data_cache;
+
+    RandomAccessFileOptions opts{.skip_fill_local_cache = _skip_fill_data_cache()};
 
     ColumnAccessPath* access_path = nullptr;
     if (_column_access_paths.find(cid) != _column_access_paths.end()) {
@@ -510,7 +512,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     } else {
         // create delta column iterator
         _column_iterators[cid] = std::move(col_iter);
-        ASSIGN_OR_RETURN(auto dcg_file, _opts.fs->new_random_access_file(dcg_filename));
+        ASSIGN_OR_RETURN(auto dcg_file, _opts.fs->new_random_access_file(opts, dcg_filename));
         iter_opts.read_file = dcg_file.get();
         _column_files[cid] = std::move(dcg_file);
     }
@@ -1541,16 +1543,14 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
                 col_index = cid;
             }
 
-            IndexReadOptions options;
-            options.fs = segment_ptr->file_system();
-            options.file_name = segment_ptr->file_name();
-            options.use_page_cache =
-                    config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
-            options.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
-            options.skip_fill_local_cache = _skip_fill_data_cache();
-            options.stats = _opts.stats;
+            IndexReadOptions opts;
+            opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
+            opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
+            opts.skip_fill_data_cache = _skip_fill_data_cache();
+            opts.read_file = _column_files[cid].get();
+            opts.stats = _opts.stats;
 
-            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(col_index, options, &_bitmap_index_iterators[cid]));
+            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(col_index, opts, &_bitmap_index_iterators[cid]));
             _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
         }
     }
