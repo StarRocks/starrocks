@@ -600,24 +600,18 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
     int timeout_ms =
             request->has_timeout() ? request->timeout() * 1000 : config::routine_load_kafka_timeout_second * 1000;
 
-    MonotonicStopWatch watch;
-    watch.start();
-    int wait_ms = 0;
-
-    auto task = [this, request, response, done, timeout_ms, &watch, &wait_ms]() {
-        wait_ms = watch.elapsed_time() / 1000 / 1000;
-        this->_get_info_impl(request, response, done, timeout_ms - wait_ms);
+    auto task = [this, request, response, done, timeout_ms]() {
+        this->_get_info_impl(request, response, done, timeout_ms);
     };
 
     auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
     if (!st.ok()) {
-        LOG(WARNING) << "get kafka info: " << st << " ,timeout: " << timeout_ms << " ,wait_ms: " << wait_ms
+        LOG(WARNING) << "get kafka info: " << st << " ,timeout: " << timeout_ms
                      << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable(
-                fmt::format(
-                        "too busy to get kafka info, please check the kafka broker status, wait ms: {}, timeout ms: {}",
-                        wait_ms, timeout_ms))
+                fmt::format("too busy to get kafka info, please check the kafka broker status, timeout ms: {}",
+                            timeout_ms))
                 .to_protobuf(response->mutable_status());
     }
 }
@@ -698,23 +692,18 @@ void PInternalServiceImplBase<T>::get_pulsar_info(google::protobuf::RpcControlle
     int timeout_ms =
             request->has_timeout() ? request->timeout() * 1000 : config::routine_load_pulsar_timeout_second * 1000;
 
-    MonotonicStopWatch watch;
-    watch.start();
-    int wait_ms = 0;
-
-    auto task = [this, request, response, done, timeout_ms, &watch, &wait_ms]() {
-        wait_ms = watch.elapsed_time() / 1000 / 1000;
-        this->_get_pulsar_info_impl(request, response, done, timeout_ms - wait_ms);
+    auto task = [this, request, response, done, timeout_ms]() {
+        this->_get_pulsar_info_impl(request, response, done, timeout_ms);
     };
 
     auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
     if (!st.ok()) {
-        LOG(WARNING) << "get pulsar info: " << st << " ,timeout: " << timeout_ms << " ,wait_ms: " << wait_ms
+        LOG(WARNING) << "get pulsar info: " << st << " ,timeout: " << timeout_ms
                      << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable(fmt::format("too busy to get pulsar info, please check the pulsar status, "
-                                               "wait ms: {}, timeout ms: {}",
-                                               wait_ms, timeout_ms))
+                                               "timeout ms: {}",
+                                               timeout_ms))
                 .to_protobuf(response->mutable_status());
     }
 }
