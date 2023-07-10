@@ -67,16 +67,16 @@ private:
 };
 
 // For global dictionary columns, predicates can be rewriten
-// ConjunctivePredicatesRewriter was a helper class, won't acquire any resource
-// ConjunctivePredicatesRewriter will rewrite ConjunctivePredicates in TabletScanner
+// GlobalDictPredicatesRewriter was a helper class, won't acquire any resource
+// GlobalDictPredicatesRewriter will rewrite ConjunctivePredicates in TabletScanner
 //
-// TODO: refactor ConjunctivePredicatesRewriter and ColumnPredicateRewriter
-class ConjunctivePredicatesRewriter {
+// TODO: refactor GlobalDictPredicatesRewriter and ColumnPredicateRewriter
+class GlobalDictPredicatesRewriter {
 public:
-    ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps)
-            : ConjunctivePredicatesRewriter(predicates, dict_maps, nullptr) {}
-    ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps,
-                                  std::vector<uint8_t>* disable_rewrite)
+    GlobalDictPredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps)
+            : GlobalDictPredicatesRewriter(predicates, dict_maps, nullptr) {}
+    GlobalDictPredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps,
+                                 std::vector<uint8_t>* disable_rewrite)
             : _predicates(predicates), _dict_maps(dict_maps), _disable_dict_rewrite(disable_rewrite) {}
 
     Status rewrite_predicate(ObjectPool* pool);

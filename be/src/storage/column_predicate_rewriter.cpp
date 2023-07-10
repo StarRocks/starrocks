@@ -386,9 +386,9 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     return true;
 }
 
-// member function for ConjunctivePredicatesRewriter
+// member function for GlobalDictPredicatesRewriter
 
-Status ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
+Status GlobalDictPredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
     std::vector<uint8_t> selection;
     auto pred_rewrite = [&](std::vector<const ColumnPredicate*>& preds) {
         for (auto& pred : preds) {
