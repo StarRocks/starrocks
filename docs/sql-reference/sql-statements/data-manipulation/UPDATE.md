@@ -59,9 +59,9 @@ One or more other tables in the database. These tables can be joined with the ta
 
 `where_condition`
 
-The condition based on which you want to update rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'. However, this parameter is not mandatory for [partial updates in column mode](#partial-updates-in-column-mode).
+The condition based on which you want to update rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'. However, this parameter is not mandatory for [partial updates in column mode](#partial-updates-in-column-mode-since-v31).
 
-## Partial updates in column mode
+## Partial updates in column mode (since v3.1)
 
 Partial updates in column mode are suitable for scenarios where only a small number of columns, but a large number of rows need to be updated. In such scenarios, enabing the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.
 
