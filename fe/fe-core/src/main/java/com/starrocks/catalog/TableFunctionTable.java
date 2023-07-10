@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
-import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
@@ -155,13 +153,7 @@ public class TableFunctionTable extends Table {
         } catch (UserException e) {
             Throwable root = ExceptionUtils.getRootCause(e);
             LOG.error("access remote storage failed", e);
-            if (root instanceof AmazonS3Exception) {
-                AmazonS3Exception s3Exception = (AmazonS3Exception) root;
-                throw new DdlException(String.format("access storage failed: %s, detailed message: %s",
-                        s3Exception.getErrorCode(), s3Exception.getErrorMessage()));
-            } else {
-                throw new DdlException("failed to parse files: " + e.getMessage());
-            }
+            throw new DdlException("failed to parse files: " + e.getMessage(), e);
         }
 
         if (fileStatuses.isEmpty()) {
@@ -245,11 +237,10 @@ public class TableFunctionTable extends Table {
             result = future.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new DdlException("failed to get file schema: " + e.getMessage());
+            throw new DdlException("failed to get file schema", e);
         } catch (Exception e) {
-            throw new DdlException("failed to get file schema: " + e.getMessage());
+            throw new DdlException("failed to get file schema", e);
         }
-
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
