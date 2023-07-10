@@ -105,7 +105,6 @@ public:
         DCHECK(_num_result_sinkers == 0);
 
         if (_exec_queue_id != nullptr) {
-            // bthread::execution_queue_join(*_exec_queue_id);
             _exec_queue_id.reset();
         }
 
