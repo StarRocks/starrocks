@@ -58,7 +58,6 @@ import com.starrocks.common.util.Util;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -555,7 +554,7 @@ public class Database extends MetaObject implements Writable {
         if (table != null) {
             this.nameToTable.remove(tableName);
             this.idToTable.remove(table.getId());
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isCloudNativeTable()) {
+            if (table.isCloudNativeTable()) {
                 GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
             }
         }

@@ -1056,8 +1056,13 @@ public class AlterTest {
             }
 
             @Mock
-            public boolean bindTableToStorageVolume(String svId, long tableId) {
-                return true;
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
             }
         };
 
@@ -1161,8 +1166,13 @@ public class AlterTest {
             }
 
             @Mock
-            public boolean bindTableToStorageVolume(String svId, long tableId) {
-                return true;
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
             }
         };
 
@@ -2122,8 +2132,13 @@ public class AlterTest {
             }
 
             @Mock
-            public boolean bindTableToStorageVolume(String svId, long tableId) {
-                return true;
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
             }
         };
 
