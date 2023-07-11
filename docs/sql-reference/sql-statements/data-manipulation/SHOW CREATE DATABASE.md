@@ -8,6 +8,8 @@ Shows the SQL command used to create a database.
 SHOW CREATE DATABASE <db_name>
 ```
 
+## Parameters
+
 `db_name`: the database name, required.
 
 ## Returns
