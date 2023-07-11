@@ -794,6 +794,13 @@ public:
         None
     };
 
+    struct FormatCtx {
+        bool is_valid = false;
+        std::string fmt;
+        int len;
+        FormatType fmt_type;
+    };
+
 private:
     struct FromUnixState {
         bool const_format{false};
@@ -807,13 +814,6 @@ private:
         bool is_valid = false;
         cctz::time_zone from_tz;
         cctz::time_zone to_tz;
-    };
-
-    struct FormatCtx {
-        bool is_valid = false;
-        std::string fmt;
-        int len;
-        FormatType fmt_type;
     };
 
     // fmt for string format like "%Y-%m-%d" and "%Y-%m-%d %H:%i:%s"
