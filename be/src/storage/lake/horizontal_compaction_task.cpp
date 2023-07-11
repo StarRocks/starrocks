@@ -83,7 +83,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
         chunk->reset();
 
         progress->update(100 * reader.stats().raw_rows_read / total_num_rows);
-        VLOG_EVERY_N(3, 1000) << "Tablet: << " << _tablet->id() << ", compaction progress: " << progress->value();
+        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet->id() << ", compaction progress: " << progress->value();
     }
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"
