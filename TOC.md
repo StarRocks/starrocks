@@ -76,6 +76,7 @@
     + [Delta Lake catalog](/data_source/catalog/deltalake_catalog.md)
     + [JDBC catalog](/data_source/catalog/jdbc_catalog.md)
     + [Elasticsearch catalog](/data_source/catalog/elasticsearch_catalog.md)
+    + [Paimon catalog](/data_source/catalog/paimon_catalog.md)
     + [查询外部数据](/data_source/catalog/query_external_data.md)
   + [外部表](/data_source/External_table.md)
   + [文件外部表](/data_source/file_external_table.md)
