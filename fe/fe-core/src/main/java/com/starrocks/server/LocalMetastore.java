@@ -1593,6 +1593,11 @@ public class LocalMetastore implements ConnectorMetadata {
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
 
         if (distributionInfo.getBucketNum() == 0) {
+            // TODO: revisit this code and define a proper behavior for shared data mode
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                throw new DdlException("You must specify 'BUCKETS' in shared_data mode");
+            }
+
             int numBucket =
                     CatalogUtils.calAvgBucketNumOfRecentPartitions(table, 5, Config.enable_auto_tablet_distribution);
             distributionInfo.setBucketNum(numBucket);

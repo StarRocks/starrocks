@@ -24,7 +24,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
@@ -303,10 +302,7 @@ public class CatalogUtils {
     }
 
     public static int calBucketNumAccordingToBackends() {
-        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
-        }
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
         // When POC, the backends is not greater than three most of the time.
         // The bucketNum will be given a small multiplier factor for small backends.
         int bucketNum = 0;
