@@ -97,7 +97,11 @@ StatusOr<ChunkUniquePtr> UnionAllSpilledInputStream::get_next(SerdeContext& cont
 // The raw chunk input stream. all chunks are in memory.
 class RawChunkInputStream final : public SpillInputStream {
 public:
+<<<<<<< HEAD
     RawChunkInputStream(std::vector<ChunkPtr> chunks) : _chunks(std::move(chunks)) {}
+=======
+    RawChunkInputStream(std::vector<ChunkPtr> chunks, Spiller* spiller) : _chunks(std::move(chunks)) {}
+>>>>>>> a7689e4c2 ([BugFix] Fixed the problem of inaccurate memory statistics with auto spill turned on (#26890))
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
 
     bool is_ready() override { return true; };
