@@ -963,3 +963,10 @@ PROPERTIES(
     "enable_persistent_index" = "true"
 );
 ```
+
+## References
+
+* [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
+* [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+* [ALTER TABLE](ALTER%20TABLE.md)
+* [DROP TABLE](DROP%20TABLE.md)
