@@ -1415,7 +1415,7 @@ public class CreateTableTest {
     @Test
     public void testCreateTableInSystemDb() {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Can't create table 'goods' (errno: create denied)",
+                "Can't create table 'goods' (errno: cannot create table in system database)",
                 () -> createTable(
                         "CREATE TABLE information_schema.goods(\n" +
                                 "    item_id1          INT,\n" +
