@@ -4,10 +4,6 @@
 
 Modifies an existing table.
 
-> **NOTE**
->
-> This operation requires the ALTER privilege on the destination table.
-
 ## Syntax
 
 ```SQL
