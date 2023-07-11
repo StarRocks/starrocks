@@ -494,6 +494,7 @@ void DeltaWriterImpl::close() {
 
     if (_flush_token != nullptr) {
         (void)_flush_token->wait();
+        VLOG(3) << "Tablet_id: " << tablet_id() << ", flush stats: " << _flush_token->get_stats();
     }
 
     // Destruct variables manually for counting memory usage into |_mem_tracker|
