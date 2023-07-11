@@ -2114,8 +2114,17 @@ std::string StringFunctions::url_decode_func(const std::string& value) {
     std::string ret;
     char ch;
     int i, ii;
+    char l, r;
     for (i = 0; i < value.length(); i++) {
-        if (int(value[i]) == 37) {
+        if (value[i] == '%') {
+            l = value[i + 1];
+            r = value[i + 2];
+            if ((l < 'A' || l > 'F') && (l < '0' || l > '9')) {
+                throw std::runtime_error("decode string contains illegal hex chars: " + value.substr(i + 1, 2));
+            }
+            if ((r < 'A' || r > 'F') && (r < '0' || r > '9')) {
+                throw std::runtime_error("decode string contains illegal hex chars: " + value.substr(i + 1, 2));
+            }
             sscanf(value.substr(i + 1, 2).c_str(), "%x", &ii);
             ch = static_cast<char>(ii);
             ret += ch;
