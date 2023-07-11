@@ -18,7 +18,7 @@
 
 - 支持访问 Parquet 格式的 Iceberg v2 数据表。
 - 【公测中】支持写出数据到 Parquet 格式的 Iceberg 表。
-- 支持通过[外部 Catalog](../data_source/catalog/elasticsearch_catalog.md)（External Catalog）访问 Elasticsearch，简化外表创建等过程。
+- 支持通过外部 Catalog（External Catalog）访问 [Elasticsearch](../data_source/catalog/elasticsearch_catalog.md) 和 [Apache Paimon](../data_source/catalog/paimon_catalog.md)，简化外表创建等过程。
 
 #### 存储、导入与查询
 
