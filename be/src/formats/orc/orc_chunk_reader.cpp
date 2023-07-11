@@ -483,7 +483,11 @@ OrcChunkReader::~OrcChunkReader() {
     _slot_id_to_desc.clear();
     _slot_id_to_position.clear();
     _cast_exprs.clear();
+<<<<<<< HEAD
     _fill_functions.clear();
+=======
+    _column_readers.clear();
+>>>>>>> e379747379 ([BugFix] Using UTC timezone when read time which less then unix epoch time in orc timestamp type (#26866))
 }
 
 Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
@@ -549,8 +553,12 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
+<<<<<<< HEAD
         _fill_functions[src_index](cvb, col, 0, _batch->numElements, slot_desc->type(),
                                    _root_selected_mapping->get_column_id_or_child_mapping(src_index).orc_mapping, this);
+=======
+        _column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements);
+>>>>>>> e379747379 ([BugFix] Using UTC timezone when read time which less then unix epoch time in orc timestamp type (#26866))
     }
 
     if (_broker_load_mode) {
