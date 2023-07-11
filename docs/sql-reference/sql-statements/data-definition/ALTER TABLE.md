@@ -15,7 +15,7 @@ ALTER TABLE [database.]table
 alter_clause1[, alter_clause2, ...]
 ```
 
-`alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, swap, and comment.
+`alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, and swap.
 
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - rollup: creates or drops a rollup index.
@@ -23,7 +23,6 @@ alter_clause1[, alter_clause2, ...]
 - rename: renames a table, rollup index, or partition. **Note that column name cannot be modified.**
 - index: modifies index (only Bitmap index can be modified).
 - swap: atomic exchange of two tables.
-- comment: modifies the table comment (supported from v3.1 onwards).
 
 > **NOTE**
 >
@@ -387,14 +386,6 @@ Syntax:
 ```sql
 ALTER TABLE [database.]table
 SWAP WITH table_name;
-```
-
-### Alter table comment (from v3.1)
-
-Syntax:
-
-```sql
-ALTER TABLE [database.]table COMMENT = "<new table comment>";
 ```
 
 ## Examples
