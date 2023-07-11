@@ -197,7 +197,7 @@ REFRESH MATERIALIZED VIEW order_mv;
 REFRESH MATERIALIZED VIEW order_mv WITH SYNC MODE;
 ```
 
-You can cancel a refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md).
+You can cancel a refresh task submitted via an asynchronous call using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md).
 
 ## Query the asynchronous materialized view
 
