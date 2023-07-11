@@ -53,6 +53,7 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -90,6 +91,7 @@ import io.trino.sql.tree.ArithmeticUnaryExpression;
 import io.trino.sql.tree.ArrayConstructor;
 import io.trino.sql.tree.AstVisitor;
 import io.trino.sql.tree.BetweenPredicate;
+import io.trino.sql.tree.BinaryLiteral;
 import io.trino.sql.tree.BooleanLiteral;
 import io.trino.sql.tree.Cast;
 import io.trino.sql.tree.CoalesceExpression;
@@ -845,6 +847,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         }
         throw new ParsingException("Parse Error : unknown type " + node.getType());
+    }
+
+    @Override
+    protected ParseNode visitBinaryLiteral(BinaryLiteral node, ParseTreeContext context) {
+        return new VarBinaryLiteral(node.getValue());
     }
 
     @Override
