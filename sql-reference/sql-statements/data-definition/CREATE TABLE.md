@@ -4,6 +4,10 @@
 
 该语句用于创建表。
 
+> **注意**
+>
+> 该操作需要有在对应数据库内的建表权限 (CREATE TABLE)。
+
 ## 语法
 
 ```sql
@@ -113,7 +117,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 1. BITMAP_UNION 聚合类型列在导入时的原始数据类型必须是 `TINYINT, SMALLINT, INT, BIGINT`。
 2. 如果在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
-  该类型只对聚合模型有用(`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
+  该类型只对聚合模型有用 (`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
 
 **NULL | NOT NULL**：列数据是否允许为 `NULL`。其中明细模型、聚合模型和更新模型表中所有列都默认指定 `NULL`。主键模型表的指标列默认指定 `NULL`，维度列默认指定 `NOT NULL`。如源数据文件中存在 `NULL` 值，可以用 `\N` 来表示，导入时 StarRocks 会将其解析为 `NULL`。
 
@@ -234,11 +238,17 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 * AGGREGATE KEY: key 列相同的记录，value 列按照指定的聚合类型进行聚合，适合报表、多维分析等业务场景。
 * UNIQUE KEY/PRIMARY KEY: key 列相同的记录，value 列按导入顺序进行覆盖，适合按 key 列进行增删改查的点查询 (point query) 业务。
-* DUPLICATE KEY: key列相同的记录，同时存在于 StarRocks 中，适合存储明细数据或者数据无聚合特性的业务场景。
+* DUPLICATE KEY: key 列相同的记录，同时存在于 StarRocks 中，适合存储明细数据或者数据无聚合特性的业务场景。
 
 默认为 DUPLICATE KEY，数据按 key 列做排序。
 
 除 AGGREGATE KEY 外，其他 `key_type` 在建表时，`value` 列不需要指定聚合类型 (agg_type)。
+
+### COMMENT
+
+表的注释，可选。注意建表时 COMMENT 必须在 `key_desc` 之后，否则建表失败。
+
+如果后续想修改表的注释，可以使用 `ALTER TABLE <table_name> COMMENT = "new table comment"`（3.1 版本开始支持）。
 
 ### **partition_desc**
 
