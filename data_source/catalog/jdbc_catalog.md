@@ -1,10 +1,10 @@
 # JDBC catalog
 
+StarRocks 从 3.0 版本开始支持 JDBC Catalog。
+
 JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执行数据导入就可以直接查询 JDBC 数据源里的数据。
 
 此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](/sql-reference/sql-statements/data-manipulation/insert.md) 能力对 JDBC 数据源的数据实现转换和导入。
-
-StarRocks 从 3.0 版本开始支持 JDBC Catalog，目前正在公测中。
 
 目前 JDBC Catalog 支持 MySQL 和 PostgreSQL。
 
