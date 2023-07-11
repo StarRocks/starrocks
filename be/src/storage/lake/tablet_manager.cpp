@@ -15,6 +15,7 @@
 #include "storage/lake/tablet_manager.h"
 
 #include <bthread/bthread.h>
+#include <butil/time.h>
 #include <bvar/bvar.h>
 
 #include <atomic>
@@ -47,6 +48,7 @@
 #include "storage/tablet_schema_map.h"
 #include "util/lru_cache.h"
 #include "util/raw_container.h"
+#include "util/trace.h"
 
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
@@ -64,11 +66,11 @@ static bvar::Window<bvar::Adder<uint64_t>> g_metadata_cache_miss_minute("lake", 
                                                                         &g_metadata_cache_miss, 60);
 
 static bvar::Adder<uint64_t> g_txnlog_cache_hit;
-static bvar::Window<bvar::Adder<uint64_t>> g_txnlog_cache_hit_minute("lake", "txnlog_cache_hit_minute",
+static bvar::Window<bvar::Adder<uint64_t>> g_txnlog_cache_hit_minute("lake", "txn_log_cache_hit_minute",
                                                                      &g_txnlog_cache_hit, 60);
 
 static bvar::Adder<uint64_t> g_txnlog_cache_miss;
-static bvar::Window<bvar::Adder<uint64_t>> g_txnlog_cache_miss_minute("lake", "txnlog_cache_miss_minute",
+static bvar::Window<bvar::Adder<uint64_t>> g_txnlog_cache_miss_minute("lake", "txn_log_cache_miss_minute",
                                                                       &g_txnlog_cache_miss, 60);
 
 static bvar::Adder<uint64_t> g_schema_cache_hit;
@@ -94,6 +96,12 @@ static bvar::Window<bvar::Adder<uint64_t>> g_segment_cache_hit_minute("lake", "s
 static bvar::Adder<uint64_t> g_segment_cache_miss;
 static bvar::Window<bvar::Adder<uint64_t>> g_segment_cache_miss_minute("lake", "segment_cache_miss_minute",
                                                                        &g_segment_cache_miss, 60);
+
+static bvar::LatencyRecorder g_get_tablet_metadata_latency("lake", "get_tablet_metadata");
+static bvar::LatencyRecorder g_put_tablet_metadata_latency("lake", "put_tablet_metadata");
+static bvar::LatencyRecorder g_get_txn_log_latency("lake", "get_txn_log");
+static bvar::LatencyRecorder g_put_txn_log_latency("lake", "put_txn_log");
+static bvar::LatencyRecorder g_del_txn_log_latency("lake", "del_txn_log");
 
 static Cache* get_metacache() {
     auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
@@ -380,6 +388,7 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
 
 Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     // write metadata file
+    auto t0 = butil::gettimeofday_us();
     auto filepath = _location_provider->tablet_metadata_location(metadata->id(), metadata->version());
     auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     auto writer_file = fs::new_writable_file(options, filepath);
@@ -392,6 +401,8 @@ Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     auto value_ptr = std::make_unique<CacheValue>(metadata);
     fill_metacache(metadata_location, value_ptr.release(), static_cast<int>(metadata->SpaceUsedLong()));
     cache_tablet_latest_metadata(metadata);
+    auto t1 = butil::gettimeofday_us();
+    g_put_tablet_metadata_latency << (t1 - t0);
     return Status::OK();
 }
 
@@ -401,9 +412,12 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache) {
+    auto t0 = butil::gettimeofday_us();
     MetaFileReader reader(metadata_location, fill_cache);
     RETURN_IF_ERROR(reader.load());
-    return reader.get_meta();
+    auto res = reader.get_meta();
+    g_get_tablet_metadata_latency << (butil::gettimeofday_us() - t0);
+    return res;
 }
 
 TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t tablet_id) {
@@ -415,6 +429,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& path, bool fill_cache) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_tablet_metadata");
     if (auto ptr = lookup_tablet_metadata(path); ptr != nullptr) {
         return ptr;
     }
@@ -454,6 +469,7 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
 }
 
 StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path, bool fill_cache) {
+    auto t0 = butil::gettimeofday_us();
     std::string read_buf;
     RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, txn_log_path));
@@ -469,10 +485,13 @@ StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path,
     if (!parsed) {
         return Status::Corruption(fmt::format("failed to parse txn log {}", txn_log_path));
     }
+    auto t1 = butil::gettimeofday_us();
+    g_get_txn_log_latency << (t1 - t0);
     return std::move(meta);
 }
 
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fill_cache) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_txn_log");
     if (auto ptr = lookup_txn_log(path); ptr != nullptr) {
         return ptr;
     }
@@ -499,6 +518,7 @@ Status TabletManager::put_txn_log(TxnLogPtr log) {
     if (UNLIKELY(!log->has_txn_id())) {
         return Status::InvalidArgument("txn log does not have txn id");
     }
+    auto t0 = butil::gettimeofday_us();
     auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     auto txn_log_path = txn_log_location(log->tablet_id(), log->txn_id());
     VLOG(5) << "Writing " << txn_log_path;
@@ -509,6 +529,8 @@ Status TabletManager::put_txn_log(TxnLogPtr log) {
     // put txnlog into cache
     auto value_ptr = std::make_unique<CacheValue>(log);
     fill_metacache(txn_log_path, value_ptr.release(), static_cast<int>(log->SpaceUsedLong()));
+    auto t1 = butil::gettimeofday_us();
+    g_put_txn_log_latency << (t1 - t0);
     return Status::OK();
 }
 
@@ -517,16 +539,24 @@ Status TabletManager::put_txn_log(const TxnLog& log) {
 }
 
 Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("del_txn_log");
+    auto t0 = butil::gettimeofday_us();
     auto location = txn_log_location(tablet_id, txn_id);
     erase_metacache(location);
     auto st = fs::delete_file(location);
+    auto t1 = butil::gettimeofday_us();
+    g_del_txn_log_latency << (t1 - t0);
     return st.is_not_found() ? Status::OK() : st;
 }
 
 Status TabletManager::delete_txn_vlog(int64_t tablet_id, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("del_txn_vlog");
+    auto t0 = butil::gettimeofday_us();
     auto location = txn_vlog_location(tablet_id, version);
     erase_metacache(location);
     auto st = fs::delete_file(location);
+    auto t1 = butil::gettimeofday_us();
+    g_del_txn_log_latency << (t1 - t0);
     return st.is_not_found() ? Status::OK() : st;
 }
 
