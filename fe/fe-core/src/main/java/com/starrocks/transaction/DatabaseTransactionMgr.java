@@ -400,6 +400,9 @@ public class DatabaseTransactionMgr {
         if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
+        if (tabletCommitInfos != null && !tabletCommitInfos.isEmpty()) {
+            transactionState.setTabletCommitInfos(tabletCommitInfos);
+        }
 
         // update transaction state extra if exists
         if (txnCommitAttachment != null) {
@@ -948,6 +951,11 @@ public class DatabaseTransactionMgr {
                                         && replica.getLastFailedVersion() < 0) {
                                     // if replica not in can load state, skip it.
                                     if (!replica.getState().canLoad()) {
+                                        continue;
+                                    }
+                                    // if replica not commit yet, skip it. This may happen when it's just create by clone.
+                                    if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(), 
+                                            replica.getBackendId())) {
                                         continue;
                                     }
                                     // this means the replica is a healthy replica,
