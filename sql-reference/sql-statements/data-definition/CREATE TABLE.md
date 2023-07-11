@@ -248,8 +248,6 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 表的注释，可选。注意建表时 COMMENT 必须在 `key_desc` 之后，否则建表失败。
 
-如果后续想修改表的注释，可以使用 `ALTER TABLE <table_name> COMMENT = "new table comment"`（3.1 版本开始支持）。
-
 ### **partition_desc**
 
 `partition_desc` 有三种使用方式，分别为：`LESS THAN，Fixed Range，批量创建分区`。以下为不同方式的详细使用方法：
