@@ -2869,10 +2869,17 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
         ctxToTestUser();
 
-        // test no authorization on show resource groups
+        // test no authorization on show storage volumes
         ShowResultSet res = new ShowExecutor(ctx,
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show storage volumes", ctx)).execute();
         Assert.assertEquals(0, res.getResultRows().size());
+
+        // test desc storage volume
+        verifyGrantRevoke(
+                "desc storage volume local",
+                "grant USAGE on storage volume local to test",
+                "revoke USAGE on storage volume local from test",
+                "Access denied for user 'test' to storage volume 'local' when checking privilege");
 
         // test drop storage volume
         verifyGrantRevoke(

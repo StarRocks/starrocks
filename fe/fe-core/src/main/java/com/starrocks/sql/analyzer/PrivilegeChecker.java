@@ -316,9 +316,9 @@ public class PrivilegeChecker {
         }
     }
 
-    static void checkStorageVolumeAction(ConnectContext context, String storageVolumeName, PrivilegeType action) {
-        if (!PrivilegeActions.checkStorageVolumeAction(context, storageVolumeName, action)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+    static void checkAnyActionOnStorageVolume(ConnectContext context, String storageVolumeName) {
+        if (!PrivilegeActions.checkAnyActionOnStorageVolume(context, storageVolumeName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_STORAGE_VOLUME_DENIED,
                     context.getQualifiedUser(), storageVolumeName);
         }
     }
