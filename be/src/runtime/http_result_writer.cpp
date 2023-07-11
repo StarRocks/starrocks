@@ -29,8 +29,11 @@
 namespace starrocks {
 
 HttpResultWriter::HttpResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
-                                   RuntimeProfile* parent_profile)
-        : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
+                                   RuntimeProfile* parent_profile, TResultSinkFormatType::type format_type)
+        : _sinker(sinker),
+          _output_expr_ctxs(output_expr_ctxs),
+          _parent_profile(parent_profile),
+          _format_type(format_type) {}
 
 Status HttpResultWriter::init(RuntimeState* state) {
     _init_profile();
@@ -46,6 +49,21 @@ void HttpResultWriter::_init_profile() {
     _convert_tuple_timer = ADD_CHILD_TIMER(_parent_profile, "TupleConvertTime", "AppendChunkTime");
     _result_send_timer = ADD_CHILD_TIMER(_parent_profile, "ResultRendTime", "AppendChunkTime");
     _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
+}
+
+// transform one row into json format
+void HttpResultWriter::_transform_row_to_json(const Columns& result_columns, int idx) {
+    int num_columns = result_columns.size();
+
+    row_str.append("{\"data\":[");
+    for (auto& result_column : result_columns) {
+        std::string row = cast_type_to_json_str(result_column, idx).value();
+        row_str.append(row);
+        if (result_column != result_columns[num_columns - 1]) {
+            row_str.append(",");
+        }
+    }
+    row_str.append("]}\n");
 }
 
 Status HttpResultWriter::append_chunk(Chunk* chunk) {
@@ -87,16 +105,13 @@ StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
         result_rows.resize(num_rows);
 
         for (int i = 0; i < num_rows; ++i) {
-            row_str.append("{\"data\":[");
-            for (auto& result_column : result_columns) {
-                std::string row = cast_type_to_json_str(result_column, i).value();
-                row_str.append(row);
-                if (result_column != result_columns[num_columns - 1]) {
-                    row_str.append(",");
-                }
+            switch (_format_type) {
+            case TResultSinkFormatType::type::JSON:
+                _transform_row_to_json(result_columns, i);
+                break;
+            case TResultSinkFormatType::type::OTHERS:
+                return Status::NotSupported("HttpResultWriter only support json format right now");
             }
-            row_str.append("]}\n");
-
             size_t len = row_str.size();
 
             if (UNLIKELY(current_bytes + len >= _max_row_buffer_size)) {

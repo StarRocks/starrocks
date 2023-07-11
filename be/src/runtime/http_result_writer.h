@@ -50,7 +50,7 @@ using TFetchDataResultPtrs = std::vector<TFetchDataResultPtr>;
 class HttpResultWriter final : public ResultWriter {
 public:
     HttpResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
-                     RuntimeProfile* parent_profile);
+                     RuntimeProfile* parent_profile, TResultSinkFormatType::type format_type);
 
     Status init(RuntimeState* state) override;
 
@@ -64,6 +64,8 @@ public:
 
 private:
     void _init_profile();
+
+    void _transform_row_to_json(const Columns& column, int idx);
 
     BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;
@@ -80,6 +82,9 @@ private:
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
 
     const size_t _max_row_buffer_size = 1024 * 1024 * 1024;
+
+    // result's format, right now just support json format
+    TResultSinkFormatType::type _format_type;
 };
 
 } // namespace starrocks

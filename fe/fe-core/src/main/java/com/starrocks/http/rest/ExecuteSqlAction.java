@@ -59,6 +59,7 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.thrift.TResultSinkFormatType;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -111,6 +112,8 @@ public class ExecuteSqlAction extends RestBaseAction {
         try {
             changeCatalogAndDB(catalogName, databaseName, context);
             SqlRequest requestBody = validatePostBody(request.getContent(), context);
+            // set result format as json,
+            context.setResultSinkFormatType(TResultSinkFormatType.JSON);
             checkSessionVariable(requestBody.sessionVariables, context);
             // parse the sql here, for the convenience of verification of http request
             parsedStmt = parse(requestBody.query, context.getSessionVariable());

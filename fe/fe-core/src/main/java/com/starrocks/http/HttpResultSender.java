@@ -55,6 +55,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
+import static com.starrocks.http.BaseResponse.HEADER_QUERY_ID;
+
 public class HttpResultSender {
     private static final Logger LOG = LogManager.getLogger(HttpResultSender.class);
 
@@ -128,6 +130,7 @@ public class HttpResultSender {
     private void sendHeader(ChannelHandlerContext nettyChannel) {
         HttpResponse responseObj = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
         responseObj.headers().set(HttpHeaderNames.CONTENT_TYPE.toString(), "application/x-ndjson; charset=utf-8");
+        responseObj.headers().set(HEADER_QUERY_ID, context.getQueryId());
         HttpUtil.setTransferEncodingChunked(responseObj, true);
 
         nettyChannel.write(responseObj);

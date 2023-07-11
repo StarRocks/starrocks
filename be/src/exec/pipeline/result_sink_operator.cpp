@@ -44,7 +44,7 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         _writer = std::make_shared<VariableResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
         break;
     case TResultSinkType::HTTP_PROTOCAL:
-        _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _format_type);
         break;
     default:
         return Status::InternalError("Unknown result sink type");

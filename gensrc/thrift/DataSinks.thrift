@@ -63,6 +63,11 @@ enum TResultSinkType {
     HTTP_PROTOCAL
 }
 
+enum TResultSinkFormatType {
+    JSON,
+    OTHERS
+}
+
 struct TParquetOptions {
     // parquet row group max size in bytes
     1: optional i64 parquet_max_group_bytes
@@ -145,6 +150,7 @@ struct TMultiCastDataStreamSink {
 struct TResultSink {
     1: optional TResultSinkType type;
     2: optional TResultFileSinkOptions file_options;
+    3: optional TResultSinkFormatType format;
 }
 
 struct TMysqlTableSink {

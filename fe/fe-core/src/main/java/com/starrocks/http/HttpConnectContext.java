@@ -35,6 +35,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.thrift.TResultSinkFormatType;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -68,11 +69,22 @@ public class HttpConnectContext extends ConnectContext {
 
     private boolean isKeepAlive;
 
+    // right now only support json type
+    private TResultSinkFormatType resultSinkFormatType;
+
     public HttpConnectContext() {
         super();
         sendDate = false;
         initialized = false;
         disablePrintConnectionId = false;
+    }
+
+    public TResultSinkFormatType getResultSinkFormatType() {
+        return resultSinkFormatType;
+    }
+
+    public void setResultSinkFormatType(TResultSinkFormatType resultSinkFormatType) {
+        this.resultSinkFormatType = resultSinkFormatType;
     }
 
     public boolean isForwardToLeader() {
