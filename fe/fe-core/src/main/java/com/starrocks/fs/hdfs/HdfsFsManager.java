@@ -1214,8 +1214,8 @@ public class HdfsFsManager {
                 resultFileStatus.add(brokerFileStatus);
             }
         } catch (FileNotFoundException e) {
-            LOG.info("file not found: ", e);
-            throw new UserException("file not found: ", e);
+            LOG.info("file not found: " + path, e);
+            throw new UserException("file not found: " + path, e);
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
             throw new UserException("listPath failed", e);
