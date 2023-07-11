@@ -27,6 +27,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
@@ -974,22 +975,24 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return 0;
             }
 
-            MaterializedIndex index = partition.getIndex(indexId);
-            if (index == null) {
-                return 0;
-            }
-
             int cnt = 0;
-            for (Tablet tablet : index.getTablets()) {
-                List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                if (replicas == null) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                MaterializedIndex index = physicalPartition.getIndex(indexId);
+                if (index == null) {
                     continue;
                 }
 
-                for (Replica replica : replicas) {
-                    if (replica.getState() == ReplicaState.NORMAL && replica.getBackendId() == beId) {
-                        if (pathHash == -1 || (pathHash != -1 && replica.getPathHash() == pathHash)) {
-                            cnt++;
+                for (Tablet tablet : index.getTablets()) {
+                    List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                    if (replicas == null) {
+                        continue;
+                    }
+
+                    for (Replica replica : replicas) {
+                        if (replica.getState() == ReplicaState.NORMAL && replica.getBackendId() == beId) {
+                            if (pathHash == -1 || (pathHash != -1 && replica.getPathHash() == pathHash)) {
+                                cnt++;
+                            }
                         }
                     }
                 }
@@ -1316,53 +1319,55 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return result;
             }
 
-            MaterializedIndex index = partition.getIndex(indexId);
-            if (index == null) {
-                return result;
-            }
-
-            // tablets on be|path
-            Map<Long, Set<Long>> tablets = Maps.newHashMap();
-            if (beIds != null) {
-                for (Long beId : beIds) {
-                    tablets.put(beId, Sets.newHashSet());
-                }
-            } else {
-                for (Long pathHash : bePaths.second) {
-                    tablets.put(pathHash, Sets.newHashSet());
-                }
-            }
-            for (Tablet tablet : index.getTablets()) {
-                List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                if (replicas == null) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                MaterializedIndex index = physicalPartition.getIndex(indexId);
+                if (index == null) {
                     continue;
                 }
 
-                for (Replica replica : replicas) {
-                    if (replica.getState() != ReplicaState.NORMAL) {
+                // tablets on be|path
+                Map<Long, Set<Long>> tablets = Maps.newHashMap();
+                if (beIds != null) {
+                    for (Long beId : beIds) {
+                        tablets.put(beId, Sets.newHashSet());
+                    }
+                } else {
+                    for (Long pathHash : bePaths.second) {
+                        tablets.put(pathHash, Sets.newHashSet());
+                    }
+                }
+                for (Tablet tablet : index.getTablets()) {
+                    List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                    if (replicas == null) {
                         continue;
                     }
 
-                    if (beIds != null) {
-                        tablets.computeIfPresent(replica.getBackendId(), (k, v) -> {
-                            v.add(tablet.getId());
-                            return v;
-                        });
-                    } else {
-                        if (replica.getBackendId() != bePaths.first ||
-                                !bePaths.second.contains(replica.getPathHash())) {
+                    for (Replica replica : replicas) {
+                        if (replica.getState() != ReplicaState.NORMAL) {
                             continue;
                         }
-                        tablets.computeIfPresent(replica.getPathHash(), (k, v) -> {
-                            v.add(tablet.getId());
-                            return v;
-                        });
+
+                        if (beIds != null) {
+                            tablets.computeIfPresent(replica.getBackendId(), (k, v) -> {
+                                v.add(tablet.getId());
+                                return v;
+                            });
+                        } else {
+                            if (replica.getBackendId() != bePaths.first ||
+                                    !bePaths.second.contains(replica.getPathHash())) {
+                                continue;
+                            }
+                            tablets.computeIfPresent(replica.getPathHash(), (k, v) -> {
+                                v.add(tablet.getId());
+                                return v;
+                            });
+                        }
                     }
                 }
-            }
 
-            for (Map.Entry<Long, Set<Long>> entry : tablets.entrySet()) {
-                result.add(new Pair<>(entry.getKey(), entry.getValue()));
+                for (Map.Entry<Long, Set<Long>> entry : tablets.entrySet()) {
+                    result.add(new Pair<>(entry.getKey(), entry.getValue()));
+                }
             }
         } finally {
             db.readUnlock();

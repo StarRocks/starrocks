@@ -107,14 +107,16 @@ public class TabletStatMgr extends FrontendDaemon {
 
                     OlapTable olapTable = (OlapTable) table;
                     for (Partition partition : olapTable.getAllPartitions()) {
-                        long version = partition.getVisibleVersion();
-                        for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            long indexRowCount = 0L;
-                            for (Tablet tablet : index.getTablets()) {
-                                indexRowCount += tablet.getRowCount(version);
-                            } // end for tablets
-                            index.setRowCount(indexRowCount);
-                        } // end for indices
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            long version = physicalPartition.getVisibleVersion();
+                            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                long indexRowCount = 0L;
+                                for (Tablet tablet : index.getTablets()) {
+                                    indexRowCount += tablet.getRowCount(version);
+                                } // end for tablets
+                                index.setRowCount(indexRowCount);
+                            } // end for indices
+                        } // end for physical partitions
                     } // end for partitions
                     LOG.debug("finished to set row num for table: {} in database: {}",
                             table.getName(), db.getFullName());
