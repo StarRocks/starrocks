@@ -54,7 +54,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionUtil;
@@ -88,6 +87,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiff;
+import com.starrocks.sql.common.PartitionRange;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -102,7 +102,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -265,38 +264,36 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (partitionRefreshNumber >= rangePartitionMap.size()) {
             return;
         }
-        Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = Maps.newHashMap();
+        List<PartitionRange> mappedPartitionsToRefresh = Lists.newArrayList();
         for (String partitionName : partitionsToRefresh) {
-            mappedPartitionsToRefresh.put(partitionName, rangePartitionMap.get(partitionName));
+            mappedPartitionsToRefresh.add(new PartitionRange(partitionName, rangePartitionMap.get(partitionName)));
         }
-        LinkedHashMap<String, Range<PartitionKey>> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+        Collections.sort(mappedPartitionsToRefresh);
 
-        Iterator<String> partitionNameIter = sortedPartition.keySet().iterator();
+        Iterator<PartitionRange> rangeIter = mappedPartitionsToRefresh.iterator();
         for (int i = 0; i < partitionRefreshNumber; i++) {
-            if (partitionNameIter.hasNext()) {
-                partitionNameIter.next();
+            if (rangeIter.hasNext()) {
+                rangeIter.next();
             }
         }
         String nextPartitionStart = null;
         String endPartitionName = null;
-        if (partitionNameIter.hasNext()) {
-            String startPartitionName = partitionNameIter.next();
-            Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
+        if (rangeIter.hasNext()) {
+            String startPartitionName = rangeIter.next().getPartitionName();
+            Range<PartitionKey> partitionKeyRange = rangePartitionMap.get(startPartitionName);
             nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(partitionKeyRange.lowerEndpoint(), 0);
             endPartitionName = startPartitionName;
             partitionsToRefresh.remove(endPartitionName);
         }
-        while (partitionNameIter.hasNext())  {
-            endPartitionName = partitionNameIter.next();
+        while (rangeIter.hasNext())  {
+            endPartitionName = rangeIter.next().getPartitionName();
             partitionsToRefresh.remove(endPartitionName);
         }
 
         mvContext.setNextPartitionStart(nextPartitionStart);
 
         if (endPartitionName != null) {
-            PartitionKey upperEndpoint = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint();
+            PartitionKey upperEndpoint = rangePartitionMap.get(endPartitionName).upperEndpoint();
             mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0));
         } else {
             // partitionNameIter has just been traversed, and endPartitionName is not updated
@@ -515,18 +512,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Column partitionColumn = mvContext.getPartitionColumn();
 
         RangePartitionDiff rangePartitionDiff = new RangePartitionDiff();
-        Map<String, Range<PartitionKey>> baseRangePartitionMap;
+        List<PartitionRange> basePartitionRanges;
 
-        Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
+        List<PartitionRange> mvPartitionRanges = materializedView.getPartitionRanges();
         database.readLock();
         try {
-            baseRangePartitionMap = PartitionUtil.getPartitionRange(partitionBaseTable, partitionColumn);
+            basePartitionRanges = PartitionUtil.getPartitionRange(partitionBaseTable, partitionColumn);
             if (partitionExpr instanceof SlotRef) {
-                rangePartitionDiff = SyncPartitionUtils.calcSyncSameRangePartition(baseRangePartitionMap, mvPartitionMap);
+                rangePartitionDiff = SyncPartitionUtils.calcSyncSameRangePartition(basePartitionRanges, mvPartitionRanges);
             } else if (partitionExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
                 String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
-                rangePartitionDiff = SyncPartitionUtils.calcSyncRollupPartition(baseRangePartitionMap, mvPartitionMap,
+                rangePartitionDiff = SyncPartitionUtils.calcSyncRollupPartition(basePartitionRanges, mvPartitionRanges,
                         granularity, partitionColumn.getPrimitiveType());
             }
         } catch (UserException e) {
@@ -536,38 +533,35 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             database.readUnlock();
         }
 
-        Map<String, Range<PartitionKey>> deletes = rangePartitionDiff.getDeletes();
+        List<PartitionRange> deletes = rangePartitionDiff.getDeletes();
 
         // We should delete the old partition first and then add the new one,
         // because the old and new partitions may overlap
 
-        for (String mvPartitionName : deletes.keySet()) {
-            dropPartition(database, materializedView, mvPartitionName);
+        for (PartitionRange range : deletes) {
+            dropPartition(database, materializedView, range.getPartitionName());
         }
         LOG.info("The process of synchronizing materialized view [{}] delete partitions range [{}]",
                 materializedView.getName(), deletes);
 
         Map<String, String> partitionProperties = getPartitionProperties(materializedView);
         DistributionDesc distributionDesc = getDistributionDesc(materializedView);
-        Map<String, Range<PartitionKey>> adds = rangePartitionDiff.getAdds();
+        List<PartitionRange> adds = rangePartitionDiff.getAdds();
 
         addRangePartitions(database, materializedView, adds, partitionProperties, distributionDesc);
-        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
-            String mvPartitionName = addEntry.getKey();
-            mvPartitionMap.put(mvPartitionName, addEntry.getValue());
-        }
+        mvPartitionRanges.addAll(adds);
 
         LOG.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
                 materializedView.getName(), adds);
 
         // used to get partitions to refresh
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
-                .generatePartitionRefMap(baseRangePartitionMap, mvPartitionMap);
+                .generatePartitionRefMap(basePartitionRanges, mvPartitionRanges);
         Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
-                .generatePartitionRefMap(mvPartitionMap, baseRangePartitionMap);
+                .generatePartitionRefMap(mvPartitionRanges, basePartitionRanges);
         mvContext.setBaseToMvNameRef(baseToMvNameRef);
         mvContext.setMvToBaseNameRef(mvToBaseNameRef);
-        mvContext.setBaseRangePartitionMap(baseRangePartitionMap);
+        mvContext.setBasePartitionRanges(basePartitionRanges);
     }
 
     private void syncPartitionsForList() {
@@ -686,7 +680,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 if (partitionInfo instanceof ListPartitionInfo) {
                     return materializedView.getValidListPartitionMap(partitionTTLNumber).keySet();
                 } else {
-                    return materializedView.getValidRangePartitionMap(partitionTTLNumber).keySet();
+                    return materializedView.getValidRangePartitionMap(partitionTTLNumber).stream()
+                            .map(PartitionRange::getPartitionName).collect(Collectors.toSet());
                 }
             }
         }
@@ -878,9 +873,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         if (mvPartitionInfo.isRangePartition()) {
             List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
-            Map<String, Range<PartitionKey>> basePartitionMap = mvContext.getBaseRangePartitionMap();
+            List<PartitionRange> basePartitions = mvContext.getBasePartitionRanges();
+            Map<String, PartitionRange> basePartitionMap = Maps.newHashMap();
+            basePartitions.stream().forEach(r -> basePartitionMap.put(r.getPartitionName(), r));
+
             for (String partitionName : tablePartitionNames) {
-                sourceTablePartitionRange.add(basePartitionMap.get(partitionName));
+                sourceTablePartitionRange.add(basePartitionMap.get(partitionName).getPartitionKeyRange());
             }
             sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
             List<Expr> partitionPredicates =
@@ -935,12 +933,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             return true;
                         }
                     } else {
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap =
-                                snapShotOlapTable.getRangePartitionMap();
-                        Map<String, Range<PartitionKey>> currentPartitionMap =
-                                ((OlapTable) table).getRangePartitionMap();
-                        boolean changed =
-                                SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
+                        List<PartitionRange> snapshotPartitionRanges = snapShotOlapTable.getPartitionRanges();
+                        List<PartitionRange> currentPartitionRanges = ((OlapTable) table).getPartitionRanges();
+                        boolean changed = SyncPartitionUtils.hasPartitionChange(snapshotPartitionRanges, currentPartitionRanges);
                         if (changed) {
                             return true;
                         }
@@ -966,10 +961,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             continue;
                         }
 
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
-                                getPartitionRange(snapshotTable, partitionColumn);
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
-                                getPartitionRange(table, partitionColumn);
+                        List<PartitionRange> snapshotPartitionMap = 
+                                PartitionUtil.getPartitionRange(snapshotTable, partitionColumn);
+                        List<PartitionRange> currentPartitionMap = 
+                                PartitionUtil.getPartitionRange(table, partitionColumn);
                         boolean changed =
                                 SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
                         if (changed) {
@@ -997,9 +992,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             continue;
                         }
 
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
+                        List<PartitionRange> snapshotPartitionMap = PartitionUtil.
                                 getPartitionRange(snapshotTable, partitionColumn);
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
+                        List<PartitionRange> currentPartitionMap = PartitionUtil.
                                 getPartitionRange(table, partitionColumn);
                         boolean changed =
                                 SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
@@ -1044,7 +1039,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Table hiveTable = hdfsScanNode.getHiveTable();
 
                 Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
-                        baseTableInfo -> baseTableInfo.getTableIdentifier().equals(hiveTable.getTableIdentifier())).
+                                baseTableInfo -> baseTableInfo.getTableIdentifier().equals(hiveTable.getTableIdentifier())).
                         findAny();
                 if (!baseTableInfoOptional.isPresent()) {
                     continue;
@@ -1155,16 +1150,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void addRangePartitions(Database database, MaterializedView materializedView,
-                                    Map<String, Range<PartitionKey>> adds, Map<String, String> partitionProperties,
+                                    List<PartitionRange> adds, Map<String, String> partitionProperties,
                                     DistributionDesc distributionDesc) {
         if (adds.isEmpty()) {
             return;
         }
         List<PartitionDesc> partitionDescs = Lists.newArrayList();
 
-        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
-            String mvPartitionName = addEntry.getKey();
-            Range<PartitionKey> partitionKeyRange = addEntry.getValue();
+        for (PartitionRange range : adds) {
+            String mvPartitionName = range.getPartitionName();
+            Range<PartitionKey> partitionKeyRange = range.getPartitionKeyRange();
 
             String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
             String upperBound = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
@@ -1283,7 +1278,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         List<com.starrocks.connector.PartitionInfo> hivePartitions = GlobalStateMgr.
                 getCurrentState().getMetadataMgr().getPartitions(baseTableInfo.getCatalogName(), hiveTable,
-                selectedPartitionNames);
+                        selectedPartitionNames);
 
         for (int index = 0; index < selectedPartitionNames.size(); ++index) {
             long modifiedTime = hivePartitions.get(index).getModifiedTime();

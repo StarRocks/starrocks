@@ -46,6 +46,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.sql.common.SyncPartitionUtils.mappingRange;
+import static com.starrocks.sql.common.SyncPartitionUtils.toList;
+import static com.starrocks.sql.common.SyncPartitionUtils.toMap;
+
 public class SyncPartitionUtilsTest {
 
     private static final TableName TABLE_NAME = new TableName("db1", "table1");
@@ -88,6 +92,19 @@ public class SyncPartitionUtilsTest {
         return Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
     }
 
+    private Map<String, Set<String>> generatePartitionRefMap(Map<String, Range<PartitionKey>> srcRangeMap,
+                                                             Map<String, Range<PartitionKey>> dstRangeMap) {
+        return SyncPartitionUtils.generatePartitionRefMap(toList(srcRangeMap),
+                toList(dstRangeMap));
+    }
+
+    private Map<String, Range<PartitionKey>>  diffRange(Map<String, Range<PartitionKey>> srcRangeMap,
+                                                        Map<String, Range<PartitionKey>> dstRangeMap) {
+        List<PartitionRange> partitionRanges = SyncPartitionUtils.diffRange(toList(srcRangeMap),
+                toList(dstRangeMap));
+        return toMap(partitionRanges);
+    }
+
     @Test
     public void testGeneratePartitionRefMap() throws AnalysisException {
         // normal condition
@@ -100,14 +117,14 @@ public class SyncPartitionUtilsTest {
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
         dstRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
 
-        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(srcRangeMap, dstRangeMap);
+        Map<String, Set<String>> partitionRefMap = generatePartitionRefMap(srcRangeMap, dstRangeMap);
 
         Assert.assertTrue(partitionRefMap.get("p20201015_20201115").contains("p202010_202011"));
         Assert.assertTrue(partitionRefMap.get("p20201015_20201115").contains("p202011_202012"));
         Assert.assertTrue(partitionRefMap.get("p20201115_20201215").contains("p202011_202012"));
         Assert.assertTrue(partitionRefMap.get("p20201115_20201215").contains("p202012_202101"));
 
-        partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(dstRangeMap, srcRangeMap);
+        partitionRefMap = generatePartitionRefMap(dstRangeMap, srcRangeMap);
 
         Assert.assertTrue(partitionRefMap.get("p202010_202011").contains("p20201015_20201115"));
         Assert.assertTrue(partitionRefMap.get("p202011_202012").contains("p20201015_20201115"));
@@ -121,10 +138,10 @@ public class SyncPartitionUtilsTest {
         dstRangeMap = Maps.newHashMap();
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
 
-        partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(srcRangeMap, dstRangeMap);
+        partitionRefMap = generatePartitionRefMap(srcRangeMap, dstRangeMap);
         Assert.assertEquals(0, partitionRefMap.get("p20201015").size());
 
-        partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(dstRangeMap, srcRangeMap);
+        partitionRefMap = generatePartitionRefMap(dstRangeMap, srcRangeMap);
         Assert.assertEquals(0, partitionRefMap.get("p202011_202012").size());
 
     }
@@ -141,7 +158,7 @@ public class SyncPartitionUtilsTest {
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
         dstRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
 
-        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(srcRangeMap, dstRangeMap);
+        Map<String, Set<String>> partitionRefMap = generatePartitionRefMap(srcRangeMap, dstRangeMap);
 
         Assert.assertEquals(1, partitionRefMap.get("p202010_202011").size());
         Assert.assertEquals(1, partitionRefMap.get("p202011_202012").size());
@@ -163,14 +180,14 @@ public class SyncPartitionUtilsTest {
         Map<String, Range<PartitionKey>> dstRange = Maps.newHashMap();
         dstRange.put("p20200101", createRange("2020-01-01", "2020-01-02"));
 
-        Map<String, Range<PartitionKey>> diff = SyncPartitionUtils.diffRange(srcRange, dstRange);
+        Map<String, Range<PartitionKey>> diff = diffRange(srcRange, dstRange);
         Assert.assertEquals(1, diff.size());
         Assert.assertEquals("2020-01-02 00:00:00",
                 diff.get("p20200102").lowerEndpoint().getKeys().get(0).getStringValue());
         Assert.assertEquals("2020-01-03 00:00:00",
                 diff.get("p20200102").upperEndpoint().getKeys().get(0).getStringValue());
 
-        diff = SyncPartitionUtils.diffRange(dstRange, srcRange);
+        diff = diffRange(dstRange, srcRange);
         Assert.assertEquals(0, diff.size());
 
         // two range
@@ -186,7 +203,7 @@ public class SyncPartitionUtilsTest {
         dstRange.put("p20200102", createRange("2020-01-02", "2020-01-06"));
         dstRange.put("p20200106", createRange("2020-01-06", "2020-01-07"));
 
-        diff = SyncPartitionUtils.diffRange(srcRange, dstRange);
+        diff = diffRange(srcRange, dstRange);
         Assert.assertEquals(2, diff.size());
         Assert.assertEquals("2020-01-02 00:00:00",
                 diff.get("p20200102").lowerEndpoint().getKeys().get(0).getStringValue());
@@ -197,7 +214,7 @@ public class SyncPartitionUtilsTest {
         Assert.assertEquals("2020-01-06 00:00:00",
                 diff.get("p20200105").upperEndpoint().getKeys().get(0).getStringValue());
 
-        diff = SyncPartitionUtils.diffRange(dstRange, srcRange);
+        diff = diffRange(dstRange, srcRange);
         Assert.assertEquals(1, diff.size());
         Assert.assertEquals("2020-01-02 00:00:00",
                 diff.get("p20200102").lowerEndpoint().getKeys().get(0).getStringValue());
@@ -254,9 +271,10 @@ public class SyncPartitionUtilsTest {
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
         mvRange.put("p202001", createRange("2020-01-01", "2020-02-01"));
 
-        RangePartitionDiff diff = SyncPartitionUtils.calcSyncSameRangePartition(baseRange, mvRange);
+        RangePartitionDiff diff = SyncPartitionUtils.calcSyncSameRangePartition(toList(baseRange),
+                toList(mvRange));
 
-        Map<String, Range<PartitionKey>> adds = diff.getAdds();
+        Map<String, Range<PartitionKey>> adds = toMap(diff.getAdds());
         Assert.assertEquals(3, adds.size());
         Assert.assertEquals("2020-01-01 00:00:00",
                 adds.get("p20200101").lowerEndpoint().getKeys().get(0).getStringValue());
@@ -271,7 +289,7 @@ public class SyncPartitionUtilsTest {
         Assert.assertEquals("2020-02-01 00:00:00",
                 adds.get("p20200131").upperEndpoint().getKeys().get(0).getStringValue());
 
-        Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
+        Map<String, Range<PartitionKey>> deletes = toMap(diff.getDeletes());
         Assert.assertEquals(1, deletes.size());
         Assert.assertEquals("2020-01-01 00:00:00",
                 deletes.get("p202001").lowerEndpoint().getKeys().get(0).getStringValue());
@@ -289,10 +307,11 @@ public class SyncPartitionUtilsTest {
         mvRange.put("p20200102", createRange("2020-01-02", "2020-01-03"));
         mvRange.put("p20200103", createRange("2020-01-03", "2020-01-04"));
 
-        diff = SyncPartitionUtils.calcSyncSameRangePartition(baseRange, mvRange);
+        diff = SyncPartitionUtils.calcSyncSameRangePartition(toList(baseRange),
+                toList(mvRange));
 
-        adds = diff.getAdds();
-        deletes = diff.getDeletes();
+        adds = toMap(diff.getAdds());
+        deletes = toMap(diff.getDeletes());
 
         Assert.assertEquals(1, adds.size());
         Assert.assertEquals("2020-01-04 00:00:00",
@@ -311,7 +330,7 @@ public class SyncPartitionUtilsTest {
     public void testMappingRangeRollup() throws AnalysisException {
         // minute
         Range<PartitionKey> baseRange = createRange("2020-05-03 12:34:56", "2020-06-04 12:34:56");
-        PartitionMapping mappedRange = SyncPartitionUtils.mappingRange(baseRange, "minute");
+        PartitionMapping mappedRange = mappingRange(baseRange, "minute");
 
         Assert.assertEquals("2020-05-03T12:34:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -320,7 +339,7 @@ public class SyncPartitionUtilsTest {
 
         // hour
         baseRange = createRange("2020-05-03 12:34:56", "2020-06-04 12:34:56");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "hour");
+        mappedRange = mappingRange(baseRange, "hour");
 
         Assert.assertEquals("2020-05-03T12:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -329,7 +348,7 @@ public class SyncPartitionUtilsTest {
 
         // day
         baseRange = createRange("2020-05-03 12:34:56", "2020-06-04 12:34:56");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "day");
+        mappedRange = mappingRange(baseRange, "day");
 
         Assert.assertEquals("2020-05-03T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -338,7 +357,7 @@ public class SyncPartitionUtilsTest {
 
         // month
         baseRange = createRange("2020-05-03", "2020-06-04");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "month");
+        mappedRange = mappingRange(baseRange, "month");
 
         Assert.assertEquals("2020-05-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -347,7 +366,7 @@ public class SyncPartitionUtilsTest {
 
         // quarter
         baseRange = createRange("2020-05-03", "2020-06-04");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "quarter");
+        mappedRange = mappingRange(baseRange, "quarter");
 
         Assert.assertEquals("2020-04-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -356,7 +375,7 @@ public class SyncPartitionUtilsTest {
 
         // year
         baseRange = createRange("2020-05-03", "2020-06-04");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "year");
+        mappedRange = mappingRange(baseRange, "year");
 
         Assert.assertEquals("2020-01-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -370,7 +389,7 @@ public class SyncPartitionUtilsTest {
                 new DateLiteral(Type.DATE, true).toLocalDateTime().format(DateTimeFormatter.ISO_DATE_TIME);
         // minute
         Range<PartitionKey> baseRange = createMaxValueRange("2020-05-03 12:34:56");
-        PartitionMapping mappedRange = SyncPartitionUtils.mappingRange(baseRange, "minute");
+        PartitionMapping mappedRange = mappingRange(baseRange, "minute");
 
         Assert.assertEquals("2020-05-03T12:34:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -378,7 +397,7 @@ public class SyncPartitionUtilsTest {
 
         // hour
         baseRange = createMaxValueRange("2020-05-03 12:34:56");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "hour");
+        mappedRange = mappingRange(baseRange, "hour");
 
         Assert.assertEquals("2020-05-03T12:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -386,7 +405,7 @@ public class SyncPartitionUtilsTest {
 
         // day
         baseRange = createMaxValueRange("2020-05-03 12:34:56");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "day");
+        mappedRange = mappingRange(baseRange, "day");
 
         Assert.assertEquals("2020-05-03T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -394,7 +413,7 @@ public class SyncPartitionUtilsTest {
 
         // month
         baseRange = createMaxValueRange("2020-05-03");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "month");
+        mappedRange = mappingRange(baseRange, "month");
 
         Assert.assertEquals("2020-05-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -402,7 +421,7 @@ public class SyncPartitionUtilsTest {
 
         // quarter
         baseRange = createMaxValueRange("2020-05-03");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "quarter");
+        mappedRange = mappingRange(baseRange, "quarter");
 
         Assert.assertEquals("2020-04-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -410,7 +429,7 @@ public class SyncPartitionUtilsTest {
 
         // year
         baseRange = createMaxValueRange("2020-05-03");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "year");
+        mappedRange = mappingRange(baseRange, "year");
 
         Assert.assertEquals("2020-01-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -426,7 +445,8 @@ public class SyncPartitionUtilsTest {
         baseRangeMap.put("p202003", createRange("2020-03-01", "2020-04-01"));
         baseRangeMap.put("p202004", createMaxValueRange("2020-04-01"));
 
-        result = SyncPartitionUtils.mappingRangeList(baseRangeMap, "month", PrimitiveType.DATE);
+        result = toMap(SyncPartitionUtils.mappingRangeList(toList(baseRangeMap),
+                "month", PrimitiveType.DATE));
 
         Assert.assertTrue(result.containsKey("p202004_999912"));
         Assert.assertEquals(1, result.get("p202004_999912").upperEndpoint().getKeys().size());
@@ -438,7 +458,8 @@ public class SyncPartitionUtilsTest {
         baseRangeMap.put("p202002", createRange("2020-02-01 20:01:59", "2020-03-01 02:50:49"));
         baseRangeMap.put("p202003", createRange("2020-03-01 02:50:49", "2020-04-01 01:05:06"));
         baseRangeMap.put("p202004", createMaxValueRange("2020-04-01 01:05:06"));
-        result = SyncPartitionUtils.mappingRangeList(baseRangeMap, "hour", PrimitiveType.DATETIME);
+        result = toMap(SyncPartitionUtils.mappingRangeList(toList(baseRangeMap),
+                "hour", PrimitiveType.DATETIME));
         Assert.assertTrue(result.containsKey("p2020040102_9999123100"));
         Assert.assertEquals(1, result.get("p2020040102_9999123100").upperEndpoint().getKeys().size());
         Assert.assertEquals("9999-12-31 00:00:00", result.get("p2020040102_9999123100").upperEndpoint().getKeys().get(0).
@@ -450,7 +471,7 @@ public class SyncPartitionUtilsTest {
 
         // less than
         Range<PartitionKey> baseRange = createLessThanRange("2020-05-03");
-        PartitionMapping mappedRange = SyncPartitionUtils.mappingRange(baseRange, "day");
+        PartitionMapping mappedRange = mappingRange(baseRange, "day");
 
         Assert.assertEquals("0000-01-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -459,7 +480,7 @@ public class SyncPartitionUtilsTest {
 
         // big partition
         baseRange = createRange("2020-01-01", "2020-02-01");
-        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "day");
+        mappedRange = mappingRange(baseRange, "day");
 
         Assert.assertEquals("2020-01-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -477,10 +498,11 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-05-04", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        RangePartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        RangePartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(toList(baseRange), toList(mvRange),
                 "month", PrimitiveType.DATETIME);
-        Map<String, Range<PartitionKey>> adds = diff.getAdds();
-        Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
+
+        Map<String, Range<PartitionKey>> adds = toMap(diff.getAdds());
+        Map<String, Range<PartitionKey>> deletes = toMap(diff.getDeletes());
 
         Assert.assertEquals(3, adds.size());
         Assert.assertEquals("0000-01-01 00:00:00",
@@ -503,10 +525,10 @@ public class SyncPartitionUtilsTest {
 
         mvRange = Maps.newHashMap();
         mvRange.put("p20200101_20200102", createRange("2020-01-01", "2020-01-02"));
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        diff = SyncPartitionUtils.calcSyncRollupPartition(toList(baseRange), toList(mvRange),
                 "day", PrimitiveType.DATETIME);
-        adds = diff.getAdds();
-        deletes = diff.getDeletes();
+        adds = toMap(diff.getAdds());
+        deletes = toMap(diff.getDeletes());
 
         System.out.println(adds);
         System.out.println(deletes);
@@ -523,11 +545,11 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-10-12", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        RangePartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        RangePartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(toList(baseRange), toList(mvRange),
                 granularity, PrimitiveType.DATETIME);
 
-        Map<String, Range<PartitionKey>> adds = diff.getAdds();
-        Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
+        Map<String, Range<PartitionKey>> adds = toMap(diff.getAdds());
+        Map<String, Range<PartitionKey>> deletes = toMap(diff.getDeletes());
 
         Assert.assertEquals(3, adds.size());
         Assert.assertEquals("2020-09-01 00:00:00",
@@ -550,10 +572,10 @@ public class SyncPartitionUtilsTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p202001_202002", createRange("2020-01-01", "2020-02-01"));
 
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        diff = SyncPartitionUtils.calcSyncRollupPartition(toList(baseRange), toList(mvRange),
                 granularity, PrimitiveType.DATETIME);
-        adds = diff.getAdds();
-        deletes = diff.getDeletes();
+        adds = toMap(diff.getAdds());
+        deletes = toMap(diff.getDeletes());
         Assert.assertEquals(1, adds.size());
         Assert.assertEquals("2020-01-01 00:00:00",
                 adds.get("p202001_202101").lowerEndpoint().getKeys().get(0).getStringValue());
@@ -570,10 +592,10 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p20200503", createRange("2020-05-03", "2020-06-05"));
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        diff = SyncPartitionUtils.calcSyncRollupPartition(toList(baseRange), toList(mvRange),
                 "month", PrimitiveType.DATETIME);
-        adds = diff.getAdds();
-        deletes = diff.getDeletes();
+        adds = toMap(diff.getAdds());
+        deletes = toMap(diff.getDeletes());
         Assert.assertEquals(1, adds.size());
         Assert.assertEquals("2020-05-01 00:00:00",
                 adds.get("p202005_202007").lowerEndpoint().getKeys().get(0).getStringValue());
@@ -590,10 +612,10 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p20200503", createRange("2020-05-03", "2020-06-05"));
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+        diff = SyncPartitionUtils.calcSyncRollupPartition(toList(baseRange), toList(mvRange),
                 "month", PrimitiveType.DATETIME);
-        adds = diff.getAdds();
-        deletes = diff.getDeletes();
+        adds = toMap(diff.getAdds());
+        deletes = toMap(diff.getDeletes());
         Assert.assertEquals(2, adds.size());
         Assert.assertEquals("2020-04-01 00:00:00",
                 adds.get("p202004_202005").lowerEndpoint().getKeys().get(0).getStringValue());

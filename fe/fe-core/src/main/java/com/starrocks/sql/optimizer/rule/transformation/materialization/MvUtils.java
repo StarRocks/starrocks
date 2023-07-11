@@ -50,6 +50,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.PartitionRange;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -866,15 +867,15 @@ public class MvUtils {
         if (table.isNativeTableOrMaterializedView()) {
             return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
         } else {
-            Map<String, Range<PartitionKey>> partitionMap;
+            List<PartitionRange> partitionMap;
             try {
                 partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
             } catch (UserException e) {
                 LOG.warn("Materialized view Optimizer compute partition range failed.", e);
                 return Lists.newArrayList();
             }
-            return partitionMap.entrySet().stream().filter(entry -> !modifiedPartitionNames.contains(entry.getKey())).
-                    map(Map.Entry::getValue).collect(Collectors.toList());
+            return partitionMap.stream().filter(range -> !modifiedPartitionNames.contains(range.getPartitionName())).
+                    map(range -> range.getPartitionKeyRange()).collect(Collectors.toList());
         }
     }
 

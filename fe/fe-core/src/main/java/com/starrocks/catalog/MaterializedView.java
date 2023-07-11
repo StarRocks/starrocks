@@ -20,7 +20,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
@@ -57,6 +56,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.PartitionRange;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -1172,28 +1172,30 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         // check partition-by table
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
-        Map<String, Range<PartitionKey>> basePartitionMap;
+        List<PartitionRange> basePartitionRanges;
         try {
-            basePartitionMap = PartitionUtil.getPartitionRange(partitionTable,
+            basePartitionRanges = PartitionUtil.getPartitionRange(partitionTable,
                     partitionInfo.second);
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return getPartitionNames();
         }
-        Map<String, Range<PartitionKey>> mvPartitionMap = getRangePartitionMap();
+        List<PartitionRange> mvPartitionRanges = getPartitionRanges();
         RangePartitionDiff rangePartitionDiff = getPartitionDiff(partitionExpr, partitionInfo.second,
-                basePartitionMap, mvPartitionMap);
-        needRefreshMvPartitionNames.addAll(rangePartitionDiff.getDeletes().keySet());
-        for (String deleted : rangePartitionDiff.getDeletes().keySet()) {
-            mvPartitionMap.remove(deleted);
+                basePartitionRanges, mvPartitionRanges);
+        needRefreshMvPartitionNames.addAll(rangePartitionDiff.getDeletes().stream().map(PartitionRange::getPartitionName).collect(
+                Collectors.toSet()));
+        for (PartitionRange deleted : rangePartitionDiff.getDeletes()) {
+            mvPartitionRanges.remove(deleted.getPartitionName());
         }
-        needRefreshMvPartitionNames.addAll(rangePartitionDiff.getAdds().keySet());
-        mvPartitionMap.putAll(rangePartitionDiff.getAdds());
+        needRefreshMvPartitionNames.addAll(rangePartitionDiff.getAdds().stream().map(PartitionRange::getPartitionName).collect(
+                Collectors.toSet()));
+        mvPartitionRanges.addAll(rangePartitionDiff.getAdds());
 
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
-                .generatePartitionRefMap(basePartitionMap, mvPartitionMap);
+                .generatePartitionRefMap(basePartitionRanges, mvPartitionRanges);
         Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
-                .generatePartitionRefMap(mvPartitionMap, basePartitionMap);
+                .generatePartitionRefMap(mvPartitionRanges, basePartitionRanges);
 
         Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(partitionTable, true);
         if (baseChangedPartitionNames == null) {
@@ -1216,8 +1218,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     private RangePartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
-                                                Map<String, Range<PartitionKey>> basePartitionMap,
-                                                Map<String, Range<PartitionKey>> mvPartitionMap) {
+                                                List<PartitionRange> basePartitionMap,
+                                                List<PartitionRange> mvPartitionMap) {
         if (partitionExpr instanceof SlotRef) {
             return SyncPartitionUtils.calcSyncSameRangePartition(basePartitionMap, mvPartitionMap);
         } else if (partitionExpr instanceof FunctionCallExpr) {

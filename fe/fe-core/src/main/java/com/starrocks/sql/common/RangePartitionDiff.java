@@ -15,25 +15,25 @@
 
 package com.starrocks.sql.common;
 
+import com.google.api.client.util.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
-import com.starrocks.catalog.PartitionKey;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class RangePartitionDiff {
 
-    Map<String, Range<PartitionKey>> adds = Maps.newHashMap();
+    List<PartitionRange> adds = Lists.newArrayList();
 
     Map<String, Set<String>> rollupToBasePartitionMap = Maps.newHashMap();
 
-    Map<String, Range<PartitionKey>> deletes = Maps.newHashMap();
+    List<PartitionRange> deletes = Lists.newArrayList();
 
     public RangePartitionDiff() {
     }
 
-    public RangePartitionDiff(Map<String, Range<PartitionKey>> adds, Map<String, Range<PartitionKey>> deletes) {
+    public RangePartitionDiff(List<PartitionRange> adds, List<PartitionRange> deletes) {
         this.adds = adds;
         this.deletes = deletes;
     }
@@ -46,19 +46,19 @@ public class RangePartitionDiff {
         this.rollupToBasePartitionMap = rollupToBasePartitionMap;
     }
 
-    public Map<String, Range<PartitionKey>> getAdds() {
+    public List<PartitionRange> getAdds() {
         return adds;
     }
 
-    public void setAdds(Map<String, Range<PartitionKey>> adds) {
+    public void setAdds(List<PartitionRange> adds) {
         this.adds = adds;
     }
 
-    public Map<String, Range<PartitionKey>> getDeletes() {
+    public List<PartitionRange> getDeletes() {
         return deletes;
     }
 
-    public void setDeletes(Map<String, Range<PartitionKey>> deletes) {
+    public void setDeletes(List<PartitionRange> deletes) {
         this.deletes = deletes;
     }
 }

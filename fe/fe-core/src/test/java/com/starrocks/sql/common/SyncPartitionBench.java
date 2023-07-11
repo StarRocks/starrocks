@@ -54,7 +54,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.TimeUnit;
 
-import static com.starrocks.sql.common.SyncPartitionUtils.PartitionRange.PARTITION_RANGE_COMPARATOR;
+import static com.starrocks.sql.common.PartitionRange.PARTITION_RANGE_COMPARATOR;
 
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
@@ -172,7 +172,15 @@ public class SyncPartitionBench {
      */
     @Benchmark
     public void diffRangeBench() {
-        SyncPartitionUtils.diffRange(srcRangeMap, dstRangeMap);
+        List<PartitionRange> sortedSrcRangeMap = Lists.newArrayList();
+        List<PartitionRange> sortedDstRangeMap = Lists.newArrayList();
+        for (Map.Entry<String, Range<PartitionKey>> e : srcRangeMap.entrySet()) {
+            sortedSrcRangeMap.add(new PartitionRange(e.getKey(), e.getValue()));
+        }
+        for (Map.Entry<String, Range<PartitionKey>> e : dstRangeMap.entrySet()) {
+            sortedDstRangeMap.add(new PartitionRange(e.getKey(), e.getValue()));
+        }
+        SyncPartitionUtils.diffRange(sortedSrcRangeMap, sortedDstRangeMap);
     }
 
     /**
@@ -305,18 +313,18 @@ public class SyncPartitionBench {
             return result;
         }
 
-        List<SyncPartitionUtils.PartitionRange> sortedSrcRangeMap = com.google.common.collect.Lists.newArrayList();
-        List<SyncPartitionUtils.PartitionRange> sortedDstRangeMap = Lists.newArrayList();
+        List<PartitionRange> sortedSrcRangeMap = Lists.newArrayList();
+        List<PartitionRange> sortedDstRangeMap = Lists.newArrayList();
         for (Map.Entry<String, Range<PartitionKey>> e : srcRangeMap.entrySet()) {
-            sortedSrcRangeMap.add(new SyncPartitionUtils.PartitionRange(e.getKey(), e.getValue()));
+            sortedSrcRangeMap.add(new PartitionRange(e.getKey(), e.getValue()));
         }
         for (Map.Entry<String, Range<PartitionKey>> e : dstRangeMap.entrySet()) {
-            sortedDstRangeMap.add(new SyncPartitionUtils.PartitionRange(e.getKey(), e.getValue()));
+            sortedDstRangeMap.add(new PartitionRange(e.getKey(), e.getValue()));
         }
         Collections.sort(sortedSrcRangeMap, PARTITION_RANGE_COMPARATOR);
         Collections.sort(sortedDstRangeMap, PARTITION_RANGE_COMPARATOR);
 
-        for (SyncPartitionUtils.PartitionRange srcRange : sortedSrcRangeMap) {
+        for (PartitionRange srcRange : sortedSrcRangeMap) {
             int mid = Collections.binarySearch(sortedDstRangeMap, srcRange);
             if (mid < 0) {
                 continue;

@@ -40,7 +40,6 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -54,12 +53,11 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.SyncPartitionUtils.PartitionRange.PARTITION_RANGE_COMPARATOR;
 import static com.starrocks.sql.common.TimeUnitUtils.DAY;
 import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
 import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
@@ -80,55 +78,17 @@ public class SyncPartitionUtils {
 
     private static final String DEFAULT_PREFIX = "p";
 
-    static class PartitionRange implements Comparable<PartitionRange> {
-        private final Range<PartitionKey> partitionKeyRange;
-        private final String partitionName;
-        PartitionRange(String partitionName, Range<PartitionKey> partitionKeyRange) {
-            this.partitionName = partitionName;
-            this.partitionKeyRange = partitionKeyRange;
-        }
-
-        public Range<PartitionKey> getPartitionKeyRange() {
-            return partitionKeyRange;
-        }
-
-        public String getPartitionName() {
-            return partitionName;
-        }
-
-        @Override
-        public int compareTo(PartitionRange o) {
-            if (isInteract(o)) {
-                return 0;
-            } else {
-                return this.partitionKeyRange.lowerEndpoint().compareTo(o.partitionKeyRange.lowerEndpoint());
-            }
-        }
-
-        public boolean isInteract(PartitionRange o) {
-            return this.partitionKeyRange.upperEndpoint().compareTo(o.partitionKeyRange.lowerEndpoint()) > 0 &&
-                    this.partitionKeyRange.lowerEndpoint().compareTo(o.partitionKeyRange.upperEndpoint()) < 0;
-        }
-
-        public static final Comparator<PartitionRange> PARTITION_RANGE_COMPARATOR =  new Comparator<PartitionRange>() {
-            @Override
-            public int compare(PartitionRange a, PartitionRange b) {
-                return a.compareTo(b);
-            }
-        };
-    }
-
-    public static RangePartitionDiff calcSyncSameRangePartition(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                Map<String, Range<PartitionKey>> mvRangeMap) {
+    public static RangePartitionDiff calcSyncSameRangePartition(List<PartitionRange> baseRangeMap,
+                                                                List<PartitionRange> mvRangeMap) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
-        Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
-        Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, baseRangeMap);
+        List<PartitionRange> adds = diffRange(baseRangeMap, mvRangeMap);
+        List<PartitionRange> deletes = diffRange(mvRangeMap, baseRangeMap);
         return new RangePartitionDiff(adds, deletes);
     }
 
     public static ListPartitionDiff calcSyncSameListPartition(Map<String, List<List<String>>> baseListMap,
-                                                                Map<String, List<List<String>>> mvListMap) {
+                                                              Map<String, List<List<String>>> mvListMap) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         Map<String, List<List<String>>> adds = diffList(baseListMap, mvListMap);
@@ -137,35 +97,35 @@ public class SyncPartitionUtils {
     }
 
 
-    public static boolean hasPartitionChange(Map<String, Range<PartitionKey>> baseRangeMap,
-                                             Map<String, Range<PartitionKey>> mvRangeMap) {
-        Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
+    public static boolean hasPartitionChange(List<PartitionRange> baseRangeMap,
+                                             List<PartitionRange> mvRangeMap) {
+        List<PartitionRange> adds = diffRange(baseRangeMap, mvRangeMap);
         if (adds != null && !adds.isEmpty()) {
             return true;
         }
-        Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, baseRangeMap);
+        List<PartitionRange> deletes = diffRange(mvRangeMap, baseRangeMap);
         return deletes != null && !deletes.isEmpty();
     }
 
-    public static RangePartitionDiff calcSyncRollupPartition(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                             Map<String, Range<PartitionKey>> mvRangeMap,
+    public static RangePartitionDiff calcSyncRollupPartition(List<PartitionRange> baseRangeMap,
+                                                             List<PartitionRange> mvRangeMap,
                                                              String granularity, PrimitiveType partitionType) {
-        Map<String, Range<PartitionKey>> rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
+        List<PartitionRange> rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
         Map<String, Set<String>> partitionRefMap = generatePartitionRefMap(rollupRange, baseRangeMap);
-        Map<String, Range<PartitionKey>> adds = diffRange(rollupRange, mvRangeMap);
-        Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, rollupRange);
+        List<PartitionRange> adds = diffRange(rollupRange, mvRangeMap);
+        List<PartitionRange> deletes = diffRange(mvRangeMap, rollupRange);
         RangePartitionDiff diff = new RangePartitionDiff(adds, deletes);
         diff.setRollupToBasePartitionMap(partitionRefMap);
         return diff;
 
     }
 
-    public static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                    String granularity, PrimitiveType partitionType) {
+    public static List<PartitionRange> mappingRangeList(List<PartitionRange> baseRangeMap,
+                                                        String granularity, PrimitiveType partitionType) {
         Set<LocalDateTime> timePointSet = Sets.newTreeSet();
         try {
-            for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
-                PartitionMapping mappedRange = mappingRange(rangeEntry.getValue(), granularity);
+            for (PartitionRange range : baseRangeMap) {
+                PartitionMapping mappedRange = mappingRange(range.getPartitionKeyRange(), granularity);
                 // this mappedRange may exist range overlap
                 timePointSet.add(mappedRange.getLowerDateTime());
                 timePointSet.add(mappedRange.getUpperDateTime());
@@ -175,7 +135,7 @@ public class SyncPartitionUtils {
         }
         List<LocalDateTime> timePointList = Lists.newArrayList(timePointSet);
         // deal overlap
-        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        List<PartitionRange> result = Lists.newArrayList();
         if (timePointList.size() < 2) {
             return result;
         }
@@ -193,7 +153,7 @@ public class SyncPartitionUtils {
                     upperPartitionKey.pushColumn(new DateLiteral(upperDateTime, Type.DATETIME), partitionType);
                 }
                 String mvPartitionName = getMVPartitionName(lowerDateTime, upperDateTime, granularity);
-                result.put(mvPartitionName, Range.closedOpen(lowerPartitionKey, upperPartitionKey));
+                result.add(new PartitionRange(mvPartitionName, Range.closedOpen(lowerPartitionKey, upperPartitionKey)));
             } catch (AnalysisException ex) {
                 throw new SemanticException("Convert to DateLiteral failed:", ex);
             }
@@ -223,42 +183,34 @@ public class SyncPartitionUtils {
         return new PartitionMapping(truncLowerDateTime, truncUpperDateTime);
     }
 
-    public static Map<String, Set<String>> generatePartitionRefMap(Map<String, Range<PartitionKey>> srcRangeMap,
-                                                                   Map<String, Range<PartitionKey>> dstRangeMap) {
+    public static Map<String, Set<String>> generatePartitionRefMap(List<PartitionRange> srcPartitionRanges,
+                                                                   List<PartitionRange> dstPartitionRanges) {
         Map<String, Set<String>> result = Maps.newHashMap();
-        srcRangeMap.keySet().stream().forEach(x -> result.put(x, Sets.newHashSet()));
-        if (dstRangeMap.isEmpty()) {
+        srcPartitionRanges.stream().forEach(x -> result.put(x.getPartitionName(), Sets.newHashSet()));
+        if (dstPartitionRanges.isEmpty()) {
             return result;
         }
 
-        List<SyncPartitionUtils.PartitionRange> sortedSrcRangeMap = Lists.newArrayList();
-        List<SyncPartitionUtils.PartitionRange> sortedDstRangeMap = Lists.newArrayList();
-        for (Map.Entry<String, Range<PartitionKey>> e : srcRangeMap.entrySet()) {
-            sortedSrcRangeMap.add(new SyncPartitionUtils.PartitionRange(e.getKey(), e.getValue()));
-        }
-        for (Map.Entry<String, Range<PartitionKey>> e : dstRangeMap.entrySet()) {
-            sortedDstRangeMap.add(new SyncPartitionUtils.PartitionRange(e.getKey(), e.getValue()));
-        }
-        Collections.sort(sortedSrcRangeMap, PARTITION_RANGE_COMPARATOR);
-        Collections.sort(sortedDstRangeMap, PARTITION_RANGE_COMPARATOR);
+        Collections.sort(srcPartitionRanges, PartitionRange::compareTo);
+        Collections.sort(dstPartitionRanges, PartitionRange::compareTo);
 
-        for (SyncPartitionUtils.PartitionRange srcRange : sortedSrcRangeMap) {
-            int mid = Collections.binarySearch(sortedDstRangeMap, srcRange);
+        for (PartitionRange srcRange : srcPartitionRanges) {
+            int mid = Collections.binarySearch(dstPartitionRanges, srcRange);
             if (mid < 0) {
                 continue;
             }
             Set<String> addedSet = result.get(srcRange.getPartitionName());
-            addedSet.add(sortedDstRangeMap.get(mid).getPartitionName());
+            addedSet.add(dstPartitionRanges.get(mid).getPartitionName());
 
             int lower = mid - 1;
-            while (lower >= 0 && sortedDstRangeMap.get(lower).isInteract(srcRange)) {
-                addedSet.add(sortedDstRangeMap.get(lower).getPartitionName());
+            while (lower >= 0 && dstPartitionRanges.get(lower).isInteract(srcRange)) {
+                addedSet.add(dstPartitionRanges.get(lower).getPartitionName());
                 lower--;
             }
 
             int higher = mid + 1;
-            while (higher < sortedDstRangeMap.size() && sortedDstRangeMap.get(higher).isInteract(srcRange)) {
-                addedSet.add(sortedDstRangeMap.get(higher).getPartitionName());
+            while (higher < dstPartitionRanges.size() && dstPartitionRanges.get(higher).isInteract(srcRange)) {
+                addedSet.add(dstPartitionRanges.get(higher).getPartitionName());
                 higher++;
             }
         }
@@ -406,22 +358,20 @@ public class SyncPartitionUtils {
         return truncLowerDateTime;
     }
 
-    public static Map<String, Range<PartitionKey>> diffRange(Map<String, Range<PartitionKey>> srcRangeMap,
-                                                             Map<String, Range<PartitionKey>> dstRangeMap) {
-
-        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
-            if (!dstRangeMap.containsKey(srcEntry.getKey()) ||
-                    !RangeUtils.isRangeEqual(srcEntry.getValue(), dstRangeMap.get(srcEntry.getKey()))) {
-                result.put(srcEntry.getKey(), srcEntry.getValue());
+    public static List<PartitionRange> diffRange(List<PartitionRange> srcRangeMap,
+                                                 List<PartitionRange> dstRangeMap) {
+        List<PartitionRange> result = Lists.newArrayList();
+        Set<PartitionRange> dstRangeSet = dstRangeMap.stream().collect(Collectors.toSet());
+        for (PartitionRange range : srcRangeMap) {
+            if (!dstRangeSet.contains(range)) {
+                result.add(range);
             }
         }
         return result;
     }
 
     public static Map<String, List<List<String>>> diffList(Map<String, List<List<String>>> srcListMap,
-                                                             Map<String, List<List<String>>> dstListMap) {
-
+                                                           Map<String, List<List<String>>> dstListMap) {
         Map<String, List<List<String>>> result = Maps.newHashMap();
         for (Map.Entry<String, List<List<String>>> srcEntry : srcListMap.entrySet()) {
             String key = srcEntry.getKey();
@@ -446,13 +396,13 @@ public class SyncPartitionUtils {
             Column partitionColumn =
                     ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
             Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
-            Map<String, Range<PartitionKey>> rangeMap = materializedView.getValidRangePartitionMap(partitionTTLNumber);
-            for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
-                Range<PartitionKey> rangeToCheck = entry.getValue();
+            List<PartitionRange> validRanges = materializedView.getValidRangePartitionMap(partitionTTLNumber);
+            for (PartitionRange partitionRange : validRanges) {
+                Range<PartitionKey> rangeToCheck = partitionRange.getPartitionKeyRange();
                 int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
                 int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
                 if (!(lowerCmp >= 0 || upperCmp <= 0)) {
-                    result.add(entry.getKey());
+                    result.add(partitionRange.getPartitionName());
                 }
             }
             return result;
@@ -469,13 +419,14 @@ public class SyncPartitionUtils {
             lastPartitionNum = TableProperty.INVALID;
         }
 
-        return materializedView.getValidRangePartitionMap(lastPartitionNum).keySet();
+        return materializedView.getValidRangePartitionMap(lastPartitionNum).stream()
+                .map(PartitionRange::getPartitionName).collect(Collectors.toSet());
     }
 
     public static Set<String> getPartitionNamesByListWithPartitionLimit(MaterializedView materializedView,
-                                                                         String start, String end,
-                                                                         int partitionTTLNumber,
-                                                                         boolean isAutoRefresh) {
+                                                                        String start, String end,
+                                                                        int partitionTTLNumber,
+                                                                        boolean isAutoRefresh) {
         int autoRefreshPartitionsLimit = materializedView.getTableProperty().getAutoRefreshPartitionsLimit();
         boolean hasPartitionRange = StringUtils.isNoneEmpty(start) || StringUtils.isNoneEmpty(end);
 
@@ -551,9 +502,9 @@ public class SyncPartitionUtils {
             Map<String, MaterializedView.BasePartitionInfo> mvTableVersionMap = versionMap.get(tableId);
             if (mvTableVersionMap != null && mvPartitionRange != null && baseTable instanceof OlapTable) {
                 // use range derive connect base partition
-                Map<String, Range<PartitionKey>> basePartitionMap = ((OlapTable) baseTable).getRangePartitionMap();
+                List<PartitionRange> basePartitionMap = ((OlapTable) baseTable).getPartitionRanges();
                 Map<String, Set<String>> mvToBaseMapping = generatePartitionRefMap(
-                        Collections.singletonMap(mvPartitionName, mvPartitionRange), basePartitionMap);
+                        Lists.newArrayList(new PartitionRange(mvPartitionName, mvPartitionRange)), basePartitionMap);
                 mvToBaseMapping.values().forEach(parts -> parts.forEach(mvTableVersionMap::remove));
             }
         } else {
@@ -603,7 +554,6 @@ public class SyncPartitionUtils {
         }
     }
 
-
     public static void dropBaseVersionMeta(MaterializedView mv, String mvPartitionName,
                                            Range<PartitionKey> partitionRange) {
         MaterializedView.AsyncRefreshContext refreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
@@ -621,5 +571,21 @@ public class SyncPartitionUtils {
         // base version meta for olap table and external table are different, we need to drop them separately
         dropBaseVersionMetaForOlapTable(mv, mvPartitionName, partitionRange, refreshContext, tableName);
         dropBaseVersionMetaForExternalTable(mv, mvPartitionName, refreshContext, tableName);
+    }
+
+    public static List<PartitionRange> toList(Map<String, Range<PartitionKey>> rangeMap) {
+        List<PartitionRange> sortedSrcRangeMap = Lists.newArrayList();
+        for (Map.Entry<String, Range<PartitionKey>> e : rangeMap.entrySet()) {
+            sortedSrcRangeMap.add(new PartitionRange(e.getKey(), e.getValue()));
+        }
+        return sortedSrcRangeMap;
+    }
+
+    public static Map<String, Range<PartitionKey>> toMap(List<PartitionRange> partitionRanges) {
+        Map<String, Range<PartitionKey>> rangeMap = Maps.newHashMap();
+        for (PartitionRange range : partitionRanges)  {
+            rangeMap.put(range.getPartitionName(), range.getPartitionKeyRange());
+        }
+        return rangeMap;
     }
 }
