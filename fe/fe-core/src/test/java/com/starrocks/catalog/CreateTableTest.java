@@ -783,6 +783,187 @@ public class CreateTableTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testAutomaticPartitionTableLimit() {
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.site_access_part_partition(\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 month)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.site_access_interval_not_1 (\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-10-01\") EVERY (INTERVAL 2 month)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.site_access_granularity_does_not_match (\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-10-01\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.site_access_granularity_does_not_match (\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-10-01\") EVERY (INTERVAL 1 month)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE site_access_use_time_slice (\n" +
+                        "    event_day datetime,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY time_slice(event_day, interval 1 day)(\n" +
+                        "\tSTART (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+    }
+
+    @Test
+    public void testCannotCreateOlapTable() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Cannot create table without persistent volume in current run mode \"shared_data\"",
+                () -> createTable(
+                        "CREATE TABLE test.base_table2(\n" +
+                                "k1 INT,\n" +
+                                "k2 VARCHAR(20),\n" +
+                                "k3 INT,\n" +
+                                "k4 VARCHAR(20),\n" +
+                                "k5 INT,\n" +
+                                "k6 VARCHAR(20),\n" +
+                                "k7 INT,\n" +
+                                "k8 VARCHAR(20)\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"storage_volume\" = \"local\"\n" +
+                                ");"
+                ));
+    }
+
+    @Test
+    public void testCreateTableInSystemDb() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Can't create table 'goods' (errno: cannot create table in system database)",
+                () -> createTable(
+                        "CREATE TABLE information_schema.goods(\n" +
+                                "    item_id1          INT,\n" +
+                                "    item_name         STRING,\n" +
+                                "    price             FLOAT\n" +
+                                ") DISTRIBUTED BY HASH(item_id1)\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");"
+                ));
+    }
+
+    @Test
+
+    public void testCreatePartitionByExprTable() {
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable(
+                        "CREATE TABLE test.`bill_detail` (\n" +
+                                "  `bill_code` varchar(200) NOT NULL DEFAULT \"\" COMMENT \"\"\n" +
+                                ") ENGINE=OLAP \n" +
+                                "PRIMARY KEY(`bill_code`)\n" +
+                                "PARTITION BY RANGE(cast(substring(bill_code, 3) as bigint))\n" +
+                                "(PARTITION p1 VALUES [('0'), ('5000000')),\n" +
+                                "PARTITION p2 VALUES [('5000000'), ('10000000')),\n" +
+                                "PARTITION p3 VALUES [('10000000'), ('15000000')),\n" +
+                                "PARTITION p4 VALUES [('15000000'), ('20000000'))\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"in_memory\" = \"false\",\n" +
+                                "\"storage_format\" = \"DEFAULT\"\n" +
+                                ");"
+                ));
+    }
+
+    @Test
+    public void testCreateTextTable() {
+        // duplicate tabl
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.text_tbl\n" +
+                        "(k1 int, j text)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+
+    @Test
+>>>>>>> ddab92cab0 ([BugFix] improve error message when creating table in system database (#26943))
     public void testCreateCrossDatabaseColocateTable() throws Exception {
         starRocksAssert.withDatabase("dwd");
         String sql1 = "CREATE TABLE dwd.dwd_site_scan_dtl_test (\n" +

@@ -2577,11 +2577,34 @@ public class LocalMetastore implements ConnectorMetadata {
             if (getDb(db.getFullName()) == null) {
                 throw new DdlException("Database has been dropped when creating table");
             }
+<<<<<<< HEAD
             if (!db.createTableWithLock(table, false)) {
                 if (!stmt.isSetIfNotExists()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), "table already exists");
                 } else {
                     LOG.info("Create table[{}] which already exists", table.getName());
+=======
+
+            if (db.isSystemDatabase()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                        "cannot create table in system database");
+            }
+
+            db.writeLock();
+            try {
+                if (!db.registerTableUnlocked(table)) {
+                    if (!isSetIfNotExists) {
+                        if (table instanceof OlapTable) {
+                            OlapTable olapTable = (OlapTable) table;
+                            olapTable.onErase(false);
+                        }
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                                "table already exists");
+                    } else {
+                        LOG.info("Create table[{}] which already exists", table.getName());
+                        return;
+                    }
+>>>>>>> ddab92cab0 ([BugFix] improve error message when creating table in system database (#26943))
                 }
             }
         } finally {
