@@ -412,7 +412,7 @@ public:
     void check_short_circuit();
 
     bool need_report_exec_state();
-    void report_exec_state();
+    void report_exec_state_if_necessary();
 
     std::string to_readable_string() const;
 
