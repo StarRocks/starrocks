@@ -2,7 +2,7 @@
 
 ## 功能
 
-该语句用于修改已有 table。
+该语句用于修改已有表的结构。
 
 ## 语法
 
@@ -13,7 +13,7 @@ ALTER TABLE [database.]table
 alter_clause1[, alter_clause2, ...]
 ```
 
-其中 **alter_clause** 分为 partition、rollup、schema change、rename、index 和 swap 六种操作，不同操作的应用场景为：
+其中 **alter_clause** 分为 partition、rollup、schema change、rename、index、swap 操作，不同操作的应用场景为：
 
 * partition: 修改分区属性，删除分区，增加分区。
 * rollup: 创建或删除 rollup index。
@@ -24,7 +24,7 @@ alter_clause1[, alter_clause2, ...]
 
 > 说明：
 >
-> * partition、rollup 和schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
+> * partition、rollup 和 schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
 > * rollup、schema change 和 swap 是异步操作，可使用 [SHOW ALTER](../data-manipulation/SHOW%20ALTER.md) 语句查看进度。partition、rename 和 index 是同步操作，命令返回表示执行完毕。
 
 ### 操作 partition 相关语法
@@ -204,7 +204,7 @@ ALTER TABLE [database.]table DROP ROLLUP r1, r2;
 
 不能删除 base index。
 
-### schema change
+### Schema change
 
 下文中的 index 为物化索引。建表成功后表为 base 表 (base index)，基于 base 表可 [创建 rollup index](#创建-rollup-index-add-rollup)。
 
@@ -310,7 +310,7 @@ ORDER BY (column_name1, column_name2, ...)
 1. index 中的所有列都要写出来。
 2. value 列在 key 列之后。
 
-#### 修改 table 的属性
+#### 修改表的属性
 
 目前支持修改 `bloom_filter_columns`，`colocate_with`， `dynamic_partition` 属性，`enable_persistent_index` 属性，`replication_num` 和 `default.replication_num` 属性。
 
@@ -323,7 +323,7 @@ PROPERTIES ("key"="value")
 注意：
 也可以合并到上面的 schema change 操作中来修改，见下面例子。
 
-### rename 对名称进行修改
+### Rename 对名称进行修改
 
 #### 修改表名
 
@@ -351,9 +351,9 @@ ALTER TABLE [database.]table
 RENAME PARTITION old_partition_name new_partition_name;
 ```
 
-### bitmap index 修改
+### Bitmap index 修改
 
-#### 创建 bitmap 索引 (ADD INDEX)
+#### 创建 Bitmap 索引 (ADD INDEX)
 
 语法：
 
@@ -378,7 +378,7 @@ ALTER TABLE [database.]table
 DROP INDEX index_name;
 ```
 
-### swap 将两个表原子替换
+### Swap 将两个表原子替换
 
 语法：
 
