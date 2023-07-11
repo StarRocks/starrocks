@@ -65,7 +65,10 @@ struct ResourceMemTrackerGuard {
         return true;
     }
 
-    void scoped_end() const { tls_thread_status.set_mem_tracker(old_tracker); }
+    void scoped_end() const {
+        tls_thread_status.set_mem_tracker(old_tracker);
+        captured = {};
+    }
 
 private:
     auto capture(const std::tuple<WeakPtrs...>& weak_tup) const
