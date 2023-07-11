@@ -4,6 +4,10 @@
 
 Creates a new table in StarRocks.
 
+> **NOTE**
+>
+> This operation requires the CREATE TABLE privilege on the destination database.
+
 ## Syntax
 
 ```Plain%20Text
@@ -200,6 +204,12 @@ Data is sequenced in specified key columns and has different attributes for diff
 > **NOTE**
 >
 > Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
+
+### COMMENT
+
+You can add a table comment when you create a table, optional. Note that COMMENT must be placed after `key_desc`. Otherwise, the table cannot be created.
+
+From v3.1 onwards, you can modify the table comment suing `ALTER TABLE <table_name> COMMENT = "new table comment"`.
 
 ### partition_desc
 
@@ -844,3 +854,10 @@ PROPERTIES(
     "enable_persistent_index" = "true"
 );
 ```
+
+## References
+
+- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+- [ALTER TABLE](ALTER%20TABLE.md)
+- [DROP TABLE](DROP%20TABLE.md)
