@@ -4,10 +4,6 @@
 
 Creates a new table in StarRocks.
 
-> **NOTE**
->
-> This operation requires the CREATE TABLE privilege on the destination database.
-
 ## Syntax
 
 ```Plain%20Text
