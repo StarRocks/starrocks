@@ -48,28 +48,28 @@ import com.starrocks.proto.VacuumResponse;
 import java.util.concurrent.Future;
 
 public interface LakeService {
-    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = 5000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = /*1m=*/60000)
     Future<PublishVersionResponse> publishVersion(PublishVersionRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "abort_txn", onceTalkTimeout = 5000)
     Future<AbortTxnResponse> abortTxn(AbortTxnRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = /*24 hours=*/86400000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = /*24H=*/86400000)
     Future<CompactResponse> compact(CompactRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = /*10 minutes=*/60000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = /*10m=*/60000)
     Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "delete_data", onceTalkTimeout = 300000)
     Future<DeleteDataResponse> deleteData(DeleteDataRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "get_tablet_stats", onceTalkTimeout = 5000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "get_tablet_stats", onceTalkTimeout = /*5m=*/300000)
     Future<TabletStatResponse> getTabletStats(TabletStatRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "drop_table", onceTalkTimeout = 5000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "drop_table", onceTalkTimeout = /*5m=*/300000)
     Future<DropTableResponse> dropTable(DropTableRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = 5000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = /*1m=*/60000)
     Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "lock_tablet_metadata", onceTalkTimeout = 5000)
@@ -87,7 +87,7 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "abort_compaction", onceTalkTimeout = 5000)
     Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum", onceTalkTimeout = /*10 minutes=*/600000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum", onceTalkTimeout = /*10m=*/600000)
     Future<VacuumResponse> vacuum(VacuumRequest request);
 }
 
