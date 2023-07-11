@@ -275,7 +275,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private void reportWorkerNotFoundException(boolean chooseComputeNode) throws SchedulerException {
-        throw new SchedulerException(
+        throw new NonRecoverableException(
                 FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode));
     }
 
