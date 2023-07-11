@@ -321,7 +321,7 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
         auto array1 = ColumnHelper::create_column(type_arr_int, false);
         array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)41)}); // [11,41]
         array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
-        array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});       // [NULL, 1]
+        array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});             // [NULL, 1]
         auto array_expr1 = MockExpr(type_arr_int, array1);
 
         expr0->_children.push_back(&select_internal);
