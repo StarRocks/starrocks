@@ -16,6 +16,7 @@ package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaNotFoundException;
 import com.starrocks.storagevolume.StorageVolume;
 
 import java.util.List;
@@ -113,5 +114,18 @@ public class StorageVolumePEntryObject implements PEntryObject {
     @Override
     public PEntryObject clone() {
         return new StorageVolumePEntryObject(id);
+    }
+
+    @Override
+    public String toString() {
+        if (id.equalsIgnoreCase(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID)) {
+            return "ALL STORAGE VOLUMES";
+        } else {
+            String storageVolumeName = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(id);
+            if (storageVolumeName.isEmpty()) {
+                throw new MetaNotFoundException("Can't find storage volume : " + id);
+            }
+            return storageVolumeName;
+        }
     }
 }
