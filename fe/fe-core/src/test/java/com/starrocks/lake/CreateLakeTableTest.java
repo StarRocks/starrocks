@@ -289,6 +289,19 @@ public class CreateLakeTableTest {
 
     @Test
     public void testCreateLakeTableException() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) throws DdlException {
+                return FilePathInfo.newBuilder().build();
+            }
+        };
+
         // storage_cache disabled but enable_async_write_back = true
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "enable_async_write_back can't be turned on when cache is disabled",
@@ -296,6 +309,16 @@ public class CreateLakeTableTest {
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
                                 "distributed by hash(key1) buckets 3\n" +
                                 " properties('datacache.enable' = 'false', 'enable_async_write_back' = 'true');"));
+
+        // do not support list partition
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Do not support create list partition Cloud Native table",
+                () -> createTable(
+                        "create table lake_test.list_partition_invalid (dt date not null, key2 varchar(10))\n" +
+                                "PARTITION BY LIST (dt) (PARTITION p1 VALUES IN ((\"2022-04-01\")),\n" +
+                                "PARTITION p2 VALUES IN ((\"2022-04-02\")),\n" +
+                                "PARTITION p3 VALUES IN ((\"2022-04-03\")))\n" +
+                                "distributed by hash(dt) buckets 3;"));
     }
 
     @Test
