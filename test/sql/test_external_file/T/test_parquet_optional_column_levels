@@ -1,0 +1,19 @@
+-- name: testParquetOptionalColumnLevels
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/optional_column_levels >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/optional_column_levels.parq oss://${oss_bucket}/test_external_file/optional_column_levels/optional_column_levels.parq | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE opt_col_levels
+(
+    c0 int,
+    c_struct struct<c1 int>
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_external_file/optional_column_levels/optional_column_levels.parq",
+    "format" = "parquet"
+);
+
+select * from opt_col_levels where c0 = 403350;
+select * from opt_col_levels where c0 = 403376;
