@@ -17,7 +17,7 @@ package com.starrocks.qe;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.planner.HdfsScanNode;
-import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -110,7 +110,7 @@ public class HDFSBackendSelectorTest {
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
         ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
-        WorkerProvider workerProvider = new WorkerProvider(
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
                 ImmutableMap.of(),
                 computeNodes,
                 ImmutableMap.of(),
@@ -162,7 +162,7 @@ public class HDFSBackendSelectorTest {
 
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
         ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
-        WorkerProvider workerProvider = new WorkerProvider(
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
                 ImmutableMap.of(),
                 computeNodes,
                 ImmutableMap.of(),

@@ -45,7 +45,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class WorkerProviderTest {
+public class DefaultWorkerProviderTest {
     private final ImmutableMap<Long, ComputeNode> id2Backend = genWorkers(0, 10, Backend::new);
     private final ImmutableMap<Long, ComputeNode> id2ComputeNode = genWorkers(10, 15, ComputeNode::new);
     private final ImmutableMap<Long, ComputeNode> availableId2Backend = ImmutableMap.of(
@@ -95,7 +95,7 @@ public class WorkerProviderTest {
         };
 
         Reference<Integer> nextComputeNodeIndex = new Reference<>(0);
-        new MockUp<WorkerProvider>() {
+        new MockUp<DefaultWorkerProvider>() {
             @Mock
             int getNextComputeNodeIndex() {
                 int next = nextComputeNodeIndex.getRef();
@@ -116,15 +116,15 @@ public class WorkerProviderTest {
             }
         };
 
-        WorkerProvider workerProvider;
+        DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
+        DefaultWorkerProvider workerProvider;
         List<Integer> numUsedComputeNodesList = ImmutableList.of(100, 0, -1, 1, 2, 3, 4, 5, 6);
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             // Reset nextComputeNodeIndex.
             nextComputeNodeIndex.setRef(0);
 
-            workerProvider =
-                    WorkerProvider.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), true,
-                            numUsedComputeNodes);
+            workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), true,
+                    numUsedComputeNodes);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -167,7 +167,7 @@ public class WorkerProviderTest {
             };
 
             Reference<Integer> nextComputeNodeIndex = new Reference<>(0);
-            new MockUp<WorkerProvider>() {
+            new MockUp<DefaultWorkerProvider>() {
                 @Mock
                 int getNextComputeNodeIndex() {
                     int next = nextComputeNodeIndex.getRef();
@@ -183,14 +183,15 @@ public class WorkerProviderTest {
                 }
             };
 
-            WorkerProvider workerProvider;
+            DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
+            DefaultWorkerProvider workerProvider;
             List<Integer> numUsedComputeNodesList = ImmutableList.of(100, 0, -1, 1, 2, 3, 4, 5, 6);
             for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
                 // Reset nextComputeNodeIndex.
                 nextComputeNodeIndex.setRef(0);
 
                 workerProvider =
-                        WorkerProvider.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), false,
+                        workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), false,
                                 numUsedComputeNodes);
 
                 for (long id = 0; id < 15; id++) {
@@ -214,8 +215,9 @@ public class WorkerProviderTest {
 
     @Test
     public void testChooseBackend() throws UserException {
-        WorkerProvider workerProvider =
-                new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
+        DefaultWorkerProvider workerProvider =
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
+                        true);
         for (long id = 0; id < 15; id++) {
             if (availableId2Backend.containsKey(id)) {
                 ComputeNode backend = availableId2Backend.get(id);
@@ -225,12 +227,12 @@ public class WorkerProviderTest {
                 testUsingWorkerHelper(workerProvider, backend);
             } else {
                 long finalId = id;
-                Assert.assertThrows(UserException.class, () -> workerProvider.chooseBackend(finalId));
+                Assert.assertThrows(SchedulerException.class, () -> workerProvider.chooseBackend(finalId));
             }
         }
     }
 
-    private static <C extends ComputeNode> void testChooseNextWorkerHelper(WorkerProvider workerProvider,
+    private static <C extends ComputeNode> void testChooseNextWorkerHelper(DefaultWorkerProvider workerProvider,
                                                                            Map<Long, C> id2Worker)
             throws UserException {
 
@@ -252,37 +254,43 @@ public class WorkerProviderTest {
 
     @Test
     public void testChooseNextWorker() throws UserException {
-        WorkerProvider workerProvider;
+        DefaultWorkerProvider workerProvider;
         Reference<Long> workerIdRef = new Reference<>();
 
         workerProvider =
-                new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
+                        true);
         testChooseNextWorkerHelper(workerProvider, availableId2ComputeNode);
 
-        workerProvider = new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true);
+        workerProvider =
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true);
         testChooseNextWorkerHelper(workerProvider, availableId2Backend);
 
         workerProvider =
-                new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, false);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
+                        false);
         testChooseNextWorkerHelper(workerProvider, availableId2Backend);
 
-        workerProvider = new WorkerProvider(id2Backend, id2ComputeNode, ImmutableMap.of(), ImmutableMap.of(), false);
-        WorkerProvider finalWorkerProvider = workerProvider;
-        Assert.assertThrows(UserException.class, () -> finalWorkerProvider.chooseNextWorker(workerIdRef));
+        workerProvider =
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, ImmutableMap.of(), ImmutableMap.of(), false);
+        DefaultWorkerProvider finalWorkerProvider = workerProvider;
+        Assert.assertThrows(SchedulerException.class, () -> finalWorkerProvider.chooseNextWorker(workerIdRef));
     }
 
     @Test
     public void testChooseAllComputedNodes() {
-        WorkerProvider workerProvider;
+        DefaultWorkerProvider workerProvider;
         List<TNetworkAddress> computeNodeAddrs;
 
         workerProvider =
-                new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, false);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
+                        false);
         computeNodeAddrs = workerProvider.chooseAllComputedNodes();
         Assert.assertTrue(computeNodeAddrs.isEmpty());
 
         workerProvider =
-                new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
+                        true);
         computeNodeAddrs = workerProvider.chooseAllComputedNodes();
         Assert.assertEquals(availableId2ComputeNode.size(), computeNodeAddrs.size());
         Set<TNetworkAddress> computeNodeAddrSet = new HashSet<>(computeNodeAddrs);
@@ -293,7 +301,7 @@ public class WorkerProviderTest {
         }
     }
 
-    private static <C extends ComputeNode> void testGetBackendHelper(WorkerProvider workerProvider,
+    private static <C extends ComputeNode> void testGetBackendHelper(DefaultWorkerProvider workerProvider,
                                                                      Map<Long, C> availableId2Worker) {
         for (long id = -1; id < 16; id++) {
             ComputeNode backend = workerProvider.getBackend(id);
@@ -311,38 +319,43 @@ public class WorkerProviderTest {
 
     @Test
     public void testGetBackend() {
-        WorkerProvider workerProvider =
-                new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
+        DefaultWorkerProvider workerProvider =
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
+                        true);
         testGetBackendHelper(workerProvider, availableId2Backend);
     }
 
     @Test
     public void testGetWorkersPreferringComputeNode() {
-        WorkerProvider workerProvider;
+        DefaultWorkerProvider workerProvider;
 
         workerProvider =
-                new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
+                        true);
         assertThat(workerProvider.getWorkers())
                 .containsOnlyOnceElementsOf(availableId2ComputeNode.values());
 
-        workerProvider = new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true);
+        workerProvider =
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, ImmutableMap.of(), true);
         assertThat(workerProvider.getWorkers())
                 .containsOnlyOnceElementsOf(availableId2Backend.values());
 
         workerProvider =
-                new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, false);
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
+                        false);
         assertThat(workerProvider.getWorkers())
                 .containsOnlyOnceElementsOf(availableId2ComputeNode.values());
     }
 
     @Test
     public void testReportBackendNotFoundException() {
-        WorkerProvider workerProvider =
-                new WorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode, true);
+        DefaultWorkerProvider workerProvider =
+                new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
+                        true);
         Assert.assertThrows(SchedulerException.class, workerProvider::reportBackendNotFoundException);
     }
 
-    public static void testUsingWorkerHelper(WorkerProvider workerProvider, ComputeNode worker) {
+    public static void testUsingWorkerHelper(DefaultWorkerProvider workerProvider, ComputeNode worker) {
         Assert.assertTrue(workerProvider.isUsingWorker(worker.getId()));
         Assert.assertEquals(worker.getHttpAddress(), workerProvider.getUsedHttpAddrByBeAddr(worker.getAddress()));
         Assert.assertEquals(worker, workerProvider.getUsedWorkerByBeAddr(worker.getAddress()));

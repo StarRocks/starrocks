@@ -51,6 +51,7 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
+import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -142,6 +143,7 @@ public class CoordinatorPreprocessor {
     private final Map<Integer, TNetworkAddress> channelIdToBEHTTP = Maps.newHashMap();
     private final Map<Integer, TNetworkAddress> channelIdToBEPort = Maps.newHashMap();
 
+    private final WorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
     private WorkerProvider workerProvider;
 
     // Resource group
@@ -160,7 +162,7 @@ public class CoordinatorPreprocessor {
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider = WorkerProvider.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
     }
 
@@ -177,7 +179,7 @@ public class CoordinatorPreprocessor {
         this.fragments = fragments;
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider = WorkerProvider.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
@@ -326,7 +328,7 @@ public class CoordinatorPreprocessor {
      */
     private void resetExec() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        workerProvider = WorkerProvider.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
+        workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
 
         fragments.forEach(PlanFragment::reset);
