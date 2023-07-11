@@ -434,11 +434,20 @@ bool PipelineDriver::need_report_exec_state() {
     return _fragment_ctx->need_report_exec_state();
 }
 
-void PipelineDriver::report_exec_state() {
+void PipelineDriver::report_exec_state_if_necessary() {
     if (_state == DriverState::NOT_READY || _state == DriverState::FINISH || _state == DriverState::CANCELED ||
         _state == DriverState::INTERNAL_ERROR) {
         return;
     }
+
+    COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
+    COUNTER_SET(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
+    for (auto& op : _operators) {
+        COUNTER_SET(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +
+                                              op->_finishing_timer->value() + op->_finished_timer->value() +
+                                              op->_close_timer->value());
+    }
+
     _fragment_ctx->report_exec_state_if_necessary();
 }
 
@@ -548,8 +557,8 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, in
 
     set_driver_state(state);
 
-    COUNTER_UPDATE(_total_timer, _total_timer_sw->elapsed_time());
-    COUNTER_UPDATE(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
+    COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
+    COUNTER_SET(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
     _update_overhead_timer();
 
     // Acquire the pointer to avoid be released when removing query
@@ -574,9 +583,9 @@ void PipelineDriver::_update_overhead_timer() {
 
     if (overhead_time < 0) {
         // All the time are recorded indenpendently, and there may be errors
-        COUNTER_UPDATE(_overhead_timer, 0);
+        COUNTER_SET(_overhead_timer, static_cast<int64_t>(0));
     } else {
-        COUNTER_UPDATE(_overhead_timer, overhead_time);
+        COUNTER_SET(_overhead_timer, overhead_time);
     }
 }
 
@@ -706,9 +715,8 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
         QUERY_TRACE_SCOPED(op->get_name(), "close");
         op->close(state);
     }
-    COUNTER_UPDATE(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +
-                                             op->_finishing_timer->value() + op->_finished_timer->value() +
-                                             op->_close_timer->value());
+    COUNTER_SET(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() + op->_finishing_timer->value() +
+                                          op->_finished_timer->value() + op->_close_timer->value());
     return Status::OK();
 }
 
