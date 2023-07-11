@@ -17,7 +17,7 @@ The following scenario calculates UVs based on detailed data in table (dt, page,
 |   20191206  |   game  | 101 |
 |   20191206  |   shopping  | 101 |
 |   20191206  |   game  | 101 |
-|   20191206  |   game  | 101 |
+|   20191206  |   shopping  | 101 |
 
 StarRocks computes data according to the following figure. It first groups data by the `page` and `user_id` columns, and then counts the processed result.
 
