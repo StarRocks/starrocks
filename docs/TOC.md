@@ -261,6 +261,7 @@
       + [SHOW BACKUP](./sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md)
       + [SHOW CATALOGS](./sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)
       + [SHOW CREATE CATALOG](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md)
+      + [SHOW CREATE DATABASE](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20DATABASE.md)
       + [SHOW CREATE MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20MATERIALIZED%20VIEW.md)
       + [SHOW CREATE TABLE](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md)
       + [SHOW CREATE VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20VIEW.md)
