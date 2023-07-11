@@ -16,6 +16,7 @@ package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;
@@ -246,7 +247,8 @@ public class PlannerProfile {
 
     private static String print(String name, long point, ScopedTimer timer) {
         return String.format("%8dms|", point) + String.join("", Collections.nCopies(timer.level, "    "))
-                + "-- " + name + "[" + timer.getTotalCount() + "] " + timer.getTotalTime() + "ms\n";
+                + "-- " + name + "[" + timer.getTotalCount() + "] "
+                + DebugUtil.getPrettyStringMs(timer.getTotalTime()) + "\n";
     }
 
     public static String printPlannerTimeCost(PlannerProfile profile) {
