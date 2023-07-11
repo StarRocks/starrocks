@@ -111,5 +111,4 @@ DESC hive_catalog.hive_db.hive_table;
 - [SHOW CREATE DATABASE](SHOW%20CREATE%20DATABASE.md)
 - [USE](../data-definition)
 - [SHOW DATABASES](../data-manipulation/SHOW%20DATABASES.md)
-- [DESC](../Utility/DESCRIBE.md)
 - [DROP DATABASE](../data-definition/DROP%20DATABASE.md)
