@@ -824,11 +824,17 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
 std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool,
                                                                const std::string& reader_tz,
                                                                const std::string& write_tz,
-                                                               const std::vector<int64_t>& values) {
+                                                               const std::vector<int64_t>& values,
+                                                               const bool isInstant) {
     const char* filename = "orc_scanner_test_timestamp.orc";
     std::filesystem::remove(filename);
     ORC_UNIQUE_PTR<orc::OutputStream> outStream = orc::writeLocalFile(filename);
-    ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<c0:timestamp with local time zone>"));
+    ORC_UNIQUE_PTR<orc::Type> schema;
+    if (isInstant) {
+        schema = orc::Type::buildTypeFromString("struct<c0:timestamp with local time zone>");
+    } else {
+        schema = orc::Type::buildTypeFromString("struct<c0:timestamp>");
+    }
 
     orc::WriterOptions writer_options;
     writer_options.setTimezoneName(write_tz);
@@ -892,32 +898,53 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
 TEST_F(OrcChunkReaderTest, TestTimestamp) {
     // clang-format off
     const std::vector<int64_t> orc_values = {
-        // 2021.5.25 1:18:40 GMT
-        // 2021.5.25 9:18:40 Asia/Shanghai
-        1621905520,
-        // 1970.1.1 0:0:0 GMT
-        // 1970.1.1 8:00:0 Asia/Shanghai
-        0,
-        // 1702.5.31 19:55:52 GMT
-        // to Asia/Shanghai, it's supposed to be
-        // 1702.6.01 03:55:52
-        // but acutally it's
-        // 1702-06-01 04:01:35
-        // before unix epoch, time conversion is totoally a mess.
-        -8444232248
-    };
-    const std::vector<std::string> exp_values = {
-        "2021-05-25 09:18:40",
-        "1970-01-01 08:00:00",
-        "1702-06-01 04:01:35",
+            // 2021.5.25 1:18:40 GMT
+            // 2021.5.25 9:18:40 Asia/Shanghai
+            1621905520,
+            // 1970.1.1 0:0:0 GMT
+            // 1970.1.1 8:00:0 Asia/Shanghai
+            0,
+            // 1702.5.31 19:55:52 GMT
+            // to Asia/Shanghai, it's supposed to be
+            // 1702.6.01 03:55:52
+            // but acutally it's
+            // 1702-06-01 04:01:35
+            // before unix epoch, time conversion is totoally a mess.
+            -8444232248
     };
     // clang-format on
-    ObjectPool pool;
-    auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values);
-    EXPECT_EQ(res.size(), orc_values.size());
-    for (size_t i = 0; i < res.size(); i++) {
-        std::string o = res[i].to_string();
-        EXPECT_EQ(o, exp_values[i]);
+    {
+        // Instant Timestamp
+        const std::vector<std::string> exp_values = {
+                "2021-05-25 09:18:40",
+                "1970-01-01 08:00:00",
+                "1702-06-01 04:01:35",
+        };
+        ObjectPool pool;
+        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values,
+                                                      true);
+        EXPECT_EQ(res.size(), orc_values.size());
+        for (size_t i = 0; i < res.size(); i++) {
+            std::string o = res[i].to_string();
+            EXPECT_EQ(o, exp_values[i]);
+        }
+    }
+    {
+        // Timestamp
+        // Instant Timestamp
+        const std::vector<std::string> exp_values = {
+                "2021-05-25 01:18:40",
+                "1970-01-01 00:00:00",
+                "1702-05-31 19:55:52",
+        };
+        ObjectPool pool;
+        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values,
+                                                      false);
+        EXPECT_EQ(res.size(), orc_values.size());
+        for (size_t i = 0; i < res.size(); i++) {
+            std::string o = res[i].to_string();
+            EXPECT_EQ(o, exp_values[i]);
+        }
     }
 }
 
