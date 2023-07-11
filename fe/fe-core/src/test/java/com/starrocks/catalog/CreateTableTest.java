@@ -1261,6 +1261,59 @@ public class CreateTableTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCreateTableInSystemDb() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Can't create table 'goods' (errno: cannot create table in system database)",
+                () -> createTable(
+                        "CREATE TABLE information_schema.goods(\n" +
+                                "    item_id1          INT,\n" +
+                                "    item_name         STRING,\n" +
+                                "    price             FLOAT\n" +
+                                ") DISTRIBUTED BY HASH(item_id1)\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");"
+                ));
+    }
+
+    @Test
+
+    public void testCreatePartitionByExprTable() {
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable(
+                        "CREATE TABLE test.`bill_detail` (\n" +
+                                "  `bill_code` varchar(200) NOT NULL DEFAULT \"\" COMMENT \"\"\n" +
+                                ") ENGINE=OLAP \n" +
+                                "PRIMARY KEY(`bill_code`)\n" +
+                                "PARTITION BY RANGE(cast(substring(bill_code, 3) as bigint))\n" +
+                                "(PARTITION p1 VALUES [('0'), ('5000000')),\n" +
+                                "PARTITION p2 VALUES [('5000000'), ('10000000')),\n" +
+                                "PARTITION p3 VALUES [('10000000'), ('15000000')),\n" +
+                                "PARTITION p4 VALUES [('15000000'), ('20000000'))\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"in_memory\" = \"false\",\n" +
+                                "\"storage_format\" = \"DEFAULT\"\n" +
+                                ");"
+                ));
+    }
+
+    @Test
+    public void testCreateTextTable() {
+        // duplicate tabl
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.text_tbl\n" +
+                        "(k1 int, j text)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+
+    @Test
+>>>>>>> ddab92cab0 ([BugFix] improve error message when creating table in system database (#26943))
     public void testCreateCrossDatabaseColocateTable() throws Exception {
         starRocksAssert.withDatabase("dwd");
         String sql1 = "CREATE TABLE dwd.dwd_site_scan_dtl_test (\n" +
