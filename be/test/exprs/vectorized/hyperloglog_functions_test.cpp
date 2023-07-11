@@ -197,15 +197,15 @@ TEST_F(HyperLogLogFunctionsTest, hllSerializeTest) {
         col1->append(std::move(h6));
 
         ColumnPtr v = nullptr;
-        v = HyperloglogFunction::hll_cardinality(ctx, {col1});
+        v = HyperloglogFunctions::hll_cardinality(ctx, {col1}).value();
         ASSERT_TRUE(v->is_numeric());
         auto expect = ColumnHelper::cast_to<TYPE_BIGINT>(v);
 
-        v = HyperloglogFunction::hll_serialize(ctx, {col1});
+        v = HyperloglogFunctions::hll_serialize(ctx, {col1}).value();
         ASSERT_TRUE(v->is_binary());
-        v = HyperloglogFunction::hll_deserialize(ctx, {v});
+        v = HyperloglogFunctions::hll_deserialize(ctx, {v}).value();
         ASSERT_TRUE(v->is_object());
-        v = HyperloglogFunction::hll_cardinality(ctx, {v});
+        v = HyperloglogFunctions::hll_cardinality(ctx, {v}).value();
         ASSERT_TRUE(v->is_numeric());
 
         auto autcal = ColumnHelper::cast_to<TYPE_BIGINT>(v);

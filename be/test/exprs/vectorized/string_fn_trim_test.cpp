@@ -67,7 +67,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
     std::vector<ColumnPtr> columns{str_col, remove_col};
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr result = StringFunctions::trim(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();
     ASSERT_EQ(4096, result->size());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
@@ -90,7 +90,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
             Columns columns{str_col, remove_col};
             ctx->set_constant_columns(columns);
             ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-            auto maybe_result = StringFunctions::trim(ctx.get(), columns);
+            auto maybe_result = StringFunctions::trim(ctx.get(), columns).value();
             Slice result = *ColumnHelper::get_cpp_data<TYPE_VARCHAR>(maybe_result);
             ASSERT_EQ("abc🐱🐷", std::string(result));
             ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
