@@ -326,7 +326,7 @@ public class DateLiteral extends LiteralExpr {
         } else if (microsecond == 0) {
             return String.format("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
         } else {
-            return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d", year, month, day, hour, minute, second, microsecond);
+            return String.format("%04d-%02d-%02d %02d:%02d:%02d.%06d", year, month, day, hour, minute, second, microsecond);
         }
     }
 
