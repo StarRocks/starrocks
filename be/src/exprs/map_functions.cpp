@@ -346,9 +346,9 @@ StatusOr<ColumnPtr> MapFunctions::distinct_map_keys(FunctionContext* context, co
     }
     auto map = MapColumn::create(new_keys, new_values, new_offsets);
     if (arg0->has_null()) {
-        return NullableColumn::create(
-                std::move(map),
-                std::static_pointer_cast<NullColumn>(down_cast<NullableColumn*>(arg0.get())->null_column()->clone_shared()));
+        return NullableColumn::create(std::move(map),
+                                      std::static_pointer_cast<NullColumn>(
+                                              down_cast<NullableColumn*>(arg0.get())->null_column()->clone_shared()));
     }
     return map;
 }
