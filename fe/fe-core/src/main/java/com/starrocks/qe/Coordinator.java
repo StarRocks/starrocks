@@ -1692,14 +1692,17 @@ public class Coordinator {
         }
 
         RuntimeProfile newQueryProfile = new RuntimeProfile(queryProfile.getName());
-        newQueryProfile.copyAllInfoStringsFrom(queryProfile);
+        newQueryProfile.copyAllInfoStringsFrom(queryProfile, null);
         newQueryProfile.copyAllCountersFrom(queryProfile);
+
+        long maxQueryCumulativeCpuTime = 0;
+        long maxQueryPeakMemoryUsage = 0;
 
         List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
             RuntimeProfile newFragmentProfile = new RuntimeProfile(fragmentProfile.getName());
             newFragmentProfiles.add(newFragmentProfile);
-            newFragmentProfile.copyAllInfoStringsFrom(fragmentProfile);
+            newFragmentProfile.copyAllInfoStringsFrom(fragmentProfile, null);
             newFragmentProfile.copyAllCountersFrom(fragmentProfile);
 
             if (fragmentProfile.getChildList().isEmpty()) {
@@ -1710,12 +1713,24 @@ public class Coordinator {
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());
 
-            // Setup backend address infos
             Set<String> backendAddresses = Sets.newHashSet();
-            instanceProfiles.forEach(instanceProfile -> {
+            for (RuntimeProfile instanceProfile : instanceProfiles) {
+                // Setup backend address infos
                 backendAddresses.add(instanceProfile.getInfoString("Address"));
-                instanceProfile.removeInfoString("Address");
-            });
+
+                // Get query level peak memory usage and cpu cost
+                Counter toBeRemove = instanceProfile.getCounter("QueryCumulativeCpuTime");
+                if (toBeRemove != null) {
+                    maxQueryCumulativeCpuTime = Math.max(maxQueryCumulativeCpuTime, toBeRemove.getValue());
+                }
+                instanceProfile.removeCounter("QueryCumulativeCpuTime");
+
+                toBeRemove = instanceProfile.getCounter("QueryPeakMemoryUsage");
+                if (toBeRemove != null) {
+                    maxQueryPeakMemoryUsage = Math.max(maxQueryPeakMemoryUsage, toBeRemove.getValue());
+                }
+                instanceProfile.removeCounter("QueryPeakMemoryUsage");
+            }
             newFragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
             Counter backendNum = newFragmentProfile.addCounter("BackendNum", TUnit.UNIT, null);
             backendNum.setValue(backendAddresses.size());
@@ -1724,10 +1739,11 @@ public class Coordinator {
             Counter counter = newFragmentProfile.addCounter("InstanceNum", TUnit.UNIT, null);
             counter.setValue(instanceProfiles.size());
 
-            RuntimeProfile mergedInstanceProfile = RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles);
+            RuntimeProfile mergedInstanceProfile =
+                    RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles, Sets.newHashSet("Address"));
             Preconditions.checkState(mergedInstanceProfile != null);
 
-            newFragmentProfile.copyAllInfoStringsFrom(mergedInstanceProfile);
+            newFragmentProfile.copyAllInfoStringsFrom(mergedInstanceProfile, null);
             newFragmentProfile.copyAllCountersFrom(mergedInstanceProfile);
 
             mergedInstanceProfile.getChildList().forEach(pair -> {
@@ -1810,10 +1826,11 @@ public class Coordinator {
         newQueryProfile.getCounterTotalTime().setValue(0);
 
         Counter queryCumulativeCpuTime = newQueryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
-        queryCumulativeCpuTime.setValue(statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs);
+        queryCumulativeCpuTime.setValue(statistics == null || statistics.cpuCostNs == null ?
+                maxQueryCumulativeCpuTime : statistics.cpuCostNs);
         Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
-        queryPeakMemoryUsage.setValue(
-                statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes);
+        queryPeakMemoryUsage.setValue(statistics == null || statistics.memCostBytes == null ?
+                maxQueryPeakMemoryUsage : statistics.memCostBytes);
 
         return newQueryProfile;
     }

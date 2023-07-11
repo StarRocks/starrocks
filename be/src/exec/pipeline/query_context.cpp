@@ -190,7 +190,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     DCHECK(_is_result_sink) << "must be the result sink";
     auto res = std::make_shared<QueryStatistics>();
     res->add_scan_stats(_total_scan_rows_num, _total_scan_bytes);
-    res->add_cpu_costs(_total_cpu_cost_ns);
+    res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
 
     _sub_plan_query_statistics_recvr->aggregate(res.get());
