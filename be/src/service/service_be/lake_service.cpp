@@ -18,6 +18,7 @@
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 #include <butil/time.h> // NOLINT
+#include <bvar/bvar.h>
 
 #include "agent/agent_server.h"
 #include "common/config.h"
@@ -35,8 +36,63 @@
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 #include "util/threadpool.h"
+#include "util/trace.h"
 
 namespace starrocks {
+
+static ThreadPool* get_thread_pool(TTaskType::type type) {
+    auto env = ExecEnv::GetInstance();
+    if (UNLIKELY(env == nullptr)) {
+        return nullptr;
+    }
+    auto as = env->agent_server();
+    if (UNLIKELY(as == nullptr)) {
+        return nullptr;
+    }
+    return as->get_thread_pool(type);
+}
+
+static int get_num_queued_tasks(TTaskType::type type) {
+    auto tp = get_thread_pool(type);
+    if (UNLIKELY(tp == nullptr)) {
+        return 0;
+    }
+    return tp->num_queued_tasks();
+}
+
+static int get_num_active_tasks(TTaskType::type type) {
+    auto tp = get_thread_pool(type);
+    if (UNLIKELY(tp == nullptr)) {
+        return 0;
+    }
+    return tp->active_threads();
+}
+
+static int get_num_publish_queued_tasks(void*) {
+    return get_num_queued_tasks(TTaskType::PUBLISH_VERSION);
+}
+
+static int get_num_publish_active_tasks(void*) {
+    return get_num_active_tasks(TTaskType::PUBLISH_VERSION);
+}
+
+static int get_num_vacuum_queued_tasks(void*) {
+    return get_num_queued_tasks(TTaskType::DROP);
+}
+
+static int get_num_vacuum_active_tasks(void*) {
+    return get_num_active_tasks(TTaskType::DROP);
+}
+
+static bvar::PassiveStatus<int> g_publish_version_queued_tasks("lake_publish_version_queued_tasks",
+                                                               get_num_publish_queued_tasks, nullptr);
+static bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_active_tasks",
+                                                               get_num_publish_active_tasks, nullptr);
+static bvar::Adder<int64_t> g_publish_version_failed_tasks("lake_publish_version_failed_tasks");
+static bvar::LatencyRecorder g_publish_tablet_version_latency("lake_publish_tablet_version");
+static bvar::LatencyRecorder g_publish_tablet_version_queuing_latency("lake_putlish_tablet_version_queuing");
+static bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
+static bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
@@ -68,37 +124,48 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         return;
     }
 
+    auto start_ts = butil::gettimeofday_us();
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
 
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
+            scoped_refptr<Trace> trace(new Trace);
+            ADOPT_TRACE(trace.get());
+            auto run_ts = butil::gettimeofday_us();
             auto base_version = request->base_version();
             auto new_version = request->new_version();
             auto txns = request->txn_ids().data();
             auto txns_size = request->txn_ids().size();
             auto tablet_manager = _env->lake_tablet_manager();
+            g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
 
             auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size);
+            auto finish_ts = butil::gettimeofday_us();
             if (res.ok()) {
                 auto metadata = std::move(res).value();
                 auto score = compaction_score(*metadata);
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
-                VLOG(5) << "Publish version success. tablet_id=" << tablet_id << " txn_id=" << txns[0]
-                        << " version=" << new_version;
+                auto print_log = (finish_ts - run_ts) >= config::lake_publish_version_slow_log_ms * 1000;
+                LOG_IF(INFO, print_log) << "Publish version success. tablet_id=" << tablet_id << " txn_id=" << txns[0]
+                                        << " version=" << new_version << " trace=" << trace->DumpToString();
             } else {
+                g_publish_version_failed_tasks << 1;
                 LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                             << " txn_id=" << txns[0] << " version=" << new_version;
+                             << " txn_id=" << txns[0] << " version=" << new_version
+                             << " trace=" << trace->DumpToString();
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
             latch.count_down();
+            g_publish_tablet_version_latency << (finish_ts - run_ts);
         };
 
         auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
         if (!st.ok()) {
+            g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
                          << " txn_id=" << request->txn_ids()[0];
             std::lock_guard l(response_mtx);
@@ -108,6 +175,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     }
 
     latch.wait();
+    auto end_ts = butil::gettimeofday_us();
+    if (end_ts - start_ts >= config::lake_publish_version_slow_log_ms * 1000) {
+        LOG(INFO) << "Published txn " << request->txn_ids(0) << ". #tablets=" << request->tablet_ids_size()
+                  << " cost=" << (end_ts - start_ts) << "us";
+    }
 }
 
 void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* controller,
@@ -141,6 +213,7 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
 
             auto st = _env->lake_tablet_manager()->publish_log_version(tablet_id, txn_id, version);
             if (!st.ok()) {
+                g_publish_version_failed_tasks << 1;
                 LOG(WARNING) << "Fail to rename txn log. tablet_id=" << tablet_id << " txn_id=" << txn_id << ": " << st;
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
@@ -150,6 +223,7 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
 
         auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
         if (!st.ok()) {
+            g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish log version task: " << st;
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);

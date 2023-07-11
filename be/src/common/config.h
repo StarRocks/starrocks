@@ -874,6 +874,7 @@ CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
+CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
