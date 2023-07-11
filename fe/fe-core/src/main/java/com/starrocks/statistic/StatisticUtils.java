@@ -130,7 +130,7 @@ public class StatisticUtils {
         // collectPartitionIds contains partition that is first loaded.
         List<Long> collectPartitionIds = Lists.newArrayList();
         for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-            if (table.getPartition(partitionId).isFirstLoad()) {
+            if (table.getPhysicalPartition(partitionId).isFirstLoad()) {
                 collectPartitionIds.add(partitionId);
             }
         }
