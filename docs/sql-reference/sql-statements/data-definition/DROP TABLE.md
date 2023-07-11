@@ -34,3 +34,11 @@ Note:
     ```sql
     DROP TABLE my_table FORCE;
     ```
+
+## References
+
+- [CREATE TABLE](CREATE%20TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
+- [ALTER TABLE](ALTER%20TABLE.md)
+- [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md)
