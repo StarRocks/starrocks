@@ -510,13 +510,6 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
     auto& mem_resource_mgr = op->mem_resource_manager();
     if (state->enable_spill() && mem_resource_mgr.releaseable() &&
         op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
-        auto releasing_operators = mem_resource_mgr.query_spill_manager()->releasing_operators();
-        if (releasing_operators > 0) {
-            // if there are some operators that are releasing memory,
-            // wait until all release operations are over before attempting to spill
-            return;
-        }
-
         int64_t request_reserved = 0;
         if (chunk == nullptr) {
             request_reserved = op->estimated_memory_reserved();
@@ -535,18 +528,9 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
 const double release_buffer_mem_threshold = 0.8;
 
 void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op) {
-    if (state->enable_spill()) {
+    if (state->enable_spill() && op->releaseable()) {
         auto& mem_resource_mgr = op->mem_resource_manager();
         if (mem_resource_mgr.is_releasing()) {
-            if (op->release_memory_mode_done()) {
-                mem_resource_mgr.set_release_done();
-                TRACE_SPILL_LOG << "operator release memory done, op: " << op->get_name() << ", " << op.get()
-                                << ", res releasing opeartors: "
-                                << mem_resource_mgr.query_spill_manager()->releasing_operators();
-            }
-            return;
-        }
-        if (mem_resource_mgr.release_done()) {
             return;
         }
         auto query_mem_tracker = _query_ctx->mem_tracker();
@@ -556,18 +540,17 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
         if (query_consumption >= spill_mem_threshold * release_buffer_mem_threshold) {
             // if the currently used memory is very close to the threshold that triggers spill,
             // try to release buffer first
-            if (op->releaseable()) {
-                TRACE_SPILL_LOG << "release operator due to mem pressure, consumption: " << query_consumption
-                                << ", release buffer threshold: "
-                                << static_cast<int64_t>(spill_mem_threshold * release_buffer_mem_threshold)
-                                << ", spill mem threshold: " << static_cast<int64_t>(spill_mem_threshold);
-                mem_resource_mgr.to_low_memory_mode();
-            }
+            TRACE_SPILL_LOG << "release operator due to mem pressure, consumption: " << query_consumption
+                            << ", release buffer threshold: "
+                            << static_cast<int64_t>(spill_mem_threshold * release_buffer_mem_threshold)
+                            << ", spill mem threshold: " << static_cast<int64_t>(spill_mem_threshold);
+            mem_resource_mgr.to_low_memory_mode();
         }
     }
 }
 
-void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count, int64_t execution_time) {
+void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
+                              int64_t execution_time) {
     if (schedule_count > 0) {
         _global_schedule_counter->set(schedule_count - _global_schedule_counter->value());
     } else {

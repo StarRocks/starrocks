@@ -133,7 +133,6 @@ public:
     bool releaseable() const override { return true; }
 
     void enter_release_memory_mode() override;
-    bool release_memory_mode_done() const override;
     void set_execute_mode(int performance_level) override;
 
 private:

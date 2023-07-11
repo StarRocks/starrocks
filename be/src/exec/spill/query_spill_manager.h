@@ -39,17 +39,10 @@ public:
 
     BlockManager* block_manager() const { return _block_manager.get(); }
 
-    void increase_releasing_operators() { _releasing_operators++; }
-    void decrease_releasing_operators() { _releasing_operators--; }
-
-    size_t releasing_operators() { return _releasing_operators; }
-
 private:
     TUniqueId _uid;
     std::unique_ptr<BlockManager> _block_manager;
     std::atomic_size_t _spilling_operators = 0;
     size_t _spillable_operators = 0;
-
-    std::atomic_size_t _releasing_operators = 0;
 };
 } // namespace starrocks::spill

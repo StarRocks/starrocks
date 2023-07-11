@@ -24,12 +24,6 @@ enum MEM_RESOURCE {
     MEM_RESOURCE_LOW_MEMORY = 2,
 };
 
-enum MEM_RELEASE_STATE {
-    NOT_RELEASE = 0,
-    RELEASING = 1,
-    RELEASE_DONE = 2,
-};
-
 class OperatorMemoryResourceManager {
 public:
     using OP = pipeline::Operator;
@@ -47,13 +41,9 @@ public:
     // For the current operator available memory (estimated value)
     size_t operator_avaliable_memory_bytes();
 
-    void set_releasing() { _release_state = MEM_RELEASE_STATE::RELEASING; }
+    void set_releasing() { _is_releasing = true; }
 
-    void set_release_done();
-
-    bool is_releasing() const { return _release_state == MEM_RELEASE_STATE::RELEASING; }
-
-    bool release_done() const { return _release_state == MEM_RELEASE_STATE::RELEASE_DONE; }
+    bool is_releasing() const { return _is_releasing; }
 
     QuerySpillManager* query_spill_manager() const { return _query_spill_manager; }
 
@@ -65,6 +55,6 @@ private:
     bool _releaseable = false;
     OP* _op = nullptr;
     QuerySpillManager* _query_spill_manager = nullptr;
-    int _release_state = MEM_RELEASE_STATE::NOT_RELEASE;
+    bool _is_releasing = false;
 };
 } // namespace starrocks::spill

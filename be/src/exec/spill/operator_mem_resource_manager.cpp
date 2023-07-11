@@ -37,15 +37,7 @@ void OperatorMemoryResourceManager::to_low_memory_mode() {
         }
         if (_op->releaseable()) {
             set_releasing();
-            _query_spill_manager->increase_releasing_operators();
         }
-    }
-}
-
-void OperatorMemoryResourceManager::set_release_done() {
-    if (_release_state != MEM_RELEASE_STATE::RELEASE_DONE) {
-        _release_state = MEM_RELEASE_STATE::RELEASE_DONE;
-        _query_spill_manager->decrease_releasing_operators();
     }
 }
 

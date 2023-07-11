@@ -141,11 +141,8 @@ const size_t min_local_memory_limit = 1LL * 1024 * 1024;
 void LocalExchangeSourceOperator::enter_release_memory_mode() {
     // limit the memory limit to a very small value so that the upstream will not write new data until all the data has been pushed to the downstream operators
     _local_memory_limit = min_local_memory_limit;
-    _memory_manager->update_max_memory_usage(min_local_memory_limit);
-}
-
-bool LocalExchangeSourceOperator::release_memory_mode_done() const {
-    return _local_memory_usage <= min_local_memory_limit;
+    size_t max_memory_usage = min_local_memory_limit * _memory_manager->get_max_input_dop();
+    _memory_manager->update_max_memory_usage(max_memory_usage);
 }
 
 void LocalExchangeSourceOperator::set_execute_mode(int performance_level) {
