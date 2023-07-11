@@ -678,3 +678,11 @@ SWAP WITH table_name;
 ```sql
 ALTER TABLE table1 SWAP WITH table2;
 ```
+
+## 参考文档
+
+* [CREATE TABLE](CREATE%20TABLE.md)
+* [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
+* [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+* [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md)
+* [DROP TABLE](DROP%20TABLE.md)
