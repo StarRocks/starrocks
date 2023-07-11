@@ -14,13 +14,17 @@
 
 #pragma once
 
+#include "column/chunk.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/hash_set.h"
 #include "common/object_pool.h"
+#include "exprs/function_helper.h"
+#include "exprs/literal.h"
 #include "exprs/predicate.h"
 #include "gutil/strings/substitute.h"
+#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -393,6 +397,119 @@ private:
     in_const_pred_detail::LHashSetType<Type> _hash_set;
     // Ensure the string memory don't early free
     std::vector<ColumnPtr> _string_values;
+};
+
+class VectorizedInConstPredicateGeneric final : public Predicate {
+public:
+    VectorizedInConstPredicateGeneric(const TExprNode& node)
+            : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
+
+    VectorizedInConstPredicateGeneric(const VectorizedInConstPredicateGeneric& other)
+            : Predicate(other), _is_not_in(other._is_not_in) {}
+
+    ~VectorizedInConstPredicateGeneric() override = default;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInConstPredicateGeneric(*this)); }
+
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
+        RETURN_IF_ERROR(Expr::open(state, context, scope));
+        _const_input.resize(_children.size());
+        for (auto i = 0; i < _children.size(); ++i) {
+            if (_children[i]->is_constant()) {
+                // _const_input[i] maybe not be of ConstColumn
+                ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
+            } else {
+                _const_input[i] = nullptr;
+            }
+        }
+        return Status::OK();
+    }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        auto child_size = _children.size();
+        Columns input_data(child_size);
+        std::vector<NullColumnPtr> input_null(child_size);
+        std::vector<bool> is_const(child_size, true);
+        Columns columns_ref(child_size);
+        ColumnPtr value;
+        bool all_const = true;
+        for (int i = 0; i < child_size; ++i) {
+            value = _const_input[i];
+            if (value == nullptr) {
+                ASSIGN_OR_RETURN(value, _children[i]->evaluate_checked(context, ptr));
+                is_const[i] = false;
+                all_const = false;
+            }
+            if (i == 0) {
+                RETURN_IF_COLUMNS_ONLY_NULL({value});
+            }
+            columns_ref[i] = value;
+            if (value->is_constant()) {
+                value = down_cast<ConstColumn*>(value.get())->data_column();
+            }
+            if (value->is_nullable()) {
+                auto nullable = down_cast<const NullableColumn*>(value.get());
+                input_null[i] = nullable->null_column();
+                input_data[i] = nullable->data_column();
+            } else {
+                input_null[i] = nullptr;
+                input_data[i] = value;
+            }
+        }
+        auto size = columns_ref[0]->size();
+        DCHECK(ptr == nullptr || ptr->num_rows() == size); // ptr is null in tests.
+        auto dest_size = size;
+        if (all_const) {
+            dest_size = 1;
+        }
+        BooleanColumn::Ptr res = BooleanColumn::create(dest_size, _is_not_in);
+        NullColumnPtr res_null = NullColumn::create(dest_size, DATUM_NULL);
+        auto& res_data = res->get_data();
+        auto& res_null_data = res_null->get_data();
+        for (auto i = 0; i < dest_size; ++i) {
+            auto id_0 = is_const[0] ? 0 : i;
+            if (input_null[0] == nullptr || !input_null[0]->get_data()[id_0]) {
+                bool has_null = false;
+                for (auto j = 1; j < child_size; ++j) {
+                    auto id = is_const[j] ? 0 : i;
+                    // input[j] is null
+                    if (input_null[j] != nullptr && input_null[j]->get_data()[id]) {
+                        has_null = true;
+                        continue;
+                    }
+                    // input[j] is not null
+                    auto is_equal = input_data[0]->equals(id_0, *input_data[j], id, false);
+                    if (is_equal == 1) {
+                        res_null_data[i] = false;
+                        res_data[i] = !_is_not_in;
+                        break;
+                    } else if (is_equal == -1) {
+                        has_null = true;
+                    }
+                }
+                if (_is_not_in == res_data[i]) {
+                    res_null_data[i] = has_null;
+                }
+            }
+        }
+        if (all_const) {
+            if (res_null_data[0]) { // return only_null column
+                return ColumnHelper::create_const_null_column(size);
+            } else {
+                return ConstColumn::create(res, size);
+            }
+        } else {
+            if (SIMD::count_nonzero(res_null_data) > 0) {
+                return NullableColumn::create(std::move(res), std::move(res_null));
+            } else {
+                return res;
+            }
+        }
+    }
+
+private:
+    const bool _is_not_in{false};
+    Columns _const_input;
 };
 
 class VectorizedInConstPredicateBuilder {
