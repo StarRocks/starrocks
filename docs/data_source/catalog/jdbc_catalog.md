@@ -1,6 +1,6 @@
 # JDBC catalog
 
-tarRocks supports JDBC catalogs from v3.0 onwards.
+StarRocks supports JDBC catalogs from v3.0 onwards.
 
 A JDBC catalog is a kind of external catalog that enables you to query data from data sources accessed through JDBC without ingestion.
 
