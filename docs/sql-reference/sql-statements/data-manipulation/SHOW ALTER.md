@@ -45,6 +45,5 @@ SHOW ALTER TABLE ROLLUP FROM example_db;
 
 - [CREATE TABLE](CREATE%20TABLE.md)
 - [ALTER TABLE](ALTER%20TABLE.md)
-- [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md)
 - [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
 - [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
