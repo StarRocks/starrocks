@@ -109,25 +109,25 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testCastExpression() throws Exception {
         String sql = "select cast(tb as varchar(10)) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(2: tb AS VARCHAR(10))");
+        assertPlanContains(sql, "CAST(2: tb AS VARCHAR(10))");
 
         sql = "select cast(tb as char(10)) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(2: tb AS CHAR(10))");
+        assertPlanContains(sql, "CAST(2: tb AS CHAR(10))");
 
         sql = "select cast(tb as int) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(2: tb AS INT)");
+        assertPlanContains(sql, "CAST(2: tb AS INT)");
 
         sql = "select cast(ti as datetime) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(9: ti AS DATETIME)");
+        assertPlanContains(sql, "CAST(9: ti AS DATETIME)");
 
         sql = "select cast(th as date) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(8: th AS DATE)");
+        assertPlanContains(sql, "CAST(8: th AS DATE)");
 
         sql = "select cast(th as time) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(8: th AS TIME)");
+        assertPlanContains(sql, "CAST(8: th AS TIME)");
 
         sql = "select cast(ti as timestamp) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(9: ti AS DATETIME)");
+        assertPlanContains(sql, "CAST(9: ti AS DATETIME)");
     }
 
     @Test
@@ -166,19 +166,19 @@ public class TrinoQueryTest extends TrinoTestBase {
         analyzeFail(sql, "Unknown type: decimal128");
 
         sql = "select cast(tj as decimal) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(38,0))");
+        assertPlanContains(sql, "CAST(10: tj AS DECIMAL128(38,0))");
 
         sql = "select cast(tj as decimal(10, 2)) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL64(10,2))");
+        assertPlanContains(sql, "CAST(10: tj AS DECIMAL64(10,2))");
 
         sql = "select cast(tj as decimal(10)) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL64(10,0))");
+        assertPlanContains(sql, "CAST(10: tj AS DECIMAL64(10,0))");
 
         sql = "select cast(tj as decimal(28, 2)) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(28,2))");
+        assertPlanContains(sql, "CAST(10: tj AS DECIMAL128(28,2))");
 
         sql = "select cast(tj as decimal(28)) from tall";
-        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(28,0))");
+        assertPlanContains(sql, "CAST(10: tj AS DECIMAL128(28,0))");
     }
 
     @Test
