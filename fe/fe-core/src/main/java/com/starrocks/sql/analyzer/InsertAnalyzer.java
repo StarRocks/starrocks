@@ -34,6 +34,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.external.starrocks.TableMetaSyncer;
+import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -165,6 +166,13 @@ public class InsertAnalyzer {
                 }
             } else if (insertStmt.isStaticKeyPartitionInsert()) {
                 checkStaticKeyPartitionInsert(insertStmt, icebergTable, targetPartitionNames);
+            }
+
+            for (Column column : icebergTable.getPartitionColumns()) {
+                if (IcebergTableSink.isUnSupportedPartitionColumnType(column.getType())) {
+                    throw new SemanticException("Unsupported partition column type [%s] for iceberg table sink",
+                            column.getType().canonicalName());
+                }
             }
         }
 

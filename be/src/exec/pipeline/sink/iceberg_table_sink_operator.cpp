@@ -20,8 +20,6 @@
 
 namespace starrocks::pipeline {
 
-static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
-
 static const std::string ICEBERG_UNPARTITIONED_TABLE_LOCATION = "iceberg_unpartitioned_table_fake_location";
 
 Status IcebergTableSinkOperator::prepare(RuntimeState* state) {
@@ -117,7 +115,10 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
             if (column->has_null()) {
                 return Status::NotSupported("Partition value can't be null.");
             }
-            partition_column_values.emplace_back(_value_to_string(column));
+
+            std::string partition_value;
+            RETURN_IF_ERROR(partition_value_to_string(ColumnHelper::get_data_column(column.get()), partition_value));
+            partition_column_values.emplace_back(partition_value);
         }
 
         DCHECK(partition_column_names.size() == partition_column_values.size());
@@ -145,27 +146,6 @@ std::string IcebergTableSinkOperator::_get_partition_location(const std::vector<
         partition_location += names[i] + "=" + values[i] + "/";
     }
     return partition_location;
-}
-
-std::string IcebergTableSinkOperator::_value_to_string(const ColumnPtr& column) {
-    auto v = column->get(0);
-    std::string res;
-    v.visit([&](auto& variant) {
-        std::visit(
-                [&](auto&& arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, Slice> || std::is_same_v<T, TimestampValue> ||
-                                  std::is_same_v<T, DateValue> || std::is_same_v<T, decimal12_t> ||
-                                  std::is_same_v<T, DecimalV2Value>) {
-                        res = arg.to_string();
-                    } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> ||
-                                         std::is_same_v<T, float> || std::is_same_v<T, double>) {
-                        res = std::to_string(arg);
-                    }
-                },
-                variant);
-    });
-    return res;
 }
 
 IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, FragmentContext* fragment_ctx,
@@ -310,7 +290,8 @@ void calculate_column_stats(const std::shared_ptr<::parquet::FileMetaData>& meta
     }
 }
 
-static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state) {
+void IcebergTableSinkOperator::add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer,
+                                                       RuntimeState* state) {
     TIcebergColumnStats iceberg_column_stats;
     calculate_column_stats(writer->metadata(), iceberg_column_stats);
 
@@ -331,6 +312,40 @@ static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer,
     // update runtime state
     state->add_sink_commit_info(commit_info);
     state->update_num_rows_load_sink(iceberg_data_file.record_count);
+}
+
+Status IcebergTableSinkOperator::partition_value_to_string(Column* column, std::string& partition_value) {
+    auto v = column->get(0);
+    if (column->is_date()) {
+        partition_value = v.get_date().to_string();
+        return Status::OK();
+    }
+
+    bool not_support = false;
+    v.visit([&](auto& variant) {
+        std::visit(
+                [&](auto&& arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, Slice>) {
+                        partition_value = arg.to_string();
+                    } else if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t> ||
+                                         std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t> ||
+                                         std::is_same_v<T, uint24_t> || std::is_same_v<T, int32_t> ||
+                                         std::is_same_v<T, uint32_t> || std::is_same_v<T, int64_t> ||
+                                         std::is_same_v<T, uint64_t>) {
+                        partition_value = std::to_string(arg);
+                    } else {
+                        not_support = true;
+                    }
+                },
+                variant);
+    });
+
+    if (not_support) {
+        return Status::NotSupported(fmt::format("Partition value can't be {}", column->get_name()));
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline
