@@ -470,7 +470,7 @@ void SegmentIterator::_init_column_paths() {
     if (_opts.column_access_paths == nullptr || _opts.column_access_paths->empty()) {
         return;
     }
-    
+
     for (size_t i = 0; i < _opts.column_access_paths->size(); i++) {
         auto* path = (*_opts.column_access_paths)[i].get();
 
