@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.rule.transformation;
+package com.starrocks.sql.optimizer.rule.transformation.pruner;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
@@ -23,7 +23,6 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.CPBiRel;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -43,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 
 import java.util.Collections;
 import java.util.List;
@@ -68,13 +68,9 @@ public class CboTablePruneRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOp = input.getOp().cast();
-        if (joinOp.getJoinType() != JoinOperator.INNER_JOIN &&
-                joinOp.getJoinType() != JoinOperator.LEFT_OUTER_JOIN &&
-                joinOp.getJoinType() != JoinOperator.RIGHT_OUTER_JOIN) {
-            return false;
-        } else {
-            return true;
-        }
+        return joinOp.getJoinType() == JoinOperator.INNER_JOIN ||
+                joinOp.getJoinType() == JoinOperator.LEFT_OUTER_JOIN ||
+                joinOp.getJoinType() == JoinOperator.RIGHT_OUTER_JOIN;
     }
 
     @Override
@@ -141,7 +137,7 @@ public class CboTablePruneRule extends TransformationRule {
                     }
                 }
             }
-            boolean mutualJoinOnFK = hasLeftToRightFK & hasRightToLeftFK;
+            boolean mutualJoinOnFK = hasLeftToRightFK && hasRightToLeftFK;
 
             if (sameTableJoinUK) {
                 return handleSameTableInnerJoin(input, optOtherJoinOnPredicate);
@@ -182,9 +178,9 @@ public class CboTablePruneRule extends TransformationRule {
             }
 
             if (joinType.isLeftOuterJoin() && matchUniqueConstraints(rhsScanOp, rhsJoinCols)) {
-                return handleLeftOrRightJoin(input, lhs, rhs);
+                return handleLeftOrRightJoin(input, lhs);
             } else if (joinType.isRightOuterJoin() && matchUniqueConstraints(lhsScanOp, lhsJoinCols)) {
-                return handleLeftOrRightJoin(input, rhs, lhs);
+                return handleLeftOrRightJoin(input, rhs);
             }
         }
         return Collections.emptyList();
@@ -322,20 +318,20 @@ public class CboTablePruneRule extends TransformationRule {
 
         // create a new ScanOperator who unifies join operator, retain-side scan operator and
         // prune-side scan operators.
-        Operator.Builder newOpBuilder = OperatorBuilderFactory.build(retainOp.getOp()).withOperator(retainOp.getOp())
-                .setPredicate(newPredicate)
-                .setProjection(new Projection(newColRefMap));
+        LogicalOlapScanOperator.Builder newOpBuilder =
+                (LogicalOlapScanOperator.Builder) OperatorBuilderFactory.build(retainOp.getOp())
+                        .withOperator(retainOp.getOp())
+                        .setPredicate(newPredicate)
+                        .setProjection(new Projection(newColRefMap));
 
         // set new ColumnRefToColumnMap in case that when the same tables join on UK/PK
-        newColRefToColumnMap.ifPresent(
-                columnRefToColumnMap -> ((LogicalOlapScanOperator.Builder) newOpBuilder).setColRefToColumnMetaMap(
-                        columnRefToColumnMap));
+        newColRefToColumnMap.ifPresent(newOpBuilder::setColRefToColumnMetaMap);
         Operator newScan = newOpBuilder.build();
         newScan.addSalt();
         return Collections.singletonList(OptExpression.create(newScan));
     }
 
-    List<OptExpression> handleLeftOrRightJoin(OptExpression joinOpt, OptExpression retainOpt, OptExpression pruneOpt) {
+    List<OptExpression> handleLeftOrRightJoin(OptExpression joinOpt, OptExpression retainOpt) {
         Optional<Projection> joinProjection = Optional.ofNullable(joinOpt.getOp().getProjection());
         ColumnRefSet usedColRefSet =
                 joinProjection.map(Projection::getUsedColumns).orElse(joinOpt.getRowOutputInfo().getUsedColumnRefSet());

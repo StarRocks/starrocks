@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.rule.transformation;
+package com.starrocks.sql.optimizer.rule.transformation.pruner;
 
-import com.starrocks.sql.optimizer.CPJoinGardener;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;

@@ -2347,6 +2347,7 @@ public class OlapTable extends Table {
         tableProperty.clearBinlogAvailableVersion();
     }
 
+    @Override
     public boolean hasUniqueConstraints() {
         if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
             return true;

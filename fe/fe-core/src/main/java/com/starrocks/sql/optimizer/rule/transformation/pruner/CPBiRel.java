@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer;
+package com.starrocks.sql.optimizer.rule.transformation.pruner;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
@@ -106,10 +107,10 @@ public class CPBiRel {
         OlapTable rhsTable = (OlapTable) rhsScanOp.getTable();
         Map<String, ColumnRefOperator> lhsColumnName2ColRef =
                 lhsScanOp.getColumnMetaToColRefMap().entrySet().stream()
-                        .collect(Collectors.toMap(e -> e.getKey().getName(), e -> e.getValue()));
+                        .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
         Map<String, ColumnRefOperator> rhsColumnName2ColRef =
                 rhsScanOp.getColumnMetaToColRefMap().entrySet().stream()
-                        .collect(Collectors.toMap(e -> e.getKey().getName(), e -> e.getValue()));
+                        .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
         List<CPBiRel> biRels = Lists.newArrayList();
         if (lhsTable.hasForeignKeyConstraints() && rhsTable.hasUniqueConstraints()) {
             lhsTable.getForeignKeyConstraints().stream()

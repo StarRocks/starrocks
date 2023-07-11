@@ -24,6 +24,8 @@ import java.util.Optional;
 import java.util.Set;
 
 // UnionFind support equivalence inferring based on equivalence classes
+// TODO(by satanson): There are many UnionFind utilities, in future, all of them will be
+//  unified into one
 public class UnionFind<T> {
     private final Map<T, Integer> element2Group = Maps.newHashMap();
     private final Map<Integer, Set<T>> eqGroupMap = Maps.newHashMap();
@@ -85,9 +87,7 @@ public class UnionFind<T> {
             Set<T> lhsGroup = eqGroupMap.get(lhsGroupIdx);
             Set<T> rhsGroup = eqGroupMap.get(rhsGroupIdx);
             lhsGroup.addAll(rhsGroup);
-            rhsGroup.forEach(s -> {
-                element2Group.put(s, lhsGroupIdx);
-            });
+            rhsGroup.forEach(s -> element2Group.put(s, lhsGroupIdx));
             eqGroupMap.remove(rhsGroupIdx);
         }
     }

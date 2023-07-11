@@ -21,13 +21,13 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.CPBiRel;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.pruner.CPBiRel;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -43,13 +43,12 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.ToLongFunction;
 import java.util.stream.Collectors;
 
 public class JoinReorderCardinalityPreserving extends JoinOrder {
     List<OptExpression> atomOptExprs;
     List<ScalarOperator> predicates;
-    Map<ColumnRefOperator, ScalarOperator> expressionMap;
-
     Optional<OptExpression> bestPlanRoot = Optional.empty();
 
     public JoinReorderCardinalityPreserving(OptimizerContext context) {
@@ -89,7 +88,7 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
         }
 
         public List<OptExpression> getRoot() {
-            return nodes.entrySet().stream().filter(e -> inEdges.get(e.getValue()).isEmpty()).map(e -> e.getKey())
+            return nodes.entrySet().stream().filter(e -> inEdges.get(e.getValue()).isEmpty()).map(Map.Entry::getKey)
                     .collect(Collectors.toList());
         }
 
@@ -129,10 +128,10 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
 
         // BFS travel
         void travel(OptExpression root, Set<OptExpression> visited, List<OptExpression> component) {
-            Queue<OptExpression> q0 = new LinkedList<OptExpression>();
-            Queue<OptExpression> q1 = new LinkedList<OptExpression>();
-            Function<OptExpression, Long> getTableId =
-                    (optExpr) -> ((LogicalScanOperator) optExpr.getOp()).getTable().getId();
+            Queue<OptExpression> q0 = new LinkedList<>();
+            Queue<OptExpression> q1 = new LinkedList<>();
+            ToLongFunction<OptExpression> getTableId =
+                    optExpr -> ((LogicalScanOperator) optExpr.getOp()).getTable().getId();
             q0.add(root);
             while (!q0.isEmpty()) {
                 while (!q0.isEmpty()) {
@@ -142,14 +141,14 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
                     }
                     visited.add(curr);
                     component.add(curr);
-                    Long currTableId = getTableId.apply(curr);
+                    Long currTableId = getTableId.applyAsLong(curr);
                     // permute LogicalScanOperator originates from the same table together will give
                     // CboTablePruneRule more chance to prune tables.
                     List<OptExpression> children =
                             outEdges.get(nodes.get(curr)).stream().filter(child -> !visited.contains(child))
                                     .sorted((lhs, rhs) -> Boolean.compare(
-                                            !getTableId.apply(lhs).equals(currTableId),
-                                            !getTableId.apply(rhs).equals(currTableId)))
+                                            getTableId.applyAsLong(lhs) != currTableId,
+                                            getTableId.applyAsLong(rhs) != currTableId))
                                     .collect(Collectors.toList());
                     q1.addAll(children);
                 }
@@ -227,7 +226,7 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
             }
 
             biRelToColRefPairs.computeIfAbsent(Pair.create(lhsOptExpr, rhsOptExpr),
-                    (k) -> Sets.newHashSet()).add(Pair.create(lhsColRef, rhsColRef));
+                    k -> Sets.newHashSet()).add(Pair.create(lhsColRef, rhsColRef));
         }
 
         Graph graph = new Graph(scanOps);

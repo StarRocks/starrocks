@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer;
+package com.starrocks.sql.optimizer.rule.transformation.pruner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
@@ -24,6 +24,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.JoinHelper;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.UnionFind;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -208,14 +213,13 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         Set<OptExpression> candidateLhsScanOpSet =
                 joinColumnEqClasses.stream()
                         .flatMap(p ->
-                                columnRefEquivClasses.getGroup(p.first).stream().map(col -> columnToScans.get(col)))
+                                columnRefEquivClasses.getGroup(p.first).stream().map(columnToScans::get))
                         .collect(Collectors.toSet());
 
         Set<OptExpression> candidateRhsScanOpSet =
                 joinColumnEqClasses.stream()
                         .flatMap(p ->
-                                columnRefEquivClasses.getGroup(p.second).stream()
-                                        .map(col -> columnToScans.get(col)))
+                                columnRefEquivClasses.getGroup(p.second).stream().map(columnToScans::get))
                         .collect(Collectors.toSet());
 
         List<CPBiRel> biRels =
@@ -300,22 +304,21 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
             if (!biRel.isFromForeignKey() && joinType.isInnerJoin()) {
                 cpEdges.add(new CPEdge(biRel.getLhs(), biRel.getRhs(), false, eqColumnRefs));
                 currCPScanOps = RoaringBitmap.or(lhsCardPreservingScanOps, rhsCardPreservingScanOps);
-                uniqueKeyColRefs.computeIfAbsent(biRel.getLhs(), (k) -> Sets.newHashSet())
+                uniqueKeyColRefs.computeIfAbsent(biRel.getLhs(), k -> Sets.newHashSet())
                         .addAll(pairs.stream().map(p -> p.first).collect(Collectors.toList()));
-                uniqueKeyColRefs.computeIfAbsent(biRel.getRhs(), (k) -> Sets.newHashSet())
+                uniqueKeyColRefs.computeIfAbsent(biRel.getRhs(), k -> Sets.newHashSet())
                         .addAll(pairs.stream().map(p -> p.second).collect(Collectors.toList()));
                 pairs.forEach(p -> {
-                    foreignKeyColRefs.computeIfAbsent(p.first, (k) -> Maps.newHashMap()).put(biRel.getRhs(), p.second);
-                    foreignKeyColRefs.computeIfAbsent(p.second, (k) -> Maps.newHashMap()).put(biRel.getLhs(), p.first);
+                    foreignKeyColRefs.computeIfAbsent(p.first, k -> Maps.newHashMap()).put(biRel.getRhs(), p.second);
+                    foreignKeyColRefs.computeIfAbsent(p.second, k -> Maps.newHashMap()).put(biRel.getLhs(), p.first);
                 });
             } else {
                 CPEdge edge = new CPEdge(biRel.getLhs(), biRel.getRhs(), true, eqColumnRefs);
                 currCPScanOps = biRel.isLeftToRight() ? lhsCardPreservingScanOps : rhsCardPreservingScanOps;
-                uniqueKeyColRefs.computeIfAbsent(biRel.getRhs(), (k) -> Sets.newHashSet())
+                uniqueKeyColRefs.computeIfAbsent(biRel.getRhs(), k -> Sets.newHashSet())
                         .addAll(pairs.stream().map(p -> p.second).collect(Collectors.toList()));
-                pairs.forEach(p -> {
-                    foreignKeyColRefs.computeIfAbsent(p.second, (k) -> Maps.newHashMap()).put(biRel.getLhs(), p.first);
-                });
+                pairs.forEach(p -> foreignKeyColRefs.computeIfAbsent(p.second, k -> Maps.newHashMap())
+                        .put(biRel.getLhs(), p.first));
                 cpEdges.add(edge);
             }
 
@@ -577,9 +580,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
 
         void merge(PruneContext other) {
             this.pruned &= other.pruned;
-            other.rewriteMapping.forEach((k, v) -> {
-                this.rewriteMapping.merge(k, v, Sets::union);
-            });
+            other.rewriteMapping.forEach((k, v) -> this.rewriteMapping.merge(k, v, Sets::union));
             this.unprunedPkColRefs.addAll(other.unprunedPkColRefs);
             this.prunedTables.addAll(other.prunedTables);
         }
@@ -670,7 +671,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
             for (CPNode child : children) {
                 LogicalOlapScanOperator scanOp = child.getValue().getOp().cast();
                 Long tableId = scanOp.getTable().getId();
-                tableIdToChildGroups.computeIfAbsent(tableId, (k) -> Lists.newArrayList()).add(child);
+                tableIdToChildGroups.computeIfAbsent(tableId, k -> Lists.newArrayList()).add(child);
             }
             // we prefer to prune higher LogicalScanOperator and retain lower one, since pruning lower one, because
             // the some Operator in mid of the path from the common ancestor to the lower one may use the ColumnRef
@@ -728,7 +729,6 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
             Set<ColumnRefOperator> outputColRefs =
                     pruneContext.getOutputColRefs(root.getValue(), originalColRefSet, pkColRefs);
 
-            //getOutputColRefs(root, originalColRefSet, pruneResult.rewriteMapping);
             if (!pruneContext.isPruned() || root.isRoot()) {
                 return pruneContext.toUnpruned(outputColRefs, pkColRefs);
             }
@@ -758,7 +758,6 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
     }
 
     public static class Pruner extends OptExpressionVisitor<Optional<OptExpression>, Void> {
-        private final Map<ColumnRefOperator, ScalarOperator> remapping;
         private final Set<ColumnRefOperator> substColRefs;
         private final ReplaceColumnRefRewriter columnRefRewriter;
         private final Set<OptExpression> prunedTables;
@@ -768,7 +767,6 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
 
         public Pruner(Map<ColumnRefOperator, ScalarOperator> remapping, Set<OptExpression> prunedTables,
                       Set<ColumnRefOperator> substColRefs) {
-            this.remapping = remapping;
             this.substColRefs = substColRefs;
             this.columnRefRewriter = new ReplaceColumnRefRewriter(remapping);
             this.prunedTables = prunedTables;
@@ -863,7 +861,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
             if (optExpression.getInputs().size() == 1) {
                 OptExpression child = optExpression.inputAt(0);
                 predicate = Utils.compoundAnd(child.getOp().getPredicate(), predicate);
-                Operator newChild = ((Operator.Builder) OperatorBuilderFactory.build(child.getOp()))
+                Operator newChild = OperatorBuilderFactory.build(child.getOp())
                         .withOperator(child.getOp()).setPredicate(predicate).build();
                 return Optional.of(OptExpression.create(newChild, child.getInputs()));
             } else {
@@ -887,12 +885,12 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
     }
 
     public static class Grafter extends OptExpressionVisitor<Optional<OptExpression>, Void> {
-        private List<ScalarOperator> predicates;
-        private Map<ColumnRefOperator, ScalarOperator> colRefMap;
+        private List<ScalarOperator> extraPredicates;
+        private Map<ColumnRefOperator, ScalarOperator> extraColRefMap;
 
         public Grafter(List<ScalarOperator> predicates, Map<ColumnRefOperator, ScalarOperator> colRefMap) {
-            this.predicates = predicates;
-            this.colRefMap = colRefMap;
+            this.extraPredicates = predicates;
+            this.extraColRefMap = colRefMap;
         }
 
         @Override
@@ -916,7 +914,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
             List<ScalarOperator> selectedPredicates = Lists.newArrayList();
             LogicalScanOperator scanOperator = optExpression.getOp().cast();
             ColumnRefSet outputColumnRefSet = optExpression.getRowOutputInfo().getOutputColumnRefSet();
-            this.predicates.forEach(predicate -> {
+            this.extraPredicates.forEach(predicate -> {
                 if (outputColumnRefSet.containsAll(predicate.getUsedColumns())) {
                     selectedPredicates.add(predicate);
                 } else {
@@ -931,15 +929,15 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                 }
                 ScalarOperator predicate =
                         Utils.compoundAnd(Utils.extractConjuncts(Utils.compoundAnd(selectedPredicates)));
-                this.predicates = remainPredicates;
-                Operator operator = ((LogicalScanOperator.Builder) OperatorBuilderFactory.build(scanOperator))
+                this.extraPredicates = remainPredicates;
+                Operator operator = OperatorBuilderFactory.build(scanOperator)
                         .withOperator(scanOperator).setPredicate(predicate).build();
                 scanOpt = OptExpression.create(operator, Collections.emptyList());
             }
 
             Map<ColumnRefOperator, ScalarOperator> remainColRefMap = Maps.newHashMap();
             Map<ColumnRefOperator, ScalarOperator> selectedColRefMap = Maps.newHashMap();
-            this.colRefMap.forEach((k, v) -> {
+            this.extraColRefMap.forEach((k, v) -> {
                 if (outputColumnRefSet.containsAll(v.getUsedColumns())) {
                     selectedColRefMap.put(k, v);
                 } else {
@@ -948,7 +946,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
             });
 
             if (!selectedColRefMap.isEmpty()) {
-                this.colRefMap = remainColRefMap;
+                this.extraColRefMap = remainColRefMap;
                 scanOperator.getOutputColumns().forEach(k -> selectedColRefMap.put(k, k));
                 LogicalProjectOperator projectOperator = new LogicalProjectOperator(selectedColRefMap);
                 return Optional.of(OptExpression.create(projectOperator, Collections.singletonList(scanOpt)));
