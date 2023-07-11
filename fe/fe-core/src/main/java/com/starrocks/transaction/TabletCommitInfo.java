@@ -124,4 +124,22 @@ public class TabletCommitInfo implements Writable {
         Gson gson = new Gson();
         return gson.toJson(this);
     }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(tabletId);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof TabletCommitInfo)) {
+            return false;
+        }
+
+        TabletCommitInfo info = (TabletCommitInfo) obj;
+        return (tabletId == info.tabletId) && (backendId == info.backendId);
+    }
 }
