@@ -73,6 +73,7 @@ private:
 
         bool try_mem_consume(int64_t size) {
             MemTracker* cur_tracker = _loader();
+            int64_t prev_reserved = _reserved_bytes;
             size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
@@ -83,6 +84,7 @@ private:
                     _cache_size = 0;
                     return true;
                 } else {
+                    _reserved_bytes = prev_reserved;
                     _cache_size -= size;
                     _allocated_cache_size -= size;
                     _try_consume_mem_size = size;
@@ -95,7 +97,6 @@ private:
 
         bool try_mem_consume_with_limited_tracker(int64_t size, MemTracker* tracker, int64_t limit) {
             MemTracker* cur_tracker = _loader();
-            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
