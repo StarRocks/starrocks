@@ -724,35 +724,6 @@ PROPERTIES
     "table" = "hive_table_name"
 );
 ```
-<<<<<<< HEAD
-=======
-
-### Create a Primary Key table and specify the sort key
-
-Suppose that you need to analyze user behavior in real time from dimensions such as users' address and last active time. When you create a table, you can define the `user_id` column as the primary key and define the combination of the `address` and `last_active` columns as the sort key.
-
-```SQL
-create table users (
-    user_id bigint NOT NULL,
-    name string NOT NULL,
-    email string NULL,
-    address string NULL,
-    age tinyint NULL,
-    sex tinyint NULL,
-    last_active datetime,
-    property0 tinyint NOT NULL,
-    property1 tinyint NOT NULL,
-    property2 tinyint NOT NULL,
-    property3 tinyint NOT NULL
-) 
-PRIMARY KEY (`user_id`)
-DISTRIBUTED BY HASH(`user_id`)
-ORDER BY(`address`,`last_active`)
-PROPERTIES(
-    "replication_num" = "3",
-    "enable_persistent_index" = "true"
-);
-```
 
 ## References
 
@@ -761,4 +732,3 @@ PROPERTIES(
 - [USE](USE.md)
 - [ALTER TABLE](ALTER%20TABLE.md)
 - [DROP TABLE](DROP%20TABLE.md)
->>>>>>> e15c85eaf ([Doc] cp alter table comment to Branch 3.1 (#26998))
