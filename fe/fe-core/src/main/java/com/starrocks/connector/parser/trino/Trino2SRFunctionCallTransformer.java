@@ -79,6 +79,7 @@ public class Trino2SRFunctionCallTransformer {
         registerBitwiseFunctionTransformer();
         registerUnicodeFunctionTransformer();
         registerMapFunctionTransformer();
+        registerBinaryFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -170,6 +171,10 @@ public class Trino2SRFunctionCallTransformer {
         // week -> week_iso
         registerFunctionTransformer("week", 1, "week_iso",
                 ImmutableList.of(Expr.class));
+
+        // format_datetime -> jodatime_format
+        registerFunctionTransformer("format_datetime", 2, "jodatime_format",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerStringFunctionTransformer() {
@@ -249,6 +254,11 @@ public class Trino2SRFunctionCallTransformer {
         // map(array, array) -> map_from_arrays
         registerFunctionTransformer("map", 2, "map_from_arrays",
                 ImmutableList.of(Expr.class, Expr.class));
+    }
+
+    private static void registerBinaryFunctionTransformer() {
+        // to_hex -> hex
+        registerFunctionTransformer("to_hex", 1, "hex", ImmutableList.of(Expr.class));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
