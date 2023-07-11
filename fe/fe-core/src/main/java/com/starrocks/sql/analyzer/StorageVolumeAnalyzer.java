@@ -48,17 +48,18 @@ public class StorageVolumeAnalyzer {
                 throw new SemanticException("'storage volume name' can not be null or empty");
             }
             if (svName.equals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME)) {
-                throw new SemanticException(String.format("%s can not be created by SQL",
+                throw new SemanticException(String.format(
+                        "%s is a reserved storage volume name, please choose a different name for the storage volume",
                         StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
             }
 
             List<String> locations = statement.getStorageLocations();
             if (locations.isEmpty()) {
-                throw new SemanticException("'storage volume locations' can not be empty");
+                throw new SemanticException("'location' field is required to create the storage volume");
             }
             for (String location : locations) {
                 if (location.isEmpty()) {
-                    throw new SemanticException("'location in storage volume' can not be empty");
+                    throw new SemanticException("'location' field is required to create the storage volume");
                 }
             }
 

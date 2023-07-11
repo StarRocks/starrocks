@@ -121,6 +121,9 @@ public class StarMgrServer {
         com.staros.util.Config.STARMGR_IP = FrontendOptions.getLocalHostAddress();
         com.staros.util.Config.STARMGR_RPC_PORT = Config.cloud_native_meta_port;
 
+        // Storage fs type
+        com.staros.util.Config.DEFAULT_FS_TYPE = "";
+
         // use tablet_sched_disable_balance
         com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
         // turn on 0 as default worker group id, to be compatible with add/drop backend in FE

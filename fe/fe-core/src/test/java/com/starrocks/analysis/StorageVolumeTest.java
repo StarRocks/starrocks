@@ -58,12 +58,13 @@ public class StorageVolumeTest {
         sql = "CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_1 type = s3 "  +
                 "LOCATIONS = ('') COMMENT 'comment' PROPERTIES (\"aws.s3.endpoint\"=\"endpoint\", " +
                 "\"aws.s3.region\"=\"us-west-2\", \"enabled\"=\"false\")";
-        AnalyzeTestUtil.analyzeFail(sql, "'location in storage volume' can not be empty");
+        AnalyzeTestUtil.analyzeFail(sql, "'location' field is required to create the storage volume");
 
         sql = "CREATE STORAGE VOLUME IF NOT EXISTS builtin_storage_volume type = s3 "  +
                 "LOCATIONS = ('') COMMENT 'comment' PROPERTIES (\"aws.s3.endpoint\"=\"endpoint\", " +
                 "\"aws.s3.region\"=\"us-west-2\", \"enabled\"=\"false\")";
-        AnalyzeTestUtil.analyzeFail(sql, "builtin_storage_volume can not be created by SQL");
+        AnalyzeTestUtil.analyzeFail(sql,
+                "builtin_storage_volume is a reserved storage volume name, please choose a different name for the storage volume");
     }
 
     @Test

@@ -288,11 +288,11 @@ public class SharedDataStorageVolumeMgrTest {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         Assert.assertFalse(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
 
-        Config.enable_volume_from_conf = false;
+        Config.enable_load_volume_from_conf = false;
         sdsvm.createBuiltinStorageVolume();
         Assert.assertFalse(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
 
-        Config.enable_volume_from_conf = true;
+        Config.enable_load_volume_from_conf = true;
         String id = sdsvm.createBuiltinStorageVolume();
         Assert.assertTrue(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
         StorageVolume sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
@@ -563,6 +563,10 @@ public class SharedDataStorageVolumeMgrTest {
         Config.cloud_native_storage_type = "s3";
         Config.aws_s3_path = "";
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        Assert.assertThrows(InvalidConfException.class, () -> sdsvm.validateStorageVolumeConfig());
+        Config.aws_s3_path = "path";
+        Config.aws_s3_region = "";
+        Config.aws_s3_endpoint = "";
         Assert.assertThrows(InvalidConfException.class, () -> sdsvm.validateStorageVolumeConfig());
 
         Config.cloud_native_storage_type = "hdfs";

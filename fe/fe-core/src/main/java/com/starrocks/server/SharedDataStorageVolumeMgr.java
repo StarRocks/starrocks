@@ -229,7 +229,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
 
     @Override
     public String createBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
-        if (!Config.enable_volume_from_conf) {
+        if (!Config.enable_load_volume_from_conf) {
             return "";
         }
 
@@ -259,6 +259,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                     throw new InvalidConfException(
                             String.format("The configuration item \"aws_s3_path = %s\" is invalid, s3 bucket is empty.",
                                     Config.aws_s3_path));
+                }
+                if (Config.aws_s3_region.isEmpty() && Config.aws_s3_endpoint.isEmpty()) {
+                    throw new InvalidConfException(
+                            "Both configuration item \"aws_s3_region\" and \"aws_s3_endpoint\" are empty");
                 }
                 String credentialType = getAwsCredentialType();
                 if (credentialType == null) {

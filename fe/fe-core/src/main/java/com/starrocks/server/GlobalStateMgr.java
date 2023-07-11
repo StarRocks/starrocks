@@ -764,7 +764,7 @@ public class GlobalStateMgr {
         try {
             storageVolumeMgr.validateStorageVolumeConfig();
         } catch (InvalidConfException e) {
-            LOG.error(e.getMessage());
+            LOG.fatal(e.getMessage());
             System.exit(-1);
         }
 
