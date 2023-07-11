@@ -106,7 +106,8 @@ public class TrinoTestBase {
                 "  `tg` bigint(20) NULL COMMENT \"\",\n" +
                 "  `th` datetime NULL COMMENT \"\",\n" +
                 "  `ti` date NULL COMMENT \"\",\n" +
-                "  `tj` decimal(9, 3) NULL COMMENT \"\"\n" +
+                "  `tj` decimal(9, 3) NULL COMMENT \"\",\n" +
+                "  `tk` varbinary NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`ta`)\n" +
                 "COMMENT \"OLAP\"\n" +
