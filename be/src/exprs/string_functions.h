@@ -423,6 +423,26 @@ public:
      */
     DEFINE_VECTORIZED_FN(strcmp);
 
+    /**
+     * params are one strings. Returns string for url encode string,
+     *
+     * @param: [string_value]
+     * @paramType: [StringColumn]
+     * @return: StringColumn
+     */
+    DEFINE_VECTORIZED_FN(url_encode);
+    static std::string url_encode_func(const std::string& value);
+
+    /**
+     * params are one strings. Returns string for url decode string,
+     *
+     * @param: [string_value]
+     * @paramType: [StringColumn]
+     * @return: StringColumn
+     */
+    DEFINE_VECTORIZED_FN(url_decode);
+    static std::string url_decode_func(const std::string& value);
+
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
 private:

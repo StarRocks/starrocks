@@ -18,8 +18,12 @@
 #include <re2/re2.h>
 
 #include <algorithm>
+#include <cctype>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
+#include <string>
 
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -2073,6 +2077,67 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
 
 StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<unhexImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
+    return StringFunctions::url_encode_func(str.to_string());
+}
+
+std::string StringFunctions::url_encode_func(const std::string& value) {
+    std::ostringstream escaped;
+    escaped.fill('0');
+    escaped << std::hex;
+
+    for (auto c : value) {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            escaped << c;
+            continue;
+        }
+
+        escaped << std::uppercase;
+        escaped << '%' << std::setw(2) << int((unsigned char)c);
+        escaped << std::nouppercase;
+    }
+    return escaped.str();
+}
+
+StatusOr<ColumnPtr> StringFunctions::url_encode(FunctionContext* context, const starrocks::Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<url_encodeImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(url_decodeImpl, str) {
+    return StringFunctions::url_decode_func(str.to_string());
+}
+
+std::string StringFunctions::url_decode_func(const std::string& value) {
+    std::string ret;
+    char ch;
+    int ii;
+    char l, r;
+    size_t length = value.length();
+    for (size_t i = 0; i < length; i++) {
+        if (value[i] == '%') {
+            l = value[i + 1];
+            r = value[i + 2];
+            if ((l < 'A' || l > 'F') && (l < '0' || l > '9')) {
+                throw std::runtime_error("decode string contains illegal hex chars: " + value.substr(i + 1, 2));
+            }
+            if ((r < 'A' || r > 'F') && (r < '0' || r > '9')) {
+                throw std::runtime_error("decode string contains illegal hex chars: " + value.substr(i + 1, 2));
+            }
+            sscanf(value.substr(i + 1, 2).c_str(), "%x", &ii);
+            ch = static_cast<char>(ii);
+            ret += ch;
+            i = i + 2;
+        } else {
+            ret += value[i];
+        }
+    }
+    return (ret);
+}
+
+StatusOr<ColumnPtr> StringFunctions::url_decode(FunctionContext* context, const starrocks::Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<url_decodeImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(sm3Impl, str) {
