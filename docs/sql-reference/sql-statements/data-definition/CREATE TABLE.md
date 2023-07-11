@@ -207,8 +207,6 @@ Data is sequenced in specified key columns and has different attributes for diff
 
 You can add a table comment when you create a table, optional. Note that COMMENT must be placed after `key_desc`. Otherwise, the table cannot be created.
 
-From v3.1 onwards, you can modify the table comment suing `ALTER TABLE <table_name> COMMENT = "new table comment"`.
-
 ### partition_desc
 
 Partition description can be used in the following three ways:
