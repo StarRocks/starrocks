@@ -376,7 +376,52 @@ Paimon Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
 
 #### AWS S3
 
-##### 如果基于 Instance Profile 进行鉴权和认证
+- 如果基于 Instance Profile 进行鉴权和认证
+
+  ```SQL
+  CREATE EXTERNAL CATALOG paimon_catalog_fs
+  PROPERTIES
+  (
+      "type" = "paimon",
+      "paimon.catalog.type" = "filesystem",
+      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+- 如果基于 Assumed Role 进行鉴权和认证
+
+  ```SQL
+  CREATE EXTERNAL CATALOG paimon_catalog_fs
+  PROPERTIES
+  (
+      "type" = "paimon",
+      "paimon.catalog.type" = "filesystem",
+      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+- 如果基于 IAM User 进行鉴权和认证
+
+  ```SQL
+  CREATE EXTERNAL CATALOG paimon_catalog_fs
+  PROPERTIES
+  (
+      "type" = "paimon",
+      "paimon.catalog.type" = "filesystem",
+      "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "us-west-2"
+  );
+  ```
+
+#### 阿里云 OSS
 
 ```SQL
 CREATE EXTERNAL CATALOG paimon_catalog_fs
@@ -385,39 +430,9 @@ PROPERTIES
     "type" = "paimon",
     "paimon.catalog.type" = "filesystem",
     "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
-    "aws.s3.use_instance_profile" = "true",
-    "aws.s3.region" = "us-west-2"
-);
-```
-
-##### 如果基于 Assumed Role 进行鉴权和认证
-
-```SQL
-CREATE EXTERNAL CATALOG paimon_catalog_fs
-PROPERTIES
-(
-    "type" = "paimon",
-    "paimon.catalog.type" = "filesystem",
-    "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
-    "aws.s3.use_instance_profile" = "true",
-    "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-    "aws.s3.region" = "us-west-2"
-);
-```
-
-##### 如果基于 IAM User 进行鉴权和认证
-
-```SQL
-CREATE EXTERNAL CATALOG paimon_catalog_fs
-PROPERTIES
-(
-    "type" = "paimon",
-    "paimon.catalog.type" = "filesystem",
-    "paimon.catalog.warehouse" = "hdfs://192.168.7.239:9000/user/hive/warehouse",
-    "aws.s3.use_instance_profile" = "false",
-    "aws.s3.access_key" = "<iam_user_access_key>",
-    "aws.s3.secret_key" = "<iam_user_secret_key>",
-    "aws.s3.region" = "us-west-2"
+    "aliyun.oss.access_key" = "<user_access_key>",
+    "aliyun.oss.secret_key" = "<user_secret_key>",
+    "aliyun.oss.endpoint" = "<oss_endpoint>"
 );
 ```
 
