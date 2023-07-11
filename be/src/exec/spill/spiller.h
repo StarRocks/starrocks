@@ -136,6 +136,11 @@ public:
     Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
                                    const MemGuard& guard) {
         auto flush_call_back = [this, callback, state, &executor, guard]() {
+<<<<<<< HEAD
+=======
+            auto defer = DeferOp([&]() { guard.scoped_end(); });
+            RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
+>>>>>>> a7689e4c23 ([BugFix] Fixed the problem of inaccurate memory statistics with auto spill turned on (#26890))
             RETURN_IF_ERROR(callback());
             if (!_is_cancel && spilled()) {
                 RETURN_IF_ERROR(_acquire_input_stream(state));
