@@ -34,7 +34,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  `map2` MAP<INT, MAP<INT, INT>> NULL, " +
                 "  `map3` MAP<INT, MAP<INT, MAP<INT, INT>>> NULL, " +
                 "  `map4` MAP<INT, MAP<INT, MAP<INT, MAP<INT, INT>>>> NULL, " +
-                "  `map5` MAP<INT, STRUCT<s1 INT, m2 MAP<INT, STRUCT<s2 int, s3 int>>>>" +
+                "  `map5` MAP<INT, STRUCT<s1 INT, m2 MAP<INT, STRUCT<s2 int, s3 int>>>>," +
+                "  `a1` ARRAY<INT> NULL" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
@@ -51,7 +52,9 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  `st3` struct<s1 INT, s2 INT, sa3 ARRAY<INT>> NULL, \n" +
                 "  `st4` struct<s1 INT, s2 INT, ss3 struct<s31 INT, s32 INT>> NULL, \n" +
                 "  `st5` struct<s1 INT, s2 INT, ss3 struct<s31 INT, s32 INT>, " +
-                " ss4 struct<s41 INT, s52 struct<s421 INT, s423 INT>>> NULL \n" +
+                " ss4 struct<s41 INT, s52 struct<s421 INT, s423 INT>>> NULL," +
+                "  `st6` struct<s1 INT, m2 MAP<int, STRUCT<s3 int, s4 int>>, " +
+                "a3 ARRAY<STRUCT<s5 int, s6 int>>> NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
@@ -97,7 +100,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select sc0.st1.s1, st1.s2 from t0 join sc0 on sc0.v1 = t0.v1";
         String plan = getVerboseExplain(sql);
         System.out.println(plan);
-        assertContains(plan, "ColumnAccessPath: [/st1/s2, /st1/s1]");
+        assertContains(plan, "ColumnAccessPath: [/st1/s1, /st1/s2]");
     }
 
     @Test
@@ -130,11 +133,11 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
         sql = "select map_keys(map3[1][2]) from pc0";
         plan = getVerboseExplain(sql);
-        assertNotContains(plan, "ColumnAccessPath");
+        assertContains(plan, "ColumnAccessPath: [/map3/INDEX/INDEX/KEY]");
 
         sql = "select map_keys(map4[1][2]) from pc0";
         plan = getVerboseExplain(sql);
-        assertNotContains(plan, "ColumnAccessPath");
+        assertContains(plan, "ColumnAccessPath: [/map4/INDEX/INDEX/KEY]");
 
         sql = "select map1, " +
                 "     map2, " +
@@ -151,8 +154,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     public void testPruneMapStructNest() throws Exception {
         String sql = "select map5[1].m2 from pc0";
         String plan = getVerboseExplain(sql);
-        assertNotContains(plan, "ColumnAccessPath");
-
+        assertContains(plan, "ColumnAccessPath: [/map5/INDEX/m2]");
     }
 
     @Test
@@ -183,7 +185,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
         sql = "select st1.s1, st1.s2 from sc0";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "[/st1/s2, /st1/s1]");
+        assertContains(plan, "[/st1/s1, /st1/s2]");
 
         sql = "select st2.s1, st2.sm3 from sc0";
         plan = getVerboseExplain(sql);
@@ -191,11 +193,11 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
         sql = "select st2.s1, map_keys(st2.sm3), st3.sa3 from sc0";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "[/st2/sm3/KEY, /st2/s1, /st3/sa3]");
+        assertContains(plan, "[/st2/s1, /st2/sm3/KEY, /st3/sa3]");
 
         sql = "select st4.ss3, st4.s1 from sc0";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "[/st4/ss3, /st4/s1]");
+        assertContains(plan, "[/st4/s1, /st4/ss3]");
 
         sql = "select st4.ss3, st4.ss3.s31 from sc0";
         plan = getVerboseExplain(sql);
@@ -207,7 +209,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
         sql = "select st5.ss4.s52.s421, st5.ss3.s32 from sc0";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "[/st5/ss4/s52/s421, /st5/ss3/s32]");
+        assertContains(plan, "[/st5/ss3/s32, /st5/ss4/s52/s421]");
     }
 
     @Test
@@ -218,7 +220,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
         sql = "select st1.s1, st1.s2 from sc0 group by st1.s1, st1.s2";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "[/st1/s2, /st1/s1]");
+        assertContains(plan, "[/st1/s1, /st1/s2]");
     }
 
     @Test
@@ -229,6 +231,70 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
         sql = "select map_keys(map1), map_size(map1) from pc0";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "[/map1/KEY, /map1/OFFSET]");
+        assertContains(plan, "ColumnAccessPath: [/map1/KEY]");
+    }
+
+    @Test
+    public void testPruneComplexFunction() throws Exception {
+        String sql = "select st6.m2[1].s3, st6.a3[2].s6 from sc0";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/a3/INDEX/s6, /st6/m2/INDEX/s3]");
+
+        sql = "select st6.a3[1].s5, st6.a3[2].s6 from sc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "/st6/a3/INDEX/s5");
+        assertContains(plan, "/st6/a3/INDEX/s6");
+
+        sql = "select st6.a3[1].s5, array_length(st6.a3) from sc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/a3/ALL]");
+
+        sql = "select st6.m2[1].s3, map_keys(st6.m2) from sc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/m2/ALL]");
+
+        sql = "select st6.m2[1].s3, map_size(st6.m2) from sc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/m2/ALL]");
+
+        sql = "select st6.m2[1].s3, st6.m2[3].s4 from sc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/m2/INDEX/s3, /st6/m2/INDEX/s4]");
+
+        sql = "select array_length(a1) from pc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/a1/OFFSET]");
+
+        sql = "select array_length(a1), a1[1] from pc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/a1/ALL]");
+    }
+
+    @Test
+    public void testPredicate() throws Exception {
+        String sql = "select st6.m2[1].s3, st6.a3[2].s6 from sc0 where st6.m2[1].s3 = 1";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/a3/INDEX/s6, /st6/m2/INDEX/s3]");
+        assertContains(plan, "PredicateAccessPath: [/st6/m2/INDEX/s3]");
+
+        sql = "select st6.m2[1].s3, st6.a3[2].s6 from sc0 where map_size(st6.m2) = 1";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/a3/INDEX/s6, /st6/m2/ALL]");
+        assertContains(plan, "PredicateAccessPath: [/st6/m2/OFFSET]");
+
+        sql = "select st6.m2[1].s3, st6.a3[2].s6 from sc0 where st6.m2 = map{1:row(1,1)}";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/a3/INDEX/s6, /st6/m2]");
+        assertContains(plan, "PredicateAccessPath: [/st6/m2]");
+
+        sql = "select map_keys(st6.m2), st6.a3[2].s6 from sc0 where map_size(st6.m2) = 1";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/a3/INDEX/s6, /st6/m2/KEY]");
+        assertContains(plan, "PredicateAccessPath: [/st6/m2/OFFSET]");
+
+        sql = "select array_length(a1), a1[1] from pc0 where a1[2] = 3";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/a1/ALL]");
+        assertContains(plan, "PredicateAccessPath: [/a1/INDEX]");
     }
 }

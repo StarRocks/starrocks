@@ -27,6 +27,7 @@ namespace starrocks {
 
 Status ColumnAccessPath::init(const TColumnAccessPath& column_path, RuntimeState* state, ObjectPool* pool) {
     _type = column_path.type;
+    _from_predicate = column_path.from_predicate;
 
     ExprContext* expr_ctx = nullptr;
     // Todo: may support late materialization? to compute path by other column predicate
@@ -72,6 +73,7 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
     ColumnAccessPathPtr path = std::make_unique<ColumnAccessPath>();
     path->_type = this->_type;
     path->_path = this->_path;
+    path->_from_predicate = this->_from_predicate;
     path->_column_index = index;
 
     if (!field->has_sub_fields()) {
@@ -84,20 +86,54 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
 
     auto all_field = field->sub_fields();
 
-    std::unordered_map<std::string_view, uint32_t> name_index;
+    if (field->type()->type() == LogicalType::TYPE_ARRAY) {
+        // _type must be ALL/INDEX/OFFSET
+        for (const auto& child : this->_children) {
+            ASSIGN_OR_RETURN(auto copy, child->convert_by_index(&all_field[0], 0));
+            path->_children.emplace_back(std::move(copy));
+        }
+    } else if (field->type()->type() == LogicalType::TYPE_MAP) {
+        // _type must be ALL/INDEX/OFFSET/KEY
+        for (const auto& child : this->_children) {
+            if (child->_type == TAccessPathType::type::KEY || child->_type == TAccessPathType::type::OFFSET) {
+                // KEY/OFFSET never has children
+                ASSIGN_OR_RETURN(auto copy, child->convert_by_index(&all_field[0], 0));
+                path->_children.emplace_back(std::move(copy));
+            } else if (child->_type == TAccessPathType::type::INDEX || child->_type == TAccessPathType::type::ALL) {
+                ASSIGN_OR_RETURN(auto copy, child->convert_by_index(&all_field[1], 1));
+                path->_children.emplace_back(std::move(copy));
+            } else {
+                return Status::InternalError(fmt::format("impossable child access path, field: {}, path: {}",
+                                                         field->name(), child->to_string()));
+            }
+        }
+    } else if (field->type()->type() == LogicalType::TYPE_STRUCT) {
+        // _type must be FIELD
+        std::unordered_map<std::string_view, uint32_t> name_index;
 
-    for (uint32_t i = 0; i < all_field.size(); i++) {
-        name_index[all_field[i].name()] = i;
-    }
+        for (uint32_t i = 0; i < all_field.size(); i++) {
+            name_index[all_field[i].name()] = i;
+        }
 
-    for (const auto& child : this->_children) {
-        uint32_t i = name_index[child->_path];
+        for (const auto& child : this->_children) {
+            if (child->_type != TAccessPathType::type::FIELD) {
+                return Status::InternalError(fmt::format("impossable child access path, field: {}, path: {}",
+                                                         field->name(), child->to_string()));
+            }
+            uint32_t i = name_index[child->_path];
 
-        ASSIGN_OR_RETURN(auto copy, child->convert_by_index(&all_field[i], i));
-        path->_children.emplace_back(std::move(copy));
+            ASSIGN_OR_RETURN(auto copy, child->convert_by_index(&all_field[i], i));
+            path->_children.emplace_back(std::move(copy));
+        }
     }
 
     return path;
+}
+
+const std::string& ColumnAccessPath::to_string() const {
+    std::stringstream ss;
+    ss << _path << "(" << _type << ")";
+    return _path;
 }
 
 } // namespace starrocks

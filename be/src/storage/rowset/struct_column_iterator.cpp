@@ -14,6 +14,7 @@
 
 #include "storage/rowset/struct_column_iterator.h"
 
+#include "column/column_access_path.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "storage/rowset/column_reader.h"
@@ -24,7 +25,7 @@ namespace starrocks {
 class StructColumnIterator final : public ColumnIterator {
 public:
     StructColumnIterator(ColumnReader* _reader, std::unique_ptr<ColumnIterator> null_iter,
-                         std::vector<std::unique_ptr<ColumnIterator>> field_iters, std::vector<uint8_t> access_flags);
+                         std::vector<std::unique_ptr<ColumnIterator>> field_iters, ColumnAccessPath* path);
 
     ~StructColumnIterator() override = default;
 
@@ -51,24 +52,23 @@ private:
 
     std::unique_ptr<ColumnIterator> _null_iter;
     std::vector<std::unique_ptr<ColumnIterator>> _field_iters;
+    ColumnAccessPath* _path;
+
     std::vector<uint8_t> _access_flags;
 };
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(ColumnReader* _reader,
                                                              std::unique_ptr<ColumnIterator> null_iter,
                                                              std::vector<std::unique_ptr<ColumnIterator>> field_iters,
-                                                             std::vector<uint8_t> access_flags) {
+                                                             ColumnAccessPath* path) {
     return std::make_unique<StructColumnIterator>(_reader, std::move(null_iter), std::move(field_iters),
-                                                  std::move(access_flags));
+                                                  std::move(path));
 }
 
 StructColumnIterator::StructColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
                                            std::vector<std::unique_ptr<ColumnIterator>> field_iters,
-                                           std::vector<uint8_t> access_flags)
-        : _reader(reader),
-          _null_iter(std::move(null_iter)),
-          _field_iters(std::move(field_iters)),
-          _access_flags(std::move(access_flags)) {}
+                                           ColumnAccessPath* path)
+        : _reader(reader), _null_iter(std::move(null_iter)), _field_iters(std::move(field_iters)), _path(path) {}
 
 Status StructColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_null_iter != nullptr) {
@@ -77,6 +77,15 @@ Status StructColumnIterator::init(const ColumnIteratorOptions& opts) {
 
     for (auto& iter : _field_iters) {
         RETURN_IF_ERROR(iter->init(opts));
+    }
+
+    if (_path != nullptr && !_path->children().empty()) {
+        _access_flags.resize(_field_iters.size(), 0);
+        for (const auto& child : _path->children()) {
+            _access_flags[child->index()] = 1;
+        }
+    } else {
+        _access_flags.resize(_field_iters.size(), 1);
     }
 
     return Status::OK();
