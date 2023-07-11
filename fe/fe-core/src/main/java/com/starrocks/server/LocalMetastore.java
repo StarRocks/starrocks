@@ -1987,7 +1987,8 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             if (db.isSystemDatabase()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), "create denied");
+                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                        "cannot create table in system database");
             }
 
             db.writeLock();
