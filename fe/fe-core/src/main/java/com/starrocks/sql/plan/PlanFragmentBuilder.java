@@ -1725,7 +1725,7 @@ public class PlanFragmentBuilder {
                 }
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
-                if (!withLocalShuffle && !node.isUseStreamingPreAgg() &&
+                if (!withLocalShuffle && node.isMergedLocalAgg() &&
                         hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
