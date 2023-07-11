@@ -78,6 +78,11 @@ public class Trino2SRFunctionCallTransformer {
         registerJsonFunctionTransformer();
         registerBitwiseFunctionTransformer();
         registerUnicodeFunctionTransformer();
+<<<<<<< HEAD
+=======
+        registerMapFunctionTransformer();
+        registerBinaryFunctionTransformer();
+>>>>>>> 61473e3564 ([Enhancement] support some binary/date function for trino parser (#26916))
         // todo: support more function transform
     }
 
@@ -169,6 +174,10 @@ public class Trino2SRFunctionCallTransformer {
         // week -> week_iso
         registerFunctionTransformer("week", 1, "week_iso",
                 ImmutableList.of(Expr.class));
+
+        // format_datetime -> jodatime_format
+        registerFunctionTransformer("format_datetime", 2, "jodatime_format",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerStringFunctionTransformer() {
@@ -244,6 +253,20 @@ public class Trino2SRFunctionCallTransformer {
                 ImmutableList.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("utf8"))));
     }
 
+<<<<<<< HEAD
+=======
+    private static void registerMapFunctionTransformer() {
+        // map(array, array) -> map_from_arrays
+        registerFunctionTransformer("map", 2, "map_from_arrays",
+                ImmutableList.of(Expr.class, Expr.class));
+    }
+
+    private static void registerBinaryFunctionTransformer() {
+        // to_hex -> hex
+        registerFunctionTransformer("to_hex", 1, "hex", ImmutableList.of(Expr.class));
+    }
+
+>>>>>>> 61473e3564 ([Enhancement] support some binary/date function for trino parser (#26916))
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
                                                     List<Class<? extends Expr>> starRocksArgumentsClass) {
         FunctionCallExpr starRocksFunctionCall = buildStarRocksFunctionCall(starRocksFnName, starRocksArgumentsClass);

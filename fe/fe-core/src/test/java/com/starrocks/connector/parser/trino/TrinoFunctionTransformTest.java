@@ -145,6 +145,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select week(date '2023-01-01');";
         assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
+
+        sql = "select format_datetime(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')";
+        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+
+        sql = "select format_datetime(date '2023-06-25', 'yyyyMMdd HH:mm:ss');";
+        assertPlanContains(sql, "jodatime_format('2023-06-25', 'yyyyMMdd HH:mm:ss')");
+
+        sql = "select last_day_of_month(timestamp '2023-07-01 00:00:00');";
+        assertPlanContains(sql, "last_day('2023-07-01 00:00:00', 'month')");
+
+        sql = "select last_day_of_month(date '2023-07-01');";
+        assertPlanContains(sql, "last_day('2023-07-01 00:00:00', 'month')");
     }
 
     @Test
@@ -284,4 +296,27 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select from_utf8(to_utf8('123'))";
         assertPlanContains(sql, "from_binary(to_binary('123', 'utf8'), 'utf8')");
     }
+
+    @Test
+    public void testBinaryFunction() throws Exception {
+        String sql = "select x'0012'";
+        assertPlanContains(sql, "'0012'");
+
+        sql = "select md5(x'0012');";
+        assertPlanContains(sql, "md5(from_binary('0012', 'utf8'))");
+
+        sql = "select md5(tk) from tall";
+        assertPlanContains(sql, "md5(from_binary(11: tk, 'utf8'))");
+
+        sql = "select to_hex(tk) from tall";
+        assertPlanContains(sql, "hex(11: tk)");
+
+        sql = "select sha256(x'aaaa');";
+        assertPlanContains(sql, "sha2(from_binary('AAAA', 'utf8'), 256)");
+
+        sql = "select sha256(tk) from tall";
+        assertPlanContains(sql, "sha2(from_binary(11: tk, 'utf8'), 256)");
+        System.out.println(getFragmentPlan(sql));
+    }
+
 }
