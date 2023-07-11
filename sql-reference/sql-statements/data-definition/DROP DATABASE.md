@@ -4,6 +4,10 @@
 
 该语句用于删除数据库（database）。
 
+> **注意**
+>
+> 该操作需要有对应数据库的 DROP 权限。
+
 ## 语法
 
 ```sql
@@ -26,3 +30,11 @@ DROP DATABASE [IF EXISTS] db_name [FORCE]
     ```sql
     DROP DATABASE db_test;
     ```
+
+## 参考文档
+
+- [CREATE DATABASE](../data-definition/CREATE%20DATABASE.md)
+- [SHOW CREATE DATABASE](SHOW%20CREATE%20DATABASE.md)
+- [USE](../data-definition)
+- [DESC](../Utility/DESCRIBE.md)
+- [SHOW DATABASES](../data-manipulation/SHOW%20DATABASES.md)
