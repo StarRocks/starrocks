@@ -52,24 +52,37 @@ Status VarBinaryConverter::write_quoted_string(OutputStream* os, const Column& c
 }
 
 bool VarBinaryConverter::read_string(Column* column, Slice s, const Options& options) const {
-    int max_size = 0;
+    int max_size = -1;
     if (options.type_desc != nullptr) {
         max_size = options.type_desc->len;
     }
 
     char* data_ptr = static_cast<char*>(s.data);
     int start = StringParser::skip_leading_whitespace(data_ptr, s.size);
+    if (start == s.size) {
+        column->append_default();
+        return true;
+    }
 
     auto buf = new char[s.size + 3];
     DeferOp defer([&]() { delete[] buf; });
 
-    int decoded_len = base64_decode2(s.data + start, s.size, buf);
-    if (UNLIKELY((decoded_len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && decoded_len > max_size))) {
+    int r = base64_decode2(s.data + start, s.size, buf);
+    char* data = buf;
+    int len = r;
+
+    if (r == -1) { // fallback if decode failed
+        data = data_ptr;
+        len = s.size;
+    }
+
+    // check if length exceed max varbinary length
+    if (UNLIKELY((len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size != -1 && len > max_size))) {
         LOG(WARNING) << "Column [" << column->get_name() << "]'s length exceed max varbinary length.";
         return false;
     }
 
-    down_cast<BinaryColumn*>(column)->append(Slice(buf, decoded_len));
+    down_cast<BinaryColumn*>(column)->append(Slice(data, len));
     return true;
 }
 

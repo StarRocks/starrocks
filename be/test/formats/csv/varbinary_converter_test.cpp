@@ -45,12 +45,31 @@ TEST_F(VarBinaryConverterTest, test_read_varbinary) {
     EXPECT_TRUE(conv->read_string(col.get(), "YQ== ", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlq", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlqX2s= ", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "   ", Converter::Options()));
 
-    EXPECT_EQ(4, col->size());
+    EXPECT_EQ(5, col->size());
     EXPECT_EQ(Slice("abcd"), col->get(0).get_slice());
     EXPECT_EQ(Slice("a"), col->get(1).get_slice());
     EXPECT_EQ(Slice("efghij"), col->get(2).get_slice());
     EXPECT_EQ(Slice("efghij_k"), col->get(3).get_slice());
+    EXPECT_EQ(Slice(), col->get(4).get_slice());
+}
+
+// NOLINTNEXTLINE
+TEST_F(VarBinaryConverterTest, test_read_varbinary_fallback) {
+    auto conv = csv::get_converter(_type, false);
+    auto col = ColumnHelper::create_column(_type, false);
+
+    EXPECT_TRUE(conv->read_string(col.get(), "YWJjZA==.", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "YQ== !", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlq.", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlqX2s= ?", Converter::Options()));
+
+    EXPECT_EQ(4, col->size());
+    EXPECT_EQ(Slice("YWJjZA==."), col->get(0).get_slice());
+    EXPECT_EQ(Slice("YQ== !"), col->get(1).get_slice());
+    EXPECT_EQ(Slice(" ZWZnaGlq."), col->get(2).get_slice());
+    EXPECT_EQ(Slice(" ZWZnaGlqX2s= ?"), col->get(3).get_slice());
 }
 
 // NOLINTNEXTLINE
