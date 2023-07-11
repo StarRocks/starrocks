@@ -142,6 +142,7 @@ public:
     Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
                                    const MemGuard& guard) {
         auto flush_call_back = [this, callback, state, &executor, guard]() {
+            auto defer = DeferOp([&]() { guard.scoped_end(); });
             RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
             RETURN_IF_ERROR(callback());
             if (!_is_cancel && spilled()) {
