@@ -306,23 +306,39 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
 
     // Test fake Array works
     {
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        RandomValueExpr<TYPE_BOOLEAN> select_internal(expr_node, 3, e);
         expr_node.type = tttype_desc[1];
         auto expr0 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
-        RandomValueExpr<TYPE_INT> col1(expr_node, chunk_size, e);
-        RandomValueExpr<TYPE_INT> col2(expr_node, chunk_size, e);
+        TypeDescriptor type_arr_int = array_type(TYPE_INT);
 
-        expr0->_children.push_back(&select_col);
-        expr0->_children.push_back(&col1);
-        expr0->_children.push_back(&col2);
+        auto array0 = ColumnHelper::create_column(type_arr_int, true);
+        array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
+        array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
+        array0->append_datum(Datum{});                                          // NULL
+        auto array_expr0 = MockExpr(type_arr_int, array0);
+
+        auto array1 = ColumnHelper::create_column(type_arr_int, false);
+        array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)41)}); // [11,41]
+        array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
+        array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});       // [NULL, 1]
+        auto array_expr1 = MockExpr(type_arr_int, array1);
+
+        expr0->_children.push_back(&select_internal);
+        expr0->_children.push_back(&array_expr0);
+        expr0->_children.push_back(&array_expr1);
 
         ColumnPtr ptr = expr0->evaluate(nullptr, nullptr);
         if (ptr->is_nullable()) {
             ptr = down_cast<NullableColumn*>(ptr.get())->data_column();
         }
-        auto* res_col0 = down_cast<Int32Column*>(ptr.get());
-        for (int i = 0; i < res_col0->size(); ++i) {
-            auto result = select_col.get_data()[i] ? col1.get_data()[i] : col2.get_data()[i];
-            ASSERT_EQ(result, res_col0->get_data()[i]);
+        ASSERT_TRUE(ptr->is_array());
+        for (int i = 0; i < ptr->size(); ++i) {
+            if (select_internal.get_data()[i]) {
+                EXPECT_EQ(ptr->debug_item(i), array0->debug_item(i));
+            } else {
+                EXPECT_EQ(ptr->debug_item(i), array1->debug_item(i));
+            }
         }
     }
 
@@ -358,8 +374,8 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
         ASSERT_EQ(result, res_col2->get_data()[i]);
     }
 
-    for (auto desc : tttype_desc1) {
-        expr_node.type = desc;
+    {
+        expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
         // Test INT8 var const
         auto expr3 = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
         RandomValueExpr<TYPE_TINYINT> col7(expr_node, chunk_size, e);
