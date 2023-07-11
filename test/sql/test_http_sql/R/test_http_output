@@ -149,7 +149,7 @@ sync;
 shell: curl -X POST '${url}/api/v2/default_catalog/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "disablePrintConnectionId":true}' --header "Content-Type: application/json" 
 -- result:
 0
-{"exception":"Getting syntax error at line 1, column 7. Detail message: Unexpected input 'from', the most similar input is {'FORMAT', 'RANDOM', 'FRONTEND', 'FRONTENDS', 'ROW_NUMBER', '(', '[', '/*+', '{', '+', '-', '*', '!', '~', '@', '...'}."}
+{"exception":"Getting syntax error at line 1, column 7. Detail message: Unexpected input 'from', the most similar input is {a legal identifier}."}
 -- !result
 sync;
 -- result:
