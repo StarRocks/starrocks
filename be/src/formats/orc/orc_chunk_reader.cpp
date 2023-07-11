@@ -498,7 +498,6 @@ OrcChunkReader::~OrcChunkReader() {
     _slot_id_to_position.clear();
     _cast_exprs.clear();
     _column_readers.clear();
-    //    _fill_functions.clear();
 }
 
 Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
@@ -565,8 +564,6 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        //        _fill_functions[src_index](cvb, col, 0, _batch->numElements, _src_types[src_index],
-        //                                   _root_selected_mapping->get_orc_type_child_mapping(src_index).orc_mapping, this);
         _column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements);
     }
 
