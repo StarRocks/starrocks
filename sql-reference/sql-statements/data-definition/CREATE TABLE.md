@@ -968,5 +968,6 @@ PROPERTIES(
 
 * [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
 * [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+* [USE](USE.md)
 * [ALTER TABLE](ALTER%20TABLE.md)
 * [DROP TABLE](DROP%20TABLE.md)

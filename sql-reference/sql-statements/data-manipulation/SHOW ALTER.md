@@ -36,3 +36,10 @@ SHOW ALTER TABLE {COLUMN | ROLLUP} [FROM db_name]
     ```sql
     SHOW ALTER TABLE ROLLUP FROM example_db;
     ````
+
+## 参考文档
+
+- [CREATE TABLE](CREATE%20TABLE.md)
+- [ALTER TABLE](ALTER%20TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
