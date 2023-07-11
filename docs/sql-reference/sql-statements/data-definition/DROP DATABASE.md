@@ -4,10 +4,6 @@
 
 Drops a database in StarRocks.
 
-> **NOTE**
->
-> This operation requires the DROP privilege on the destination database.
-
 ## Syntax
 
 ```sql
