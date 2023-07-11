@@ -2825,15 +2825,14 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
+static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
     hs_scratch_t* scratch = nullptr;
     hs_error_t status;
     if ((status = hs_clone_scratch(state->scratch, &scratch)) != HS_SUCCESS) {
-        CHECK(false) << "ERROR: Unable to clone scratch space."
-                     << " status: " << status;
+        return Status::InternalError(strings::Substitute("Unable to clone scratch space. status: $0", status));
     }
     DeferOp op([&] {
         if (scratch != nullptr) {
