@@ -66,7 +66,7 @@ public:
     StatusOr<std::unique_ptr<ColumnAccessPath>> convert_by_index(const Field* field, uint32_t index);
 
     const std::string& to_string() const;
-    
+
 private:
     TAccessPathType::type _type;
 

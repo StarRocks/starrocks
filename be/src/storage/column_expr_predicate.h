@@ -59,9 +59,6 @@ public:
     Status try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool,
                                               std::vector<const ColumnExprPredicate*>* output) const;
 
-    const std::vector<ExprContext*>& exprs() const {
-        return _expr_ctxs;
-    }
 private:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                         const SlotDescriptor* slot_desc);

@@ -471,10 +471,11 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         if (path != nullptr && !path->children().empty()) {
             for (const auto& child : path->children()) {
                 if (child->is_index() || child->is_all()) {
-                    if (value_path != nullptr) {
+                    if (UNLIKELY(value_path != nullptr)) {
+                        // ignore error path, read all
                         value_path = nullptr;
-                        LOG(WARNING) << "bad access path on column: " << *child; 
-                        continue;
+                        LOG(WARNING) << "bad access path on column: " << *child;
+                        break;
                     }
                     value_path = child.get();
                 }
@@ -498,10 +499,11 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         if (path != nullptr && !path->children().empty()) {
             for (const auto& child : path->children()) {
                 if (child->is_index() || child->is_all()) {
-                    if (value_path != nullptr) {
+                    if (UNLIKELY(value_path != nullptr)) {
+                        // ignore error path, read all
                         value_path = nullptr;
-                        LOG(WARNING) << "bad access path on column: " << *child; 
-                        continue;
+                        LOG(WARNING) << "bad access path on column: " << *child;
+                        break;
                     }
                     value_path = child.get();
                 }

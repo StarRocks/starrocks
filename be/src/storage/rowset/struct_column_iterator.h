@@ -23,4 +23,4 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(ColumnReader* reade
                                                              std::unique_ptr<ColumnIterator> null_iter,
                                                              std::vector<std::unique_ptr<ColumnIterator>> field_iters,
                                                              ColumnAccessPath* path);
-}
+} // namespace starrocks

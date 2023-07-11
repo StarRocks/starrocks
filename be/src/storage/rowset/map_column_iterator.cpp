@@ -48,9 +48,9 @@ Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     _access_keys = false;
     _access_values = false;
 
-    // KEY: ask key & offset
-    // OFFSET: ask offset
-    // ALL/INDEX: ask key & value & offset
+    // KEY: read key & offset
+    // OFFSET: read offset
+    // ALL/INDEX: read key & value & offset
     for (const auto& p : _path->children()) {
         if (p->is_key()) {
             _access_keys |= true;
