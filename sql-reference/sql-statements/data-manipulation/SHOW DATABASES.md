@@ -55,3 +55,11 @@ SHOW DATABASES FROM hive1;
 | hive_db3  |
 +-----------+
 ```
+
+## 参考文档
+
+- [CREATE DATABASE](../data-definition/CREATE%20DATABASE.md)
+- [SHOW CREATE DATABASE](SHOW%20CREATE%20DATABASE.md)
+- [USE](../data-definition/USE.md)
+- [DESC](../Utility/DESCRIBE.md)
+- [DROP DATABASE](../data-definition/DROP%20DATABASE.md)
