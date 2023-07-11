@@ -2447,6 +2447,10 @@ public class LocalMetastore implements ConnectorMetadata {
                             table.getName(), e.getMessage()), e);
         }
 
+        if (table.isCloudNativeTable() && partitionInfo.getType() == PartitionType.LIST) {
+            throw new DdlException("Do not support create list partition Cloud Native table");
+        }
+
         // a set to record every new tablet created when create table
         // if failed in any step, use this set to do clear things
         Set<Long> tabletIdSet = new HashSet<Long>();
