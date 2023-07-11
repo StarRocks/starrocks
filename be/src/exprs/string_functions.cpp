@@ -2088,8 +2088,7 @@ std::string StringFunctions::url_encode_func(const std::string& value) {
     escaped.fill('0');
     escaped << std::hex;
 
-    for (std::string::const_iterator i = value.begin(), n = value.end(); i != n; ++i) {
-        std::string::value_type c = (*i);
+    for (auto c : value) {
         if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
             escaped << c;
             continue;
@@ -2113,9 +2112,10 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(url_decodeImpl, str) {
 std::string StringFunctions::url_decode_func(const std::string& value) {
     std::string ret;
     char ch;
-    int i, ii;
+    int ii;
     char l, r;
-    for (i = 0; i < value.length(); i++) {
+    size_t length = value.length();
+    for (size_t i = 0; i < length; i++) {
         if (value[i] == '%') {
             l = value[i + 1];
             r = value[i + 2];
