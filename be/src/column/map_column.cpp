@@ -15,6 +15,7 @@
 #include "column/map_column.h"
 
 #include <cstdint>
+#include <set>
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -422,34 +423,75 @@ int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq
         return false;
     }
 
-    bool has_null = false;
+    // process the null key at last if exists, so non-nullable keys can exactly identify equal one or not.
+    // if any non-nullable key does not match, return false;
+    // else if all non-nullable key are matched (true or null), check the last nullable keys.
+    // if the last nullable key is not matched, return false; else if there is null result from all keys matching,
+    // return null, else return true.
+
+    bool has_null_eq = false;
+    uint32_t null_id = 0;
+    std::vector<uint32_t> index;
     for (uint32_t i = lhs_offset; i < lhs_end; ++i) {
-        bool found = false;
-        for (uint32_t j = rhs_offset; j < rhs_end; ++j) {
-            int res = _keys->equals(i, *(rhs_map._keys.get()), j, safe_eq);
-            if (res == EQUALS_FALSE) {
+        if (_keys->is_null(i)) {
+            null_id = i;
+            continue;
+        }
+        index.push_back(i);
+    }
+    if (index.size() < (lhs_end - lhs_offset)) {
+        index.push_back(null_id);
+    }
+    std::set<uint32_t> right_index;
+    for (uint32_t j = rhs_offset; j < rhs_end; ++j) {
+        right_index.insert(j);
+    }
+
+    for (auto i : index) {
+        bool real_eq = false;
+        bool null_eq = false;
+        uint32_t eq_id = 0;
+        for (unsigned int j : right_index) {
+            int key_res = _keys->equals(i, *(rhs_map._keys.get()), j, safe_eq);
+            if (key_res == EQUALS_FALSE) {
                 continue;
             }
+            // So two keys are the same or right key is null
+            int val_res = _values->equals(i, *(rhs_map._values.get()), j, safe_eq);
 
-            has_null |= (res == EQUALS_NULL);
-            // So two keys is the same
-            res = _values->equals(i, *(rhs_map._values.get()), j, safe_eq);
-            if (res == EQUALS_FALSE) {
-                return EQUALS_FALSE;
+            // case 1: key_res == EQUALS_TRUE
+            if (key_res == EQUALS_TRUE) {
+                if (val_res == EQUALS_FALSE) {
+                    return EQUALS_FALSE;
+                } else if (val_res == EQUALS_NULL) {
+                    null_eq = true;
+                } else if (val_res == EQUALS_TRUE) {
+                    null_eq = false;
+                    real_eq = true;
+                }
+                eq_id = j;
+                break;
             }
-            has_null |= (res == EQUALS_NULL);
-            found = true;
-            break;
+            // case 2: key_res == EQUALS_NULL, continue
+            if (val_res != EQUALS_FALSE) {
+                eq_id = j;
+                null_eq = true;
+            }
         }
-        if (!found) {
+        if (null_eq || real_eq) {
+            right_index.erase(eq_id);
+            has_null_eq |= (!real_eq && null_eq);
+        } else {
             return EQUALS_FALSE;
         }
     }
 
-    // unsafe eq && has null, should return NULL
-    // unsafe eq && none null, should return TRUE
+    DCHECK(right_index.empty()); // all matched return null or true
+
+    // unsafe eq && has null eq, should return NULL
+    // unsafe eq && none null eq, should return TRUE
     // safe eq, should return TRUE
-    return !safe_eq && has_null ? EQUALS_NULL : EQUALS_TRUE;
+    return !safe_eq && has_null_eq ? EQUALS_NULL : EQUALS_TRUE;
 }
 
 void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {

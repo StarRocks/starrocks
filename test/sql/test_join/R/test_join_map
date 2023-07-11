@@ -180,8 +180,8 @@ select map3 from map_test t where exists (select 1 from map_test s where t.map3 
 -- result:
 {"11":{1:"abc"},"":{2:null}}
 {"1":{1:"abc"}}
-{"3":{3:"a33c"},null:null}
 {null:{null:null}}
+{"3":{3:"a33c"},null:null}
 -- !result
 select map5 from map_test t where exists (select 1 from map_test s where t.map5 < s.map3);
 -- result:
@@ -206,107 +206,76 @@ E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. 
 -- !result
 select map3 from map_test t where map3 in (select map3 from map_test s);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map4 from map_test t where map4 in (select map3 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map5 from map_test t where map5 in (select map3 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map1 from map_test t where map1 in (select map5 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map2 from map_test t where map2 in (select map5 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map3 from map_test t where map3 in (select map5 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+{null:{null:null}}
+{"1":{1:"abc"}}
+{"3":{3:"a33c"},null:null}
+{"11":{1:"abc"},"":{2:null}}
 -- !result
 select map4 from map_test t where map4 in (select map5 from map_test s);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+E: (1064, 'Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: The input types (map<int(11),json>,map<int(11),struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
 -- !result
 select map5 from map_test t where map5 in (select map5 from map_test s);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+{0:{"c":1,"b":"a"}}
+{null:null,3:{"c":3,"b":"a"}}
+{null:{"c":null,"b":null}}
+{null:{"c":null,"b":null}}
 -- !result
 select map3 from map_test t where map3 not in (select map2 from map_test s);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map4 from map_test t where map4 not in (select map2 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map4 from map_test t where map4 not in (select map3 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map4 from map_test t where map4 not in (select map5 from map_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+E: (1064, 'Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: The input types (map<varchar(65533),map<int(11),varchar(30)>>,map<int(11),array<varchar(65533)>>) of in predict are not compatible.')
 -- !result
 select map5 from map_test t where map5 not in (select map5 from map_test s);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
 -- !result
 select map0 in (select map0 from map_test s) from map_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 43. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map1 in (select map0 from map_test s) from map_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 43. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map2 in (select map0 from map_test s) from map_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 43. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+1
+None
+1
+1
+1
 -- !result
 select map3 in (select map5 from map_test s) from map_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 43. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map4 in (select map5 from map_test s) from map_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 43. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 43. Detail message: The input types (map<varchar(65533),map<int(11),varchar(30)>>,map<int(11),struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
 -- !result
 select map5 in (select map5 from map_test s) from map_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 43. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+None
+1
+1
+1
+1
 -- !result
 select map0 not in (select map0 from map_test s) from map_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+None
+0
+0
+0
+0
 -- !result
 select map1 not in (select map0 from map_test s) from map_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map2 not in (select map0 from map_test s) from map_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map2 not in (select map5 from map_test s) from map_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select map3 not in (select map5 from map_test s) from map_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+0
+None
+0
+0
+None
 -- !result
 select map4 not in (select map5 from map_test s) from map_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: The input types (map<int(11),json>,map<int(11),struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
 -- !result
 select map5 not in (select map5 from map_test s) from map_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+None
+0
+0
+0
+0
 -- !result
 select t.map4, s.map4 from map_test t left join map_test s on s.map4 = t.map4 order by t.pk;
 -- result:
