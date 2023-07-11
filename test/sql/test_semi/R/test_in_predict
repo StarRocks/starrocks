@@ -66,43 +66,41 @@ insert into sc2 values (13, null, [],     [map{2:20, 1:10}],       [row(1, 2)], 
 -- !result
 select js in (json_object(),json_object('a',1)) from sc2;
 -- result:
+None
+None
+0
+0
 0
 0
 0
 0
 0
 None
-0
-0
-None
 None
 0
 0
-None
 -- !result
 select js not in (json_object(),json_object('a',1)) from sc2;
 -- result:
 1
 1
+1
+1
 None
 None
 1
+1
+1
 None
 1
 None
-1
-1
-1
-1
 1
 -- !result
 select json_object() in (js,json_object('a',1)) from sc2;
 -- result:
+None
+None
 0
-0
-None
-None
-None
 0
 0
 0
@@ -111,22 +109,24 @@ None
 0
 1
 None
+None
+0
 -- !result
 select json_object() not in (js,json_object('a',1)) from sc2;
 -- result:
-None
-None
-1
-1
-1
-1
-None
-None
 1
 1
 1
 1
 0
+1
+1
+None
+None
+1
+None
+1
+None
 -- !result
 select js in (null,json_object('a',1)) from sc2;
 -- result:
@@ -196,20 +196,25 @@ select js in (1,3,json_object('a',2)) from sc2;
 -- result:
 0
 0
-0
-0
-0
-0
-0
 None
 None
 0
 0
 None
+0
+0
+0
+0
 None
+0
 -- !result
 select js not in (2,3) from sc2;
 -- result:
+None
+None
+1
+1
+None
 1
 1
 1
@@ -217,28 +222,23 @@ select js not in (2,3) from sc2;
 1
 1
 None
-None
 1
-None
-1
-1
-None
 -- !result
 select js in (1,3,v1,json_object('a',11)) from sc2;
 -- result:
 0
-None
-None
-0
-0
-0
-0
 0
 0
 0
 None
+0
+0
+0
+None
 None
 0
+0
+None
 -- !result
 select js not in (2,3,v1) from sc2;
 -- result:
@@ -246,13 +246,13 @@ None
 None
 1
 1
-1
+None
 1
 1
 1
 1
 None
-None
+1
 1
 1
 -- !result
@@ -260,31 +260,31 @@ select js in (json_object("a", 1),json_object("ab", 12, 'bc',4),json_object("ab"
 -- result:
 0
 0
-0
-0
+None
+None
 0
 0
 None
 0
-None
 0
-None
+0
+0
 None
 0
 -- !result
 select js not in (json_object("a", 1),json_object("ab", 13, 'b',4) ) from sc2;
 -- result:
-1
-1
-1
-1
-1
-1
+None
+None
 1
 1
 None
-None
-None
+1
+1
+1
+1
+1
+1
 None
 1
 -- !result
@@ -394,34 +394,34 @@ None
 -- !result
 select [] in (array1), [] not in (array1), [null] in (array1), [null] not in (array1),[] in (array2), [] not in (array2), [null] in (array2), [null] not in (array2),[] in (array3), [] not in (array3), [null] in (array3), [null] not in (array3) from sc2;
 -- result:
-None	None	None	None	None	None	None	None	None	None	None	None
 0	1	0	1	0	1	None	1	0	1	None	1
-1	0	0	1	0	1	None	1	0	1	0	1
+0	1	0	1	1	0	0	1	0	1	None	1
 0	1	0	1	0	1	None	0	0	1	None	1
 0	1	0	1	0	1	None	1	0	1	None	1
 0	1	0	1	0	1	None	1	1	0	0	1
 0	1	0	1	0	1	None	1	0	1	None	0
 0	1	0	1	0	1	None	1	0	1	None	1
-0	1	0	1	1	0	0	1	0	1	None	1
+0	1	0	1	0	1	None	1	0	1	None	1
+None	None	None	None	None	None	None	None	None	None	None	None
+0	1	0	1	0	1	None	1	0	1	None	1
+1	0	0	1	0	1	None	1	0	1	0	1
+0	1	0	1	0	1	None	1	0	1	None	1
 1	0	0	1	0	1	None	1	0	1	None	1
-0	1	0	1	0	1	None	1	0	1	None	1
-0	1	0	1	0	1	None	1	0	1	None	1
-0	1	0	1	0	1	None	1	0	1	None	1
 -- !result
 select array2 in ([],[map{}]),  array2 in ([null],[map{1:3}]), array2 in ([map{1:10, 3:30, 2:20}], [map{}])  from sc2;
 -- result:
-None	None	None
 0	None	0
-0	None	1
+1	0	0
 None	None	None
 1	None	1
 0	None	1
 0	None	1
 0	None	None
 0	None	None
-0	None	None
+None	None	None
 0	None	0
-1	0	0
+0	None	1
+0	None	None
 0	None	0
 -- !result
 select array2 not in ([],[map{}]),  array2 not in ([null],[map{1:3}]), array2 not in ([map{1:10, 3:30, 2:20}], [map{3:3}])  from sc2;
@@ -432,28 +432,28 @@ None	None	None
 1	None	0
 1	None	None
 1	None	None
-1	None	None
 None	None	None
 1	None	1
 1	None	0
 1	None	None
-0	1	1
 1	None	1
+1	None	None
+0	1	1
 -- !result
 select array3 in ([]), array3 not in ([]), array3 in ([null]), array3 not in ([null]), array3 in ([row(1, 2)], [null]), array3 not in ([row(1, 2)], [null]) from sc2;
 -- result:
+0	1	None	1	1	0
+0	1	None	1	1	0
+1	0	0	1	0	1
+0	1	None	0	None	0
 0	1	None	1	None	1
+0	1	None	1	1	0
 0	1	None	1	1	0
 0	1	None	1	1	0
 None	None	None	None	None	None
 0	1	None	1	None	1
 0	1	0	1	0	1
 0	1	None	1	1	0
-0	1	None	1	1	0
-0	1	None	1	1	0
-0	1	None	1	1	0
-1	0	0	1	0	1
-0	1	None	0	None	0
 0	1	None	1	1	0
 -- !result
 select array1 in (null), array1 not in (null), array2 in (null), array2 not in (null), array3 in (null), array3 not in (null) from sc2;
@@ -494,11 +494,11 @@ E: (1064, "Getting syntax error at line 1, column 18. Detail message: No viable 
 -- !result
 select array1 in (['a']) from sc2;
 -- result:
-0
-0
-0
-0
 None
+0
+0
+0
+0
 0
 0
 0
@@ -546,11 +546,9 @@ E: (1064, 'Getting analyzing error at line 1, column 7. Detail message: in predi
 -- !result
 select map1 in (map{}), map1 not in (map{}), map2 in (map{}), map2 not in (map{}), map3 in (map{}), map3 not in (map{}) from sc2;
 -- result:
-1	0	0	1	0	1
-0	1	0	1	0	1
-0	1	0	1	0	1
-0	1	0	1	0	1
 0	1	0	1	1	0
+0	1	0	1	0	1
+1	0	0	1	0	1
 0	1	0	1	0	1
 1	0	0	1	0	1
 0	1	0	1	0	1
@@ -558,6 +556,8 @@ select map1 in (map{}), map1 not in (map{}), map2 in (map{}), map2 not in (map{}
 0	1	0	1	0	1
 None	None	None	None	None	None
 1	0	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
 0	1	0	1	0	1
 -- !result
 select map1 in (null), map1 not in (null), map2 in (null), map2 not in (null), map3 in (null), map3 not in (null) from sc2;
@@ -594,91 +594,91 @@ None	None	None	None	None	None
 -- !result
 select map{} in (map1), map() not in (map1), map() in (map2), map() not in (map2), map() in (map3), map() not in (map3) from sc2;
 -- result:
-0	1	0	1	0	1
-0	1	0	1	0	1
-0	1	0	1	0	1
-0	1	0	1	0	1
 None	None	None	None	None	None
 1	0	0	1	0	1
 0	1	0	1	0	1
-1	0	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
+0	1	0	1	0	1
 0	1	0	1	0	1
 0	1	0	1	1	0
+0	1	0	1	0	1
+1	0	0	1	0	1
 0	1	0	1	0	1
 1	0	0	1	0	1
 0	1	0	1	0	1
 -- !result
 select map1 in (map{1:10, 2:20, 4:40}, map{}), map2 in (map{2:[2,3,4], 1:[1,2,3]}, map{2:[2,3,4], 1:[1,22,3]}), map3 not in (map{2:row(2,4), 1:row(1,2)},map{2:row(2,4), 1:row(1,22)}) from sc2;
 -- result:
-None	None	None
-1	0	None
-0	0	1
 0	1	0
 0	0	0
 None	1	1
 1	0	1
 1	0	1
 0	0	1
-0	None	1
 1	None	0
-0	0	0
 0	None	0
+None	None	None
+1	0	None
+0	0	1
+0	None	1
+0	0	0
 -- !result
 select map2 not in (map{2:[2,3,4], 1:[1,2,3]},null), map3 in (map{2:row(2,4), 1:row(1,2)}, null) from sc2;
 -- result:
 None	None
-0	None
 None	None
 None	None
 None	None
 None	1
 0	1
 None	1
+0	None
+None	None
+None	None
+None	None
 None	1
-None	None
-None	None
-None	None
 None	1
 -- !result
 select map2 in (map{1:[1,2,null],2:[2,4,null]},map{2:[2,3,4], 1:[1,2,3]}) from sc2;
 -- result:
-None
-0
-None
-None
-None
-None
-0
-1
-0
 1
 0
 0
 None
+None
+None
+1
+0
+None
+0
+None
+None
+0
 -- !result
 select map2 not in (map{1:[1,2,null],2:[2,4,null]},map{2:[2,3,4], 1:[1,2,3]}) from sc2;
 -- result:
-None
-1
-None
-0
-1
-None
-None
-1
-None
 0
 1
 1
 None
+None
+None
+0
+1
+None
+1
+None
+None
+1
 -- !result
 select map1 in (map{'a':'b'}) from sc2;
 -- result:
-0
-0
-0
-0
 None
+0
+0
+0
+0
 0
 0
 0
@@ -690,14 +690,14 @@ None
 -- !result
 select map1 not in (map{'a':3}) from sc2;
 -- result:
-1
-1
-1
-1
-1
-1
-1
 None
+1
+1
+1
+1
+1
+1
+1
 1
 1
 1
@@ -708,12 +708,12 @@ select map2 in (map{'2':[3]}) from sc2;
 -- result:
 0
 0
-0
-0
-0
-0
-0
 None
+0
+0
+0
+0
+0
 0
 0
 0
@@ -793,64 +793,64 @@ select st1 in (row(1, [2,1,3], map{1:1, 2:2}, row(3, 2)), row(12, [2,null,3], ma
 None
 1
 None
-None
 0
 0
 None
-0
+None
 0
 0
 0
 0
 None
+0
 -- !result
 select st1 not in (row(1, [2,1,3], map{1:1, 2:2}, row(3, 2)), row(12, [2,null,3], map{11:1, 2:2}, row(31, 2))) from sc2;
 -- result:
 None
+1
+1
 None
 None
-1
-1
-1
-1
-1
-1
 None
 0
 1
+1
+1
+1
 None
+1
 -- !result
 select st1 in (row(1, [2,1,null], map{1:1, 2:2}, row(1, 2)),row(1, [2,1,3], map{1:1, 2:2}, row(3, 2))) from sc2;
 -- result:
 None
-0
-0
-0
-0
-None
-None
-None
-None
-0
-None
 1
 0
+0
+0
+0
+None
+0
+None
+None
+0
+None
+None
 -- !result
 select st1 not in (row(1, [2,1,3], map{1:1, 2:2}, row(1, 2)),row(1, [2,1,3], map{1:1, 2:2}, row(3, 2))) from sc2;
 -- result:
+1
+1
+1
+1
 None
+1
 None
 0
 None
 None
-None
-1
 1
 None
-1
-1
-1
-1
+None
 -- !result
 select st1 in (map{}) from sc2;
 -- result:

@@ -254,23 +254,23 @@ select s0 in (select s0 from struct_test s) from struct_test;
 -- result:
 1
 1
+1
+1
 None
-1
-1
 -- !result
 select s0 in (select s1 from struct_test s) from struct_test;
 -- result:
-1
-1
-1
 None
+1
+1
+1
 None
 -- !result
 select s5 in (select s5 from struct_test s) from struct_test;
 -- result:
 1
-1
 None
+1
 1
 1
 -- !result
