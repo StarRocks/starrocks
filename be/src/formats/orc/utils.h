@@ -90,7 +90,11 @@ public:
             seconds = is_instant ? seconds + tzoffset : seconds;
             orc_ts_to_native_ts_after_unix_epoch(tv, seconds, nanoseconds);
         } else {
-            orc_ts_to_native_ts_before_unix_epoch(tv, tz, seconds, nanoseconds);
+            if (is_instant) {
+                orc_ts_to_native_ts_before_unix_epoch(tv, tz, seconds, nanoseconds);
+            } else {
+                orc_ts_to_native_ts_before_unix_epoch(tv, cctz::utc_time_zone(), seconds, nanoseconds);
+            }
         }
     }
 };
