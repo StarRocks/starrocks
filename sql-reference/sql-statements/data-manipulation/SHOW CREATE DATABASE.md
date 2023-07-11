@@ -8,6 +8,8 @@
 SHOW CREATE DATABASE <db_name>
 ```
 
+## 参数说明
+
 `db_name`：数据库的名称，必填。
 
 ## 返回结果说明
