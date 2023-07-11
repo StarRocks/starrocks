@@ -194,6 +194,7 @@ import java.util.Set;
 
 import static com.starrocks.sql.analyzer.PrivilegeChecker.checkAnyActionOnDb;
 import static com.starrocks.sql.analyzer.PrivilegeChecker.checkAnyActionOnOrInDb;
+import static com.starrocks.sql.analyzer.PrivilegeChecker.checkAnyActionOnStorageVolume;
 import static com.starrocks.sql.analyzer.PrivilegeChecker.checkAnyActionOnTable;
 import static com.starrocks.sql.analyzer.PrivilegeChecker.checkCatalogAction;
 import static com.starrocks.sql.analyzer.PrivilegeChecker.checkDbAction;
@@ -1554,11 +1555,7 @@ public class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, ConnectContext context) {
-        if (!PrivilegeActions.checkAnyActionOnStorageVolume(
-                context, statement.getName())) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                    "DESC STORAGE VOLUME");
-        }
+        checkAnyActionOnStorageVolume(context, statement.getName());
         return null;
     }
 
