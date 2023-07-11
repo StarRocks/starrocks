@@ -33,7 +33,7 @@ void test_money_format_decimal(TestArray const& test_cases, int precision, int s
     }
 
     columns.emplace_back(money_column);
-    ColumnPtr result = StringFunctions::money_format_decimal<Type>(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::money_format_decimal<Type>(ctx.get(), columns).value();
     auto v = ColumnHelper::as_raw_column<BinaryColumn>(result);
 
     for (int i = 0; i < rows_num; ++i) {

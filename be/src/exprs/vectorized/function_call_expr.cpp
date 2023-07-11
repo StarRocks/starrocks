@@ -143,17 +143,18 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     }
 #endif
 
-    ColumnPtr result;
+    StatusOr<ColumnPtr> result;
     if (_fn_desc->exception_safe) {
         result = _fn_desc->scalar_function(fn_ctx, args);
     } else {
         SCOPED_SET_CATCHED(false);
         result = _fn_desc->scalar_function(fn_ctx, args);
     }
+    RETURN_IF_ERROR(result);
 
     // For no args function call (pi, e)
-    if (result->is_constant() && ptr != nullptr) {
-        result->resize(ptr->num_rows());
+    if (result.value()->is_constant() && ptr != nullptr) {
+        result.value()->resize(ptr->num_rows());
     }
     return result;
 }

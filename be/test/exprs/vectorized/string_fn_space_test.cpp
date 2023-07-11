@@ -17,7 +17,7 @@ TEST_F(StringFunctionSpaceTest, spaceTest) {
 
     columns.emplace_back(times);
 
-    ColumnPtr result = StringFunctions::space(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::space(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
     ASSERT_TRUE(result->is_binary());
 
@@ -45,7 +45,7 @@ TEST_F(StringFunctionSpaceTest, spaceConstTest) {
     for (auto& c : times_cases) {
         auto [column, is_null, expect] = c;
         Columns columns{column};
-        ColumnPtr result = StringFunctions::space(ctx.get(), columns);
+        ColumnPtr result = StringFunctions::space(ctx.get(), columns).value();
         ASSERT_EQ(result->size(), 1);
         if (is_null) {
             ASSERT_TRUE(result->is_null(0));
@@ -104,7 +104,7 @@ TEST_F(StringFunctionSpaceTest, spaceNullableColumnTest) {
         null_col->append(is_null);
     }
     Columns columns{NullableColumn::create(times_col, null_col)};
-    auto result = StringFunctions::space(ctx.get(), columns);
+    auto result = StringFunctions::space(ctx.get(), columns).value();
     const auto num_rows = times_col->size();
     ASSERT_EQ(result->size(), num_rows);
     ASSERT_TRUE(num_rows - start_row > 0);
