@@ -18,7 +18,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -115,14 +114,8 @@ public class JsonTypeTest extends PlanTestBase {
                     String.format("parse_json('1') %s CAST(false AS JSON)", operator));
         }
 
-        try {
-            getFragmentPlan("select parse_json('1') in (1, 2, 3)");
-            getFragmentPlan("select parse_json('1') in (parse_json('1'), parse_json('2')");
-            Assert.fail("should throw");
-        } catch (SemanticException e) {
-            Assert.assertEquals("Getting analyzing error from line 1, column 7 to line 1, column 21. " +
-                    "Detail message: InPredicate of JSON is not supported.", e.getMessage());
-        }
+        assertPlanContains("select parse_json('1') in (1, 2, 3)", "IN");
+        assertPlanContains("select parse_json('1') in (parse_json('1'), parse_json('2'))", "OR");
     }
 
     /**

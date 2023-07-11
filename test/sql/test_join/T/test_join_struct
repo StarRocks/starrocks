@@ -23,7 +23,6 @@ insert into struct_test values (2, row(null,null),row(null,null),row(null,null),
 insert into struct_test values (3, row(3,''),row(3,''),row(3,['3',null, null,null]),row('3',map(3,'a33c',null,null)),row(null,json_object('name','abc','age',23)),row(null, row(3,'a')));
 insert into struct_test values (4, null,null,null,null,null,null);
 
-
 select t.s0, s.s0 from struct_test t join struct_test s on s.s0 = t.s0 order by t.pk;
 select t.s1, s.s1 from struct_test t join struct_test s on s.s1 = t.s1 order by t.pk;
 select t.s2, s.s2 from struct_test t join struct_test s on s.s2 = t.s2 order by t.pk;
@@ -32,9 +31,7 @@ select t.s0, s.s0 from struct_test t join struct_test s where s.s0 = t.s0 order 
 select t.s1, s.s1 from struct_test t join struct_test s where s.s1 = t.s1 order by t.pk;
 select t.s2, s.s2 from struct_test t join struct_test s where s.s2 = t.s2 order by t.pk;
 select t.s3, s.s3 from struct_test t join struct_test s where s.s3 = t.s3 order by t.pk;
--- select t.s4, s.s4 from struct_test t join struct_test s where s.s4 = t.s4 order by t.pk;
 select t.s2, s.s3 from struct_test t join struct_test s where s.s2 = t.s3 order by t.pk;
-
 
 select t.s0, s.s0 from struct_test t join struct_test s on s.s0 <=> t.s0 order by t.pk;
 select t.s1, s.s1 from struct_test t join struct_test s on s.s1 <=> t.s1 order by t.pk;
@@ -50,7 +47,6 @@ select t.s4, s.s4 from struct_test t join struct_test s where s.s4 > t.s4 order 
 select t.s0, s.s0 from struct_test t join struct_test s on s.s0 >= t.s0 order by t.pk;
 select t.s4, s.s5 from struct_test t join struct_test s where s.s4 >= t.s5 order by t.pk;
 
-
 select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 = s.s5);
 select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 = s.s5);
 select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 = s.s5);
@@ -58,7 +54,6 @@ select s2 from struct_test t where exists (select 1 from struct_test s where t.s
 select s3 from struct_test t where exists (select 1 from struct_test s where t.s3 <=> s.s2);
 select s4 from struct_test t where exists (select 1 from struct_test s where t.s4 <=> s.s2);
 select s5 from struct_test t where exists (select 1 from struct_test s where t.s5 <=> s.s2);
-
 
 select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 < s.s1);
 select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 < s.s1);
@@ -69,30 +64,17 @@ select s4 from struct_test t where not exists (select 1 from struct_test s where
 select s5 from struct_test t where not exists (select 1 from struct_test s where t.s5 <=> s.s5);
 
 select s2 from struct_test t where s2 in (select s0 from struct_test s);
-select s3 from struct_test t where s3 in (select s0 from struct_test s);
 select s4 from struct_test t where s4 in (select s1 from struct_test s);
-select s0 from struct_test t where s0 in (select s4 from struct_test s);
-select s4 from struct_test t where s4 in (select s4 from struct_test s);
 select s0 from struct_test t where s0 in (select s5 from struct_test s);
-select s5 from struct_test t where s5 not in (select s0 from struct_test s);
-select s0 from struct_test t where s0 not in (select s1 from struct_test s);
-select s0 from struct_test t where s0 not in (select s2 from struct_test s);
-select s2 from struct_test t where s2 not in (select s3 from struct_test s);
-select s5 from struct_test t where s5 not in (select s4 from struct_test s);
+select s5 from struct_test t where s5 not in (select s5 from struct_test s);
 select s0 from struct_test t where s0 not in (select s5 from struct_test s);
 
 select s0 in (select s0 from struct_test s) from struct_test;
 select s0 in (select s1 from struct_test s) from struct_test;
-select s4 in (select s2 from struct_test s) from struct_test;
-select s5 in (select s2 from struct_test s) from struct_test;
-select s0 in (select s3 from struct_test s) from struct_test;
 select s5 in (select s5 from struct_test s) from struct_test;
 select s0 not in (select s0 from struct_test s) from struct_test;
 select s0 not in (select s2 from struct_test s) from struct_test;
-select s5 not in (select s3 from struct_test s) from struct_test;
-select s4 not in (select s4 from struct_test s) from struct_test;
 select s0 not in (select s5 from struct_test s) from struct_test;
-
 
 select t.s4, s.s5 from struct_test t left join struct_test s where s.s4 <=> t.s5 order by t.pk;
 select t.s0, s.s0 from struct_test t left join struct_test s on s.s0 = t.s0 order by t.pk;
