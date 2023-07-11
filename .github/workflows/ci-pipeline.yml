@@ -236,6 +236,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
+      GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: BRANCH INFO
         id: branch
@@ -284,6 +285,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
+      GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: clean
         run: |
@@ -450,6 +452,8 @@ jobs:
         id: run_ut
         shell: bash
         timeout-minutes: 60
+        env:
+          GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
@@ -536,6 +540,8 @@ jobs:
         id: run_build
         shell: bash
         timeout-minutes: 90
+        env:
+          GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
