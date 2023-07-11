@@ -2,19 +2,21 @@
 
 package com.starrocks.epack.sql.ast;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.sql.analyzer.AnalyzerUtilsEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 public class WithRowAccessPolicy implements ParseNode {
     private final PolicyName policyName;
-    private final List<String> onColumns;
+    private List<String> onColumns;
     private final NodePosition pos;
 
     //Resolved by Analyzer
@@ -50,7 +52,19 @@ public class WithRowAccessPolicy implements ParseNode {
     public void analyze(ConnectContext context) {
         AnalyzerUtilsEPack.normalizationPolicyName(context, policyName);
         SecurityPolicyMgr securityPolicyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
-        Policy policy = securityPolicyManager.getPolicyByName(PolicyType.ROW_ACCESS, policyName, false);
+        Policy policy = securityPolicyManager.getPolicyByName(PolicyType.ROW_ACCESS, policyName);
+        if (policy == null) {
+            throw new SemanticException("Can't find policy " + policyName);
+        }
         policyId = policy.getPolicyId();
+
+        if (onColumns == null || onColumns.isEmpty()) {
+            onColumns = Lists.newArrayList(policy.getArgNames().get(0));
+        }
+
+        if (policy.getArgNames().size() != onColumns.size()) {
+            throw new SemanticException("The number of on columns does not match " +
+                    "the number of parameters required by the policy");
+        }
     }
 }

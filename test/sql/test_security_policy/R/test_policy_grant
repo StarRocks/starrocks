@@ -1,0 +1,262 @@
+-- name: test_row_access_policy_grant
+CREATE DATABASE test_row_access_policy_grant;
+-- result:
+-- !result
+use test_row_access_policy_grant;
+-- result:
+-- !result
+drop user if exists u2;
+-- result:
+-- !result
+create user u2;
+-- result:
+-- !result
+grant create row access policy on database test_row_access_policy_grant to u2;
+-- result:
+-- !result
+grant impersonate on user root to u2;
+-- result:
+-- !result
+execute as u2 with no revert;
+-- result:
+-- !result
+create row access policy rp as (v1 bigint) returns boolean -> true;
+-- result:
+-- !result
+show row access policies;
+-- result:
+rp	ROW ACCESS	default_catalog	test_row_access_policy_grant
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+revoke create row access policy on database test_row_access_policy_grant from u2;
+-- result:
+-- !result
+execute as u2 with no revert;
+-- result:
+-- !result
+show grants;
+-- result:
+'u2'@'%'	default_catalog	GRANT IMPERSONATE ON USER 'root'@'%' TO USER 'u2'@'%'
+-- !result
+create row access policy rp2 as (v1 bigint) returns boolean -> true;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Access denied; you need (at least one of) the CREATE ROW ACCESS POLICY privilege(s) for this operation.')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+grant apply on row access policy rp to u2;
+-- result:
+-- !result
+grant all privileges on table t0 to u2;
+-- result:
+-- !result
+grant all privileges on all tables in database starrocks to u2;
+-- result:
+-- !result
+execute as u2 with no revert;
+-- result:
+-- !result
+alter table t0 add row access policy rp;
+-- result:
+-- !result
+select * from starrocks.policy_references where POLICY_DATABASE='test_row_access_policy_grant';
+-- result:
+test_row_access_policy_grant	rp	Row Access	default_catalog	test_row_access_policy_grant	t0	None
+-- !result
+alter table t0 drop row access policy rp;
+-- result:
+-- !result
+select * from starrocks.policy_references where POLICY_DATABASE='test_row_access_policy_grant';
+-- result:
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+revoke apply on row access policy rp from u2;
+-- result:
+-- !result
+show grants for u2;
+-- result:
+'u2'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE ON ALL TABLES IN DATABASE starrocks TO USER 'u2'@'%'
+'u2'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE ON TABLE test_row_access_policy_grant.t0 TO USER 'u2'@'%'
+'u2'@'%'	default_catalog	GRANT IMPERSONATE ON USER 'root'@'%' TO USER 'u2'@'%'
+-- !result
+execute as u2 with no revert;
+-- result:
+-- !result
+alter table t0 add row access policy rp;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Access denied; you need (at least one of) the APPLY privilege(s) for this operation.')
+-- !result
+select * from starrocks.policy_references where POLICY_DATABASE='test_policy_grant';
+-- result:
+-- !result
+drop row access policy rp;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Access denied; you need (at least one of) the DROP privilege(s) for this operation.')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+grant drop on row access policy rp to u2;
+-- result:
+-- !result
+execute as u2 with no revert;
+-- result:
+-- !result
+drop row access policy rp;
+-- result:
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+-- name: test_masking_policy_grant
+CREATE DATABASE test_masking_policy_grant;
+-- result:
+-- !result
+use test_masking_policy_grant;
+-- result:
+-- !result
+drop user if exists u1;
+-- result:
+-- !result
+create user u1;
+-- result:
+-- !result
+grant create masking policy on database test_masking_policy_grant to u1;
+-- result:
+-- !result
+grant impersonate on user root to u1;
+-- result:
+-- !result
+execute as u1 with no revert;
+-- result:
+-- !result
+create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
+-- result:
+-- !result
+show masking policies;
+-- result:
+mp	MASKING	default_catalog	test_masking_policy_grant
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+revoke create masking policy on database test_masking_policy_grant from u1;
+-- result:
+-- !result
+execute as u1 with no revert;
+-- result:
+-- !result
+show grants;
+-- result:
+'u1'@'%'	default_catalog	GRANT IMPERSONATE ON USER 'root'@'%' TO USER 'u1'@'%'
+-- !result
+create masking policy mp2 as ( v1 bigint) returns bigint -> v1 + 1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Access denied; you need (at least one of) the CREATE MASKING POLICY privilege(s) for this operation.')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+grant apply on masking policy mp to u1;
+-- result:
+-- !result
+grant all privileges on table t0 to u1;
+-- result:
+-- !result
+grant all privileges on all tables in database starrocks to u1;
+-- result:
+-- !result
+execute as u1 with no revert;
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp;
+-- result:
+-- !result
+select * from starrocks.policy_references where POLICY_DATABASE='test_masking_policy_grant';
+-- result:
+test_masking_policy_grant	mp	Column Masking	default_catalog	test_masking_policy_grant	t0	v1
+-- !result
+alter table t0 modify column v1 unset masking policy;
+-- result:
+-- !result
+select * from starrocks.policy_references where POLICY_DATABASE='test_masking_policy_grant';
+-- result:
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+revoke apply on masking policy mp from u1;
+-- result:
+-- !result
+show grants for u1;
+-- result:
+'u1'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE ON ALL TABLES IN DATABASE starrocks TO USER 'u1'@'%'
+'u1'@'%'	default_catalog	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE ON TABLE test_masking_policy_grant.t0 TO USER 'u1'@'%'
+'u1'@'%'	default_catalog	GRANT IMPERSONATE ON USER 'root'@'%' TO USER 'u1'@'%'
+-- !result
+execute as u1 with no revert;
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Access denied; you need (at least one of) the APPLY privilege(s) for this operation.')
+-- !result
+select * from starrocks.policy_references where POLICY_DATABASE='test_policy_grant';
+-- result:
+-- !result
+drop masking policy mp;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Access denied; you need (at least one of) the DROP privilege(s) for this operation.')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+grant drop on masking policy mp to u1;
+-- result:
+-- !result
+execute as u1 with no revert;
+-- result:
+-- !result
+drop masking policy mp;
+-- result:
+-- !result
+execute as root with no revert;
+-- result:
+-- !result

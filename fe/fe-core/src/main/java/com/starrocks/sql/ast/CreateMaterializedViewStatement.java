@@ -21,10 +21,13 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
+import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -69,6 +72,9 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
 
+    //Add by Epack
+    private List<WithRowAccessPolicy> withRowAccessPolicies;
+
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            String comment,
@@ -108,6 +114,26 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setIfNotExists(boolean ifNotExists) {
         this.ifNotExists = ifNotExists;
+    }
+
+    public Map<String, WithColumnMaskingPolicy> getMaskingPolicyContextMap() {
+        Map<String, WithColumnMaskingPolicy> withColumnMaskingPolicyMap = new HashMap<>();
+        if (colWithComments != null) {
+            for (ColWithComment colWithComment : colWithComments) {
+                if (colWithComment.getWithColumnMaskingPolicy() != null) {
+                    withColumnMaskingPolicyMap.put(colWithComment.getColName(), colWithComment.getWithColumnMaskingPolicy());
+                }
+            }
+        }
+        return withColumnMaskingPolicyMap;
+    }
+
+    public List<WithRowAccessPolicy> getWithRowAccessPolicies() {
+        return withRowAccessPolicies;
+    }
+
+    public void setWithRowAccessPolicies(List<WithRowAccessPolicy> withRowAccessPolicies) {
+        this.withRowAccessPolicies = withRowAccessPolicies;
     }
 
     public String getComment() {

@@ -16,6 +16,7 @@ package com.starrocks.privilege;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.epack.privilege.PrivilegeTypeEPack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 
@@ -29,7 +30,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     private static final short PLUGIN_ID = 1;
     private static final short PLUGIN_VERSION = 1;
 
-    private static final Map<ObjectType, List<PrivilegeType>> TYPE_TO_ACTION_LIST =
+    protected static final Map<ObjectType, List<PrivilegeType>> TYPE_TO_ACTION_LIST =
             ImmutableMap.<ObjectType, List<PrivilegeType>>builder()
                     .put(ObjectType.TABLE, ImmutableList.of(
                             PrivilegeType.DELETE,
@@ -46,7 +47,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                             PrivilegeType.ALTER,
                             PrivilegeType.CREATE_VIEW,
                             PrivilegeType.CREATE_FUNCTION,
-                            PrivilegeType.CREATE_MATERIALIZED_VIEW))
+                            PrivilegeType.CREATE_MATERIALIZED_VIEW,
+                            PrivilegeTypeEPack.CREATE_MASKING_POLICY,
+                            PrivilegeTypeEPack.CREATE_ROW_ACCESS_POLICY))
 
                     .put(ObjectType.SYSTEM, ImmutableList.of(
                             PrivilegeType.GRANT,

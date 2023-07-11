@@ -16,6 +16,10 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.alter.AlterOpType;
+import com.starrocks.alter.AlterOperations;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -24,11 +28,15 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -52,10 +60,12 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public interface ConnectorMetadata {
     /**
@@ -79,8 +89,9 @@ public interface ConnectorMetadata {
 
     /**
      * Return all partition names of the table.
+     *
      * @param databaseName the name of the database
-     * @param tableName the name of the table
+     * @param tableName    the name of the table
      * @return a list of partition names
      */
     default List<String> listPartitionNames(String databaseName, String tableName) {
@@ -89,8 +100,9 @@ public interface ConnectorMetadata {
 
     /**
      * Return partial partition names of the table using partitionValues to filter.
-     * @param databaseName the name of the database
-     * @param tableName the name of the table
+     *
+     * @param databaseName    the name of the database
+     * @param tableName       the name of the table
      * @param partitionValues the partition value to filter
      * @return a list of partition names
      */
@@ -126,12 +138,12 @@ public interface ConnectorMetadata {
      * There are two ways of current connector table.
      * 1. Get the remote files information from hdfs or s3 according to table or partition.
      * 2. Get file scan tasks for iceberg metadata by query predicate.
+     *
      * @param table
      * @param partitionKeys selected partition columns
-     * @param snapshotId selected snapshot id
-     * @param predicate used to filter metadata for iceberg, etc
-     * @param fieldNames all selected columns (including partition columns)
-     *
+     * @param snapshotId    selected snapshot id
+     * @param predicate     used to filter metadata for iceberg, etc
+     * @param fieldNames    all selected columns (including partition columns)
      * @return the remote file information of the query to scan.
      */
     default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
@@ -145,12 +157,12 @@ public interface ConnectorMetadata {
 
     /**
      * Get statistics for the table.
-     * @param session optimizer context
-     * @param table
-     * @param columns selected columns
-     * @param partitionKeys selected partition keys
-     * @param predicate used to filter metadata for iceberg, etc
      *
+     * @param session       optimizer context
+     * @param table
+     * @param columns       selected columns
+     * @param partitionKeys selected partition keys
+     * @param predicate     used to filter metadata for iceberg, etc
      * @return the table statistics for the table.
      */
     default Statistics getTableStatistics(OptimizerContext session,
@@ -211,6 +223,29 @@ public interface ConnectorMetadata {
     }
 
     default void alterTable(AlterTableStmt stmt) throws UserException {
+        TableName dbTableName = stmt.getTbl();
+        String dbName = dbTableName.getDb();
+        Database db = getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        List<AlterClause> alterClauses = stmt.getOps();
+        AlterOperations currentAlterOps = new AlterOperations();
+        currentAlterOps.checkConflict(alterClauses);
+
+        Set<AlterOpType> currentOps = new HashSet<>(currentAlterOps.getCurrentOps());
+        currentOps.retainAll(Sets.newHashSet(AlterOpType.APPLY_COLUMN_MASKING_POLICY,
+                AlterOpType.REVOKE_COLUMN_MASKING_POLICY,
+                AlterOpType.APPLY_ROW_ACCESS_POLICY,
+                AlterOpType.REVOKE_ROW_ACCESS_POLICY,
+                AlterOpType.REVOKE_ALL_ROW_ACCESS_POLICY));
+
+        if (!currentOps.isEmpty()) {
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processPolicy(dbTableName, alterClauses);
+        } else {
+            throw new DdlException("Do not support alter non-native table[" + dbTableName + "]");
+        }
     }
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {

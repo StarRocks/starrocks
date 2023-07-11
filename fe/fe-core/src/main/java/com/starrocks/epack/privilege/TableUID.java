@@ -66,7 +66,8 @@ public class TableUID {
         long catalogId;
 
         // Default to internal_catalog when no catalog explicitly selected.
-        if (catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
+        if (catalogName == null || CatalogMgr.isInternalCatalog(catalogName)
+                || CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
             catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
             catalogId = InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID;
         } else {

@@ -13,6 +13,7 @@ import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseVisitor;
+import com.starrocks.sql.analyzer.SemanticException;
 
 public class AlterTableClauseVisitorEPack extends AlterTableClauseVisitor {
     @Override
@@ -38,7 +39,10 @@ public class AlterTableClauseVisitorEPack extends AlterTableClauseVisitor {
         AnalyzerUtilsEPack.normalizationPolicyName(context, policyName);
 
         SecurityPolicyMgr securityPolicyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
-        Policy policy = securityPolicyManager.getPolicyByName(PolicyType.ROW_ACCESS, policyName, false);
+        Policy policy = securityPolicyManager.getPolicyByName(PolicyType.ROW_ACCESS, policyName);
+        if (policy == null) {
+            throw new SemanticException("Can't find masking policy : " + policyName.getName());
+        }
         clause.setPolicyId(policy.getPolicyId());
         return null;
     }

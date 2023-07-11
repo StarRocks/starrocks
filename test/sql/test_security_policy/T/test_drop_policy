@@ -1,0 +1,8 @@
+-- name: test_drop_policy
+create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
+drop masking policy mp;
+show masking policies;
+
+create row access policy rp as (v1 bigint) returns boolean -> true;
+drop row access policy rp;
+show row access policies;

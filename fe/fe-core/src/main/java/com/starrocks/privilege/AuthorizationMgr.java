@@ -28,6 +28,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.epack.privilege.AuthorizationProviderEPack;
+import com.starrocks.epack.privilege.ObjectTypeEPack;
+import com.starrocks.epack.privilege.PolicyPEntryObject;
+import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -116,7 +120,7 @@ public class AuthorizationMgr {
     public AuthorizationMgr(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
         if (provider == null) {
-            this.provider = new DefaultAuthorizationProvider();
+            this.provider = new AuthorizationProviderEPack();
         } else {
             this.provider = provider;
         }
@@ -128,6 +132,10 @@ public class AuthorizationMgr {
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
         initBuiltinRolesAndUsers();
+    }
+
+    public AuthorizationProvider getProvider() {
+        return provider;
     }
 
     public void initBuiltinRolesAndUsers() {
@@ -268,6 +276,16 @@ public class AuthorizationMgr {
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.SYSTEM.equals(objectType)) {
             collection.grant(objectType, actionList, Arrays.asList(new PEntryObject[] {null}), false);
+        } else if (ObjectTypeEPack.MASKING_POLICY.equals(objectType)) {
+            PEntryObject pEntryObject = PolicyPEntryObject.generate(globalStateMgr, PolicyType.MASKING,
+                    Lists.newArrayList("*", "*", "*"));
+            objects.add(pEntryObject);
+            collection.grant(objectType, actionList, objects, false);
+        } else if (ObjectTypeEPack.ROW_ACCESS_POLICY.equals(objectType)) {
+            PEntryObject pEntryObject = PolicyPEntryObject.generate(globalStateMgr, PolicyType.ROW_ACCESS,
+                    Lists.newArrayList("*", "*", "*"));
+            objects.add(pEntryObject);
+            collection.grant(objectType, actionList, objects, false);
         } else {
             throw new PrivilegeException("unsupported type " + objectType);
         }
@@ -773,7 +791,7 @@ public class AuthorizationMgr {
     /**
      * read from cache
      */
-    protected PrivilegeCollectionV2 mergePrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
+    public PrivilegeCollectionV2 mergePrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
             throws PrivilegeException {
         try {
             return ctxToMergedPrivilegeCollections.get(new Pair<>(userIdentity, roleIds));

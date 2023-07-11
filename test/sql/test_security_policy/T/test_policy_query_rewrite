@@ -1,0 +1,46 @@
+-- name: test_policy_query_rewrite
+CREATE DATABASE test_create_masking_policy;
+use test_create_masking_policy;
+create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
+
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+alter table t0 modify column v1 set masking policy mp;
+alter table t0 modify column v2 set masking policy mp using (v2);
+ explain select * from t0;
+alter table t0 modify column v1 unset masking policy;
+alter table t0 modify column v2 unset masking policy;
+ explain select * from t0;
+
+create masking policy mp2 as ( v1 bigint, v2 bigint, v3 bigint) returns bigint -> if (v1 = 1, v2, v3);
+CREATE TABLE `t1` (
+  `a` bigint(20) NULL COMMENT "",
+  `b` bigint(20) NULL COMMENT "",
+  `c` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`a`, `b`, `c`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+alter table t1 modify column a set masking policy mp2 using (a, b, c);
+ explain select * from t1;
+alter table t1 modify column a unset masking policy;
+ explain select * from t1;

@@ -20,14 +20,14 @@ public class Policy {
     private String comment;
 
     public Policy(PolicyType policyType, Long policyId,
-                  String policyName, DbUID dbPEntryObject,
+                  String policyName, DbUID dbUID,
                   List<String> argNames, List<Type> argTypes, Type retType,
                   Expr policyExpression, String comment) {
         this.policyType = policyType;
         this.policyId = policyId;
 
         this.name = policyName;
-        this.dbUID = dbPEntryObject;
+        this.dbUID = dbUID;
 
         this.argNames = argNames;
         this.argTypes = argTypes;

@@ -17,9 +17,13 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
+import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class CreateViewStmt extends DdlStmt {
     private final TableName tableName;
@@ -31,6 +35,9 @@ public class CreateViewStmt extends DdlStmt {
     //Resolved by Analyzer
     protected List<Column> columns;
     private String inlineViewDef;
+
+    //Add by Epack
+    private List<WithRowAccessPolicy> withRowAccessPolicies;
 
     public CreateViewStmt(boolean ifNotExists,
                           TableName tableName, List<ColWithComment> colWithComments,
@@ -87,6 +94,26 @@ public class CreateViewStmt extends DdlStmt {
 
     public void setInlineViewDef(String inlineViewDef) {
         this.inlineViewDef = inlineViewDef;
+    }
+
+    public Map<String, WithColumnMaskingPolicy> getMaskingPolicyContextMap() {
+        Map<String, WithColumnMaskingPolicy> maskingPolicyMap = new HashMap<>();
+        if (colWithComments != null) {
+            for (ColWithComment colWithComment : colWithComments) {
+                if (colWithComment.getWithColumnMaskingPolicy() != null) {
+                    maskingPolicyMap.put(colWithComment.getColName(), colWithComment.getWithColumnMaskingPolicy());
+                }
+            }
+        }
+        return maskingPolicyMap;
+    }
+
+    public List<WithRowAccessPolicy> getWithRowAccessPolicies() {
+        return withRowAccessPolicies;
+    }
+
+    public void setWithRowAccessPolicies(List<WithRowAccessPolicy> withRowAccessPolicies) {
+        this.withRowAccessPolicies = withRowAccessPolicies;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

@@ -22,12 +22,15 @@ import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
+import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
+import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -53,6 +56,8 @@ public class CreateTableStmt extends DdlStmt {
 
     private List<Index> indexes = Lists.newArrayList();
 
+    private List<WithRowAccessPolicy> withRowAccessPolicies;
+
     // for backup. set to -1 for normal use
     private int tableSignature;
 
@@ -68,56 +73,7 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> extProperties,
                            String comment) {
         this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, null, keysDesc, partitionDesc,
-                distributionDesc, properties, extProperties, comment, null, null);
-    }
-
-    public CreateTableStmt(boolean ifNotExists,
-                           boolean isExternal,
-                           TableName tableName,
-                           List<ColumnDef> columnDefinitions,
-                           String engineName,
-                           KeysDesc keysDesc,
-                           PartitionDesc partitionDesc,
-                           DistributionDesc distributionDesc,
-                           Map<String, String> properties,
-                           Map<String, String> extProperties,
-                           String comment, List<AlterClause> ops) {
-        this(ifNotExists, isExternal, tableName, columnDefinitions, engineName, null, keysDesc, partitionDesc,
-                distributionDesc, properties, extProperties, comment, ops, null);
-    }
-
-    public CreateTableStmt(boolean ifNotExists,
-                           boolean isExternal,
-                           TableName tableName,
-                           List<ColumnDef> columnDefinitions,
-                           String engineName,
-                           String charsetName,
-                           KeysDesc keysDesc,
-                           PartitionDesc partitionDesc,
-                           DistributionDesc distributionDesc,
-                           Map<String, String> properties,
-                           Map<String, String> extProperties,
-                           String comment, List<AlterClause> ops, List<String> sortKeys) {
-        this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, charsetName, keysDesc, partitionDesc,
-                distributionDesc, properties, extProperties, comment, ops, sortKeys);
-    }
-
-    public CreateTableStmt(boolean ifNotExists,
-                           boolean isExternal,
-                           TableName tableName,
-                           List<ColumnDef> columnDefinitions,
-                           List<IndexDef> indexDefs,
-                           String engineName,
-                           String charsetName,
-                           KeysDesc keysDesc,
-                           PartitionDesc partitionDesc,
-                           DistributionDesc distributionDesc,
-                           Map<String, String> properties,
-                           Map<String, String> extProperties,
-                           String comment, List<AlterClause> rollupAlterClauseList, List<String> sortKeys) {
-        this(ifNotExists, isExternal, tableName, columnDefinitions, indexDefs, engineName, charsetName, keysDesc,
-                partitionDesc, distributionDesc, properties, extProperties, comment, rollupAlterClauseList,
-                sortKeys, NodePosition.ZERO);
+                distributionDesc, properties, extProperties, comment, null, null, NodePosition.ZERO);
     }
 
     public CreateTableStmt(boolean ifNotExists,
@@ -292,6 +248,24 @@ public class CreateTableStmt extends DdlStmt {
 
     public void setPartitionDesc(PartitionDesc partitionDesc) {
         this.partitionDesc = partitionDesc;
+    }
+
+    public Map<String, WithColumnMaskingPolicy> getMaskingPolicyContextMap() {
+        Map<String, WithColumnMaskingPolicy> maskingPolicyMap = new HashMap<>();
+        for (ColumnDef columnDef : columnDefs) {
+            if (columnDef.getWithColumnMaskingPolicy() != null) {
+                maskingPolicyMap.put(columnDef.getName(), columnDef.getWithColumnMaskingPolicy());
+            }
+        }
+        return maskingPolicyMap;
+    }
+
+    public List<WithRowAccessPolicy> getWithRowAccessPolicies() {
+        return withRowAccessPolicies;
+    }
+
+    public void setWithRowAccessPolicies(List<WithRowAccessPolicy> withRowAccessPolicies) {
+        this.withRowAccessPolicies = withRowAccessPolicies;
     }
 
     public static CreateTableStmt read(DataInput in) throws IOException {

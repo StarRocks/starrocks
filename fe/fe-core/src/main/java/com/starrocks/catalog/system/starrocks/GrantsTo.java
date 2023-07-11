@@ -28,6 +28,12 @@ import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.epack.privilege.DbUID;
+import com.starrocks.epack.privilege.ObjectTypeEPack;
+import com.starrocks.epack.privilege.Policy;
+import com.starrocks.epack.privilege.PolicyPEntryObject;
+import com.starrocks.epack.privilege.PrivilegeBuiltinConstantsEPack;
+import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.CatalogPEntryObject;
@@ -365,6 +371,55 @@ public class GrantsTo {
                         String storageVolumeName = storageVolumeMgr.getStorageVolumeName(storageVolumeId);
                         objects.add(Lists.newArrayList(null, null, storageVolumeName));
                     }
+                } else if (ObjectTypeEPack.MASKING_POLICY.equals(privEntry.getKey()) ||
+                        ObjectTypeEPack.ROW_ACCESS_POLICY.equals(privEntry.getKey())) {
+                    PolicyPEntryObject policyPEntryObject = (PolicyPEntryObject) privilegeEntry.getObject();
+                    if (policyPEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
+                        List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                .stream().filter(catalogName ->
+                                        !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                                ).collect(Collectors.toList());
+                        catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+                        for (String catalogName : catalogs) {
+                            objects.addAll(expandAllDatabaseAndPolicies(metadataMgr, catalogName, privEntry.getKey()));
+                        }
+                    } else {
+                        String catalogName = getCatalogName(policyPEntryObject.getCatalogId());
+                        if (catalogName == null) {
+                            continue;
+                        }
+
+                        if (policyPEntryObject.getDatabaseUUID().equalsIgnoreCase(
+                                PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
+                            objects.addAll(expandAllDatabaseAndPolicies(metadataMgr, catalogName, privEntry.getKey()));
+                        } else {
+                            Database database;
+                            if (CatalogMgr.isInternalCatalog(policyPEntryObject.getCatalogId())) {
+                                database = GlobalStateMgr.getCurrentState()
+                                        .getDb(Long.parseLong(policyPEntryObject.getDatabaseUUID()));
+                            } else {
+                                String dbName = ExternalCatalog.getDbNameFromUUID(policyPEntryObject.getDatabaseUUID());
+                                database = metadataMgr.getDb(catalogName, dbName);
+                            }
+                            if (database == null) {
+                                continue;
+                            }
+
+                            if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
+                                continue;
+                            }
+
+                            String dbName = database.getFullName();
+                            if (policyPEntryObject.getPolicyId() == PrivilegeBuiltinConstantsEPack.ALL_POLICY_ID) {
+                                objects.addAll(expandAllPolicies(metadataMgr, catalogName, dbName, privEntry.getKey()));
+                            } else {
+                                Policy policy = GlobalStateMgr.getCurrentState().getSecurityPolicyManager().getPolicyById(
+                                        policyPEntryObject.getPolicyId());
+                                objects.add(Lists.newArrayList(catalogName, dbName, policy.getName()));
+                            }
+                        }
+                    }
                 }
 
                 ActionSet actionSet = privilegeEntry.getActionSet();
@@ -462,6 +517,43 @@ public class GrantsTo {
             }
 
             objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, objectType));
+        }
+
+        return objects;
+    }
+
+    private static Set<List<String>> expandAllPolicies(MetadataMgr metadataMgr,
+                                                       String catalogName, String dbName, ObjectType policyType) {
+        Set<List<String>> objects = new HashSet<>();
+
+        Map<String, Policy> policyMap;
+        if (policyType.equals(ObjectTypeEPack.MASKING_POLICY)) {
+            policyMap = GlobalStateMgr.getCurrentState().getSecurityPolicyManager()
+                    .getOrCreateNamePolicyMapByDBUID(DbUID.generate(catalogName, dbName), PolicyType.MASKING);
+        } else {
+            policyMap = GlobalStateMgr.getCurrentState().getSecurityPolicyManager()
+                    .getOrCreateNamePolicyMapByDBUID(DbUID.generate(catalogName, dbName), PolicyType.ROW_ACCESS);
+        }
+        for (Policy policy : policyMap.values()) {
+            objects.add(Lists.newArrayList(catalogName, dbName, policy.getName()));
+        }
+        return objects;
+    }
+
+    private static Set<List<String>> expandAllDatabaseAndPolicies(MetadataMgr metadataMgr, String catalogName,
+                                                                  ObjectType objectType) {
+        Set<List<String>> objects = new HashSet<>();
+        List<String> dbNames = metadataMgr.listDbNames(catalogName);
+        for (String dbName : dbNames) {
+            Database database = metadataMgr.getDb(catalogName, dbName);
+            if (database == null) {
+                continue;
+            }
+            if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
+                continue;
+            }
+
+            objects.addAll(expandAllPolicies(metadataMgr, catalogName, dbName, objectType));
         }
 
         return objects;

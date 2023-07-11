@@ -15,6 +15,9 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.epack.sql.analyzer.CreateTableAnalyzerEPack;
+import com.starrocks.epack.sql.analyzer.MaterializedViewAnalyzerEPack;
+import com.starrocks.epack.sql.analyzer.ViewAnalyzerEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -162,7 +165,7 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext context) {
-        CreateTableAnalyzer.analyze(statement, context);
+        CreateTableAnalyzerEPack.analyze(statement, context);
         return null;
     }
 
@@ -241,7 +244,7 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext session) {
-        ViewAnalyzer.analyze(statement, session);
+        ViewAnalyzerEPack.analyze(statement, session);
         return null;
     }
 
@@ -371,7 +374,7 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                      ConnectContext context) {
-        MaterializedViewAnalyzer.analyze(statement, context);
+        MaterializedViewAnalyzerEPack.analyze(statement, context);
         return null;
     }
 

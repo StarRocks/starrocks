@@ -27,9 +27,14 @@ import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.StarRocksParser;
@@ -49,7 +54,84 @@ public class AstBuilderEPack extends AstBuilder {
         super(sqlMode);
     }
 
+    // ------------------------------------------- Table Statement -----------------------------------------------------
+    @Override
+    public ParseNode visitCreateTableStatement(StarRocksParser.CreateTableStatementContext context) {
+        CreateTableStmt createTableStmt = (CreateTableStmt) super.visitCreateTableStatement(context);
+
+        if (context.columnDesc() != null) {
+            int columnSize = context.columnDesc().size();
+            for (int i = 0; i < columnSize; ++i) {
+                StarRocksParser.ColumnDescContext columnDescContext = context.columnDesc(i);
+                if (columnDescContext.withMaskingPolicy() != null) {
+                    WithColumnMaskingPolicy withColumnMaskingPolicy
+                            = (WithColumnMaskingPolicy) visit(columnDescContext.withMaskingPolicy());
+
+                    createTableStmt.getColumnDefs().get(i).setWithColumnMaskingPolicy(withColumnMaskingPolicy);
+                }
+            }
+        }
+
+        List<WithRowAccessPolicy> withRowAccessPolicies =
+                visit(context.withRowAccessPolicy(), WithRowAccessPolicy.class);
+        createTableStmt.setWithRowAccessPolicies(withRowAccessPolicies);
+
+        return createTableStmt;
+    }
+
+    // ------------------------------------------- View Statement ------------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateViewStatement(StarRocksParser.CreateViewStatementContext context) {
+        CreateViewStmt createViewStmt = (CreateViewStmt) super.visitCreateViewStatement(context);
+
+        if (context.columnNameWithComment() != null) {
+            int columnSize = context.columnNameWithComment().size();
+            for (int i = 0; i < columnSize; ++i) {
+                StarRocksParser.ColumnNameWithCommentContext columnNameWithComment = context.columnNameWithComment(i);
+                if (columnNameWithComment.withMaskingPolicy() != null) {
+                    WithColumnMaskingPolicy withColumnMaskingPolicy
+                            = (WithColumnMaskingPolicy) visit(columnNameWithComment.withMaskingPolicy());
+
+                    createViewStmt.getColWithComments().get(i).setWithColumnMaskingPolicy(withColumnMaskingPolicy);
+                }
+            }
+        }
+
+        List<WithRowAccessPolicy> withRowAccessPolicies =
+                visit(context.withRowAccessPolicy(), WithRowAccessPolicy.class);
+        createViewStmt.setWithRowAccessPolicies(withRowAccessPolicies);
+        return createViewStmt;
+    }
+
     // ------------------------------------------- Materialized View Statement -----------------------------------------
+    @Override
+    public ParseNode visitCreateMaterializedViewStatement(StarRocksParser.CreateMaterializedViewStatementContext context) {
+        StatementBase stmt = (StatementBase) super.visitCreateMaterializedViewStatement(context);
+        if (stmt instanceof CreateMaterializedViewStmt) {
+            return stmt;
+        }
+
+        CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+        if (context.columnNameWithComment() != null) {
+            int columnSize = context.columnNameWithComment().size();
+            for (int i = 0; i < columnSize; ++i) {
+                StarRocksParser.ColumnNameWithCommentContext columnNameWithComment = context.columnNameWithComment(i);
+                if (columnNameWithComment.withMaskingPolicy() != null) {
+                    WithColumnMaskingPolicy withColumnMaskingPolicy
+                            = (WithColumnMaskingPolicy) visit(columnNameWithComment.withMaskingPolicy());
+
+                    createMaterializedViewStatement.getColWithComments().get(i)
+                            .setWithColumnMaskingPolicy(withColumnMaskingPolicy);
+                }
+            }
+        }
+
+        List<WithRowAccessPolicy> withRowAccessPolicies =
+                visit(context.withRowAccessPolicy(), WithRowAccessPolicy.class);
+        createMaterializedViewStatement.setWithRowAccessPolicies(withRowAccessPolicies);
+        return createMaterializedViewStatement;
+    }
 
     @Override
     public ParseNode visitAlterMaterializedViewStatement(
@@ -66,6 +148,86 @@ public class AstBuilderEPack extends AstBuilder {
         }
 
         return alterMaterializedViewStmt;
+    }
+
+    // ---------------------------------------- Alter Policy Clause ---------------------------------------------------
+
+    @Override
+    public ParseNode visitApplyMaskingPolicyClause(StarRocksParser.ApplyMaskingPolicyClauseContext context) {
+        String columName = ((Identifier) visit(context.identifier())).getValue();
+        if (context.SET() != null) {
+            List<String> usingColumns = new ArrayList<>();
+            if (context.identifierList() != null) {
+                final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+                usingColumns.addAll(identifierList.stream().map(Identifier::getValue).collect(toList()));
+            }
+
+            QualifiedName qualifiedName = getQualifiedName(context.policyName);
+            PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+
+            WithColumnMaskingPolicy withColumnMaskingPolicy =
+                    new WithColumnMaskingPolicy(policyName, usingColumns, createPos(context));
+
+            return new ApplyMaskingPolicyClause(columName, withColumnMaskingPolicy, createPos(context));
+        } else {
+            return new RevokeMaskingPolicyClause(columName, createPos(context));
+        }
+    }
+
+    @Override
+    public ParseNode visitApplyRowAccessPolicyClause(StarRocksParser.ApplyRowAccessPolicyClauseContext context) {
+        if (context.ADD() != null) {
+            List<String> onColumns = new ArrayList<>();
+
+            if (context.identifierList() != null) {
+                final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+                onColumns.addAll(identifierList.stream().map(Identifier::getValue).collect(toList()));
+            }
+
+            QualifiedName qualifiedName = getQualifiedName(context.policyName);
+            PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+
+            WithRowAccessPolicy withRowAccessPolicy =
+                    new WithRowAccessPolicy(policyName, onColumns, createPos(context));
+
+            return new ApplyRowAccessPolicyClause(withRowAccessPolicy, createPos(context));
+        } else {
+            if (context.ALL() != null) {
+                return new RevokeRowAccessPolicyClause(createPos(context));
+            } else {
+                QualifiedName qualifiedName = getQualifiedName(context.policyName);
+                PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+                return new RevokeRowAccessPolicyClause(policyName, createPos(context));
+            }
+        }
+    }
+
+    @Override
+    public ParseNode visitWithMaskingPolicy(StarRocksParser.WithMaskingPolicyContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.policyName);
+        PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+
+        List<String> columnList = null;
+        if (context.identifierList() != null) {
+            List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+            columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
+        }
+
+        return new WithColumnMaskingPolicy(policyName, columnList, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitWithRowAccessPolicy(StarRocksParser.WithRowAccessPolicyContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.policyName);
+        PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+
+        List<String> columnList = null;
+        if (context.identifierList() != null) {
+            List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+            columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
+        }
+
+        return new WithRowAccessPolicy(policyName, columnList, createPos(context));
     }
 
     // ---------------------------------------- Security Policy Statement ---------------------------------------------------
@@ -208,7 +370,8 @@ public class AstBuilderEPack extends AstBuilder {
     }
 
     @Override
-    public ParseNode visitShowCreateRowAccessPolicyStatement(StarRocksParser.ShowCreateRowAccessPolicyStatementContext context) {
+    public ParseNode visitShowCreateRowAccessPolicyStatement(
+            StarRocksParser.ShowCreateRowAccessPolicyStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
         return new ShowCreatePolicyStmt(PolicyType.ROW_ACCESS, policyName, createPos(context));
@@ -276,55 +439,4 @@ public class AstBuilderEPack extends AstBuilder {
     }
 
 
-    // ---------------------------------------- Alter Policy Clause ---------------------------------------------------
-
-    @Override
-    public ParseNode visitApplyMaskingPolicyClause(StarRocksParser.ApplyMaskingPolicyClauseContext context) {
-        String columName = ((Identifier) visit(context.identifier())).getValue();
-        if (context.SET() != null) {
-            List<String> usingColumns = new ArrayList<>();
-            if (context.identifierList() != null) {
-                final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-                usingColumns.addAll(identifierList.stream().map(Identifier::getValue).collect(toList()));
-            }
-
-            QualifiedName qualifiedName = getQualifiedName(context.policyName);
-            PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
-
-            WithColumnMaskingPolicy withColumnMaskingPolicy =
-                    new WithColumnMaskingPolicy(policyName, usingColumns, createPos(context));
-
-            return new ApplyMaskingPolicyClause(columName, withColumnMaskingPolicy, createPos(context));
-        } else {
-            return new RevokeMaskingPolicyClause(columName, createPos(context));
-        }
-    }
-
-    @Override
-    public ParseNode visitApplyRowAccessPolicyClause(StarRocksParser.ApplyRowAccessPolicyClauseContext context) {
-        if (context.ADD() != null) {
-            List<String> onColumns = new ArrayList<>();
-
-            if (context.identifierList() != null) {
-                final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-                onColumns.addAll(identifierList.stream().map(Identifier::getValue).collect(toList()));
-            }
-
-            QualifiedName qualifiedName = getQualifiedName(context.policyName);
-            PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
-
-            WithRowAccessPolicy withRowAccessPolicy =
-                    new WithRowAccessPolicy(policyName, onColumns, createPos(context));
-
-            return new ApplyRowAccessPolicyClause(withRowAccessPolicy, createPos(context));
-        } else {
-            if (context.ALL() != null) {
-                return new RevokeRowAccessPolicyClause(createPos(context));
-            } else {
-                QualifiedName qualifiedName = getQualifiedName(context.policyName);
-                PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
-                return new RevokeRowAccessPolicyClause(policyName, createPos(context));
-            }
-        }
-    }
 }

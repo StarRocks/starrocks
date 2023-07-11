@@ -63,6 +63,7 @@ import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
+import com.starrocks.epack.persist.CreateTableInfoEPack;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
@@ -232,7 +233,7 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_TABLE:
                 case OperationType.OP_CREATE_TABLE_V2: {
-                    CreateTableInfo info = (CreateTableInfo) journal.getData();
+                    CreateTableInfoEPack info = (CreateTableInfoEPack) journal.getData();
 
                     if (info.getTable().isMaterializedView()) {
                         LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
@@ -242,7 +243,7 @@ public class EditLog {
                         LOG.info("Begin to unprotect create table. db = "
                                 + info.getDbName() + " table = " + info.getTable().getId());
                     }
-                    globalStateMgr.replayCreateTable(info);
+                    globalStateMgr.getLocalMetastore().replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_DROP_TABLE:
@@ -259,11 +260,11 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_MATERIALIZED_VIEW: {
-                    CreateTableInfo info = (CreateTableInfo) journal.getData();
+                    CreateTableInfoEPack info = (CreateTableInfoEPack) journal.getData();
                     LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
                             + " create materialized view = " + info.getTable().getId()
                             + " tableName = " + info.getTable().getName());
-                    globalStateMgr.replayCreateTable(info);
+                    globalStateMgr.getLocalMetastore().replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION_V2: {
@@ -1298,7 +1299,7 @@ public class EditLog {
         }
     }
 
-    public void logCreateTable(CreateTableInfo info) {
+    public void logCreateTable(CreateTableInfoEPack info) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
         } else {
@@ -2092,9 +2093,9 @@ public class EditLog {
     }
 
     public void logDropPolicy(PolicyName policyName, DbUID db, Policy policy) {
-        DropPolicyLog dropPolicyInfo =
+        DropPolicyLog dropPolicyLog =
                 new DropPolicyLog(policy.getPolicyType(), policy.getPolicyId(), db, policyName.getName());
-        logEdit(OperationTypeEPack.OP_DROP_POLICY, dropPolicyInfo);
+        logEdit(OperationTypeEPack.OP_DROP_POLICY, dropPolicyLog);
     }
 
     public void logAlterPolicySetBody(PolicyName policyName, PolicyType policyType, String policyBody) {

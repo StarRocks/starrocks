@@ -56,6 +56,7 @@ import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
+import com.starrocks.epack.persist.CreateTableInfoEPack;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
@@ -89,7 +90,6 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
-import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropCatalogLog;
@@ -256,13 +256,13 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_CREATE_MATERIALIZED_VIEW:
             case OperationType.OP_CREATE_TABLE: {
-                data = new CreateTableInfo();
-                ((CreateTableInfo) data).readFields(in);
+                data = new CreateTableInfoEPack();
+                ((CreateTableInfoEPack) data).readFields(in);
                 isRead = true;
                 break;
             }
             case OperationType.OP_CREATE_TABLE_V2: {
-                data = GsonUtils.GSON.fromJson(Text.readString(in), CreateTableInfo.class);
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CreateTableInfoEPack.class);
                 isRead = true;
                 break;
             }

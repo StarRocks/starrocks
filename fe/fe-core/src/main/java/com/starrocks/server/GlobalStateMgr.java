@@ -190,7 +190,6 @@ import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
-import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -1513,6 +1512,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                         .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, warehouseMgr::load)
+                        .put(SRMetaBlockIDEPack.SECURITY_POLICY_MGR, securityPolicyManager::load)
                         .build();
                 try {
                     loadHeaderV2(dis);
@@ -1925,6 +1925,7 @@ public class GlobalStateMgr {
                     globalFunctionMgr.save(dos);
                     storageVolumeMgr.save(dos);
                     warehouseMgr.save(dos);
+                    securityPolicyManager.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
@@ -2936,10 +2937,6 @@ public class GlobalStateMgr {
         if (!Strings.isNullOrEmpty(table.getComment())) {
             sb.append("\nCOMMENT \"").append(table.getDisplayComment()).append("\"");
         }
-    }
-
-    public void replayCreateTable(CreateTableInfo info) {
-        localMetastore.replayCreateTable(info);
     }
 
     // Drop table

@@ -1,0 +1,118 @@
+-- name: test_masking_policy_grant
+CREATE DATABASE test_masking_policy_grant;
+use test_masking_policy_grant;
+drop user if exists u1;
+create user u1;
+
+grant create masking policy on database test_masking_policy_grant to u1;
+grant impersonate on user root to u1;
+execute as u1 with no revert;
+create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
+show masking policies;
+
+execute as root with no revert;
+revoke create masking policy on database test_masking_policy_grant from u1;
+execute as u1 with no revert;
+show grants;
+create masking policy mp2 as ( v1 bigint) returns bigint -> v1 + 1;
+
+
+execute as root with no revert;
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+grant apply on masking policy mp to u1;
+grant all privileges on table t0 to u1;
+grant all privileges on all tables in database starrocks to u1;
+
+execute as u1 with no revert;
+alter table t0 modify column v1 set masking policy mp;
+select * from starrocks.policy_references where POLICY_DATABASE='test_masking_policy_grant';
+alter table t0 modify column v1 unset masking policy;
+select * from starrocks.policy_references where POLICY_DATABASE='test_masking_policy_grant';
+
+execute as root with no revert;
+revoke apply on masking policy mp from u1;
+show grants for u1;
+
+execute as u1 with no revert;
+alter table t0 modify column v1 set masking policy mp;
+select * from starrocks.policy_references where POLICY_DATABASE='test_policy_grant';
+
+drop masking policy mp;
+execute as root with no revert;
+grant drop on masking policy mp to u1;
+execute as u1 with no revert;
+drop masking policy mp;
+
+execute as root with no revert;
+
+-- name: test_row_access_policy_grant
+CREATE DATABASE test_row_access_policy_grant;
+use test_row_access_policy_grant;
+drop user if exists u2;
+create user u2;
+
+grant create row access policy on database test_row_access_policy_grant to u2;
+grant impersonate on user root to u2;
+execute as u2 with no revert;
+create row access policy rp as (v1 bigint) returns boolean -> true;
+show row access policies;
+
+execute as root with no revert;
+revoke create row access policy on database test_row_access_policy_grant from u2;
+execute as u2 with no revert;
+show grants;
+create row access policy rp2 as (v1 bigint) returns boolean -> true;
+
+execute as root with no revert;
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+grant apply on row access policy rp to u2;
+grant all privileges on table t0 to u2;
+grant all privileges on all tables in database starrocks to u2;
+
+execute as u2 with no revert;
+alter table t0 add row access policy rp;
+select * from starrocks.policy_references where POLICY_DATABASE='test_row_access_policy_grant';
+alter table t0 drop row access policy rp;
+select * from starrocks.policy_references where POLICY_DATABASE='test_row_access_policy_grant';
+
+execute as root with no revert;
+revoke apply on row access policy rp from u2;
+show grants for u2;
+
+execute as u2 with no revert;
+alter table t0 add row access policy rp;
+select * from starrocks.policy_references where POLICY_DATABASE='test_policy_grant';
+
+drop row access policy rp;
+execute as root with no revert;
+grant drop on row access policy rp to u2;
+execute as u2 with no revert;
+drop row access policy rp;
+
+execute as root with no revert;

@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.epack.sql.analyzer.PrivilegeCheckerVisitorEPack;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
@@ -41,7 +42,7 @@ import java.util.List;
 import java.util.Set;
 
 public class PrivilegeChecker {
-    private static final PrivilegeChecker INSTANCE = new PrivilegeChecker(new PrivilegeCheckerVisitor());
+    private static final PrivilegeChecker INSTANCE = new PrivilegeChecker(new PrivilegeCheckerVisitorEPack());
 
     public static PrivilegeChecker getInstance() {
         return INSTANCE;

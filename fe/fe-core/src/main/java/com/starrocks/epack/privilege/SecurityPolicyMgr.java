@@ -2,7 +2,6 @@
 
 package com.starrocks.epack.privilege;
 
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
@@ -12,6 +11,7 @@ import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
+import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
@@ -19,13 +19,21 @@ import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.SqlParser;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -33,21 +41,27 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class SecurityPolicyMgr {
-    @SerializedName(value = "idToPolicy")
-    private Map<Long, Policy> idToPolicy;
+
+    private final Map<Long, Policy> idToPolicy;
     private final Map<DbUID, Map<String, Policy>> nameToMaskingPolicy;
     private final Map<DbUID, Map<String, Policy>> nameToRowAccessPolicy;
-    private final ReentrantReadWriteLock policyLock;
-
-    @SerializedName(value = "policyContextMap")
     private final ConcurrentMap<TableUID, PolicyAppliedContext> policyContextMap;
+    private final ReentrantReadWriteLock policyLock;
 
     public SecurityPolicyMgr() {
         idToPolicy = new HashMap<>();
         nameToMaskingPolicy = new HashMap<>();
         nameToRowAccessPolicy = new HashMap<>();
-        policyLock = new ReentrantReadWriteLock();
         policyContextMap = new ConcurrentHashMap<>();
+        policyLock = new ReentrantReadWriteLock();
+    }
+
+    public boolean hasTableAppliedPolicy(TableUID tablePEntryObject) {
+        return policyContextMap.containsKey(tablePEntryObject);
+    }
+
+    public PolicyAppliedContext getTableAppliedPolicyInfo(TableUID tableId) {
+        return policyContextMap.get(tableId);
     }
 
     public void createMaskingPolicy(CreatePolicyStmt stmt) throws DdlException {
@@ -108,7 +122,8 @@ public class SecurityPolicyMgr {
     }
 
     private void registerPolicy(Policy policy) {
-        Map<String, Policy> nameToPolicy = getOrCreateNamePolicyMapByDBUIDUnlocked(policy.getDbUID(), policy.getPolicyType());
+        Map<String, Policy> nameToPolicy =
+                getOrCreateNamePolicyMapByDBUIDUnlocked(policy.getDbUID(), policy.getPolicyType());
         nameToPolicy.put(policy.getName(), policy);
         idToPolicy.put(policy.getPolicyId(), policy);
     }
@@ -133,7 +148,7 @@ public class SecurityPolicyMgr {
         }
     }
 
-    public void replayDropPolicy(DropPolicyLog dropPolicyInfo) throws DdlException {
+    public void replayDropPolicy(DropPolicyLog dropPolicyInfo) {
         policyLock.writeLock().lock();
         try {
             doDropPolicyUnlocked(dropPolicyInfo.getPolicyType(), dropPolicyInfo.getDb(), dropPolicyInfo.getName(),
@@ -147,10 +162,10 @@ public class SecurityPolicyMgr {
                                       boolean force) {
         Map<String, Policy> nameToPolicy = getOrCreateNamePolicyMapByDBUIDUnlocked(dbUID, policyType);
 
-        //TODO: support force drop
-        //if (isPolicyHasApplied(policyType, policyId) && !force) {
-        //    throw new DdlException("Can't drop policy which has be apply");
-        //}
+        if (policyContextMap.values().stream().anyMatch(policyContext -> policyContext.hasApplyPolicy(policyType, policyId))
+                && !force) {
+            throw new SemanticException("Can't drop policy which has be apply");
+        }
 
         nameToPolicy.remove(policyName);
         idToPolicy.remove(policyId);
@@ -194,7 +209,8 @@ public class SecurityPolicyMgr {
     public void replayAlterPolicy(AlterPolicyLog alterPolicyInfo) throws DdlException {
         policyLock.writeLock().lock();
         try {
-            Policy policy = getPolicyByNameUnlocked(alterPolicyInfo.getPolicyType(), alterPolicyInfo.getPolicyName(), false);
+            Policy policy =
+                    getPolicyByNameUnlocked(alterPolicyInfo.getPolicyType(), alterPolicyInfo.getPolicyName(), false);
             // Return NULL means there is no policy but if exists is set
             if (policy == null) {
                 throw new DdlException("Policy " + alterPolicyInfo.getPolicyName() + " not exists");
@@ -229,7 +245,8 @@ public class SecurityPolicyMgr {
     }
 
     private void doAlterPolicyRenameUnlocked(Policy policy, String newName) {
-        Map<String, Policy> nameToPolicy = getOrCreateNamePolicyMapByDBUIDUnlocked(policy.getDbUID(), policy.getPolicyType());
+        Map<String, Policy> nameToPolicy =
+                getOrCreateNamePolicyMapByDBUIDUnlocked(policy.getDbUID(), policy.getPolicyType());
         nameToPolicy.remove(policy.getName());
         policy.setName(newName);
         nameToPolicy.put(newName, policy);
@@ -253,6 +270,30 @@ public class SecurityPolicyMgr {
         }
     }
 
+    public Policy getPolicyByName(PolicyType policyType, PolicyName policyName) {
+        policyLock.readLock().lock();
+        try {
+            DbUID dbUID = DbUID.generate(policyName.getCatalog(), policyName.getDbName());
+            if (policyType.equals(PolicyType.MASKING)) {
+                Map<String, Policy> policies = nameToMaskingPolicy.get(dbUID);
+                if (policies == null) {
+                    return null;
+                } else {
+                    return policies.get(policyName.getName());
+                }
+            } else {
+                Map<String, Policy> policies = nameToRowAccessPolicy.get(dbUID);
+                if (policies == null) {
+                    return null;
+                } else {
+                    return policies.get(policyName.getName());
+                }
+            }
+        } finally {
+            policyLock.readLock().unlock();
+        }
+    }
+
     private Policy getPolicyByNameUnlocked(PolicyType policyType, PolicyName policyName, boolean isSetIfExists) {
         Map<String, Policy> nameToPolicy = getOrCreateNamePolicyMapByDBUIDUnlocked(
                 DbUID.generate(policyName.getCatalog(), policyName.getDbName()), policyType);
@@ -267,7 +308,6 @@ public class SecurityPolicyMgr {
 
         return policy;
     }
-
 
     public Map<String, Policy> getOrCreateNamePolicyMapByDBUID(DbUID dbUID, PolicyType policyType) {
         policyLock.readLock().lock();
@@ -290,6 +330,84 @@ public class SecurityPolicyMgr {
             nameToPolicy.put(dbUID, new HashMap<>());
         }
         return nameToPolicy.get(dbUID);
+    }
+
+    public void removeInvalidObject() {
+        policyLock.readLock().lock();
+        try {
+            nameToMaskingPolicy.entrySet().removeIf(entry -> !entry.getKey().validate());
+            nameToRowAccessPolicy.entrySet().removeIf(entry -> !entry.getKey().validate());
+
+            Iterator<Map.Entry<TableUID, PolicyAppliedContext>> iterator = policyContextMap.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<TableUID, PolicyAppliedContext> entry = iterator.next();
+                if (!entry.getKey().validate()) {
+                    iterator.remove();
+                } else {
+                    PolicyAppliedContext policyContext = entry.getValue();
+                    Map<String, MaskingPolicyContext> m = policyContext.getMaskingPolicyApply();
+                    for (MaskingPolicyContext context : m.values()) {
+                        if (!idToPolicy.containsKey(context.getPolicyId())) {
+                            policyContext.revokeMaskingPolicy(context.getPolicyId());
+                        }
+                    }
+
+                    List<RowAccessPolicyContext> r = policyContext.getRowAccessPolicyApply();
+                    for (RowAccessPolicyContext context : r) {
+                        if (!idToPolicy.containsKey(context.getPolicyId())) {
+                            policyContext.revokeRowAccessPolicy(context.getPolicyId());
+                        }
+                    }
+                }
+            }
+        } finally {
+            policyLock.readLock().unlock();
+        }
+    }
+
+    public void save(DataOutputStream dos) throws IOException {
+        try {
+            // 1 json for idToPolicy size, 1 json for policyContextMap size, others for each map key and value
+            int cnt = 1 + 1 + idToPolicy.size() + policyContextMap.size() * 2;
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockIDEPack.SECURITY_POLICY_MGR, cnt);
+
+            writer.writeJson(idToPolicy.size());
+            for (Policy policy : idToPolicy.values()) {
+                writer.writeJson(new CreatePolicyLog(policy));
+            }
+
+            writer.writeJson(policyContextMap.size());
+            for (Map.Entry<TableUID, PolicyAppliedContext> entry : policyContextMap.entrySet()) {
+                writer.writeJson(entry.getKey());
+                writer.writeJson(entry.getValue());
+            }
+
+            writer.close();
+        } catch (SRMetaBlockException e) {
+            throw new IOException("failed to save SecurityPolicyManager", e);
+        }
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
+        int policySize = reader.readJson(int.class);
+        for (int i = 0; i < policySize; ++i) {
+            CreatePolicyLog createPolicyInfo = reader.readJson(CreatePolicyLog.class);
+
+            Policy policy = new Policy(createPolicyInfo.getPolicyType(), createPolicyInfo.getPolicyId(),
+                    createPolicyInfo.getName(), createPolicyInfo.getDbUID(),
+                    createPolicyInfo.getArgNames(), createPolicyInfo.getArgTypes(),
+                    createPolicyInfo.getRetType(), createPolicyInfo.getPolicyExpression(),
+                    createPolicyInfo.getComment());
+
+            registerPolicy(policy);
+        }
+
+        int policyContextSize = reader.readJson(int.class);
+        for (int i = 0; i < policyContextSize; ++i) {
+            TableUID tablePEntryObject = reader.readJson(TableUID.class);
+            PolicyAppliedContext policyContext = reader.readJson(PolicyAppliedContext.class);
+            policyContextMap.put(tablePEntryObject, policyContext);
+        }
     }
 
     public void applyMaskingPolicyContext(TableName tableName, String columnName,

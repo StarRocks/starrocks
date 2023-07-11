@@ -1199,7 +1199,7 @@ public class AlterJobMgr {
         }
     }
 
-    private void processPolicy(TableName tableName, List<AlterClause> alterClauses) {
+    public void processPolicy(TableName tableName, List<AlterClause> alterClauses) {
         for (AlterClause alterClause : alterClauses) {
             switch (alterClause.getOpType()) {
                 case APPLY_COLUMN_MASKING_POLICY: {

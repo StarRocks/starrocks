@@ -47,6 +47,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.epack.privilege.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -95,6 +96,7 @@ import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME
 public class QueryAnalyzer {
     private final ConnectContext session;
     private final MetadataMgr metadataMgr;
+    public boolean hasRewrite = false;
 
     public QueryAnalyzer(ConnectContext session) {
         this.session = session;
@@ -284,12 +286,14 @@ public class QueryAnalyzer {
                 }
 
                 Table table = resolveTable(tableRelation);
+                Relation r;
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
-                    return viewRelation;
+
+                    r = viewRelation;
                 } else if (table instanceof HiveView) {
                     HiveView hiveView = (HiveView) table;
                     QueryStatement queryStatement = hiveView.getQueryStatement();
@@ -297,7 +301,8 @@ public class QueryAnalyzer {
                     view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
-                    return viewRelation;
+
+                    r = viewRelation;
                 } else {
                     if (tableRelation.getTemporalClause() != null) {
                         if (table.getType() != Table.TableType.MYSQL) {
@@ -309,10 +314,24 @@ public class QueryAnalyzer {
 
                     if (table.isSupported()) {
                         tableRelation.setTable(table);
-                        return tableRelation;
+                        r = tableRelation;
                     } else {
                         throw unsupportedException("Unsupported scan table type: " + table.getType());
                     }
+                }
+
+                if (hasRewrite) {
+                    return r;
+                }
+                assert tableName != null;
+                QueryStatement policyRewriteQuery = SecurityPolicyRewriteRule.buildView(r, tableName);
+                if (policyRewriteQuery == null) {
+                    return r;
+                } else {
+                    hasRewrite = true;
+                    SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
+                    subqueryRelation.setAlias(tableName);
+                    return subqueryRelation;
                 }
             } else {
                 if (relation.getResolveTableName() != null) {

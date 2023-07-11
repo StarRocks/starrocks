@@ -55,6 +55,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
@@ -137,6 +138,7 @@ public class ColumnDef implements ParseNode {
     private Expr materializedColumnExpr;
     private DefaultValueDef defaultValueDef;
     private final String comment;
+    private WithColumnMaskingPolicy withColumnMaskingPolicy;
 
     private final NodePosition pos;
 
@@ -164,7 +166,7 @@ public class ColumnDef implements ParseNode {
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
-                     Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement, 
+                     Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement,
                      Expr materializedColumnExpr, String comment, NodePosition pos) {
         this.pos = pos;
         this.name = name;
@@ -211,6 +213,14 @@ public class ColumnDef implements ParseNode {
 
     public Expr materializedColumnExpr() {
         return materializedColumnExpr;
+    }
+
+    public WithColumnMaskingPolicy getWithColumnMaskingPolicy() {
+        return withColumnMaskingPolicy;
+    }
+
+    public void setWithColumnMaskingPolicy(WithColumnMaskingPolicy withColumnMaskingPolicy) {
+        this.withColumnMaskingPolicy = withColumnMaskingPolicy;
     }
 
     // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.
@@ -453,7 +463,8 @@ public class ColumnDef implements ParseNode {
             }
             // default function uuid currently only support VARCHAR type.
             if (FunctionSet.UUID.equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.VARCHAR) {
-                throw new AnalysisException(String.format("Default function uuid() for type %s is not supported", type));
+                throw new AnalysisException(
+                        String.format("Default function uuid() for type %s is not supported", type));
             }
             if (FunctionSet.UUID.equalsIgnoreCase(functionName) && type.getColumnSize() < 36) {
                 throw new AnalysisException("Varchar type length must be greater than 36 for uuid function");
@@ -461,8 +472,9 @@ public class ColumnDef implements ParseNode {
             // default function uuid_numeric currently only support LARGE INT type.
             if (FunctionSet.UUID_NUMERIC.equalsIgnoreCase(functionName) &&
                     type.getPrimitiveType() != PrimitiveType.LARGEINT) {
-                throw new AnalysisException(String.format("Default function uuid_numeric() for type %s is not supported",
-                        type));
+                throw new AnalysisException(
+                        String.format("Default function uuid_numeric() for type %s is not supported",
+                                type));
             }
         } else if (defaultExpr instanceof NullLiteral) {
             // nothing to check

@@ -637,7 +637,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
                 context.orderByDesc() == null ? null :
                         visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                .stream().map(Identifier::getValue).collect(toList()));
+                                .stream().map(Identifier::getValue).collect(toList()),
+                createPos(context));
     }
 
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context, List<ColumnDef> columnDefs) {
@@ -960,6 +961,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             expr = (Expr) visit(materializedColumnDescContext.expression());
         }
+
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
         return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
@@ -1277,6 +1279,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.columnNameWithComment().size() > 0) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
+
         return new CreateViewStmt(
                 context.IF() != null,
                 targetTableName,
@@ -1602,6 +1605,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "DISTRIBUTION BY"),
                         distributionDesc.getPos());
             }
+
+            if (colWithComments != null) {
+                throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type",
+                        "SPECIFY COLUMN NAME"), createPos(context));
+            }
+
+            if (!context.withRowAccessPolicy().isEmpty()) {
+                throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type",
+                        "ROW ACCESS POLICY"), createPos(context));
+            }
             return new CreateMaterializedViewStmt(tableName, queryStatement, properties);
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
@@ -1613,7 +1626,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.feConfigDisable("enable_experimental_mv"), NodePosition.ZERO);
         }
 
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments,
+                comment,
                 refreshSchemeDesc,
                 expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
     }
@@ -1766,7 +1780,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String whName = ((Identifier) visit(context.identifier())).getValue();
         return new ShowClustersStmt(whName, createPos(context));
     }
-
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
     @Override
@@ -3571,7 +3584,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
                             columnDef.getPos());
                 }
-    
+
                 if (properties.size() != 0) {
                     throw new ParsingException(
                             PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
@@ -6400,8 +6413,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             comment = ((StringLiteral) visit(context.comment())).getStringValue();
         }
 
-        return new ColWithComment(((Identifier) visit(context.identifier())).getValue(), comment,
-                createPos(context));
+        return new ColWithComment(((Identifier) visit(context.columnName)).getValue(), comment, createPos(context));
     }
 
     @Override
@@ -6827,4 +6839,3 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new LabelName(dbName, name, createPos(start, stop));
     }
 }
-

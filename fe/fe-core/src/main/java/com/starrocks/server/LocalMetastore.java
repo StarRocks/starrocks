@@ -116,6 +116,12 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
+import com.starrocks.epack.persist.ApplyOrRevokeRowAccessPolicyLog;
+import com.starrocks.epack.persist.CreateTableInfoEPack;
+import com.starrocks.epack.privilege.SecurityPolicyMgr;
+import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
+import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
@@ -127,7 +133,6 @@ import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.CreateDbInfo;
-import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -800,7 +805,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 .getStorageVolumeIdOfTable(table.getId());
 
         try {
-            onCreate(db, table, storageVolumeId, stmt.isSetIfNotExists());
+            onCreate(db, table, storageVolumeId,
+                    stmt.getMaskingPolicyContextMap(),
+                    stmt.getWithRowAccessPolicies(),
+                    stmt.isSetIfNotExists());
         } catch (DdlException e) {
             if (table.isCloudNativeTable()) {
                 GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
@@ -1975,7 +1983,11 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setStorageInfo(pathInfo, dataCacheInfo);
     }
 
-    void onCreate(Database db, Table table, String storageVolumeId, boolean isSetIfNotExists) throws DdlException {
+    void onCreate(Database db, Table table,
+                  String storageVolumeId,
+                  Map<String, WithColumnMaskingPolicy> columnMaskingPolicyMap,
+                  List<WithRowAccessPolicy> rowAccessPolicies,
+                  boolean isSetIfNotExists) throws DdlException {
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -2007,9 +2019,26 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
 
-                CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
+                CreateTableInfoEPack createTableInfo =
+                        new CreateTableInfoEPack(db.getFullName(), table, storageVolumeId,
+                                columnMaskingPolicyMap, rowAccessPolicies);
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
                 table.onCreate(db);
+
+                SecurityPolicyMgr securityManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+                if (columnMaskingPolicyMap != null) {
+                    for (Map.Entry<String, WithColumnMaskingPolicy> withColumnMaskingPolicy : columnMaskingPolicyMap.entrySet()) {
+                        securityManager.applyMaskingPolicyContext(new TableName(db.getFullName(), table.getName()),
+                                withColumnMaskingPolicy.getKey(), withColumnMaskingPolicy.getValue());
+                    }
+                }
+
+                if (rowAccessPolicies != null) {
+                    for (WithRowAccessPolicy withRowAccessPolicy : rowAccessPolicies) {
+                        securityManager.applyRowAccessPolicyContext(new TableName(db.getFullName(), table.getName()),
+                                withRowAccessPolicy);
+                    }
+                }
             } finally {
                 db.writeUnlock();
             }
@@ -2019,7 +2048,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void replayCreateTable(CreateTableInfo info) {
+    public void replayCreateTable(CreateTableInfoEPack info) {
         Table table = info.getTable();
         Database db = this.fullNameToDb.get(info.getDbName());
         db.writeLock();
@@ -2066,6 +2095,20 @@ public class LocalMetastore implements ConnectorMetadata {
         if (table.isCloudNativeTable()) {
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                     .replayBindTableToStorageVolume(info.getStorageVolumeId(), table.getId());
+        }
+
+        SecurityPolicyMgr securityManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+        List<ApplyOrRevokeMaskingPolicyLog> applyOrRevokeMaskingPolicyLogs = info.getApplyOrRevokeMaskingPolicyLogs();
+        if (applyOrRevokeMaskingPolicyLogs != null) {
+            for (ApplyOrRevokeMaskingPolicyLog applyOrRevokeMaskingPolicyLog : applyOrRevokeMaskingPolicyLogs) {
+                securityManager.replayApplyMaskingPolicyContext(applyOrRevokeMaskingPolicyLog);
+            }
+        }
+        List<ApplyOrRevokeRowAccessPolicyLog> rowAccessPolicies = info.getApplyOrRevokeRowAccessPolicyLogs();
+        if (rowAccessPolicies != null) {
+            for (ApplyOrRevokeRowAccessPolicyLog applyOrRevokeRowAccessPolicyLog : rowAccessPolicies) {
+                securityManager.replayApplyRowAccessPolicyContext(applyOrRevokeRowAccessPolicyLog);
+            }
         }
     }
 
@@ -2857,7 +2900,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
         MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
 
-        onCreate(db, materializedView, "", stmt.isIfNotExists());
+        onCreate(db, materializedView, "", stmt.getMaskingPolicyContextMap(),
+                stmt.getWithRowAccessPolicies(),
+                stmt.isIfNotExists());
         LOG.info("Successfully create materialized view [{}:{}]", mvName, materializedView.getMvId());
 
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
@@ -3883,7 +3928,8 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("failed to init view stmt", e);
         }
 
-        onCreate(db, view, "", stmt.isSetIfNotExists());
+        onCreate(db, view, "", stmt.getMaskingPolicyContextMap(),
+                stmt.getWithRowAccessPolicies(), stmt.isSetIfNotExists());
 
         LOG.info("successfully create view[" + tableName + "-" + view.getId() + "]");
     }

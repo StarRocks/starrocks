@@ -81,6 +81,19 @@ public class DbUID {
         }
     }
 
+    public boolean validate() {
+        if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
+            return GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
+        } else {
+            Optional<Catalog> catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogById(catalogId);
+            if (!catalog.isPresent()) {
+                return false;
+            }
+            String dbName = ExternalCatalog.getDbNameFromUUID(uuid);
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalog.get().getName(), dbName) != null;
+        }
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

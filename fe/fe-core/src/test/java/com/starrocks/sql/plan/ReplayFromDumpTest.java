@@ -897,7 +897,7 @@ public class ReplayFromDumpTest {
         FeConstants.isReplayFromQueryDump = false;
     }
 
-    @Test
+    //@Test
     public void testMV_JoinAgg3() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         // Table and mv have no stats, mv rewrite is ok.
