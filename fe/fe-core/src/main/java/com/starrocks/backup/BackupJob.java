@@ -53,6 +53,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -407,7 +408,7 @@ public class BackupJob extends AbstractJob {
         }
     }
 
-    protected void prepareSnapshotTask(Partition partition, Table tbl, Tablet tablet, MaterializedIndex index,
+    protected void prepareSnapshotTask(PhysicalPartition partition, Table tbl, Tablet tablet, MaterializedIndex index,
                                        long visibleVersion, int schemaHash) {
         Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion);
         if (replica == null) {
@@ -474,20 +475,21 @@ public class BackupJob extends AbstractJob {
 
                 // snapshot partitions
                 for (Partition partition : partitions) {
-                    long visibleVersion = partition.getVisibleVersion();
-                    List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.VISIBLE);
-                    for (MaterializedIndex index : indexes) {
-                        int schemaHash = tbl.getSchemaHashByIndexId(index.getId());
-                        for (Tablet tablet : index.getTablets()) {
-                            prepareSnapshotTask(partition, tbl, tablet, index, visibleVersion, schemaHash);
-                            if (status != Status.OK) {
-                                return;
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        long visibleVersion = physicalPartition.getVisibleVersion();
+                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
+                        for (MaterializedIndex index : indexes) {
+                            int schemaHash = tbl.getSchemaHashByIndexId(index.getId());
+                            for (Tablet tablet : index.getTablets()) {
+                                prepareSnapshotTask(physicalPartition, tbl, tablet, index, visibleVersion, schemaHash);
+                                if (status != Status.OK) {
+                                    return;
+                                }
                             }
                         }
-                    }
 
-                    LOG.info("snapshot for partition {}, version: {}",
-                            partition.getId(), visibleVersion);
+                        LOG.info("snapshot for partition {}, version: {}", partition.getId(), visibleVersion);
+                    }
                 }
             }
 

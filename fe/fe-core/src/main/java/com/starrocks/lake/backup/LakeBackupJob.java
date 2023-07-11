@@ -24,6 +24,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.UserException;
@@ -107,7 +108,7 @@ public class LakeBackupJob extends BackupJob {
     }
 
     @Override
-    protected void prepareSnapshotTask(Partition partition, Table tbl, Tablet tablet, MaterializedIndex index,
+    protected void prepareSnapshotTask(PhysicalPartition partition, Table tbl, Tablet tablet, MaterializedIndex index,
                                        long visibleVersion, int schemaHash) {
         try {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo()

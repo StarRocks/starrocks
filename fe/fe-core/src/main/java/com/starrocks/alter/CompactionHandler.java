@@ -41,6 +41,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -108,10 +109,13 @@ public class CompactionHandler extends AlterHandler {
                 }
 
                 for (Partition partition : allPartitions) {
-                    for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                        for (Tablet tablet : index.getTablets()) {
-                            for (Long backendId : ((LocalTablet) tablet).getBackendIds()) {
-                                backendToTablets.put(backendId, tablet.getId());
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
+                                    MaterializedIndex.IndexExtState.VISIBLE)) {
+                            for (Tablet tablet : index.getTablets()) {
+                                for (Long backendId : ((LocalTablet) tablet).getBackendIds()) {
+                                    backendToTablets.put(backendId, tablet.getId());
+                                }
                             }
                         }
                     }
