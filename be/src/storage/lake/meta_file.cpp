@@ -24,6 +24,7 @@
 #include "util/coding.h"
 #include "util/defer_op.h"
 #include "util/raw_container.h"
+#include "util/trace.h"
 
 namespace starrocks {
 namespace lake {
@@ -55,6 +56,7 @@ void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
 }
 
 void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("apply_opwrite");
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
     rowset->set_id(_tablet_meta->next_rowset_id());
