@@ -188,18 +188,13 @@ GROUP BY order_id;
 
 ## Manually refresh an asynchronous materialized view
 
-You can refresh an asynchronous materialized view asynchronously or synchronously that is created with the ASYNC or the MANUAL refreshing strategy via [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md). StarRocks v2.5 supports refreshing specific partitions of an asynchronous materialized view by specifying partition names.
+You can refresh an asynchronous materialized view regardless of its refreshing strategy via [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md). StarRocks v2.5 supports refreshing specific partitions of an asynchronous materialized view by specifying partition names. StarRocks v3.1 supports making a synchronous call of the refresh task, and the SQL statement is returned only when the task succeeds or fails.
 
 ```SQL
+-- Refresh the materialized view via an asynchronous call (default).
 REFRESH MATERIALIZED VIEW order_mv;
-
-REFRESH MATERIALIZED VIEW order_mv with sync mode;
-
-REFRESH MATERIALIZED VIEW mv
-PARTITION START ("2020-02-01") END ("2020-03-01");
-
-REFRESH MATERIALIZED VIEW mv
-PARTITION START ("2020-02-01") END ("2020-03-01") with sync mode;
+-- Refresh the materialized view via a synchronous call.
+REFRESH MATERIALIZED VIEW order_mv WITH SYNC MODE;
 ```
 
 You can cancel a refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md).
