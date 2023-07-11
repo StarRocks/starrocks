@@ -150,6 +150,10 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             return true;
         }
 
+        if (agg.hasLimit()) {
+            return false;
+        }
+
         if (!hasMultiColumns && agg.getGroupingKeys().size() > 1) {
             return false;
         }

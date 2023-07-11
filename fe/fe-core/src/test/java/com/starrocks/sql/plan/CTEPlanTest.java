@@ -667,9 +667,35 @@ public class CTEPlanTest extends PlanTestBase {
         {
             String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 limit 1";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "29:Project\n" +
+            assertContains(plan, "2:Project\n" +
                     "  |  <slot 4> : 4: sum\n" +
-                    "  |  <slot 5> : CAST(7: sum AS DOUBLE) / CAST(9: count AS DOUBLE)\n" +
+                    "  |  <slot 5> : CAST(7: multi_distinct_sum AS DOUBLE) / CAST(6: multi_distinct_count AS DOUBLE)\n" +
+                    "  |  limit: 1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: multi_distinct_sum(1: v1), multi_distinct_count(2: v2), multi_distinct_sum(2: v2)\n" +
+                    "  |  group by: \n" +
+                    "  |  limit: 1");
+        }
+        {
+            String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 group by v3 limit 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "2:Project\n" +
+                    "  |  <slot 4> : 4: sum\n" +
+                    "  |  <slot 5> : CAST(7: multi_distinct_sum AS DOUBLE) / CAST(6: multi_distinct_count AS DOUBLE)\n" +
+                    "  |  limit: 1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: multi_distinct_sum(1: v1), multi_distinct_count(2: v2), multi_distinct_sum(2: v2)\n" +
+                    "  |  group by: 3: v3\n" +
+                    "  |  limit: 1");
+        }
+        {
+            String sql = "select count(distinct v1, v2), avg(distinct(v2)) from t0 limit 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "29:Project\n" +
+                    "  |  <slot 4> : 4: count\n" +
+                    "  |  <slot 5> : CAST(8: sum AS DOUBLE) / CAST(10: count AS DOUBLE)\n" +
                     "  |  limit: 1\n" +
                     "  |  \n" +
                     "  28:NESTLOOP JOIN\n" +
@@ -678,17 +704,12 @@ public class CTEPlanTest extends PlanTestBase {
                     "  |  limit: 1");
         }
         {
-            String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 group by v3 limit 1";
+            String sql = "select count(distinct v1, v2), avg(distinct(v2)) from t0 group by v3 limit 1";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "21:Project\n" +
-                    "  |  <slot 4> : 4: sum\n" +
-                    "  |  <slot 5> : CAST(8: sum AS DOUBLE) / CAST(11: count AS DOUBLE)\n" +
-                    "  |  limit: 1\n" +
-                    "  |  \n" +
-                    "  20:HASH JOIN\n" +
+            assertContains(plan, "20:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 7: v3 <=> 13: v3\n" +
+                    "  |  equal join conjunct: 8: v3 <=> 14: v3\n" +
                     "  |  limit: 1");
         }
         {
