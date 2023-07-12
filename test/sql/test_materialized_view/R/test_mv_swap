@@ -1,8 +1,8 @@
 -- name: test_mv_swap
-create database db_${uuid0};
+create database db_test_mv_swap;
 -- result:
 -- !result
-use db_${uuid0};
+use db_test_mv_swap;
 -- result:
 -- !result
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
@@ -34,14 +34,14 @@ CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day,
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
 -- result:
-2f8adbb9-2091-11ee-9a7e-f236c9537340
+9ad02465-2092-11ee-9a7e-f236c9537340
 -- !result
 CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) as count_pv FROM ss GROUP BY event_day;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv2 with sync mode ;
 -- result:
-2fc6fa70-2091-11ee-9a7e-f236c9537340
+9cc823e3-2092-11ee-9a7e-f236c9537340
 -- !result
 SELECT * FROM mv1 ORDER BY event_day;
 -- result:
@@ -81,11 +81,11 @@ INSERT INTO ss values('2020-01-15', 2);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
 -- result:
-3077acfd-2091-11ee-9a7e-f236c9537340
+a168d541-2092-11ee-9a7e-f236c9537340
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv2 with sync mode;
 -- result:
-30f51966-2091-11ee-9a7e-f236c9537340
+a2c0760e-2092-11ee-9a7e-f236c9537340
 -- !result
 SELECT * FROM mv1 ORDER BY event_day;
 -- result:
@@ -122,11 +122,11 @@ AS SELECT sum_sum_pv + 1 FROM mv_on_mv_1;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_mv_1 with sync mode;
 -- result:
-319c7d17-2091-11ee-9a7e-f236c9537340
+a33b236b-2092-11ee-9a7e-f236c9537340
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_mv_2 with sync mode;
 -- result:
-32236062-2091-11ee-9a7e-f236c9537340
+a3b81ba6-2092-11ee-9a7e-f236c9537340
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:
@@ -141,11 +141,11 @@ false	based table mv1 swapped
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
 -- result:
-E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_1] because analyze materialized view define sql: \n\nSELECT sum(`db_2f3a47aa209111eeabf3c9d28a9636a8`.`mv1`.`sum_pv`) AS `sum_sum_pv`\nFROM `db_2f3a47aa209111eeabf3c9d28a9636a8`.`mv1`\n\nCause an error: Column '`db_2f3a47aa209111eeabf3c9d28a9636a8`.`mv1`.`sum_pv`' cannot be resolved.")
+E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_1] because analyze materialized view define sql: \n\nSELECT sum(`db_test_mv_swap`.`mv1`.`sum_pv`) AS `sum_sum_pv`\nFROM `db_test_mv_swap`.`mv1`\n\nCause an error: Column '`db_test_mv_swap`.`mv1`.`sum_pv`' cannot be resolved.")
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error from line 2, column 5 to line 2, column 43. Detail message: Create materialized view from inactive materialized view: mv_on_mv_1.')
+E: (1064, 'Unexpected exception: Getting analyzing error from line 2, column 5 to line 2, column 23. Detail message: Create materialized view from inactive materialized view: mv_on_mv_1.')
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
 -- result:
@@ -180,7 +180,7 @@ AS SELECT ss.event_day, sum(ss.pv) as ss_sum_pv, sum(jj.pv) as jj_sum_pv
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_table_1 with sync mode ;
 -- result:
-32cf30e6-2091-11ee-9a7e-f236c9537340
+a46af10a-2092-11ee-9a7e-f236c9537340
 -- !result
 ALTER TABLE ss SWAP WITH jj;
 -- result:

@@ -1,6 +1,6 @@
 -- name: test_mv_swap
-create database db_${uuid0};
-use db_${uuid0};
+create database db_test_mv_swap;
+use db_test_mv_swap;
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
 CREATE TABLE jj( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
 insert into ss values('2020-01-14', 2);
