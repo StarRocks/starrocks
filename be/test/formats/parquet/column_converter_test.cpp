@@ -459,7 +459,8 @@ TEST_F(ColumnConverterTest, Int96Test) {
 }
 
 TEST_F(ColumnConverterTest, Int96TimeZoneTest) {
-    const std::string file_path = "./be/test/formats/parquet/test_data/column_converter/int96_timestamp_timezone.parquet";
+    const std::string file_path =
+            "./be/test/formats/parquet/test_data/column_converter/int96_timestamp_timezone.parquet";
     const size_t expected_rows = 1;
 
     {
