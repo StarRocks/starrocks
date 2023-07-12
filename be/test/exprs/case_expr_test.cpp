@@ -135,6 +135,7 @@ TEST_F(VectorizedCaseExprTest, whenArrayMapCase) {
     auto array_expr1 = MockExpr(type_arr_int, array1);
 
     TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
+    expr->set_type(type_map_int_int);
 
     auto map_column_not_nullable = ColumnHelper::create_column(type_map_int_int, false);
     {
