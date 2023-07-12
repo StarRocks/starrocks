@@ -1021,4 +1021,6 @@ CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
 
+CONF_mBool(dump_metrics_with_bvar, "true");
+
 } // namespace starrocks::config
