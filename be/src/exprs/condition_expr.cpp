@@ -111,6 +111,33 @@ private:
 
         return result.build(ColumnHelper::is_all_const(columns));
     }
+<<<<<<< HEAD
+=======
+
+    ColumnPtr _evaluate_complex(const Columns& inputs) {
+        auto num_rows = inputs[0]->size();
+        Columns columns;
+        for (const auto& col : inputs) {
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
+        }
+        auto res = ColumnHelper::create_column(this->type(), true);
+        res->reserve(num_rows);
+        NullColumnPtr null = nullptr;
+
+        if (columns[0]->is_nullable()) {
+            null = down_cast<NullableColumn*>(columns[0].get())->null_column();
+        }
+
+        for (int row = 0; row < num_rows; ++row) {
+            if (null == nullptr || !null->get_data()[row]) { // not null
+                res->append(*columns[0], row, 1);
+            } else {
+                res->append(*columns[1], row, 1);
+            }
+        }
+        return res;
+    }
+>>>>>>> fdc1cb7a3b ([BugFix] return column created from this->type() and hold const inputs for map functions (#26974))
 };
 
 template <LogicalType Type>
@@ -157,6 +184,34 @@ private:
 
         return result.build(ColumnHelper::is_all_const(columns));
     }
+<<<<<<< HEAD
+=======
+
+    ColumnPtr _evaluate_complex(const Columns& inputs) {
+        auto num_rows = inputs[0]->size();
+        Columns columns;
+        for (const auto& col : inputs) {
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
+        }
+        auto res = ColumnHelper::create_column(this->type(), true);
+        res->reserve(num_rows);
+        auto right_data = columns[1];
+        NullColumnPtr right_nulls = nullptr;
+        if (columns[1]->is_nullable()) {
+            right_data = down_cast<NullableColumn*>(columns[1].get())->data_column();
+            right_nulls = down_cast<NullableColumn*>(columns[1].get())->null_column();
+        }
+        for (int row = 0; row < num_rows; ++row) {
+            if ((right_nulls == nullptr || !right_nulls->get_data()[row]) &&
+                columns[0]->equals(row, *right_data, row, false) == 1) {
+                res->append_nulls(1);
+            } else {
+                res->append(*columns[0], row, 1);
+            }
+        }
+        return res;
+    }
+>>>>>>> fdc1cb7a3b ([BugFix] return column created from this->type() and hold const inputs for map functions (#26974))
 };
 
 template <LogicalType Type>
@@ -279,6 +334,39 @@ private:
         }
         return result.build(all_const);
     }
+<<<<<<< HEAD
+=======
+
+    template <bool check_null>
+    ColumnPtr _evaluate_complex(const Columns& inputs) {
+        auto num_rows = inputs[0]->size();
+        Columns columns;
+        for (const auto& col : inputs) {
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
+        }
+        ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
+        ColumnPtr res = ColumnHelper::create_column(this->type(), true);
+        res->reserve(num_rows);
+        if constexpr (check_null) {
+            for (int row = 0; row < num_rows; ++row) {
+                if (bhs_viewer.is_null(row) || !bhs_viewer.value(row)) {
+                    res->append(*columns[2], row, 1);
+                } else {
+                    res->append(*columns[1], row, 1);
+                }
+            }
+        } else {
+            for (int row = 0; row < num_rows; ++row) {
+                if (!bhs_viewer.value(row)) {
+                    res->append(*columns[2], row, 1);
+                } else {
+                    res->append(*columns[1], row, 1);
+                }
+            }
+        }
+        return res;
+    }
+>>>>>>> fdc1cb7a3b ([BugFix] return column created from this->type() and hold const inputs for map functions (#26974))
 };
 
 template <LogicalType Type>
@@ -351,6 +439,44 @@ public:
 
         return builder.build(ColumnHelper::is_all_const(columns));
     }
+<<<<<<< HEAD
+=======
+
+    StatusOr<ColumnPtr> _evaluate_complex(const Columns& inputs) { // without only-null columns
+        int size = inputs[0]->size();
+        Columns columns;
+        for (const auto& col : inputs) {
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), size, col));
+        }
+        int col_size = columns.size();
+        auto res = ColumnHelper::create_column(this->type(), true);
+        res->reserve(size);
+        NullColumns nullColumns;
+        nullColumns.resize(col_size);
+        for (auto i = 0; i < col_size; ++i) {
+            if (columns[i]->is_nullable()) {
+                nullColumns[i] = down_cast<NullableColumn*>(columns[i].get())->null_column();
+            } else {
+                nullColumns[i] = nullptr;
+            }
+        }
+        for (int row = 0; row < size; ++row) {
+            int col;
+            for (col = 0; col < col_size; ++col) {
+                // if not null
+                if (nullColumns[col] == nullptr || !nullColumns[col]->get_data()[row]) {
+                    res->append(*columns[col], row, 1);
+                    break;
+                }
+            }
+            // if all nulls
+            if (col >= col_size) {
+                res->append_nulls(1);
+            }
+        }
+        return res;
+    }
+>>>>>>> fdc1cb7a3b ([BugFix] return column created from this->type() and hold const inputs for map functions (#26974))
 };
 
 #undef DEFINE_CLASS_CONSTRUCT_FN

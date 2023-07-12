@@ -114,6 +114,72 @@ public:
     TExprNode expr_node;
 };
 
+<<<<<<< HEAD
+=======
+TEST_F(VectorizedCaseExprTest, whenArrayMapCase) {
+    expr_node.case_expr.has_case_expr = true;
+    expr_node.case_expr.has_else_expr = false;
+
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_MAP));
+
+    TypeDescriptor type_arr_int = array_type(TYPE_INT);
+
+    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
+    array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
+    array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
+    auto array_expr0 = MockExpr(type_arr_int, array0);
+
+    auto array1 = ColumnHelper::create_column(type_arr_int, false);
+    array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)41)}); // [11,41]
+    array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
+    array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});             // [NULL, 1]
+    auto array_expr1 = MockExpr(type_arr_int, array1);
+
+    TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
+    expr->set_type(type_map_int_int);
+
+    auto map_column_not_nullable = ColumnHelper::create_column(type_map_int_int, false);
+    {
+        DatumMap map1;
+        map1[(int32_t)1] = (int32_t)44;
+        map1[(int32_t)2] = (int32_t)55;
+        map1[(int32_t)4] = (int32_t)66;
+        map_column_not_nullable->append_datum(map1);
+
+        DatumMap map2;
+        map2[(int32_t)2] = (int32_t)77;
+        map2[(int32_t)3] = (int32_t)88;
+        map_column_not_nullable->append_datum(map2);
+
+        // {} empty
+        map_column_not_nullable->append_datum(DatumMap());
+    }
+    auto map_expr = MockExpr(type_map_int_int, map_column_not_nullable);
+
+    expr->_children.push_back(&array_expr0); // case
+    expr->_children.push_back(&array_expr1); // when1
+    expr->_children.push_back(&map_expr);    // then1
+    expr->_children.push_back(&array_expr0); // when2
+    expr->_children.push_back(&map_expr);    // then2
+
+    {
+        Chunk chunk;
+        ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+        if (ptr->is_nullable()) {
+            ptr = down_cast<NullableColumn*>(ptr.get())->data_column();
+        }
+        ASSERT_TRUE(ptr->is_map());
+        ASSERT_EQ(ptr->size(), 3);
+
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_TRUE(ptr->equals(j, *map_column_not_nullable, j));
+        }
+    }
+}
+
+// old tests also test _evaluate_complex()
+>>>>>>> fdc1cb7a3b ([BugFix] return column created from this->type() and hold const inputs for map functions (#26974))
 TEST_F(VectorizedCaseExprTest, whenSliceCase) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);

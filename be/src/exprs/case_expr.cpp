@@ -150,7 +150,19 @@ private:
         then_viewers.emplace_back(else_column);
 
         size_t size = when_columns[0]->size();
+<<<<<<< HEAD
         ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
+=======
+        if constexpr (lt_is_collection<ResultType> || lt_is_collection<WhenType>) {
+            // construct result column
+            bool res_nullable = false;
+            for (const auto& col : then_columns) {
+                if (col->is_nullable() || col->only_null()) {
+                    res_nullable = true;
+                }
+            }
+            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+>>>>>>> fdc1cb7a3b ([BugFix] return column created from this->type() and hold const inputs for map functions (#26974))
 
         bool columns_has_null = false;
         for (ColumnPtr& column : when_columns) {
@@ -267,8 +279,61 @@ private:
             when_columns_has_null |= column->has_null();
         }
 
+<<<<<<< HEAD
         // max case size in use SIMD CASE WHEN implements
         constexpr int max_simd_case_when_size = 8;
+=======
+        if constexpr (lt_is_collection<ResultType>) {
+            // construct nullable result column
+            bool res_nullable = false;
+            for (const auto& col : then_columns) {
+                if (col->is_nullable() || col->only_null()) {
+                    res_nullable = true;
+                }
+            }
+            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+
+            for (auto& then_column : then_columns) {
+                then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
+            }
+            // when_columns[i] is true or not
+            auto when_num = when_columns.size();
+            if (!when_columns_has_null) {
+                for (auto row = 0; row < size; ++row) {
+                    int i = 0;
+                    while (i < when_num && !(when_viewers[i].value(row))) {
+                        ++i;
+                    }
+                    if (then_columns[i]->is_null(i)) {
+                        res->append_nulls(1);
+                    } else {
+                        res->append(*then_columns[i], row, 1);
+                    }
+                }
+            } else {
+                for (auto row = 0; row < size; ++row) {
+                    int i = 0;
+                    while ((i < when_num) && (when_viewers[i].is_null(row) || !when_viewers[i].value(row))) {
+                        ++i;
+                    }
+                    if (then_columns[i]->is_null(i)) {
+                        res->append_nulls(1);
+                    } else {
+                        res->append(*then_columns[i], row, 1);
+                    }
+                }
+            }
+            return res;
+        } else {
+            std::vector<ColumnViewer<ResultType>> then_viewers;
+            then_viewers.reserve(loop_end);
+            for (auto& col : then_columns) {
+                then_viewers.emplace_back(col);
+            }
+            ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
+            // max case size in use SIMD CASE WHEN implements
+            constexpr int max_simd_case_when_size = 8;
+>>>>>>> fdc1cb7a3b ([BugFix] return column created from this->type() and hold const inputs for map functions (#26974))
 
         // optimization for no-nullable Arithmetic Type
         if constexpr (isArithmeticLT<ResultType>) {
