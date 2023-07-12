@@ -72,7 +72,6 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
-        TRACE_COUNTER_SCOPE_LATENCY_US("apply_txn_log");
         _max_txn_id = std::max(_max_txn_id, log.txn_id());
         if (log.has_op_write()) {
             RETURN_IF_ERROR(apply_write_log(log.op_write(), log.txn_id()));
@@ -86,10 +85,7 @@ public:
         return Status::OK();
     }
 
-    Status finish() override {
-        TRACE_COUNTER_SCOPE_LATENCY_US("finish_apply");
-        return _builder.finalize(_max_txn_id);
-    }
+    Status finish() override { return _builder.finalize(_max_txn_id); }
 
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
@@ -154,7 +150,6 @@ public:
             : _tablet(tablet), _metadata(std::move(metadata)), _new_version(new_version) {}
 
     Status apply(const TxnLogPB& log) override {
-        TRACE_COUNTER_SCOPE_LATENCY_US("apply_txn_log");
         if (log.has_op_write()) {
             RETURN_IF_ERROR(apply_write_log(log.op_write()));
         }
@@ -168,7 +163,6 @@ public:
     }
 
     Status finish() override {
-        TRACE_COUNTER_SCOPE_LATENCY_US("finish_apply");
         _metadata->set_version(_new_version);
         return _tablet.put_metadata(_metadata);
     }
