@@ -404,6 +404,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // Used by full sort inorder to permute only order-by columns in cascading merging phase, after
     // that, non-order-by output columns are permuted according to the ordinal column.
+    public static final String FULL_SORT_LATE_MATERIALIZATION_V2 = "full_sort_late_materialization_v2";
     public static final String FULL_SORT_LATE_MATERIALIZATION = "full_sort_late_materialization";
 
     // For group-by-count-distinct query like select a, count(distinct b) from t group by a, if group-by column a
@@ -1125,8 +1126,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
     private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
 
-    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
-    private boolean fullSortLateMaterialization = false;
+    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION_V2, alias = FULL_SORT_LATE_MATERIALIZATION,
+            show = FULL_SORT_LATE_MATERIALIZATION)
+    private boolean fullSortLateMaterialization = true;
 
     @VariableMgr.VarAttr(name = DISTINCT_COLUMN_BUCKETS)
     private int distinctColumnBuckets = 1024;
