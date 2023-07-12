@@ -28,13 +28,13 @@ static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
 
 Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("load_pk_index");
     std::lock_guard<std::mutex> lg(_lock);
     if (_loaded) {
         return _status;
     }
     _status = _do_lake_load(tablet, metadata, base_version, builder);
     _loaded = true;
+    TRACE("end load pk index");
     if (!_status.ok()) {
         LOG(WARNING) << "load LakePrimaryIndex error: " << _status << " tablet:" << _tablet_id;
     }
@@ -125,6 +125,10 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     return Status::OK();
 }
 
+<<<<<<< HEAD
 } // namespace lake
 
 } // namespace starrocks
+=======
+} // namespace starrocks::lake
+>>>>>>> 3fdd63300 ([Enhancement] Refine trace log and delete txn log in background (#26986))
