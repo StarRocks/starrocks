@@ -47,7 +47,7 @@ public class PartitionRange implements Comparable<PartitionRange> {
      */
     @Override
     public int compareTo(PartitionRange o) {
-        if (isInteract(o)) {
+        if (isIntersected(o)) {
             return 0;
         }
         return this.partitionKeyRange.lowerEndpoint().compareTo(o.partitionKeyRange.lowerEndpoint());
@@ -63,7 +63,7 @@ public class PartitionRange implements Comparable<PartitionRange> {
      *         && other.lowerBound.compareTo(upperBound) <= 0;
      *   }
      */
-    public boolean isInteract(PartitionRange o) {
+    public boolean isIntersected(PartitionRange o) {
         return this.partitionKeyRange.upperEndpoint().compareTo(o.partitionKeyRange.lowerEndpoint()) > 0 &&
                 this.partitionKeyRange.lowerEndpoint().compareTo(o.partitionKeyRange.upperEndpoint()) < 0;
     }

@@ -320,13 +320,13 @@ public class SyncPartitionBench {
             addedSet.add(dstRanges.get(mid).getPartitionName());
 
             int lower = mid - 1;
-            while (lower >= 0 && dstRanges.get(lower).isInteract(srcRange)) {
+            while (lower >= 0 && dstRanges.get(lower).isIntersected(srcRange)) {
                 addedSet.add(dstRanges.get(lower).getPartitionName());
                 lower--;
             }
 
             int higher = mid + 1;
-            while (higher < dstRanges.size() && dstRanges.get(higher).isInteract(srcRange)) {
+            while (higher < dstRanges.size() && dstRanges.get(higher).isIntersected(srcRange)) {
                 addedSet.add(dstRanges.get(higher).getPartitionName());
                 higher++;
             }
