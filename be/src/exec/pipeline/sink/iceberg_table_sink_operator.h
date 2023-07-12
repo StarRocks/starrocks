@@ -70,10 +70,12 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+    static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
+
+    static Status partition_value_to_string(Column* column, std::string& partition_value);
+
 private:
     std::string _get_partition_location(const std::vector<std::string>& names, const std::vector<std::string>& values);
-
-    std::string _value_to_string(const ColumnPtr& column);
 
     std::string _location;
     std::string _iceberg_table_data_location;

@@ -87,7 +87,7 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
         params->output_tuple_id = tnode.agg_node.output_tuple_id;
         params->sql_grouping_keys = tnode.agg_node.__isset.sql_grouping_keys ? tnode.agg_node.sql_grouping_keys : "";
         params->sql_aggregate_functions =
-                tnode.agg_node.__isset.sql_aggregate_functions ? tnode.agg_node.sql_grouping_keys : "";
+                tnode.agg_node.__isset.sql_aggregate_functions ? tnode.agg_node.sql_aggregate_functions : "";
         params->has_outer_join_child =
                 tnode.agg_node.__isset.has_outer_join_child && tnode.agg_node.has_outer_join_child;
         params->grouping_exprs = tnode.agg_node.grouping_exprs;

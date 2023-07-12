@@ -42,6 +42,8 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MockExpr(*this)); }
 
+    bool is_constant() const override { return false; }
+
 private:
     ColumnPtr _column;
 };
@@ -105,6 +107,7 @@ public:
         stop();
         return col;
     }
+    bool is_constant() const override { return false; }
 
 private:
     size_t size;
@@ -131,6 +134,7 @@ public:
         stop();
         return col;
     }
+    bool is_constant() const override { return false; }
 
 private:
     size_t size;
@@ -177,6 +181,7 @@ public:
         stop();
         return re;
     }
+    bool is_constant() const override { return only_null; }
 
 public:
     bool all_null = false;
@@ -214,6 +219,8 @@ public:
         stop();
         return std::move(col);
     }
+
+    bool is_constant() const override { return false; }
 
 private:
     ColumnPtr _column;

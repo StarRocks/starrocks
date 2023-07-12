@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -314,14 +313,19 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
-            if (table.isCloudNativeTable() && properties != null) {
-                try {
-                    PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
-                    if (duration != null) {
-                        table.setDataCachePartitionDuration(duration);
+            if (table.isCloudNativeTable()) {
+                if (properties != null) {
+                    try {
+                        PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                        if (duration != null) {
+                            table.setDataCachePartitionDuration(duration);
+                        }
+                    } catch (AnalysisException e) {
+                        throw new DdlException(e.getMessage());
                     }
-                } catch (AnalysisException e) {
-                    throw new DdlException(e.getMessage());
+                }
+                if (partitionInfo.getType() == PartitionType.LIST) {
+                    throw new DdlException("Do not support create list partition Cloud Native table");
                 }
             }
 
@@ -362,10 +366,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (!(table instanceof ExternalOlapTable) && addedToColocateGroup) {
                 // Colocate table should keep the same bucket number across the partitions
                 DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
-                if (defaultDistributionInfo.getBucketNum() == 0) {
-                    int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-                    defaultDistributionInfo.setBucketNum(bucketNum);
-                }
+                table.inferDistribution(defaultDistributionInfo);
             }
 
             // get base index storage type. default is COLUMN

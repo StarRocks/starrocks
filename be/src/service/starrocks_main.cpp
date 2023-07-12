@@ -290,7 +290,7 @@ int main(int argc, char** argv) {
     }
 
     // Init exec env.
-    EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths));
+    EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths, as_cn));
     engine->set_heartbeat_flags(exec_env->heartbeat_flags());
 
     // Start all background threads of storage engine.

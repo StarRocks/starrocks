@@ -194,5 +194,29 @@ public class AnalyzeInsertTest {
         analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)",
                 "partition value can't be null.");
         analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=222) values (1)");
+
+        new Expectations() {
+            {
+                icebergTable.getBaseSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.DATETIME),
+                        new Column("p2", Type.INT));
+                minTimes = 0;
+
+                icebergTable.getColumn(anyString);
+                result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.DATETIME));
+                minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = Lists.newArrayList("p1", "p2");
+                minTimes = 1;
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(new Column("p1", Type.DATETIME));
+                minTimes = 1;
+            }
+        };
+
+        analyzeFail("insert into iceberg_catalog.db.tbl select 1, 2, \"2023-01-01 12:34:45\"",
+                "Unsupported partition column type [DATETIME] for iceberg table sink.");
     }
 }

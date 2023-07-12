@@ -28,6 +28,7 @@
 #include "util/phmap/phmap.h"
 #include "util/stack_util.h"
 #include "util/time.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -447,8 +448,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
 
 Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                           Tablet* tablet) {
-    MonotonicStopWatch watch;
-    watch.start();
+    TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment");
     // const_cast for paritial update to rewrite segment file in op_write
     RowsetMetadata* rowset_meta = const_cast<TxnLogPB_OpWrite*>(&op_write)->mutable_rowset();
     auto root_path = tablet->metadata_root_location();
@@ -511,10 +511,6 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         if (need_rename[i]) {
             rowset_meta->set_segments(i, op_write.rewrite_segments(i));
         }
-    }
-
-    if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
-        LOG(INFO) << "RowsetUpdateState rewrite_segment cost(ms): " << watch.elapsed_time() / 1000000;
     }
     return Status::OK();
 }

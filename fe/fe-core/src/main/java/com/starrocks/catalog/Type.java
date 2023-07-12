@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
@@ -1460,12 +1461,16 @@ public abstract class Type implements Cloneable {
             return getAssignmentCompatibleType(t1, t2, false);
         }
 
-        if (t1.getPrimitiveType().equals(t2.getPrimitiveType())) {
+        if (t1.getPrimitiveType() != PrimitiveType.INVALID_TYPE && t1.getPrimitiveType().equals(t2.getPrimitiveType())) {
             return t1;
         }
 
         if (t1.isJsonType() || t2.isJsonType()) {
             return JSON;
+        }
+
+        if (t1.isComplexType() || t2.isComplexType()) {
+            return TypeManager.getCommonSuperType(t1, t2);
         }
 
         PrimitiveType t1ResultType = t1.getResultType().getPrimitiveType();

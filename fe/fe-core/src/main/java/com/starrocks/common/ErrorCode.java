@@ -315,7 +315,10 @@ public enum ErrorCode {
     ERR_BAD_WAREHOUSE_ERROR(6002, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown warehouse '%s'"),
 
-    ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s");
+    ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
+
+    ERR_PRIVILEGE_STORAGE_VOLUME_DENIED(6020, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied for user '%s' to storage volume '%s' when checking privilege");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

@@ -395,6 +395,7 @@ vectorized_functions = [
     [50196, 'seconds_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::seconds_diff'],
     [50197, 'datediff', 'INT', ['DATETIME', 'DATETIME'], 'TimeFunctions::date_diff'],
     [50198, 'timediff', 'TIME', ['DATETIME', 'DATETIME'], 'TimeFunctions::time_diff'],
+    [50199, 'date_diff', 'BIGINT', ['DATETIME', 'DATETIME', 'VARCHAR'], 'TimeFunctions::datediff',"TimeFunctions::datediff_prepare", "TimeFunctions::datediff_close"],
     [50200, 'now', 'DATETIME', [], 'TimeFunctions::now'],
     [50201, 'current_timestamp', 'DATETIME', [], 'TimeFunctions::now'],
     [50202, 'localtime', 'DATETIME', [], 'TimeFunctions::now'],
@@ -414,6 +415,8 @@ vectorized_functions = [
     # cast string to date, the function will call by FE getStrToDateFunction, and is invisible to user
     [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
+    [50260, 'jodatime_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::jodadatetime_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
+    [50261, 'jodatime_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::jodadate_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
 
     # unix timestamp extended version to int64
     # be sure to put before int32 version, so fe will find signature in order.

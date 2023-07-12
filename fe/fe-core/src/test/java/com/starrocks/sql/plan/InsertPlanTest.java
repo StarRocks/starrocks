@@ -42,7 +42,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.stream.Stream;
 
-
 public class InsertPlanTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -819,6 +818,9 @@ public class InsertPlanTest extends PlanTestBase {
 
                 icebergTable.getPartitionColumnNames();
                 result = new ArrayList<>();
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(new Column("k1", Type.INT), new Column("k2", Type.INT));
             }
         };
 

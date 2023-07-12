@@ -27,7 +27,14 @@ public:
     using Container = Buffer<std::string>;
 
     // Used to construct an unnamed struct
-    StructColumn(Columns fields) : _fields(std::move(fields)) {}
+    StructColumn(Columns fields) : _fields(std::move(fields)) {
+        DCHECK(_fields.size() > 0);
+        for (auto& f : fields) {
+            DCHECK(f->is_nullable());
+            DCHECK_EQ(f->size(), size());
+            f->check_or_die();
+        }
+    }
 
     StructColumn(Columns fields, std::vector<std::string> field_names)
             : _fields(std::move(fields)), _field_names(std::move(field_names)) {
@@ -37,6 +44,12 @@ public:
 
         // fields and field_names must have the same size.
         DCHECK(_fields.size() == _field_names.size());
+
+        for (auto& f : fields) {
+            DCHECK(f->is_nullable());
+            DCHECK_EQ(f->size(), size());
+            f->check_or_die();
+        }
     }
 
     StructColumn(const StructColumn& rhs) {
