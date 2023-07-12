@@ -20,16 +20,14 @@ import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-<<<<<<< HEAD
-=======
 import com.google.common.collect.TreeRangeSet;
-import com.starrocks.analysis.BinaryType;
->>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,13 +39,10 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.Pr
 
 @SuppressWarnings("UnstableApiUsage")
 public class RangeSimplifier {
-<<<<<<< HEAD
-    private final List<ScalarOperator> srcPredicates;
-=======
+
     protected static final Logger LOG = LogManager.getLogger(RangeSimplifier.class);
 
     private final ScalarOperator srcPredicate;
->>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
 
     public RangeSimplifier(ScalarOperator srcPredicate) {
         this.srcPredicate = srcPredicate;
@@ -107,41 +102,15 @@ public class RangeSimplifier {
             if (resultColumns.isEmpty()) {
                 return ConstantOperator.createBoolean(true);
             } else {
-<<<<<<< HEAD
-                List<ScalarOperator> rewrittenRangePredicates = Lists.newArrayList();
-                for (int columnId : resultColumnIds) {
-                    Range<ConstantOperator> columnRange = srcColumnIdToRange.get(columnId);
-                    if (isSingleValueRange(columnRange)) {
-                        List<ScalarOperator> columnPredicates = srcPredicates.stream().filter(
-                                predicate -> isScalarForColumns(predicate, columnId)
-                        ).collect(Collectors.toList());
-                        Preconditions.checkState(!columnPredicates.isEmpty());
-                        BinaryPredicateOperator binary = (BinaryPredicateOperator) columnPredicates.get(0);
-                        BinaryPredicateOperator eqBinary = new BinaryPredicateOperator(
-                                BinaryPredicateOperator.BinaryType.EQ,
-                                binary.getChild(0), columnRange.lowerEndpoint());
-                        rewrittenRangePredicates.add(eqBinary);
-                    } else {
-                        List<ScalarOperator> columnScalars = srcPredicates.stream().filter(
-                                predicate -> isScalarForColumns(predicate, columnId)
-                        ).collect(Collectors.toList());
-                        columnScalars = filterScalarOperators(columnScalars, columnRange);
-                        rewrittenRangePredicates.addAll(columnScalars);
-                    }
-=======
                 List<ScalarOperator> result = new ArrayList<>();
                 for (ColumnRefOperator column : resultColumns) {
                     TreeRangeSet<ConstantOperator> columnRange = srcColumnToRange.get(column);
                     result.add(rangeSetToExpr(columnRange, column));
->>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
                 }
                 return Utils.compoundAnd(result);
             }
         } catch (Exception e) {
-<<<<<<< HEAD
-=======
             LOG.debug("Simplify scalar operator {} failed:", target, e);
->>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
             return null;
         }
     }
