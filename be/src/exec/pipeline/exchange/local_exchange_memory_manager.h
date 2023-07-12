@@ -46,7 +46,10 @@ public:
 
     size_t get_max_input_dop() const { return _max_input_dop; }
 
-    void update_max_memory_usage(size_t max_memory_usage) { _max_memory_usage = max_memory_usage; }
+    void update_max_memory_usage(size_t max_memory_usage) {
+        DCHECK(max_memory_usage > 0);
+        _max_memory_usage = max_memory_usage;
+    }
 
 private:
     std::atomic<size_t> _max_memory_usage{128UL * 1024 * 1024 * 1024}; // 128GB

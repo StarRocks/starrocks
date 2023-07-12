@@ -525,7 +525,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
     }
 }
 
-const double release_buffer_mem_threshold = 0.8;
+const double release_buffer_mem_ratio = 0.8;
 
 void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op) {
     if (state->enable_spill() && op->releaseable()) {
@@ -537,12 +537,12 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
         auto query_mem_limit = query_mem_tracker->limit();
         auto query_consumption = query_mem_tracker->consumption();
         auto spill_mem_threshold = query_mem_limit * state->spill_mem_limit_threshold();
-        if (query_consumption >= spill_mem_threshold * release_buffer_mem_threshold) {
+        if (query_consumption >= spill_mem_threshold * release_buffer_mem_ratio) {
             // if the currently used memory is very close to the threshold that triggers spill,
             // try to release buffer first
             TRACE_SPILL_LOG << "release operator due to mem pressure, consumption: " << query_consumption
                             << ", release buffer threshold: "
-                            << static_cast<int64_t>(spill_mem_threshold * release_buffer_mem_threshold)
+                            << static_cast<int64_t>(spill_mem_threshold * release_buffer_mem_ratio)
                             << ", spill mem threshold: " << static_cast<int64_t>(spill_mem_threshold);
             mem_resource_mgr.to_low_memory_mode();
         }
