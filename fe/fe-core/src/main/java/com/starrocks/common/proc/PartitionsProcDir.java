@@ -77,6 +77,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 /*
@@ -264,13 +265,15 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private List<List<Comparable>> getPartitionInfos() {
-        return table.isCloudNativeTableOrMaterializedView() ? getLakePartitionInfos() : getOlapPartitionInfos();
-    }
-
-    private List<List<Comparable>> getOlapPartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isOlapTableOrMaterializedView());
+
+        BiFunction<PartitionInfo, Partition, List<Comparable>> partitionInfoGetter;
+        if (table.isOlapTableOrMaterializedView()) {
+            partitionInfoGetter = this::getOlapPartitionInfo;
+        } else {
+            partitionInfoGetter = this::getLakePartitionInfo;
+        }
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
@@ -294,44 +297,12 @@ public class PartitionsProcDir implements ProcDirInterface {
             for (Long partitionId : partitionIds) {
                 Partition partition = table.getPartition(partitionId);
                 String partitionName = partition.getName();
-                if (partitionName != null && !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
-                    partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition));
+                if (partitionName != null &&
+                        !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                    partitionInfos.add(partitionInfoGetter.apply(tblPartitionInfo, partition));
                 } else if (Config.enable_display_shadow_partitions) {
-                    partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition));
+                    partitionInfos.add(partitionInfoGetter.apply(tblPartitionInfo, partition));
                 }
-            }
-        } finally {
-            db.readUnlock();
-        }
-        return partitionInfos;
-    }
-
-    private List<List<Comparable>> getLakePartitionInfos() {
-        Preconditions.checkNotNull(db);
-        Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
-
-        // get info
-        List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
-        db.readLock();
-        try {
-            List<Long> partitionIds;
-            PartitionInfo tblPartitionInfo = table.getPartitionInfo();
-
-            // for range partitions, we return partitions in ascending range order by default.
-            // this is to be consistent with the behaviour before 0.12
-            if (tblPartitionInfo.isRangePartition()) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) tblPartitionInfo;
-                partitionIds = rangePartitionInfo.getSortedRangeMap(isTempPartition).stream()
-                        .map(Map.Entry::getKey).collect(Collectors.toList());
-            } else {
-                Collection<Partition> partitions =
-                        isTempPartition ? table.getTempPartitions() : table.getPartitions();
-                partitionIds = partitions.stream().map(Partition::getId).collect(Collectors.toList());
-            }
-
-            for (Long partitionId : partitionIds) {
-                partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, table.getPartition(partitionId)));
             }
         } finally {
             db.readUnlock();
