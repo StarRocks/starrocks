@@ -40,7 +40,7 @@ SET ROLE ALL;
 
 2. 激活 `db_admin` 角色。
 
-    ```undefined
+    ```plain
     SET ROLE db_admin;
     ```
 

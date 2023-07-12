@@ -74,7 +74,7 @@ select date_trunc("week", "2020-11-04 11:12:13");
 
 示例四：将输入的时间截断至一年第一天。
 
-```undefined
+```plain
 select date_trunc("year", "2020-11-04 11:12:13");
 +-------------------------------------------+
 | date_trunc('year', '2020-11-04 11:12:13') |
@@ -85,7 +85,7 @@ select date_trunc("year", "2020-11-04 11:12:13");
 
 示例五：DATE 类型下，`fmt` 设置为 `hour`时，时间部分返回 `00:00:00`。
 
-```undefined
+```plain
 select date_trunc("hour", "2020-11-04");
 +----------------------------------+
 | date_trunc('hour', '2020-11-04') |
