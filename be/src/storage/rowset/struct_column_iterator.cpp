@@ -206,7 +206,8 @@ Status StructColumnIterator::seek_to_ordinal(ordinal_t ord) {
 }
 
 Status StructColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                        const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
+                                                        const ColumnPredicate* del_predicate,
+                                                        SparseRange<>* row_ranges) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }

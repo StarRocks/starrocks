@@ -412,8 +412,8 @@ Status ColumnReader::seek_at_or_before(ordinal_t ordinal, OrdinalPageIndexIterat
 
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
-                                     std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange<>* row_ranges,
-                                     const IndexReadOptions& opts) {
+                                     std::unordered_set<uint32_t>* del_partial_filtered_pages,
+                                     SparseRange<>* row_ranges, const IndexReadOptions& opts) {
     RETURN_IF_ERROR(_load_zonemap_index(opts));
     std::vector<uint32_t> page_indexes;
     RETURN_IF_ERROR(_zone_map_filter(predicates, del_predicate, del_partial_filtered_pages, &page_indexes));

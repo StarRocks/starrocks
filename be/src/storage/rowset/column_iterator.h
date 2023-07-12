@@ -35,8 +35,8 @@
 #pragma once
 
 #include "common/status.h"
-#include "storage/range.h"
 #include "storage/olap_common.h"
+#include "storage/range.h"
 #include "storage/rowset/common.h"
 
 namespace starrocks {

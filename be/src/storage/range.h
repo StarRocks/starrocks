@@ -32,7 +32,6 @@ template <typename T = starrocks::rowid_t>
 class Range {
     using rowid_t = T;
 
-
 public:
     Range() = default;
     Range(rowid_t begin, rowid_t end);
@@ -376,7 +375,8 @@ inline void SparseRangeIterator<T>::next_range(SparseRangeIterator<T>::rowid_t s
 }
 
 template <typename T>
-inline SparseRangeIterator<T> SparseRangeIterator<T>::intersection(const SparseRange<T>& rhs, SparseRange<T>* result) const {
+inline SparseRangeIterator<T> SparseRangeIterator<T>::intersection(const SparseRange<T>& rhs,
+                                                                   SparseRange<T>* result) const {
     DCHECK(std::is_sorted(rhs._ranges.begin(), rhs._ranges.end(),
                           [](const auto& l, const auto& r) { return l.begin() < r.begin(); }));
     for (size_t i = _index; i < _range->_ranges.size(); ++i) {
@@ -435,7 +435,8 @@ inline void SparseRangeIterator<T>::skip(SparseRangeIterator<T>::rowid_t size) {
 }
 
 template <typename T>
-inline typename SparseRangeIterator<T>::rowid_t SparseRangeIterator<T>::convert_to_bitmap(uint8_t* bitmap, rowid_t max_size) const {
+inline typename SparseRangeIterator<T>::rowid_t SparseRangeIterator<T>::convert_to_bitmap(uint8_t* bitmap,
+                                                                                          rowid_t max_size) const {
     rowid_t curr_row = _next_rowid;
     size_t index = _index;
     const std::vector<Range<T>>& ranges = _range->_ranges;

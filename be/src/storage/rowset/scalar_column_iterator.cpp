@@ -305,7 +305,8 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
 }
 
 Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                        const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
+                                                        const ColumnPredicate* del_predicate,
+                                                        SparseRange<>* row_ranges) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
         IndexReadOptions opts;
