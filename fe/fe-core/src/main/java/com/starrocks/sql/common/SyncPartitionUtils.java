@@ -119,7 +119,7 @@ public class SyncPartitionUtils {
                 rollupRange.get(name))).collect(Collectors.toList());
         List<PartitionRange> baseRanges = baseRangeMap.keySet().stream().map(name -> new PartitionRange(name,
                 baseRangeMap.get(name))).collect(Collectors.toList());
-        List<PartitionRange> mvRanges = baseRangeMap.keySet().stream().map(name -> new PartitionRange(name,
+        List<PartitionRange> mvRanges = mvRangeMap.keySet().stream().map(name -> new PartitionRange(name,
                 mvRangeMap.get(name))).collect(Collectors.toList());
         Map<String, Set<String>> partitionRefMap = generatePartitionRefMap(rollupRanges, baseRanges);
         Map<String, Range<PartitionKey>> adds = diffRange(rollupRanges, mvRanges);
