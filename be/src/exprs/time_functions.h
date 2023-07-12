@@ -355,7 +355,7 @@ public:
     DEFINE_VECTORIZED_FN(time_diff);
 
     /**
-     * Calculate times from the first timestamp to the second timestamp. according to type return bigint in hour/minute/second/millisecond.
+     * Calculate times in multi type from the first timestamp to the second timestamp. according to type return bigint in hour/minute/second/millisecond.
      * @param context
      * @param columns [TimestampColumn] Columns that holds two groups timestamps for calculation.
      * @return  BigIntColumn Difference in times between the two timestamps. It can be negative.
