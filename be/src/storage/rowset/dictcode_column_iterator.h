@@ -47,7 +47,7 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
 
-    Status next_batch(const SparseRange& range, Column* dst) override { return _col_iter->next_dict_codes(range, dst); }
+    Status next_batch(const SparseRange<>& range, Column* dst) override { return _col_iter->next_dict_codes(range, dst); }
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
         return _col_iter->fetch_values_by_rowid(rowids, size, values);
@@ -70,7 +70,7 @@ public:
     }
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) override {
         return _col_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
     }
 
@@ -99,7 +99,7 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
 
-    Status next_batch(const SparseRange& range, Column* dst) override { return _col_iter->next_dict_codes(range, dst); }
+    Status next_batch(const SparseRange<>& range, Column* dst) override { return _col_iter->next_dict_codes(range, dst); }
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
         if (_local_dict_code_col == nullptr) {
@@ -135,7 +135,7 @@ public:
     }
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) override {
         return _col_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
     }
 

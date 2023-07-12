@@ -32,7 +32,7 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     Status seek_to_first() override;
 
@@ -42,7 +42,7 @@ public:
 
     /// for vectorized engine
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override;
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) override;
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
@@ -121,7 +121,7 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
     return Status::OK();
 }
 
-Status StructColumnIterator::next_batch(const SparseRange& range, Column* dst) {
+Status StructColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     StructColumn* struct_column = nullptr;
     NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
@@ -206,7 +206,7 @@ Status StructColumnIterator::seek_to_ordinal(ordinal_t ord) {
 }
 
 Status StructColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                        const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
+                                                        const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }

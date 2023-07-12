@@ -179,6 +179,7 @@ private:
     int64_t _end_offset = 0;
 
     DictFilterContext _dict_filter_ctx;
+
 };
 
 } // namespace starrocks::parquet
