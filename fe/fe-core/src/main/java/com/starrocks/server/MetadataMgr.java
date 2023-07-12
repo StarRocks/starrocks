@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -47,6 +48,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.HashMap;
 import java.util.List;
@@ -70,7 +72,15 @@ public class MetadataMgr {
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
 
+    /** get ConnectorMetadata by catalog name
+     * if catalog is null or empty will return localMetastore
+     * @param catalogName catalog's name
+     * @return ConnectorMetadata
+     */
     public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+        if (Strings.isNullOrEmpty(catalogName)) {
+            catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        }
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
         } else {
