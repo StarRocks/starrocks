@@ -8,6 +8,9 @@ use db_${uuid0};
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
+CREATE TABLE jj( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
 insert into ss values('2020-01-14', 2);
 -- result:
 -- !result
@@ -17,19 +20,28 @@ insert into ss values('2020-01-14', 3);
 insert into ss values('2020-01-15', 2);
 -- result:
 -- !result
+insert into jj values('2020-01-14', 2);
+-- result:
+-- !result
+insert into jj values('2020-01-14', 3);
+-- result:
+-- !result
+insert into jj values('2020-01-15', 2);
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
 -- result:
-1f71df93-2090-11ee-9a7e-f236c9537340
+2f8adbb9-2091-11ee-9a7e-f236c9537340
 -- !result
 CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) as count_pv FROM ss GROUP BY event_day;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv2 with sync mode ;
 -- result:
-1ffd56c1-2090-11ee-9a7e-f236c9537340
+2fc6fa70-2091-11ee-9a7e-f236c9537340
 -- !result
 SELECT * FROM mv1 ORDER BY event_day;
 -- result:
@@ -69,11 +81,11 @@ INSERT INTO ss values('2020-01-15', 2);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
 -- result:
-20bada7f-2090-11ee-9a7e-f236c9537340
+3077acfd-2091-11ee-9a7e-f236c9537340
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv2 with sync mode;
 -- result:
-212ed208-2090-11ee-9a7e-f236c9537340
+30f51966-2091-11ee-9a7e-f236c9537340
 -- !result
 SELECT * FROM mv1 ORDER BY event_day;
 -- result:
@@ -110,11 +122,11 @@ AS SELECT sum_sum_pv + 1 FROM mv_on_mv_1;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_mv_1 with sync mode;
 -- result:
-21dcc569-2090-11ee-9a7e-f236c9537340
+319c7d17-2091-11ee-9a7e-f236c9537340
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_mv_2 with sync mode;
 -- result:
-225db544-2090-11ee-9a7e-f236c9537340
+32236062-2091-11ee-9a7e-f236c9537340
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:
@@ -129,7 +141,7 @@ false	based table mv1 swapped
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
 -- result:
-E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_1] because analyze materialized view define sql: \n\nSELECT sum(`db_1f2b6d5e209011eeabf3c9d28a9636a8`.`mv1`.`sum_pv`) AS `sum_sum_pv`\nFROM `db_1f2b6d5e209011eeabf3c9d28a9636a8`.`mv1`\n\nCause an error: Column '`db_1f2b6d5e209011eeabf3c9d28a9636a8`.`mv1`.`sum_pv`' cannot be resolved.")
+E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_1] because analyze materialized view define sql: \n\nSELECT sum(`db_2f3a47aa209111eeabf3c9d28a9636a8`.`mv1`.`sum_pv`) AS `sum_sum_pv`\nFROM `db_2f3a47aa209111eeabf3c9d28a9636a8`.`mv1`\n\nCause an error: Column '`db_2f3a47aa209111eeabf3c9d28a9636a8`.`mv1`.`sum_pv`' cannot be resolved.")
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
 -- result:
@@ -157,6 +169,30 @@ SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHE
 true	
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+-- result:
+true	
+-- !result
+CREATE MATERIALIZED VIEW mv_on_table_1 REFRESH ASYNC 
+AS SELECT ss.event_day, sum(ss.pv) as ss_sum_pv, sum(jj.pv) as jj_sum_pv
+    FROM ss JOIN jj on (ss.event_day = jj.event_day) 
+    GROUP BY ss.event_day;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_on_table_1 with sync mode ;
+-- result:
+32cf30e6-2091-11ee-9a7e-f236c9537340
+-- !result
+ALTER TABLE ss SWAP WITH jj;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
+-- result:
+false	based table jj swapped
+-- !result
+ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
 -- result:
 true	
 -- !result

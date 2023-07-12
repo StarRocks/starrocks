@@ -2,9 +2,13 @@
 create database db_${uuid0};
 use db_${uuid0};
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
+CREATE TABLE jj( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
 insert into ss values('2020-01-14', 2);
 insert into ss values('2020-01-14', 3);
 insert into ss values('2020-01-15', 2);
+insert into jj values('2020-01-14', 2);
+insert into jj values('2020-01-14', 3);
+insert into jj values('2020-01-15', 2);
 
 CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
@@ -55,3 +59,14 @@ ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
 ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+
+-- swap base table
+CREATE MATERIALIZED VIEW mv_on_table_1 REFRESH ASYNC 
+AS SELECT ss.event_day, sum(ss.pv) as ss_sum_pv, sum(jj.pv) as jj_sum_pv
+    FROM ss JOIN jj on (ss.event_day = jj.event_day) 
+    GROUP BY ss.event_day;
+[UC]REFRESH MATERIALIZED VIEW mv_on_table_1 with sync mode ;
+ALTER TABLE ss SWAP WITH jj;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
+ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
