@@ -63,6 +63,9 @@ protected:
     static void check_chunk_values(std::shared_ptr<Chunk>& chunk, const std::string& expected_value) {
         chunk->check_or_die();
         size_t mid = chunk->num_rows() / 2;
+        if (mid == 0) {
+            mid = 1;
+        }
         for (size_t i = 0; i < chunk->num_rows(); i++) {
             if (i == mid) {
                 EXPECT_EQ("[NULL]", chunk->debug_row(i));
@@ -456,14 +459,28 @@ TEST_F(ColumnConverterTest, Int96Test) {
 }
 
 TEST_F(ColumnConverterTest, Int96TimeZoneTest) {
-    const std::string file_path = "./be/test/formats/parquet/test_data/column_converter/int96_new_york_timestamp.parquet";
+    const std::string file_path = "./be/test/formats/parquet/test_data/column_converter/int96_timestamp_timezone.parquet";
     const size_t expected_rows = 1;
 
     {
-        const std::string col_name = "time";
+        const std::string col_name = "time_with_new_york";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
-            check(file_path, col_type, col_name, "[2023-04-29 00:40:22.618760]", expected_rows);
+            check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
+        }
+    }
+    {
+        const std::string col_name = "time_with_shanghai";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
+        }
+    }
+    {
+        const std::string col_name = "time_without_timezone";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
         }
     }
 }
