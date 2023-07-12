@@ -468,7 +468,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.fill_data_cache = _opts.fill_data_cache;
 
-    RandomAccessFileOptions opts{.skip_fill_local_cache = _skip_fill_data_cache()};
+    RandomAccessFileOptions opts(_skip_fill_data_cache());
 
     ColumnAccessPath* access_path = nullptr;
     if (_opts.column_access_paths != nullptr && !_opts.column_access_paths->empty()) {

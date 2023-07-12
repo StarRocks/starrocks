@@ -30,6 +30,7 @@
 #include "common/type_list.h"
 #include "gutil/dynamic_annotations.h"
 #include "runtime/current_thread.h"
+#include "util/json.h"
 
 namespace starrocks {
 

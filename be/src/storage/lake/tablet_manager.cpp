@@ -473,7 +473,7 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
 StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path, bool fill_cache) {
     auto t0 = butil::gettimeofday_us();
     std::string read_buf;
-    RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
+    RandomAccessFileOptions opts(!fill_cache);
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, txn_log_path));
     ASSIGN_OR_RETURN(auto size, rf->get_size());
     if (UNLIKELY(size > std::numeric_limits<int>::max())) {

@@ -206,7 +206,7 @@ Segment::~Segment() {
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
                       bool skip_fill_local_cache) {
     SegmentFooterPB footer;
-    RandomAccessFileOptions opts{.skip_fill_local_cache = skip_fill_local_cache};
+    RandomAccessFileOptions opts(skip_fill_local_cache);
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _fname));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
 
@@ -292,7 +292,7 @@ Status Segment::load_index(bool skip_fill_local_cache) {
 
 Status Segment::_load_index(bool skip_fill_local_cache) {
     // read and parse short key index page
-    RandomAccessFileOptions file_opts{.skip_fill_local_cache = skip_fill_local_cache};
+    RandomAccessFileOptions file_opts(skip_fill_local_cache);
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _fname));
 
     PageReadOptions opts;
