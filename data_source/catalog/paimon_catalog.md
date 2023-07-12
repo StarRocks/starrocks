@@ -6,7 +6,7 @@ Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要
 
 此外，您还可以基于 Paimon Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。
 
-为保证正常访问 Hive 内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问 Paimon 内的数据，StarRocks 集群必须集成以下两个关键组件：
 
 - 对象存储或分布式文件系统，如 AWS S3、阿里云 OSS、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、Google GCS、或 HDFS。
 
@@ -16,6 +16,10 @@ Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要
 
 - StarRocks 查询 Paimon 数据时，不支持 MAP、STRUCT 和 ARRAY 这三种复杂数据类型。
 - Paimon Catalog 仅支持查询 Paimon 数据，不支持针对 Paimon 的写/删操作。
+
+## 准备工作
+
+在创建 Paimon Catalog 之前，请确保 StarRocks 集群能够正常访问 Paimon 的文件存储及元数据服务。
 
 ### AWS IAM
 
@@ -246,7 +250,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 
   `StorageCredentialParams` 包含如下参数。
 
-  | **Parameter**                 | **Required** | **Description**                                              |
+  | **参数**                      | **是否必须**  | **说明**                                                     |
   | ----------------------------- | ------------ | ------------------------------------------------------------ |
   | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
   | azure.adls1.oauth2_credential | 是           | 新建的 Client (Application) Secret。                         |
@@ -370,7 +374,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 
 ### 示例
 
-以下示例创建了一个名为 `paimon_catalog_fs` 的 Paimon Catalog，其元数据类型为 `filesystem`，用于查询 Paimon 集群里的数据。
+以下示例创建了一个名为 `paimon_catalog_fs` 的 Paimon Catalog，其元数据类型 `paimon.catalog.type` 为 `filesystem`，用于查询 Paimon 集群里的数据。
 
 #### AWS S3
 
