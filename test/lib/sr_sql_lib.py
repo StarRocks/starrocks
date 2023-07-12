@@ -447,7 +447,7 @@ class StarrocksSQLApiLib(object):
     def check(sql_id, sql, exp, act, order=False, ori_sql=None):
         """check sql result"""
         # judge if it needs to check
-        if exp == "":
+        if exp == "" and (sql.startswith(SHELL_FLAG) or sql.startswith(FUNCTION_FLAG)):
             log.info("[%s.check] only check with no Error" % sql_id)
 
             if sql.startswith(SHELL_FLAG):
