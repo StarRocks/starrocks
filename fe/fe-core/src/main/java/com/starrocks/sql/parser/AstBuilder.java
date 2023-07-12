@@ -6688,7 +6688,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    private Map<String, String> getProperties(StarRocksParser.PropertiesContext context) {
+    protected Map<String, String> getProperties(StarRocksParser.PropertiesContext context) {
         Map<String, String> properties = new HashMap<>();
         if (context != null && context.property() != null) {
             List<Property> propertyList = visit(context.property(), Property.class);

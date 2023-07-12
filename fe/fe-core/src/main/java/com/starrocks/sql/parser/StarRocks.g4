@@ -296,6 +296,10 @@ statement
     // Compaction Statement
     | cancelCompactionStatement
 
+    // Failover Group Statement
+    | createPrimaryFailoverGroupStatement
+    | createSecondaryFailoverGroupStatement
+
     //Unsupported Statement
     | unsupportedStatement
     ;
@@ -780,6 +784,44 @@ descStorageVolumeStatement
 
 setDefaultStorageVolumeStatement
     : SET identifierOrString AS DEFAULT STORAGE VOLUME
+    ;
+
+// ---------------------------------------- Failover Group Statement ---------------------------------------------------
+
+createPrimaryFailoverGroupStatement
+    : CREATE FAILOVER GROUP (IF NOT EXISTS)? failoverGroupName=identifierOrString
+          catalogsDesc?
+          databasesDesc?
+          tablesDesc?
+          membersDesc
+          scheduleDesc
+          comment?
+          properties?
+    ;
+
+catalogsDesc
+    : CATALOGS EQ identifier (',' identifier)*
+    ;
+
+databasesDesc
+    : DATABASES EQ qualifiedName (',' qualifiedName)*
+    ;
+
+tablesDesc
+    : TABLES EQ qualifiedName (',' qualifiedName)*
+    ;
+
+scheduleDesc
+    : SCHEDULE EQ string
+    ;
+
+membersDesc
+    : MEMBERS EQ string ',' string (',' string)*
+    ;
+
+createSecondaryFailoverGroupStatement
+    : CREATE FAILOVER GROUP (IF NOT EXISTS)? failoverGroupName=identifierOrString
+          AS REPLICA OF string
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
@@ -2545,7 +2587,7 @@ nonReserved
     | CONFIG | COMPACT
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
-    | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
+    | FAILOVER | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
@@ -2553,7 +2595,7 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MASKING | MANUAL | MAP | MAPPING | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
+    | MASKING | MANUAL | MAP | MAPPING | MAPPINGS | MATERIALIZED | MAX | MEMBER | MEMBERS | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
@@ -2562,7 +2604,7 @@ nonReserved
     | REMOVE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
-    | SAMPLE | SCHEDULER | SECOND | SECURITY | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
+    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION | TRACE

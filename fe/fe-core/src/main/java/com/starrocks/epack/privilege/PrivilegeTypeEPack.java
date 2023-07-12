@@ -17,6 +17,7 @@ public class PrivilegeTypeEPack extends PrivilegeType {
     public static final PrivilegeTypeEPack CREATE_ROW_ACCESS_POLICY = new PrivilegeTypeEPack(20002,
             "CREATE ROW ACCESS POLICY");
     public static final PrivilegeTypeEPack APPLY = new PrivilegeTypeEPack(20003, "APPLY");
+
     public static final Map<String, PrivilegeType> NAME_TO_PRIVILEGE =
             new ImmutableMap.Builder<String, PrivilegeType>()
                     .putAll(PrivilegeType.NAME_TO_PRIVILEGE)

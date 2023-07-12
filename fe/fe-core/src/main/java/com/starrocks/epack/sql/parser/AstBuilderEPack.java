@@ -5,13 +5,17 @@ package com.starrocks.epack.sql.parser;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Type;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
+import com.starrocks.epack.sql.ast.DatabaseName;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
@@ -437,6 +441,117 @@ public class AstBuilderEPack extends AstBuilder {
         String warehouseName = identifier.getValue();
         return new SetWarehouseStmt(warehouseName, createPos(context));
     }
+    
+    // ---------------------------------------- Failover Group Statement ---------------------------------------------------
 
+    @Override
+    public ParseNode visitCreatePrimaryFailoverGroupStatement(
+            StarRocksParser.CreatePrimaryFailoverGroupStatementContext context) {
+        boolean ifNotExist = context.IF() != null;
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+        List<String> catalogNames = parseCatalogsDescStatement(context.catalogsDesc());
+        List<DatabaseName> databaseNames = parseDatabasesDescStatement(context.databasesDesc());
+        List<TableName> tableNames = parseTablesDescStatement(context.tablesDesc());
+        List<String> members = parseMembersDescStatement(context.membersDesc());
+        String schedule = ((StringLiteral) visit(context.scheduleDesc().string())).getStringValue();
+        Map<String, String> properties = getProperties(context.properties());
+        String comment = context.comment() == null ? null : 
+                ((StringLiteral) visit(context.comment().string())).getStringValue();
 
+        return new CreatePrimaryFailoverGroupStmt(ifNotExist, failoverGroupName, catalogNames, 
+                databaseNames, tableNames, members, schedule, properties, comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitCreateSecondaryFailoverGroupStatement(
+            StarRocksParser.CreateSecondaryFailoverGroupStatementContext context) {
+        boolean ifNotExist = context.IF() != null;
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+        String primaryMember = ((StringLiteral) visit(context.string())).getStringValue();
+
+        return new CreateSecondaryFailoverGroupStmt(ifNotExist, failoverGroupName,
+                primaryMember, createPos(context));
+    }
+
+    private List<String> parseCatalogsDescStatement(StarRocksParser.CatalogsDescContext catalogsDesc) {
+        if (catalogsDesc == null) {
+            return null;
+        }
+
+        List<String> catalogNames = new ArrayList<>();
+        List<StarRocksParser.IdentifierContext> catalogList = catalogsDesc.identifier();
+        for (StarRocksParser.IdentifierContext catalog : catalogList) {
+            String catalogName = ((Identifier) visit(catalog)).getValue();
+            catalogNames.add(catalogName);
+        }
+        return catalogNames;
+    }
+
+    private List<DatabaseName> parseDatabasesDescStatement(StarRocksParser.DatabasesDescContext databasesDesc) {
+        if (databasesDesc == null) {
+            return null;
+        }
+
+        List<DatabaseName> databaseNames = new ArrayList<>();
+        List<StarRocksParser.QualifiedNameContext> databaseList = databasesDesc.qualifiedName();
+        for (StarRocksParser.QualifiedNameContext database : databaseList) {
+            DatabaseName databaseName = qualifiedNameToDatabaseName(getQualifiedName(database));
+            databaseNames.add(databaseName);
+        }
+        return databaseNames;
+    }
+
+    private List<TableName> parseTablesDescStatement(StarRocksParser.TablesDescContext tablesDesc) {
+        if (tablesDesc == null) {
+            return null;
+        }
+
+        List<TableName> tableNames = new ArrayList<>();
+        List<StarRocksParser.QualifiedNameContext> tableList = tablesDesc.qualifiedName();
+        for (StarRocksParser.QualifiedNameContext table : tableList) {
+            TableName tableName = qualifiedNameToTableName(getQualifiedName(table));
+            tableNames.add(tableName);
+        }
+        return tableNames;
+    }
+
+    private List<String> parseMembersDescStatement(StarRocksParser.MembersDescContext membersDesc) {
+        if (membersDesc == null) {
+            throw new ParsingException(PARSER_ERROR_MSG.noViableStatement("MEMBERS"));
+        }
+
+        List<String> members = new ArrayList<>();
+        List<StarRocksParser.StringContext> memberList = membersDesc.string();
+        for (StarRocksParser.StringContext memberContext : memberList) {
+            String member = ((StringLiteral) visit(memberContext)).getStringValue();
+            members.add(member);
+        }
+        return members;
+    }
+
+    private DatabaseName qualifiedNameToDatabaseName(QualifiedName qualifiedName) {
+        // Hierarchy: catalog.database
+        List<String> parts = qualifiedName.getParts();
+        if (parts.size() == 2) {
+            return new DatabaseName(parts.get(0), parts.get(1), qualifiedName.getPos());
+        } else if (parts.size() == 1) {
+            return new DatabaseName(null, parts.get(0), qualifiedName.getPos());
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidDbFormat(qualifiedName.toString()));
+        }
+    }
+
+    private TableName qualifiedNameToTableName(QualifiedName qualifiedName) {
+        // Hierarchy: catalog.database.table
+        List<String> parts = qualifiedName.getParts();
+        if (parts.size() == 3) {
+            return new TableName(parts.get(0), parts.get(1), parts.get(2), qualifiedName.getPos());
+        } else if (parts.size() == 2) {
+            return new TableName(null, parts.get(0), parts.get(1), qualifiedName.getPos());
+        } else if (parts.size() == 1) {
+            return new TableName(null, null, parts.get(0), qualifiedName.getPos());
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidTableFormat(qualifiedName.toString()));
+        }
+    }
 }

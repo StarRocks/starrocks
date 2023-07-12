@@ -10,6 +10,8 @@ import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
@@ -179,6 +181,21 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
                 statement.getPolicyName().getName())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ANY");
         }
+        return null;
+    }
+
+    // --------------------------------- Failover Group Statement ---------------------------------
+    @Override
+    public Void visitCreatePrimaryFailoverGroupStatement(
+            CreatePrimaryFailoverGroupStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
+    @Override
+    public Void visitCreateSecondaryFailoverGroupStatement(
+            CreateSecondaryFailoverGroupStmt statement, ConnectContext context) {
+        // TODO
         return null;
     }
 }

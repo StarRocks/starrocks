@@ -49,6 +49,8 @@ import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
@@ -867,6 +869,16 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDescPipeStatement(DescPipeStmt statement, C context) {
         return visitNode(statement, context);
+    }
+
+    // -------------------------------------------- Failover Group Statement -----------------------------------------------------
+    
+    public R visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------

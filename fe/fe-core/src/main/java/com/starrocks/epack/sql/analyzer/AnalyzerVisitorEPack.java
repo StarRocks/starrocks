@@ -4,6 +4,8 @@ package com.starrocks.epack.sql.analyzer;
 
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
@@ -78,6 +80,19 @@ public class AnalyzerVisitorEPack extends AnalyzerVisitor {
     @Override
     public Void visitSetWarehouseStatement(SetWarehouseStmt stmt, ConnectContext session) {
         WarehouseAnalyzer.analyze(stmt, session);
+        return null;
+    }
+
+    // ---------------------------------------- Failover Group Statement --------------------------------------------------
+
+    @Override
+    public Void visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    public Void visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
         return null;
     }
 }
