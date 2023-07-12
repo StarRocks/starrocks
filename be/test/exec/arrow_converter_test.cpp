@@ -52,6 +52,10 @@ std::tuple<bool, Status> get_conv_func(const TypeDescriptor& type, const TypeDes
     TypeDescriptor raw_type;
     bool need_cast;
     auto st = ParquetScanner::build_dest(arrow_type.get(), &type, is_nullable, &raw_type, &cf, need_cast, false);
+#if 1
+    std::cout << type.debug_string() << "  " << to_arrow_type.debug_string() << "  " << raw_type.debug_string() << "  "
+              << need_cast << std::endl;
+#endif
     return {need_cast, st};
 }
 

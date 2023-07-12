@@ -51,7 +51,7 @@ public:
         return BinaryFunctions::from_binary(ctx.get(), columns);
     }
 
-    Slice hex_binary(const Slice& str) {
+    Slice hex_binary(const Slice str) {
         std::stringstream ss;
         ss << std::hex << std::uppercase << std::setfill('0');
         for (int i = 0; i < str.size; ++i) {
@@ -79,7 +79,6 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
 
     for (auto& c : good_cases) {
         auto [binary_type, arg, expect] = c;
-        std::cout << "good case, arg:" << arg << std::endl;
         auto result = test_to_binary(arg, binary_type);
         ASSERT_TRUE(result.ok());
 
@@ -100,7 +99,6 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
     };
     for (auto& c : bad_cases) {
         auto [binary_type, arg] = c;
-        std::cout << "bad case, arg:" << arg << std::endl;
         auto result = test_to_binary(arg, binary_type);
         ASSERT_TRUE(result.ok());
         auto v = ColumnHelper::as_column<BinaryColumn>(result.value());
@@ -135,7 +133,6 @@ TEST_F(BinaryFunctionsTest, TestFromToBinaryNormal) {
 
     for (auto& c : good_cases) {
         auto [binary_type, arg, expect] = c;
-        std::cout << "good case, arg:" << arg << std::endl;
         auto result = test_to_binary(arg, binary_type);
         ASSERT_TRUE(result.ok());
 

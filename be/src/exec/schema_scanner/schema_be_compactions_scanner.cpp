@@ -45,7 +45,7 @@ Status SchemaBeCompactionsScanner::start(RuntimeState* state) {
     auto o_id = get_backend_id();
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _infos.clear();
-    CompactionInfo info;
+    CompactionInfos info;
     auto compaction_manager = StorageEngine::instance()->compaction_manager();
     info.candidates_num = compaction_manager->candidates_size();
     info.base_compaction_concurrency = compaction_manager->base_compaction_concurrency();

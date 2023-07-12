@@ -47,7 +47,8 @@ Status DownloadUtil::download(const std::string& url, const std::string& tmp_fil
         auto res = fwrite(data, length, 1, fp);
         if (res != 1) {
             LOG(ERROR) << fmt::format("fail to write data to file {}, error={}", tmp_file, ferror(fp));
-            status = Status::InternalError(fmt::format("file to write data when downloading file from {}" + url));
+            status = Status::InternalError(
+                    fmt::format(fmt::runtime("file to write data when downloading file from {}"), url));
             return false;
         }
         return true;
