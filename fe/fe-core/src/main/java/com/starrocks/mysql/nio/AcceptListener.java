@@ -120,6 +120,9 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                     } catch (Throwable e) {
                         if (e instanceof Error) {
                             LOG.error("connect processor exception because ", e);
+                        } else if (e instanceof IOException) {
+                            LOG.warn("connect processor exception IOException remote ip is",
+                                    context.getMysqlChannel().getRemoteIp());
                         } else {
                             // should be unexpected exception, so print warn log
                             LOG.warn("connect processor exception because ", e);
