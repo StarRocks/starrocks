@@ -234,7 +234,7 @@ CREATE TABLE dt_quarter( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PAR
 -- result:
 E: (1064, "Getting syntax error from line 1, column 90 to line 1, column 121. Detail message: Unsupported expr 'date_trunc('quarter', event_day)' in PARTITION BY clause.")
 -- !result
--- name: test_shadown_partition
+-- name: test_shadow_partition
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
@@ -250,6 +250,7 @@ ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="false");
 -- !result
 show partitions from ss;
 -- result:
+[REGEX]^((?!shadow_automatic_partition).)*$
 -- !result
 insert into ss values('2002-01-01', 2);
 -- result:

@@ -140,20 +140,13 @@ private:
         size_t size = when_columns[0]->size();
         if constexpr (lt_is_collection<ResultType> || lt_is_collection<WhenType>) {
             // construct result column
-            ColumnPtr res = then_columns[0];
             bool res_nullable = false;
             for (const auto& col : then_columns) {
-                if (col->is_nullable()) {
-                    if (!col->only_null()) {
-                        res = col;
-                    }
+                if (col->is_nullable() || col->only_null()) {
                     res_nullable = true;
                 }
             }
-            res = res->clone_empty();
-            if (res_nullable) {
-                res = ColumnHelper::cast_to_nullable_column(res);
-            }
+            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
 
             for (auto& then_column : then_columns) {
                 then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
@@ -314,20 +307,14 @@ private:
 
         if constexpr (lt_is_collection<ResultType>) {
             // construct nullable result column
-            ColumnPtr res = then_columns[0];
             bool res_nullable = false;
             for (const auto& col : then_columns) {
-                if (col->is_nullable()) {
-                    if (!col->only_null()) {
-                        res = col;
-                    }
+                if (col->is_nullable() || col->only_null()) {
                     res_nullable = true;
                 }
             }
-            res = res->clone_empty();
-            if (res_nullable) {
-                res = ColumnHelper::cast_to_nullable_column(res);
-            }
+            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+
             for (auto& then_column : then_columns) {
                 then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
             }
