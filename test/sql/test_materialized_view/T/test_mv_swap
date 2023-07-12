@@ -6,9 +6,9 @@ insert into ss values('2020-01-14', 2);
 insert into ss values('2020-01-14', 3);
 insert into ss values('2020-01-15', 2);
 
-CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) FROM ss GROUP BY event_day;
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
-CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) FROM ss GROUP BY event_day;
+CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) as count_pv FROM ss GROUP BY event_day;
 [UC]REFRESH MATERIALIZED VIEW mv2 with sync mode ;
 SELECT * FROM mv1 ORDER BY event_day;
 SELECT * FROM mv2 ORDER BY event_day;
@@ -32,3 +32,26 @@ ALTER TABLE ss SWAP WITH mv1;
 
 -- Try to swap with self
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv1;
+
+-- MV on MV
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+CREATE MATERIALIZED VIEW mv_on_mv_1 REFRESH ASYNC 
+AS SELECT sum(sum_pv) as sum_sum_pv FROM mv1;
+CREATE MATERIALIZED VIEW mv_on_mv_2 REFRESH ASYNC 
+AS SELECT sum_sum_pv + 1 FROM mv_on_mv_1;
+[UC]REFRESH MATERIALIZED VIEW mv_on_mv_1 with sync mode;
+[UC]REFRESH MATERIALIZED VIEW mv_on_mv_2 with sync mode;
+-- swap intermediate MV
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
+ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+-- swap back
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
+ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';

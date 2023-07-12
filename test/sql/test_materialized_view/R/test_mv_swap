@@ -17,19 +17,19 @@ insert into ss values('2020-01-14', 3);
 insert into ss values('2020-01-15', 2);
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) FROM ss GROUP BY event_day;
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
 -- result:
-0861e5cc-fe9c-11ed-b904-02762d81431e
+1f71df93-2090-11ee-9a7e-f236c9537340
 -- !result
-CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) FROM ss GROUP BY event_day;
+CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) as count_pv FROM ss GROUP BY event_day;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv2 with sync mode ;
 -- result:
-08c6e93d-fe9c-11ed-b904-02762d81431e
+1ffd56c1-2090-11ee-9a7e-f236c9537340
 -- !result
 SELECT * FROM mv1 ORDER BY event_day;
 -- result:
@@ -57,23 +57,23 @@ SELECT * FROM mv2 ORDER BY event_day;
 DESC mv1;
 -- result:
 event_day	date	YES	true	None	
-count(pv)	bigint	NO	true	None	
+count_pv	bigint	NO	true	None	
 -- !result
 DESC mv2;
 -- result:
 event_day	date	YES	true	None	
-sum(pv)	bigint	YES	true	None	
+sum_pv	bigint	YES	true	None	
 -- !result
 INSERT INTO ss values('2020-01-15', 2);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
 -- result:
-0983cfc4-fe9c-11ed-b904-02762d81431e
+20bada7f-2090-11ee-9a7e-f236c9537340
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv2 with sync mode;
 -- result:
-09f6dcef-fe9c-11ed-b904-02762d81431e
+212ed208-2090-11ee-9a7e-f236c9537340
 -- !result
 SELECT * FROM mv1 ORDER BY event_day;
 -- result:
@@ -96,4 +96,67 @@ E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materializ
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv1;
 -- result:
 E: (1064, 'Unexpected exception: New name conflicts with rollup index name: mv1')
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_on_mv_1 REFRESH ASYNC 
+AS SELECT sum(sum_pv) as sum_sum_pv FROM mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_on_mv_2 REFRESH ASYNC 
+AS SELECT sum_sum_pv + 1 FROM mv_on_mv_1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_on_mv_1 with sync mode;
+-- result:
+21dcc569-2090-11ee-9a7e-f236c9537340
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_on_mv_2 with sync mode;
+-- result:
+225db544-2090-11ee-9a7e-f236c9537340
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+-- result:
+false	based table mv1 swapped
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+-- result:
+false	based table mv1 swapped
+-- !result
+ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
+-- result:
+E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_1] because analyze materialized view define sql: \n\nSELECT sum(`db_1f2b6d5e209011eeabf3c9d28a9636a8`.`mv1`.`sum_pv`) AS `sum_sum_pv`\nFROM `db_1f2b6d5e209011eeabf3c9d28a9636a8`.`mv1`\n\nCause an error: Column '`db_1f2b6d5e209011eeabf3c9d28a9636a8`.`mv1`.`sum_pv`' cannot be resolved.")
+-- !result
+ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
+-- result:
+E: (1064, 'Unexpected exception: Getting analyzing error from line 2, column 5 to line 2, column 43. Detail message: Create materialized view from inactive materialized view: mv_on_mv_1.')
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+-- result:
+false	based table mv1 swapped
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+-- result:
+false	based table mv1 swapped
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
+-- result:
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+-- result:
+true	
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+-- result:
+true	
 -- !result
