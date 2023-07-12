@@ -1469,9 +1469,10 @@ TEST_F(VecMathFunctionsTest, widthBucketTest) {
         auto tc3 = DoubleColumn::create();
         auto tc4 = Int64Column::create();
 
-        double inputs[] = {5.35, 0, 199999.99, 290000.00, 320000.00, 399999.99, 400000.00, 470000.00, 510000.00, 610000.00};
+        double inputs[] = {5.35,      0,         199999.99, 290000.00, 320000.00,
+                           399999.99, 400000.00, 470000.00, 510000.00, 610000.00};
         double mins[] = {0.024, 1, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000};
-        double maxs[] = { 10.06, 2, 600000, 600000, 600000, 600000, 600000, 600000, 600000, 600000};
+        double maxs[] = {10.06, 2, 600000, 600000, 600000, 600000, 600000, 600000, 600000, 600000};
         int64_t buckets[] = {5, 3, 4, 4, 4, 4, 4, 4, 4, 4};
 
         int64_t results[] = {3, 0, 0, 1, 2, 2, 3, 3, 4, 5};
@@ -1504,7 +1505,6 @@ TEST_F(VecMathFunctionsTest, widthBucketTest) {
         auto tc2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
         auto tc3 = NullableColumn::create(Int32Column::create(), NullColumn::create());
         auto tc4 = NullableColumn::create(Int64Column::create(), NullColumn::create());
-
 
         int32_t inputs[] = {199999, 290000, 320000, 399999, 510000};
         int32_t mins[] = {200000, 200000, 200000, 200000, 200000};
@@ -1560,7 +1560,7 @@ TEST_F(VecMathFunctionsTest, widthBucketTest) {
 
         int32_t inputs[] = {199999, 290000, 320000, 399999, 400000, 470000, 510000, 610000};
         int32_t mins[] = {200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000};
-        int64_t buckets[] = {4, 4, 4, 4, 4, 4, 4, 4 };
+        int64_t buckets[] = {4, 4, 4, 4, 4, 4, 4, 4};
         int32_t maxs[] = {600000, 600000, 600000, 600000, 600000, 600000, 600000, 600000};
 
         int64_t results[] = {0, 1, 2, 2, 3, 3, 4, 5};
