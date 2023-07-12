@@ -247,7 +247,7 @@ This section uses  CSV-formatted data as an example to describe how you can empl
 
 Suppose you want to load CSV-formatted data from a Kafka topic named `ordertest1`.Every message in the dataset includes six columns: order ID, payment date, customer name, nationality, gender, and price.
 
-```undefined
+```plaintext
 2020050802,2020-05-08,Johann Georg Faust,Deutschland,male,895
 2020050802,2020-05-08,Julien Sorel,France,male,893
 2020050803,2020-05-08,Dorian Grey,UK,male,1262
