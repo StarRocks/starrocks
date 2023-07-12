@@ -2618,6 +2618,48 @@ StatusOr<ColumnPtr> TimeFunctions::date_diff_time(FunctionContext* context, cons
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::date_diff_years(FunctionContext* context, const Columns& columns, int64_t t) {
+    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
+    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
+    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
+    auto size = columns[2]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    for (int row = 0; row < size; ++row) {
+        TimestampValue l = (TimestampValue)lv_column.value(row);
+        TimestampValue r = (TimestampValue)rv_column.value(row);
+        result.append(years_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r));
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::date_diff_months(FunctionContext* context, const Columns& columns, int64_t t) {
+    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
+    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
+    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
+    auto size = columns[2]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    for (int row = 0; row < size; ++row) {
+        TimestampValue l = (TimestampValue)lv_column.value(row);
+        TimestampValue r = (TimestampValue)rv_column.value(row);
+        result.append(months_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r));
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::date_diff_quarters(FunctionContext* context, const Columns& columns, int64_t t) {
+    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
+    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
+    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
+    auto size = columns[2]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    for (int row = 0; row < size; ++row) {
+        TimestampValue l = (TimestampValue)lv_column.value(row);
+        TimestampValue r = (TimestampValue)rv_column.value(row);
+        result.append(months_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r) / 3);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 Status TimeFunctions::datediff_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_notnull_constant_column(2)) {
         return Status::OK();
@@ -2626,7 +2668,8 @@ Status TimeFunctions::datediff_prepare(FunctionContext* context, FunctionContext
     auto type_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(column).to_string();
     transform(type_str.begin(), type_str.end(), type_str.begin(), ::tolower);
     if (type_str != "day" && type_str != "hour" && type_str != "minute" && type_str != "second" &&
-        type_str != "millisecond") {
+        type_str != "millisecond" && type_str != "week" && type_str != "month" && type_str != "year" &&
+        type_str != "quarter") {
         return Status::InvalidArgument("type column should be one of day/hour/minute/second/millisecond");
     }
     auto fc = new TimeFunctions::DateDiffCtx();
@@ -2641,6 +2684,17 @@ Status TimeFunctions::datediff_prepare(FunctionContext* context, FunctionContext
         fc->type = USECS_PER_SEC;
     } else if (type_str == "millisecond") {
         fc->type = USECS_PER_MILLIS;
+    } else if (type_str == "week") {
+        fc->type = USECS_PER_WEEK;
+    } else if (type_str == "year") {
+        fc->type = USECS_PER_YEAR;
+        fc->function = &TimeFunctions::date_diff_years;
+    } else if (type_str == "quarter") {
+        fc->type = USECS_PER_QUARTER;
+        fc->function = &TimeFunctions::date_diff_quarters;
+    } else if (type_str == "month") {
+        fc->type = USECS_PER_MONTH;
+        fc->function = &TimeFunctions::date_diff_months;
     }
     context->set_function_state(scope, fc);
     return Status::OK();

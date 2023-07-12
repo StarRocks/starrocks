@@ -368,6 +368,9 @@ public:
      * Called by date_diff to handle
      */
     static StatusOr<ColumnPtr> date_diff_time(FunctionContext* context, const Columns& columns, int64_t t);
+    static StatusOr<ColumnPtr> date_diff_years(FunctionContext* context, const Columns& columns, int64_t t);
+    static StatusOr<ColumnPtr> date_diff_months(FunctionContext* context, const Columns& columns, int64_t t);
+    static StatusOr<ColumnPtr> date_diff_quarters(FunctionContext* context, const Columns& columns, int64_t t);
 
     // function for datediff
     struct DateDiffCtx {
