@@ -104,7 +104,7 @@ StarRocks 访问 Paimon 集群文件存储的相关参数配置。
 
 如果您使用 HDFS 作为存储系统，则不需要配置 `StorageCredentialParams`。
 
-如果您使用 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、或 GCS，则必须配置 `StorageCredentialParams`。
+如果您使用 AWS S3、阿里云 OSS、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、或 GCS，则必须配置 `StorageCredentialParams`。
 
 ##### AWS S3
 
