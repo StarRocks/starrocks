@@ -82,6 +82,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
+import com.starrocks.persist.CreateMaterializedIndexMetaInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
@@ -255,6 +256,12 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_CREATE_TABLE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), CreateTableInfo.class);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_MATERIALIZED_INDEX_META: {
+                data = new CreateMaterializedIndexMetaInfo();
+                ((CreateMaterializedIndexMetaInfo) data).readFields(in);
                 isRead = true;
                 break;
             }

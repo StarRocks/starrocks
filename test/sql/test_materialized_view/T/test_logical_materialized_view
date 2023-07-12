@@ -1,0 +1,305 @@
+-- name: test_logical_materialized_view
+
+-- non-partition tables
+drop table if exists test1;
+CREATE TABLE `test1` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL ,
+  `k4` varchar(64) NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- Test1: basic case
+drop table if exists target1;
+CREATE TABLE `target1` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL,
+  `k4` varchar(64) NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE MATERIALIZED VIEW test_mv1 
+to target1
+as
+select k1, k2, k3, k4 from test1; 
+insert into test1 values (1, 'a', 1, 'aa'), (1, 'b', 2, 'bb'), (3, NULL, NULL, NULL);
+select * from test1 order by k1;
+select * from target1 order by k1;
+
+-- Test2: test1 have multi target tables
+drop table if exists target2;
+CREATE TABLE `target2` (
+  `k1` tinyint(4) NULL,
+  `count_k2` bigint NULL,
+  `sum_k3` bigint NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE MATERIALIZED VIEW test_mv2
+to target2
+as
+select k1, count(k2) as count_k2, sum(k3) as sum_k3 from test1 group by k1;
+
+insert into test1 values (4, 'a', 1, 'aa'), (5, 'b', 2, 'bb'), (6, NULL, NULL, NULL);
+select * from test1 order by k1;
+select * from target1 order by k1;
+select * from target2 order by k1;
+
+-- Test3: test1/test2 both insert into target2
+drop table if exists test2;
+CREATE TABLE `test2` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL,
+  `k4` varchar(64) NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE MATERIALIZED VIEW test_mv3
+to target2
+as
+select k1, count(k2) as count_k2, sum(k3) as sum_k3 from test2 group by k1;
+
+insert into test2 values (1, 'a', 1, 'aa'), (1, 'b', 2, 'bb'), (3, NULL, NULL, NULL);
+select * from test1 order by k1;
+select * from target1 order by k1;
+select * from target2 order by k1;
+
+drop materialized view test_mv1;
+drop materialized view test_mv2;
+drop materialized view test_mv3;
+---------
+---------- partition tables
+drop table if exists part_test1;
+CREATE TABLE `part_test1` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL,
+  `k4` varchar(64) NULL,
+  `dt` datetime NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (dt) (
+ START ("2023-05-20") END ("2023-05-24") EVERY (INTERVAL 1 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- Test1: basic test
+drop table if exists part_target1;
+CREATE TABLE `part_target1` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL,
+  `k4` varchar(64) NULL,
+  `dt` datetime NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (dt) (
+ START ("2023-05-20") END ("2023-05-24") EVERY (INTERVAL 1 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE MATERIALIZED VIEW test_part_mv1 
+to part_target1
+as
+select k1, k2, k3, k4, dt from part_test1; 
+insert into part_test1 values (1, 'a', 1, 'aa', '2023-05-20 00:00:00'), (2, 'b', 2, 'bb', '2023-05-21 00:00:00');
+select * from part_test1 order by k1;
+select * from part_target1 order by k1;
+
+-- Test2: target table is aggregate table and part_test1 havs multi target tables
+drop table if exists part_target2;
+CREATE TABLE `part_target2` (
+  `k1` tinyint(4) NULL,
+  `dt` datetime NOT NULL,
+  `count_k2` bigint sum NULL,
+  `sum_k3` bigint sum NULL
+) ENGINE=OLAP 
+aggregate KEY(`k1`, `dt`)
+PARTITION BY RANGE (dt) (
+ START ("2023-05-20") END ("2023-05-24") EVERY (INTERVAL 1 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE MATERIALIZED VIEW test_part_mv2
+to part_target2
+as
+select k1, dt, count(k2) as count_k2, sum(k3) as sum_k3 from part_test1 group by dt, k1; 
+insert into part_test1 values (1, 'a', 1, 'aa', '2023-05-20 00:00:00'), (2, 'b', 2, 'bb', '2023-05-21 00:00:00');
+select * from part_test1 order by k1;
+select * from part_target1 order by k1;
+select * from part_target2 order by k1;
+
+-- Test2: target table is aggregate table and part_test1/part_test2 have the same target tables
+drop table if exists part_test2;
+CREATE TABLE `part_test2` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL,
+  `k4` varchar(64) NULL,
+  `dt` datetime NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (dt) (
+ START ("2023-05-20") END ("2023-05-24") EVERY (INTERVAL 1 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE MATERIALIZED VIEW test_part_mv3
+to part_target2
+as
+select k1, dt, count(k2) as count_k2, sum(k3) as sum_k3 from part_test2 group by dt, k1; 
+insert into part_test1 values (1, 'a', 1, 'aa', '2023-05-20 00:00:00'), (2, 'b', 2, 'bb', '2023-05-21 00:00:00');
+insert into part_test2 values (1, 'a', 1, 'aa', '2023-05-20 00:00:00'), (2, 'b', 2, 'bb', '2023-05-21 00:00:00');
+select * from part_test1 order by k1;
+select * from part_test2 order by k1;
+select * from part_target1 order by k1;
+select * from part_target2 order by k1;
+
+drop materialized view test_part_mv1;
+drop materialized view test_part_mv2;
+drop materialized view test_part_mv3;
+
+-- CASE1
+drop table if exists test2;
+CREATE TABLE `test2` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+drop table if exists target2;
+CREATE TABLE `target2` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k2` int NULL DEFAULT "0",
+  `k11` tinyint(4) NULL DEFAULT "0",
+  `k4` bigint sum DEFAULT "0",
+  `k5` hll hll_union
+) ENGINE=OLAP 
+AGGREGATE KEY(`k1`, `k2`, `k11`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE MATERIALIZED VIEW test_mv2 
+to target2
+as
+-- select k1 * 2 as k1, length(k2) as k2, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2; 
+select k1, length(k2) as k2, cast(k1 * 2 as tinyint(4)) as k11,  sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2; 
+
+insert into test2 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc');
+select * from test2 order by k1;
+select * from target2 order by k1;
+drop materialized view test_mv2;
+
+--- CASE2
+drop table if exists test3;
+CREATE TABLE `test3` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+drop table if exists target3;
+CREATE TABLE `target3` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  -- `k2` varchar(64) NULL DEFAULT "0",
+  `k2` int NULL DEFAULT "0",
+  `k11` tinyint(4) NULL DEFAULT "0",
+  `k4` bigint sum DEFAULT "0",
+  `k5` hll hll_union
+) ENGINE=OLAP 
+AGGREGATE KEY(`k1`, `k2`, `k11`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE MATERIALIZED VIEW test_mv3 
+to target3
+as
+select k1, length(k2) as k2, cast(k1 * 2 as tinyint(4)) as k11, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test3 group by k1, k2; 
+
+insert into test3 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc');
+select * from test3 order by k1;
+select * from target3 order by k1;
+drop materialized view test_mv3;
+
+CREATE MATERIALIZED VIEW test_mv3_1
+to target3
+as
+select k1, length(k2) as k2, k1 * 2 as k11, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2; 
+insert into test2 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc');
+select * from test3 order by k1;
+select * from target3 order by k1;
+drop materialized view test_mv3_1;
+
+drop table if exists test8;
+CREATE TABLE `test8` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+drop table if exists target8;
+CREATE TABLE `target8` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k22` int NULL DEFAULT "0",
+  `k33` bigint sum DEFAULT "0",
+  `k44` hll hll_union
+) ENGINE=OLAP 
+AGGREGATE KEY(`k1`, `k22`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE MATERIALIZED VIEW test_mv8 
+to target8
+as
+select k1, length(k2) as k22, sum(k3) as k33, hll_union(hll_hash(k4)) as k44 from test8 group by k1, k22; 
+insert into test8 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc');
+select * from test8 order by k1;
+select * from target8 order by k1;
+drop materialized view test_mv8;

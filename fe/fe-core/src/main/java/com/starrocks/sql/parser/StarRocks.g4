@@ -598,6 +598,7 @@ createMaterializedViewStatement
     withRowAccessPolicy*
     comment?
     materializedViewDesc*
+    (TO targetTable=qualifiedName)?
     AS queryStatement
     ;
 

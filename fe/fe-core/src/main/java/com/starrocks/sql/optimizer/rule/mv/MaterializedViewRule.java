@@ -197,6 +197,11 @@ public class MaterializedViewRule extends Rule {
         while (iterator.hasNext()) {
             MaterializedIndexMeta mvMeta = iterator.next();
             long mvIdx = mvMeta.getIndexId();
+            // Ignore if mv is logical
+            if (mvMeta.isLogical()) {
+                iterator.remove();
+                continue;
+            }
 
             // Ignore original query index.
             if (mvIdx == scanOperator.getSelectedIndexId()) {
@@ -703,6 +708,9 @@ public class MaterializedViewRule extends Rule {
                                           OlapTable table) {
         int keySizeOfBaseIndex = table.getKeyColumnsByIndexId(table.getBaseIndexId()).size();
         for (MaterializedIndexMeta index : allVisibleIndexes) {
+            if (index.isLogical()) {
+                continue;
+            }
             long mvIndexId = index.getIndexId();
             if (table.getKeyColumnsByIndexId(mvIndexId).size() == keySizeOfBaseIndex) {
                 candidateIndexIdToMetas.add(index);

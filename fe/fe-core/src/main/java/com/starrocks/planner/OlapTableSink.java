@@ -38,6 +38,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
@@ -55,7 +56,6 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -177,7 +177,7 @@ public class OlapTableSink extends DataSink {
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
-        tSink.setIs_lake_table(dstTable.isCloudNativeTableOrMaterializedView() || 
+        tSink.setIs_lake_table(dstTable.isCloudNativeTableOrMaterializedView() ||
                 dstTable.isOlapExternalTable() && ((ExternalOlapTable)dstTable).isSourceTableCloudNativeTableOrMaterializedView());
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
@@ -189,6 +189,7 @@ public class OlapTableSink extends DataSink {
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);
+        tSink.setEnable_replicated_storage(enableReplicatedStorage);
 
         for (Long partitionId : partitionIds) {
             Partition part = dstTable.getPartition(partitionId);
@@ -218,6 +219,30 @@ public class OlapTableSink extends DataSink {
         complete();
     }
 
+    class AssociateTableMeta {
+        private final MaterializedIndexMeta indexMeta;
+        private final OlapTable targetTable;
+        private final Partition partition;
+        private AssociateTableMeta(MaterializedIndexMeta indexMeta, OlapTable olapTable,
+                                   Partition partition) {
+            this.indexMeta = indexMeta;
+            this.targetTable = olapTable;
+            this.partition = partition;
+        }
+
+        public MaterializedIndexMeta getIndexMeta() {
+            return indexMeta;
+        }
+
+        public OlapTable getTargetTable() {
+            return targetTable;
+        }
+
+        public Partition getPartition() {
+            return partition;
+        }
+    }
+
     // must called after tupleDescriptor is computed
     public void complete() throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
@@ -234,8 +259,22 @@ public class OlapTableSink extends DataSink {
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable));
-        tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
-        tSink.setLocation(createLocation(dstTable));
+
+        if (dstTable.isEnableColocateMVIndex()) {
+            tSink.setEnable_colocate_mv_index(true);
+        }
+
+        if (dstTable.hasAssociatedTables()) {
+            // prepare associate tables
+            Database db = GlobalStateMgr.getCurrentState().getDb(tSink.getDb_id());
+            Preconditions.checkNotNull(db);
+            Map<Long, List<AssociateTableMeta>> idToAssociatedMetas = prepareAssociatedTables(db, dstTable);
+            tSink.setPartition(createPartition(tSink.getDb_id(), dstTable, idToAssociatedMetas));
+            tSink.setLocation(createLocation(idToAssociatedMetas, dstTable));
+        } else {
+            tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
+            tSink.setLocation(createLocation(dstTable));
+        }
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
         tSink.setPartial_update_mode(this.partialUpdateMode);
         if (canUseColocateMVIndex()) {
@@ -312,7 +351,75 @@ public class OlapTableSink extends DataSink {
         return distColumns;
     }
 
+    private Map<Long, List<AssociateTableMeta>> prepareAssociatedTables(Database db,
+                                                                        OlapTable olapTable) throws AnalysisException {
+        Map<Long, List<AssociateTableMeta>> idToTargetPartitionMap = Maps.newHashMap();
+        List<Partition> basePartitions = Lists.newArrayList();
+        if (olapTable.getPartitionInfo().isPartitioned()) {
+            for (Long partitionId : partitionIds) {
+                Partition partition = olapTable.getPartition(partitionId);
+                basePartitions.add(partition);
+            }
+        } else {
+            basePartitions.add(olapTable.getPartitions().iterator().next());
+        }
+        for (Partition partition : basePartitions) {
+            int basePartitionTabletSize = partition.getBaseIndex().getTablets().size();
+            // Attach the associated table's tablet indexes' into the partition thrift.
+            for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexIdToMeta().entrySet()) {
+                MaterializedIndexMeta indexMeta = entry.getValue();
+                AssociateTableMeta meta;
+                if (indexMeta.isLogical()) {
+                    Long targetTableId = indexMeta.getTargetTableId();
+                    Long targetIndexId = indexMeta.getTargetTableIndexId();
+                    OlapTable targetTable = (OlapTable) db.getTable(targetTableId);
+                    Partition targetPartition;
+                    if (targetTable.getPartitionInfo().isPartitioned()) {
+                        targetPartition = targetTable.getPartition(partition.getName());
+                        if (targetPartition == null) {
+                            throw new AnalysisException(
+                                    String.format("Associated table's partition should be kept the same with the base " +
+                                                    "table, partition %s is not found in target table %s", partition.getName(),
+                                            targetTable.getName()));
+                        }
+                    } else {
+                        targetPartition = targetTable.getPartitions().iterator().next();
+                        if (targetPartition == null) {
+                            throw new AnalysisException(
+                                    String.format("Associated table's partition should be kept the same with the base " +
+                                            "table, partition is not found in target table %s", targetTable.getName()));
+                        }
+                    }
+                    Preconditions.checkNotNull(targetPartition);
+                    MaterializedIndex targetIndex = targetPartition.getBaseIndex();
+                    if (targetIndex.getId() != targetIndexId) {
+                        throw new AnalysisException(
+                                String.format("Only support associated table's(%s) base partition id %s, but now " +
+                                        "the partition id is %s", targetTable.getName(), targetIndex.getId(), targetIndexId));
+                    }
+                    long targetPartitionId = targetPartition.getId();
+                    if (targetIndex.getTablets().size() != basePartitionTabletSize) {
+                        throw new AnalysisException(
+                                String.format("Associated table's(%s) partition %s's tablets' size %s should be " +
+                                                "equal base table partition's size %s", targetTable.getName(), targetPartitionId,
+                                        targetIndex.getTablets().size(), basePartitionTabletSize));
+                    }
+                    meta = new AssociateTableMeta(indexMeta, targetTable, targetPartition);
+                } else {
+                    meta = new AssociateTableMeta(indexMeta, olapTable, partition);
+                }
+                idToTargetPartitionMap.computeIfAbsent(partition.getId(), k -> Lists.newArrayList()).add(meta);
+            }
+        }
+        return idToTargetPartitionMap;
+    }
+
     private TOlapTablePartitionParam createPartition(long dbId, OlapTable table) throws UserException {
+        return createPartition(dbId, table, null);
+    }
+
+    private TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
+                                                     Map<Long, List<AssociateTableMeta>> idToAssociatedMetas) throws UserException {
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
@@ -320,6 +427,11 @@ public class OlapTableSink extends DataSink {
         partitionParam.setEnable_automatic_partition(enableAutomaticPartition);
 
         PartitionType partType = table.getPartitionInfo().getType();
+        if (idToAssociatedMetas != null && idToAssociatedMetas.size() > 0) {
+            Preconditions.checkState(table.hasAssociatedTables());
+            partitionParam.setEnable_associated_tables(true);
+        }
+
         switch (partType) {
             case RANGE:
             case EXPR_RANGE:
@@ -334,7 +446,7 @@ public class OlapTableSink extends DataSink {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(partition.getId());
                     setRangeKeys(rangePartitionInfo, partition, tPartition);
-                    setIndexAndBucketNums(partition, tPartition);
+                    setIndexAndBucketNums(idToAssociatedMetas, partition, tPartition);
                     partitionParam.addToPartitions(tPartition);
                     selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
@@ -358,7 +470,7 @@ public class OlapTableSink extends DataSink {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(partition.getId());
                     setListPartitionValues(listPartitionInfo, partition, tPartition);
-                    setIndexAndBucketNums(partition, tPartition);
+                    setIndexAndBucketNums(idToAssociatedMetas, partition, tPartition);
                     partitionParam.addToPartitions(tPartition);
                     selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
@@ -380,7 +492,7 @@ public class OlapTableSink extends DataSink {
                 TOlapTablePartition tPartition = new TOlapTablePartition();
                 tPartition.setId(partition.getId());
                 // No lowerBound and upperBound for this range
-                setIndexAndBucketNums(partition, tPartition);
+                setIndexAndBucketNums(idToAssociatedMetas, partition, tPartition);
                 partitionParam.addToPartitions(tPartition);
                 partitionParam.setDistributed_columns(
                         getDistColumns(partition.getDistributionInfo(), table));
@@ -452,11 +564,37 @@ public class OlapTableSink extends DataSink {
         }
     }
 
-    private void setIndexAndBucketNums(Partition partition, TOlapTablePartition tPartition) {
-        for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-            tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
-            tPartition.setNum_buckets(index.getTablets().size());
+    private void setIndexAndBucketNums(Map<Long, List<AssociateTableMeta>> idToAssociatedMetas,
+                                       Partition partition,
+                                       TOlapTablePartition tPartition) {
+        if (idToAssociatedMetas == null || idToAssociatedMetas.isEmpty()) {
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
+                        index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+                tPartition.setNum_buckets(index.getTablets().size());
+            }
+        } else {
+            for (AssociateTableMeta associateTableMeta: idToAssociatedMetas.get(partition.getId())) {
+                if (associateTableMeta.getIndexMeta().isLogical()) {
+                    // Attach the associated table's tablet indexes' into the partition thrift.
+                    Partition targetPartition = associateTableMeta.getPartition();
+                    MaterializedIndexMeta indexMeta = associateTableMeta.getIndexMeta();
+                    MaterializedIndex targetIndex = targetPartition.getBaseIndex();
+                    tPartition.addToIndexes(new TOlapTableIndexTablets(indexMeta.getIndexId(), Lists.newArrayList(
+                            targetIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+                    long targetPartitionId = targetPartition.getId();
+                    tPartition.putToAssociated_partition_ids(indexMeta.getIndexId(), targetPartitionId);
+                } else {
+                    for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
+                                index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+                        tPartition.setNum_buckets(index.getTablets().size());
+                        if (idToAssociatedMetas.containsKey(partition.getId())) {
+                            tPartition.putToAssociated_partition_ids(index.getId(), partition.getId());
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -477,60 +615,41 @@ public class OlapTableSink extends DataSink {
     }
 
     private TOlapTableLocationParam createLocation(OlapTable table) throws UserException {
+        return createLocation(null, table);
+    }
+
+    private TOlapTableLocationParam createLocation(Map<Long, List<AssociateTableMeta>> idToAssociatedMetas,
+                                                   OlapTable table) throws UserException {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
         Map<Long, Long> bePrimaryMap = new HashMap<>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState()
                 .getOrCreateSystemInfo(clusterId);
-        for (Long partitionId : partitionIds) {
-            Partition partition = table.getPartition(partitionId);
-            int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
-            // `selectedBackedIds` keeps the selected backendIds for 1th index which will be used to choose the later index's
-            // tablets' replica in colocate mv index optimization.
-            List<Long> selectedBackedIds = Lists.newArrayList();
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-                for (int idx = 0; idx < index.getTablets().size(); ++idx) {
-                    Tablet tablet = index.getTablets().get(idx);
-                    if (table.isCloudNativeTableOrMaterializedView()) {
-                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-                        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-                        locationParam.addToTablets(new TTabletLocation(tablet.getId(),
-                                Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId(workerGroupId))));
+        if (idToAssociatedMetas == null || idToAssociatedMetas.isEmpty()) {
+            for (Long partitionId : partitionIds) {
+                Partition partition = table.getPartition(partitionId);
+                int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
+                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    createIndexLocation(infoService, table, index, allBePathsMap, bePrimaryMap, quorum, locationParam);
+                }
+            }
+        } else {
+            for (Long partitionId : partitionIds) {
+                Preconditions.checkState(idToAssociatedMetas.containsKey(partitionId));
+                for (AssociateTableMeta associateTableMeta : idToAssociatedMetas.get(partitionId)) {
+                    if (associateTableMeta.getIndexMeta().isLogical()) {
+                        OlapTable targetTable = associateTableMeta.getTargetTable();
+                        // add associated tables partition
+                        Partition targetPartition = associateTableMeta.getPartition();
+                        int targetQuorum = targetTable.getPartitionInfo().getQuorumNum(targetPartition.getId(), targetTable.writeQuorum());
+                        MaterializedIndex targetIndex = targetPartition.getBaseIndex();
+                        createIndexLocation(infoService, targetTable, targetIndex, allBePathsMap, bePrimaryMap, targetQuorum, locationParam);
                     } else {
-                        // we should ensure the replica backend is alive
-                        // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
-                        LocalTablet localTablet = (LocalTablet) tablet;
-                        Multimap<Replica, Long> bePathsMap =
-                                localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
-                        if (bePathsMap.keySet().size() < quorum) {
-                            throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
-                                    "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                            + tablet.getId() + ", backends: " +
-                                            Joiner.on(",").join(localTablet.getBackends()));
-                        }
-
-                        List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
-                        if (enableReplicatedStorage) {
-                            int lowUsageIndex = findPrimaryReplica(bePrimaryMap, infoService, index,
-                                    selectedBackedIds, idx, replicas);
-                            if (lowUsageIndex != -1) {
-                                bePrimaryMap.put(replicas.get(lowUsageIndex).getBackendId(),
-                                        bePrimaryMap.getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
-                                                + 1);
-                                // replicas[0] will be the primary replica
-                                Collections.swap(replicas, 0, lowUsageIndex);
-                                selectedBackedIds.add(replicas.get(0).getBackendId());
-                            } else {
-                                LOG.warn("Tablet {} replicas {} all has write fail flag", tablet.getId(), replicas);
-                            }
-                        }
-                        locationParam
-                                .addToTablets(
-                                        new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
-                                                .collect(Collectors.toList())));
-                        for (Map.Entry<Replica, Long> entry : bePathsMap.entries()) {
-                            allBePathsMap.put(entry.getKey().getBackendId(), entry.getValue());
+                        Partition partition = table.getPartition(partitionId);
+                        int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
+                        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            createIndexLocation(infoService, table, index, allBePathsMap, bePrimaryMap, quorum, locationParam);
                         }
                     }
                 }
@@ -538,7 +657,7 @@ public class OlapTableSink extends DataSink {
         }
 
         // check if disk capacity reach limit
-        // this is for load process, so use high water mark to check
+        // this is for load process, so use high watermark to check
         Status st = GlobalStateMgr.getCurrentSystemInfo().checkExceedDiskCapacityLimit(allBePathsMap, true);
         if (!st.ok()) {
             throw new DdlException(st.getErrorMsg());
@@ -582,6 +701,59 @@ public class OlapTableSink extends DataSink {
 
     private boolean canUseColocateMVIndex() {
         return Config.enable_colocate_mv_index && dstTable.isEnableColocateMVIndex();
+    }
+
+    private void createIndexLocation(SystemInfoService infoService,
+                                     OlapTable table, MaterializedIndex index,
+                                     Multimap<Long, Long> allBePathsMap,
+                                     Map<Long, Long> bePrimaryMap,
+                                     int quorum,
+                                     TOlapTableLocationParam locationParam) throws UserException {
+        List<Long> selectedBackedIds = Lists.newArrayList();
+        for (int idx = 0; idx < index.getTablets().size(); ++idx) {
+            Tablet tablet = index.getTablets().get(idx);
+            if (table.isCloudNativeTableOrMaterializedView()) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+                locationParam.addToTablets(new TTabletLocation(tablet.getId(),
+                        Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId(workerGroupId))));
+            } else {
+                // we should ensure the replica backend is alive
+                // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
+                LocalTablet localTablet = (LocalTablet) tablet;
+                Multimap<Replica, Long> bePathsMap =
+                        localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
+                if (bePathsMap.keySet().size() < quorum) {
+                    throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+                            "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                    + tablet.getId() + ", backends: " +
+                                    Joiner.on(",").join(localTablet.getBackends()));
+                }
+
+                List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
+                if (enableReplicatedStorage) {
+                    int lowUsageIndex = findPrimaryReplica(bePrimaryMap, infoService, index,
+                            selectedBackedIds, idx, replicas);
+                    if (lowUsageIndex != -1) {
+                        bePrimaryMap.put(replicas.get(lowUsageIndex).getBackendId(),
+                                bePrimaryMap.getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
+                                        + 1);
+                        // replicas[0] will be the primary replica
+                        Collections.swap(replicas, 0, lowUsageIndex);
+                        selectedBackedIds.add(replicas.get(0).getBackendId());
+                    } else {
+                        LOG.warn("Tablet {} replicas {} all has write fail flag", tablet.getId(), replicas);
+                    }
+                }
+                locationParam
+                        .addToTablets(
+                                new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                                        .collect(Collectors.toList())));
+                for (Map.Entry<Replica, Long> entry : bePathsMap.entries()) {
+                    allBePathsMap.put(entry.getKey().getBackendId(), entry.getValue());
+                }
+            }
+        }
     }
 
     public boolean canUsePipeLine() {

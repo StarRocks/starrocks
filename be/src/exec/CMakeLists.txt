@@ -34,6 +34,8 @@ set(EXEC_FILES
     tablet_sink_colocate_sender.cpp
     tablet_sink_index_channel.cpp
     tablet_sink_sender.cpp
+    tablet_sink_multi_sender.cpp
+    tablet_sink_colocate_multi_sender.cpp
     mysql_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp

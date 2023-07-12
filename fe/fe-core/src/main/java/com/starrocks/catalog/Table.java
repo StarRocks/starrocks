@@ -235,6 +235,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return id;
     }
 
+    public List<Long> getAssociatedTableIds() {
+        return Lists.newArrayList(id);
+    }
+
     /**
      * Get the unique id of table in string format, since we already ensure
      * the uniqueness of id for internal table, we just convert it to string
@@ -358,7 +362,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     public List<Column> getBaseSchema() {
         return fullSchema;
     }
-
+    
     public void setNewFullSchema(List<Column> newSchema) {
         this.fullSchema = newSchema;
         this.nameToColumn.clear();

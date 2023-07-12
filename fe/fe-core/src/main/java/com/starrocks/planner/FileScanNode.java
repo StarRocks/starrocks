@@ -386,7 +386,7 @@ public class FileScanNode extends LoadScanNode {
             }
 
             // check hll_hash
-            if (destSlotDesc.getType().getPrimitiveType() == PrimitiveType.HLL) {
+            if (!(expr instanceof NullLiteral) && destSlotDesc.getType().getPrimitiveType() == PrimitiveType.HLL) {
                 if (!(expr instanceof FunctionCallExpr)) {
                     throw new AnalysisException("HLL column must use hll_hash function, like "
                             + destSlotDesc.getColumn().getName() + "=hll_hash(xxx)");

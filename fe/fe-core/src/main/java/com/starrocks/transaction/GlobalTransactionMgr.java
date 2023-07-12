@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
@@ -314,9 +315,28 @@ public class GlobalTransactionMgr implements Writable {
                 checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second, Config.min_load_timeout_second);
         }
 
+        // support associate table
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new AnalysisException(String.format("Database {} is not found in beginTransaction.", dbId));
+        }
+        db.readLock();
+        List<Long> associatedTableIds = Lists.newArrayList();
+        try {
+            for (Long tableId : tableIdList) {
+                Table table = db.getTable(tableId);
+                if (table == null) {
+                    throw new AnalysisException(String.format("Table {} is not found in beginTransaction.", tableId));
+                }
+                associatedTableIds.addAll(table.getAssociatedTableIds());
+            }
+        } finally {
+            db.readUnlock();
+        }
+
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         return dbTransactionMgr
-                .beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond);
+                .beginTransaction(associatedTableIds, label, requestId, coordinator, sourceType, listenerId, timeoutSecond);
     }
 
     private void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)

@@ -494,6 +494,11 @@ public class OlapTable extends Table {
 
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
                 schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns);
+        addMaterializedIndexMeta(indexName, indexMeta);
+    }
+
+    public void addMaterializedIndexMeta(String indexName, MaterializedIndexMeta indexMeta) {
+        long indexId = indexMeta.getIndexId();
         indexIdToMeta.put(indexId, indexMeta);
         indexNameToId.put(indexName, indexId);
     }
@@ -572,6 +577,14 @@ public class OlapTable extends Table {
             }
             visibleMVs.add(indexIdToMeta.get(mv.getId()));
         }
+
+        // Add associated index meta
+        for (Map.Entry<Long, MaterializedIndexMeta> entry : indexIdToMeta.entrySet()) {
+            if (entry.getValue().isLogical()) {
+                visibleMVs.add(entry.getValue());
+            }
+        }
+
         return visibleMVs;
     }
 
@@ -1543,6 +1556,35 @@ public class OlapTable extends Table {
         }
 
         return checkSumList;
+    }
+
+    @Override
+    public List<Long> getAssociatedTableIds() {
+        List<Long> associatedTableIds = Lists.newArrayList(id);
+        indexIdToMeta.values().stream().filter(MaterializedIndexMeta::isLogical)
+                .forEach(m -> associatedTableIds.add(m.getTargetTableId()));
+        return associatedTableIds;
+    }
+
+    // Return associated table_id to index ids mapping.
+    public Map<Long, List<Long>> getAssociatedTableIdToIndexes() {
+        Map<Long, List<Long>> tableIdToIndexes = Maps.newHashMap();
+        for (Map.Entry<Long, MaterializedIndexMeta> entry : indexIdToMeta.entrySet()) {
+            Long indexId = entry.getKey();
+            MaterializedIndexMeta indexMeta = entry.getValue();
+            if (indexMeta.isLogical()) {
+                tableIdToIndexes.computeIfAbsent(indexMeta.getTargetTableId(), x -> Lists.newArrayList())
+                        .add(indexMeta.getTargetTableIndexId());
+            } else {
+                tableIdToIndexes.computeIfAbsent(id, x -> Lists.newArrayList()).add(indexId);
+            }
+        }
+        return tableIdToIndexes;
+    }
+
+    public boolean hasAssociatedTables() {
+        return indexIdToMeta.values().stream()
+                .anyMatch(x -> x.getMetaIndexType() == MaterializedIndexMeta.MetaIndexType.LOGICAL);
     }
 
     // get intersect partition names with the given table "anotherTbl". not

@@ -1609,6 +1609,10 @@ public class LocalMetastore implements ConnectorMetadata {
             MaterializedIndex index = entry.getValue();
             MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
 
+            if (indexMeta.isLogical()) {
+                continue;
+            }
+
             // create tablets
             TabletMeta tabletMeta =
                     new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
@@ -2061,6 +2065,30 @@ public class LocalMetastore implements ConnectorMetadata {
         if (table.isCloudNativeTableOrMaterializedView()) {
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                     .replayBindTableToStorageVolume(info.getStorageVolumeId(), table.getId());
+        }
+    }
+
+    public void replayCreateMaterializedIndexMeta(String dbName, String tableName, String indexName,
+                                                  MaterializedIndexMeta indexMeta) {
+        LOG.info("start to replay create sync materialized view {}", indexName);
+        Database db = this.fullNameToDb.get(dbName);
+        if (db == null) {
+            return;
+        }
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        if (table == null) {
+            return;
+        }
+        try {
+            db.writeLock();
+            table.addMaterializedIndexMeta(indexName, indexMeta);
+            table.rebuildFullSchema();
+            table.lastSchemaUpdateTime.set(System.currentTimeMillis());
+            LOG.info("replay create sync materialized view {}", indexName);
+        } catch (Exception e) {
+            LOG.warn("replay create sync materialized view {} failed: {}", indexName, e);
+        } finally {
+            db.writeUnlock();
         }
     }
 

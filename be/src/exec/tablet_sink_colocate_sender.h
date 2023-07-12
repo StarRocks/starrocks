@@ -19,7 +19,7 @@
 namespace starrocks::stream_load {
 
 // TabletSinkColocateSender will control one index/table's send chunks.
-class TabletSinkColocateSender final : public TabletSinkSender {
+class TabletSinkColocateSender : public TabletSinkSender {
 public:
     TabletSinkColocateSender(PUniqueId load_id, int64_t txn_id, IndexIdToTabletBEMap index_id_to_tablet_be_map,
                              OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
@@ -51,6 +51,7 @@ private:
                         const std::vector<std::vector<int64_t>>& index_tablet_ids,
                         const std::vector<uint16_t>& selection_idx);
 
+protected:
     bool _colocate_mv_index{true};
     std::vector<std::vector<int64_t>> _index_tablet_ids;
 };

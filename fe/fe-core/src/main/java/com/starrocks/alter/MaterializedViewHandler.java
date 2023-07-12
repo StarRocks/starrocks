@@ -38,9 +38,17 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -49,12 +57,15 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -62,10 +73,12 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.BatchDropInfo;
+import com.starrocks.persist.CreateMaterializedIndexMetaInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.OriginStatement;
@@ -81,7 +94,9 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -210,22 +225,228 @@ public class MaterializedViewHandler extends AlterHandler {
         long baseIndexId = checkAndGetBaseIndex(baseIndexName, olapTable);
         // Step1.3: mv clause validation
         List<Column> mvColumns = checkAndPrepareMaterializedView(addMVClause, db, olapTable);
+        Map<String, String> properties = addMVClause.getProperties();
+
+        // Step2.0: if target table is set, process it use `createLogicalMaterializedView`
+        if (addMVClause.getTargetTableName() != null) {
+            createLogicalMaterializedView(addMVClause, db, olapTable, mvColumns);
+            return;
+        } 
 
         // Step2: create mv job
         RollupJobV2 rollupJobV2 = createMaterializedViewJob(mvIndexName, baseIndexName, mvColumns,
-                addMVClause.getProperties(), olapTable, db, baseIndexId, addMVClause.getMVKeysType(),
+                properties, olapTable, db, baseIndexId, addMVClause.getMVKeysType(),
                 addMVClause.getOrigStmt(), addMVClause.getQueryStatement());
-
         addAlterJobV2(rollupJobV2);
 
         olapTable.setState(OlapTableState.ROLLUP);
-
-
 
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2);
         LOG.info("finished to create materialized view job: {}", rollupJobV2.getJobId());
     }
 
+    public void createLogicalMaterializedView(CreateMaterializedViewStmt stmt,
+                                              Database db,
+                                              OlapTable baseTable,
+                                              List<Column> mvColumns) throws DdlException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        TableName target = stmt.getTargetTableName();
+        Table targetTable = db.getTable(target.getTbl());
+        if (targetTable == null) {
+            throw new DdlException("create logical materialized failed. table:" + target.getTbl() + " not exist");
+        }
+        if (!targetTable.isOlapTable()) {
+            throw new DdlException("Do not support create rollup on " + targetTable.getType().name() +
+                    " table[" + target.getTbl() + "], please use new syntax to create materialized view");
+        }
+        // one table should not have mv which mv's target table is the same table.
+        for (MaterializedIndexMeta indexMeta : baseTable.getIndexIdToMeta().values()) {
+            if (indexMeta.getTargetTableId() == targetTable.getId()) {
+                throw new DdlException(String.format("Target table %s has already set in the mv %s, one target table can only " +
+                        "be set once for" + " the base table.",
+                        targetTable.getName(), baseTable.getIndexNameById(indexMeta.getIndexId())));
+            }
+        }
+
+        OlapTable targetOlapTable = (OlapTable) targetTable;
+        // target table should not have the associated materialized views.
+        if (targetOlapTable.hasMaterializedView()) {
+            throw new DdlException("create logical materialized failed. Target table should not have " +
+                    "the associated materialized views." + targetOlapTable);
+        }
+        // logical materialized view's column should be in the target table.
+        Set<String> mvColumnNames = mvColumns.stream().map(Column::getName).collect(Collectors.toSet());
+        Set<String> targetColumnNames = targetOlapTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+
+        if (mvColumns.size() < targetOlapTable.getBaseSchema().size()) {
+            int j = 0;
+            List<Column> newMVColumns = Lists.newArrayList();
+            // We still need to keep the targets column order.
+            // eg:
+            // Target Table: c1, c2, c3, c4
+            // Logical MV  : c1, c3, c4
+            //  so c2 can be appended by default.
+            List<Column> targetBaseColumns = Lists.newArrayList(targetTable.getBaseSchema());
+            for (int i = 0; i < targetBaseColumns.size(); i++) {
+                Column targetCol = targetBaseColumns.get(i);
+                if (j < mvColumns.size() && targetCol.getName().equalsIgnoreCase(
+                        MVUtils.parseMVColumnName(mvColumns.get(j).getName()))) {
+                    newMVColumns.add(mvColumns.get(j));
+                    j++;
+                } else {
+                    if (!targetCol.isAllowNull()) {
+                        throw new DdlException(String.format("Target table %s's column %s is lost by default, it should be " +
+                                "nullable by default.", targetOlapTable.getName(), targetCol.getName()));
+                    }
+                    Column copiedTargetColumn = new Column(targetCol);
+                    // to distinguish with base table's column name, add `mv_` prefix
+                    copiedTargetColumn.setName(MVUtils.getMVColumnName(targetCol.getName()));
+                    copiedTargetColumn.setDefaultValue(null);
+                    copiedTargetColumn.setDefineExpr(NullLiteral.create(targetCol.getType()));
+                    newMVColumns.add(copiedTargetColumn);
+                }
+            }
+            mvColumns = newMVColumns;
+        }
+        if (mvColumns.size() > targetOlapTable.getBaseSchema().size()) {
+            throw new DdlException("Logical materialized view columns' size "
+                    + mvColumns.size() + " should be less than the target table columns' size:"
+                    + targetOlapTable.getBaseSchema().size());
+        }
+        // Ensure targetOlapTable's column is equal to mvColumns.
+        for (int i = 0; i < targetOlapTable.getBaseSchema().size(); i++) {
+            Column targetCol = targetTable.getBaseSchema().get(i);
+            Column mvCol = mvColumns.get(i);
+            String parseMVColumnName = MVUtils.parseMVColumnName(mvCol.getName());
+            if (!targetColumnNames.contains(parseMVColumnName)) {
+                throw new DdlException(String.format("Logical materialized view column name %s is not found " +
+                                "in target table %s", parseMVColumnName, targetTable.getName()));
+            }
+            if (!mvCol.getType().equals(targetCol.getType())) {
+                if (!Type.canCastTo(mvCol.getType(), targetCol.getType())) {
+                    throw new DdlException("Logical materialized view column type "
+                            + mvCol + " is not equal to " + targetCol
+                            + " and can not cast mv column to target column");
+                }
+                Expr newDefinedExpr = new CastExpr(targetCol.getType(), mvCol.getDefineExpr());
+                mvCol.setDefineExpr(newDefinedExpr);
+                mvCol.setType(targetCol.getType());
+            }
+        }
+
+        // partition keys must be the same with the base table
+        PartitionInfo baseTablePartitionInfo = baseTable.getPartitionInfo();
+        PartitionInfo targetTablePartitionInfo = targetOlapTable.getPartitionInfo();
+        if (targetTablePartitionInfo.isPartitioned()) {
+            if (!baseTablePartitionInfo.isPartitioned()) {
+                throw new DdlException("Target table:" + baseTable + " should be " +
+                        " partitioned table");
+            }
+            if (baseTable.getPartitionInfo().getType() != targetOlapTable.getPartitionInfo().getType()) {
+                throw new DdlException("The partition type of target table:" + targetOlapTable + " should be " +
+                        " the same with the base table");
+            }
+
+            try {
+                List<Column> basePartitionColumns = baseTable.getPartitionInfo().getPartitionColumns();
+                List<Column> targetPartitionColumns = targetOlapTable.getPartitionInfo().getPartitionColumns();
+
+                if (basePartitionColumns.size() != targetPartitionColumns.size()) {
+                    throw new DdlException("Target table should have same partition columns with base table");
+                }
+
+                for (int i = 0; i < basePartitionColumns.size(); ++i) {
+                    Column basePartitionColumn = basePartitionColumns.get(i);
+                    Column targetPartitionColumn = targetPartitionColumns.get(i);
+                    if (!basePartitionColumn.getName().equals(targetPartitionColumn.getName())) {
+                        throw new DdlException("Partition column" + targetPartitionColumns.get(i) +
+                                " of target table should have same name as " +
+                                basePartitionColumns.get(i) + "of base table");
+                    }
+                    if (!basePartitionColumn.getType().equals(targetPartitionColumn.getType())) {
+                        throw new DdlException("Partition column" + targetPartitionColumns.get(i) +
+                                " of target table should have same type as " +
+                                basePartitionColumns.get(i) + "of base table");
+                    }
+                }
+
+                for (Column partColumn : targetPartitionColumns) {
+                    if (!mvColumns.contains(partColumn)) {
+                        throw new DdlException("Materialized view should contain" +
+                                " the partition column: " + partColumn.toString());
+                    }
+                }
+            } catch (NotImplementedException e) {
+                throw new DdlException("Logical Materialized view don't support the partition type");
+            }
+        }
+
+        DistributionInfo distributionInfo = targetOlapTable.getDefaultDistributionInfo();
+        if (!(distributionInfo instanceof RandomDistributionInfo)) {
+            // distribution keys must be the same with the base table: only need to check the colum name is the same
+            if (!baseTable.getDefaultDistributionInfo().getDistributionKey().equals(targetOlapTable.
+                    getDefaultDistributionInfo().getDistributionKey())) {
+                throw new DdlException("Base table's distribution keys should be the" +
+                        " same with the target table: " + targetOlapTable);
+            }
+
+            if (baseTable.getDefaultDistributionInfo().getBucketNum() != targetOlapTable.
+                    getDefaultDistributionInfo().getBucketNum()) {
+                throw new DdlException("Base table's distribution bucket num should be the" +
+                        " same with the target table: " + targetOlapTable);
+            }
+
+            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+            List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
+            for (Column distColumn : distributionColumns) {
+                if (!mvColumnNames.contains(distColumn.getName())) {
+                    throw new DdlException("Materialized view should contain" +
+                            " the distribution column: " + distColumn.toString());
+                }
+            }
+        } else {
+            RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;
+            if (randomDistributionInfo.getBucketNum() != baseTable.getDefaultDistributionInfo().getBucketNum()) {
+                throw new DdlException("Base table's distribution keys' bucket number should be the" +
+                    " same with the target table: " + targetOlapTable);
+            }
+        }
+        long targetTableId = targetTable.getId();
+        int mvSchemaHash = Util.schemaHash(0 /* init schema version */, mvColumns, targetOlapTable.getCopiedBfColumns(),
+                targetOlapTable.getBfFpp());
+        long mvIndexId = globalStateMgr.getNextId();
+
+        db.writeLock();
+        try {
+            // get short key column count
+            short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, stmt.getProperties());
+            baseTable.setIndexMeta(mvIndexId, stmt.getMVName(), mvColumns, 0 /* initial schema version */,
+                    mvSchemaHash, mvShortKeyColumnCount, TStorageType.COLUMN,
+                    stmt.getMVKeysType(), stmt.getOrigStmt());
+            MaterializedIndexMeta mvIndexMeta = baseTable.getIndexMetaByIndexId(mvIndexId);
+            Preconditions.checkState(mvIndexMeta != null);
+            mvIndexMeta.setTargetTableId(targetTableId);
+            mvIndexMeta.setTargetTableIndexId(targetOlapTable.getBaseIndexId());
+            mvIndexMeta.setMetaIndexType(MaterializedIndexMeta.MetaIndexType.LOGICAL);
+
+            // colocate base table and target table.
+            ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+            if (colocateTableIndex.isSameGroup(baseTable.getId(), targetTableId)) {
+                mvIndexMeta.setColocateMVIndex(true);
+            }
+
+            baseTable.rebuildFullSchema();
+            CreateMaterializedIndexMetaInfo info =
+                    new CreateMaterializedIndexMetaInfo(db.getFullName(), baseTable.getName(),
+                            stmt.getMVName(), mvIndexMeta);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateMaterializedIndexMetaInfo(info);
+            LOG.info("create logical materialized success:", mvIndexMeta.getIndexId());
+        } catch (Exception e) {
+            throw new DdlException("create logical materialized failed:", e);
+        } finally {
+            db.writeUnlock();
+        }
+    }
 
     /**
      * There are 2 main steps.
@@ -339,6 +560,8 @@ public class MaterializedViewHandler extends AlterHandler {
         short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, properties);
         // get timeout
         long timeoutMs = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second) * 1000;
+        boolean isColocateMVIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
+                PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false);
 
         // create rollup job
         long dbId = db.getId();
@@ -796,8 +1019,11 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new MetaNotFoundException(
                     "Materialized view [" + mvName + "] does not exist in table [" + olapTable.getName() + "]");
         }
-
         long mvIndexId = olapTable.getIndexIdByName(mvName);
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(mvIndexId);
+        if (indexMeta.isLogical()) {
+            return;
+        }
         int mvSchemaHash = olapTable.getSchemaHashByIndexId(mvIndexId);
         Preconditions.checkState(mvSchemaHash != -1);
 
@@ -816,14 +1042,17 @@ public class MaterializedViewHandler extends AlterHandler {
      */
     private long dropMaterializedView(String mvName, OlapTable olapTable) {
         long mvIndexId = olapTable.getIndexIdByName(mvName);
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        for (Partition partition : olapTable.getPartitions()) {
-            MaterializedIndex rollupIndex = partition.getIndex(mvIndexId);
-            // delete rollup index
-            partition.deleteRollupIndex(mvIndexId);
-            // remove tablets from inverted index
-            for (Tablet tablet : rollupIndex.getTablets()) {
-                invertedIndex.deleteTablet(tablet.getId());
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(mvIndexId);
+        if (!indexMeta.isLogical()) {
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            for (Partition partition : olapTable.getPartitions()) {
+                MaterializedIndex rollupIndex = partition.getIndex(mvIndexId);
+                // delete rollup index
+                partition.deleteRollupIndex(mvIndexId);
+                // remove tablets from inverted index
+                for (Tablet tablet : rollupIndex.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
             }
         }
         olapTable.deleteIndexInfo(mvName);
@@ -841,6 +1070,9 @@ public class MaterializedViewHandler extends AlterHandler {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
             for (Partition partition : olapTable.getPartitions()) {
                 MaterializedIndex rollupIndex = partition.deleteRollupIndex(rollupIndexId);
+                if (rollupIndex == null) {
+                    continue;
+                }
 
                 if (!GlobalStateMgr.isCheckpointThread()) {
                     // remove from inverted index

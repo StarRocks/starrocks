@@ -81,6 +81,17 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "isColocateMVIndex")
     private boolean isColocateMVIndex = false;
 
+    public enum MetaIndexType {
+        PHYSICAL,
+        LOGICAL
+    }
+    @SerializedName(value = "metaIndexType")
+    private MetaIndexType metaIndexType = MetaIndexType.PHYSICAL;
+    @SerializedName(value = "targetTableId")
+    private long targetTableId = 0;
+    @SerializedName(value = "targetTableIndexId")
+    private long targetTableIndexId = 0;
+
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                                  OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
@@ -182,6 +193,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         isColocateMVIndex = colocateMVIndex;
     }
 
+    public boolean isLogical() {
+        return metaIndexType == MetaIndexType.LOGICAL;
+    }
+
     // The column names of the materialized view are all lowercase, but the column names may be uppercase
     @VisibleForTesting
     public void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
@@ -227,7 +242,40 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         if (indexMeta.keysType != this.keysType) {
             return false;
         }
+        if (indexMeta.metaIndexType != this.metaIndexType) {
+            return false;
+        }
+        if (indexMeta.targetTableId != this.targetTableId) {
+            return false;
+        }
+        if (indexMeta.targetTableIndexId != this.targetTableIndexId) {
+            return false;
+        }
         return true;
+    }
+
+    public long getTargetTableId() {
+        return targetTableId;
+    }
+
+    public void setTargetTableId(long targetTableId) {
+        this.targetTableId = targetTableId;
+    }
+
+    public MetaIndexType getMetaIndexType() {
+        return metaIndexType;
+    }
+
+    public void setMetaIndexType(MetaIndexType metaIndexType) {
+        this.metaIndexType = metaIndexType;
+    }
+
+    public long getTargetTableIndexId() {
+        return targetTableIndexId;
+    }
+
+    public void setTargetTableIndexId(long targetTableIndexId) {
+        this.targetTableIndexId = targetTableIndexId;
     }
 
     @Override

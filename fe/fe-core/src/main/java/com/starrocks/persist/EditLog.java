@@ -253,6 +253,16 @@ public class EditLog {
                     globalStateMgr.replayCreateTable(info);
                     break;
                 }
+                case OperationType.OP_CREATE_MATERIALIZED_INDEX_META: {
+                    CreateMaterializedIndexMetaInfo info = (CreateMaterializedIndexMetaInfo) journal.getData();
+                    LOG.info("Begin to unprotect create sync materialized view. db = " + info.getDbName()
+                                    + " tableName = " + info.getTableName()
+                            + " indexName = " + info.getTableName()
+                                    + " create materialized index id=" + info.getIndexMeta().getIndexId());
+                    globalStateMgr.replayCreateMaterializedIndexMeta(info.getDbName(), info.getTableName(),
+                            info.getIndexName(), info.getIndexMeta());
+                    break;
+                }
                 case OperationType.OP_ADD_PARTITION_V2: {
                     PartitionPersistInfoV2 info = (PartitionPersistInfoV2) journal.getData();
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
@@ -1225,6 +1235,10 @@ public class EditLog {
 
     public void logCreateTable(CreateTableInfo info) {
         logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
+    }
+
+    public void logCreateMaterializedIndexMetaInfo(CreateMaterializedIndexMetaInfo info) {
+        logEdit(OperationType.OP_CREATE_MATERIALIZED_INDEX_META, info);
     }
 
     public void logResourceGroupOp(ResourceGroupOpEntry op) {

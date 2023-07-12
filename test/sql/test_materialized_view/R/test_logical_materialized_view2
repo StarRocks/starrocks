@@ -1,0 +1,147 @@
+-- name: test_logical_materialized_view1
+drop table if exists test1;
+-- result:
+-- !result
+CREATE TABLE `test1` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+   `dt` datetime Not NULL,	
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+PARTITION BY range(`dt`)()
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
+PROPERTIES(
+    "replication_num" = "1",
+    "colocate_with" = "target1",
+    "dynamic_partition.enable" = "true",
+    "dynamic_partition.time_unit" = "DAY",
+    "dynamic_partition.start" = "-5",
+    "dynamic_partition.end" = "3",
+    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.buckets" = "3",
+    "dynamic_partition.history_partition_num" = "1"
+);
+-- result:
+-- !result
+drop table if exists test2;
+-- result:
+-- !result
+CREATE TABLE `test2` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+   `dt` datetime Not NULL,	
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+PARTITION BY range(`dt`)()
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
+PROPERTIES(
+    "replication_num" = "1",
+    "colocate_with" = "target1",
+    "dynamic_partition.enable" = "true",
+    "dynamic_partition.time_unit" = "DAY",
+    "dynamic_partition.start" = "-5",
+    "dynamic_partition.end" = "3",
+    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.buckets" = "3",
+    "dynamic_partition.history_partition_num" = "1"
+);
+-- result:
+-- !result
+drop table if exists test3;
+-- result:
+-- !result
+CREATE TABLE `test3` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+   `dt` datetime Not NULL,	
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+PARTITION BY range(`dt`)()
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
+PROPERTIES(
+    "replication_num" = "1",
+    "colocate_with" = "target1",
+    "dynamic_partition.enable" = "true",
+    "dynamic_partition.time_unit" = "DAY",
+    "dynamic_partition.start" = "-5",
+    "dynamic_partition.end" = "3",
+    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.buckets" = "3",
+    "dynamic_partition.history_partition_num" = "1"
+);
+-- result:
+-- !result
+drop table if exists target1;
+-- result:
+-- !result
+CREATE TABLE `target1` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k11` tinyint(4) NULL DEFAULT "0",
+  `k2` int NULL DEFAULT "0",
+  `dt` datetime Not NULL,
+  `k4` bigint sum DEFAULT "0",
+  `k5` hll hll_union
+) ENGINE=OLAP 
+AGGREGATE KEY(`k1`, `k11`, `k2`, `dt`)
+PARTITION BY range(`dt`)()
+DISTRIBUTED BY RANDOM BUCKETS 3 
+PROPERTIES(
+    "replication_num" = "1",
+    "colocate_with" = "target1",
+    "dynamic_partition.enable" = "true",
+    "dynamic_partition.time_unit" = "DAY",
+    "dynamic_partition.start" = "-5",
+    "dynamic_partition.end" = "3",
+    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.buckets" = "3",
+    "dynamic_partition.history_partition_num" = "1"
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+to target1
+as
+select k1, dt, hll_union(hll_hash(k4)) as k5 from test1 group by k1, dt; 
+
+CREATE MATERIALIZED VIEW test_mv2
+to target1
+as
+select k1, dt, sum(k3) as k4 from test2 group by k1, dt; 
+
+CREATE MATERIALIZED VIEW test_mv3
+to target1
+as
+select k1, dt, sum(k3) as k4 from test3 group by k1, dt; 
+
+insert into test1 values(1, '2023-06-12 00:00:00', 'a', 1, 'a');
+-- result:
+E: (1064, "Associated table's partition should be kept the same with the base table, partition p20230613 is not found in target table target1")
+-- !result
+insert into test2 values(1, '2023-06-12 00:00:00', 'a', 1, 'a');
+-- result:
+-- !result
+insert into test3 values(1, '2023-06-12 00:00:00', 'a', 1, 'a');
+-- result:
+-- !result
+select * from target1 order by k1, dt;
+-- result:
+1	None	None	2023-06-12 00:00:00	2	None
+-- !result
+drop materialized view test_mv3;
+-- result:
+-- !result
+drop materialized view test_mv2;
+-- result:
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop table target1;
+-- result:
+-- !result
