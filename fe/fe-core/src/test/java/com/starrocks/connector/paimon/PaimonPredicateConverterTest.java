@@ -244,4 +244,14 @@ public class PaimonPredicateConverterTest {
         Assert.assertTrue(p2.function() instanceof LessOrEqual);
         Assert.assertEquals(22, p2.literals().get(0));
     }
+
+    @Test
+    public void testBinaryString() {
+        ConstantOperator value = ConstantOperator.createVarchar("ttt");
+        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F1, value);;
+        Predicate result = CONVERTER.convert(op);
+        Assert.assertTrue(result instanceof LeafPredicate);
+        LeafPredicate leafPredicate = (LeafPredicate) result;
+        Assert.assertEquals(BinaryString.fromString("ttt"), leafPredicate.literals().get(0));
+    }
 }
