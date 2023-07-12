@@ -1590,32 +1590,7 @@ public class StmtExecutor {
                 }
             }
 
-<<<<<<< HEAD
-            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
-                    || stmt instanceof UpdateStmt)) {
-                if (targetTable instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getSourceTableDbId(), transactionId,
-                            externalTable.getSourceTableHost(),
-                            externalTable.getSourceTablePort(),
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-                } else if (targetTable instanceof SystemTable) {
-                    // schema table does not need txn
-                } else {
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                            database.getId(),
-                            transactionId,
-                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
-                    );
-                }
-                context.getState().setOk();
-                insertError = true;
-                return;
-            }
 
-=======
->>>>>>> 97bf1a062c ([BugFix] Fix insert empty result as canceled load (#26913))
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                 if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
