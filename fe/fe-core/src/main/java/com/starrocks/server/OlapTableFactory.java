@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -372,10 +371,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (!(table instanceof ExternalOlapTable) && addedToColocateGroup) {
                 // Colocate table should keep the same bucket number across the partitions
                 DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
-                if (defaultDistributionInfo.getBucketNum() == 0) {
-                    int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-                    defaultDistributionInfo.setBucketNum(bucketNum);
-                }
+                table.inferDistribution(defaultDistributionInfo);
             }
 
             // get base index storage type. default is COLUMN
