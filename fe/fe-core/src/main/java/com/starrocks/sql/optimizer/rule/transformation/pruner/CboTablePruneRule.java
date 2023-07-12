@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -90,6 +91,7 @@ public class CboTablePruneRule extends TransformationRule {
             return Collections.emptyList();
         }
 
+        // The same tables inner join on primary keys and otherOnPredicates can be pruned.
         if (!otherOnPredicates.isEmpty() && !joinType.isInnerJoin()) {
             return Collections.emptyList();
         }
@@ -109,14 +111,14 @@ public class CboTablePruneRule extends TransformationRule {
             }
             List<CPBiRel> biRels = Lists.newArrayList();
             List<CPBiRel> lhsToRhsBiRels =
-                    CPBiRel.getCPBiRels(input.inputAt(0), input.inputAt(1), true);
+                    CPBiRel.extractCPBiRels(input.inputAt(0), input.inputAt(1), true);
             List<CPBiRel> rhsToLhsBiRels =
-                    CPBiRel.getCPBiRels(input.inputAt(1), input.inputAt(0), false);
+                    CPBiRel.extractCPBiRels(input.inputAt(1), input.inputAt(0), false);
             biRels.addAll(lhsToRhsBiRels);
             biRels.addAll(rhsToLhsBiRels);
 
             Set<Pair<ColumnRefOperator, ColumnRefOperator>> reverseEqColRefPairs =
-                    eqColRefPairs.stream().map(p -> Pair.create(p.second, p.first)).collect(Collectors.toSet());
+                    eqColRefPairs.stream().map(Pair::inverse).collect(Collectors.toSet());
             List<CPBiRel> matchedBiRels =
                     biRels.stream().filter(biRel -> biRel.isLeftToRight() ? biRel.getPairs().equals(eqColRefPairs) :
                             biRel.getPairs().equals(reverseEqColRefPairs)).collect(Collectors.toList());
@@ -229,7 +231,7 @@ public class CboTablePruneRule extends TransformationRule {
             return Collections.emptyList();
         }
 
-        List<CPBiRel> biRels = CPBiRel.getCPBiRels(lhs, rhs, true);
+        List<CPBiRel> biRels = CPBiRel.extractCPBiRels(lhs, rhs, true);
         if (biRels.stream().filter(biRel -> !biRel.isFromForeignKey())
                 .noneMatch(biRel -> eqColRefPairs.equals(biRel.getPairs()))) {
             return Collections.emptyList();
@@ -248,7 +250,7 @@ public class CboTablePruneRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> rewriteMapping = Maps.newHashMap();
         for (Map.Entry<Column, ColumnRefOperator> e : lhsColToColRef.entrySet()) {
             ColumnRefOperator lhsColRef = e.getValue();
-            ColumnRefOperator rhsColRef = rhsColToColRef.get(e.getKey());
+            ColumnRefOperator rhsColRef = Objects.requireNonNull(rhsColToColRef.get(e.getKey()));
             rewriteMapping.put(lhsColRef, rhsColRef);
         }
 
@@ -258,6 +260,7 @@ public class CboTablePruneRule extends TransformationRule {
                 .map(col -> (ColumnRefOperator) rewriteMapping.get(col))
                 .collect(Collectors.toMap(Function.identity(), colRefToColMap::get));
         newColRefToCols.putAll(rhsScanOp.getColRefToColumnMetaMap());
+        // pruning either lhs or rhs is OK, here prune lhs and retain rhs.
         return handleInnerJoin(joinOptExpression, rhs, lhs, rewriteMapping, Optional.of(newColRefToCols),
                 optOtherJoinOnPredicate);
     }

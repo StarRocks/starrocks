@@ -240,8 +240,8 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
             Set<Pair<ColumnRefOperator, ColumnRefOperator>> inversePairs = pairs.stream().map(Pair::inverse).collect(
                     Collectors.toSet());
             List<CPBiRel> biRels = Lists.newArrayList();
-            biRels.addAll(CPBiRel.getCPBiRels(lhsOptExpr, rhsOptExpr, true));
-            biRels.addAll(CPBiRel.getCPBiRels(rhsOptExpr, lhsOptExpr, false));
+            biRels.addAll(CPBiRel.extractCPBiRels(lhsOptExpr, rhsOptExpr, true));
+            biRels.addAll(CPBiRel.extractCPBiRels(rhsOptExpr, lhsOptExpr, false));
             for (CPBiRel biRel : biRels) {
                 if (biRel.isLeftToRight() && biRel.getPairs().equals(pairs)) {
                     graph.addEdge(lhsOptExpr, rhsOptExpr);

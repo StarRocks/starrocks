@@ -96,8 +96,8 @@ public class CPBiRel {
                 .anyMatch(uk -> new HashSet<>(uk.getUniqueColumns()).equals(referencedColumnNames));
     }
 
-    public static List<CPBiRel> getCPBiRels(OptExpression lhs, OptExpression rhs,
-                                            boolean leftToRight) {
+    public static List<CPBiRel> extractCPBiRels(OptExpression lhs, OptExpression rhs,
+                                                boolean leftToRight) {
         LogicalScanOperator lhsScanOp = lhs.getOp().cast();
         LogicalScanOperator rhsScanOp = rhs.getOp().cast();
         if (!(lhsScanOp.getTable() instanceof OlapTable) || !(rhsScanOp.getTable() instanceof OlapTable)) {

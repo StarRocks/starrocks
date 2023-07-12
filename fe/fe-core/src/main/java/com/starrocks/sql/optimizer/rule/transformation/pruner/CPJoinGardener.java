@@ -136,7 +136,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                             .flatMap(lhsScan -> getIntStream(cpScanOps.get(rhs)).map(
                                             ordinalToScanNodes::get)
                                     .filter(candidateRhsScanOpSet::contains)
-                                    .flatMap(rhsScan -> CPBiRel.getCPBiRels(lhsScan, rhsScan, true).stream()
+                                    .flatMap(rhsScan -> CPBiRel.extractCPBiRels(lhsScan, rhsScan, true).stream()
                                     )).collect(Collectors.toList());
             biRels.addAll(leftToRightBiRels);
         }
@@ -148,7 +148,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                             .flatMap(rhsScan -> getIntStream(cpScanOps.get(lhs)).map(
                                             ordinalToScanNodes::get)
                                     .filter(candidateLhsScanOpSet::contains)
-                                    .flatMap(lhsScan -> CPBiRel.getCPBiRels(rhsScan, lhsScan, false).stream()
+                                    .flatMap(lhsScan -> CPBiRel.extractCPBiRels(rhsScan, lhsScan, false).stream()
                                     )).collect(Collectors.toList());
             biRels.addAll(rightToLeftBiRels);
         }

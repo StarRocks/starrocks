@@ -160,6 +160,8 @@ public class ReorderJoinRule extends Rule {
         return Optional.empty();
     }
 
+    // This method is only called in RBO phase, so it return the rewritten plan instead of copying its into memo,
+    // it adopts JoinReorderCardinalityPreserving algorithm to reorder multi-joins to adapt to table pruning.
     public OptExpression rewrite(OptExpression input, OptimizerContext context) {
         List<Pair<OptExpression, Pair<OptExpression, Integer>>> innerJoinTreesAndParents = Lists.newArrayList();
         extractRootInnerJoin(null, -1, input, innerJoinTreesAndParents, false);
