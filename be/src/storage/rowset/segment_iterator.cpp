@@ -471,8 +471,8 @@ void SegmentIterator::_init_column_paths() {
         return;
     }
 
-    for (size_t i = 0; i < _opts.column_access_paths->size(); i++) {
-        auto* path = (*_opts.column_access_paths)[i].get();
+    for (auto& column_access_path : *_opts.column_access_paths) {
+        auto* path = column_access_path.get();
 
         if (path->is_from_predicate()) {
             _predicate_column_access_paths[path->index()] = path;
