@@ -79,11 +79,9 @@ public class HDFSBackendSelectorTest {
         return ImmutableMap.copyOf(ans);
     }
 
-    private Map<TNetworkAddress, Long> computeHostReadBytes(
-            FragmentScanRangeAssignment assignment,
-            int scanNodeId) {
-        Map<TNetworkAddress, Long> stats = new HashMap<>();
-        for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
+    private Map<Long, Long> computeWorkerIdToReadBytes(FragmentScanRangeAssignment assignment, int scanNodeId) {
+        Map<Long, Long> stats = new HashMap<>();
+        for (Map.Entry<Long, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
             List<TScanRangeParams> scanRangeParams = entry.getValue().get(scanNodeId);
             for (TScanRangeParams params : scanRangeParams) {
                 THdfsScanRange scanRange = params.scan_range.hdfs_scan_range;
@@ -124,8 +122,8 @@ public class HDFSBackendSelectorTest {
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
         int variance = 5 * scanRangeSize;
-        Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);
-        for (Map.Entry<TNetworkAddress, Long> entry : stats.entrySet()) {
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
             Assert.assertTrue(Math.abs(entry.getValue() - avg) < variance);
         }
@@ -174,9 +172,9 @@ public class HDFSBackendSelectorTest {
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, true, false);
         selector.computeScanRangeAssignment();
 
-        Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
         Assert.assertEquals(stats.size(), localHostNumber);
-        for (Map.Entry<TNetworkAddress, Long> entry : stats.entrySet()) {
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
         }
     }

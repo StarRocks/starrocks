@@ -33,11 +33,11 @@ import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsScanRange;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
@@ -223,7 +223,7 @@ public class HDFSBackendSelector implements BackendSelector {
         long avgScanRangeBytes = computeAverageScanRangeBytes();
         long maxImbalanceBytes = avgScanRangeBytes * kMaxImbalanceRatio;
 
-        for (ComputeNode computeNode : workerProvider.getWorkers()) {
+        for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
             assignedScansPerComputeNode.put(computeNode, 0L);
             hostToBackends.put(computeNode.getHost(), computeNode);
         }
@@ -274,19 +274,19 @@ public class HDFSBackendSelector implements BackendSelector {
         }
     }
 
-    private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations) {
-        TNetworkAddress address = node.getAddress();
-        workerProvider.recordUsedWorker(node.getId(), address);
+    private void recordScanRangeAssignment(ComputeNode worker, TScanRangeLocations scanRangeLocations)
+            throws NonRecoverableException {
+        workerProvider.selectWorker(worker.getId());
 
         // update statistic
         long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
-        assignedScansPerComputeNode.put(node, assignedScansPerComputeNode.get(node) + addedScans);
+        assignedScansPerComputeNode.put(worker, assignedScansPerComputeNode.get(worker) + addedScans);
 
         // add in assignment
         Map<Integer, List<TScanRangeParams>> scanRanges =
-                BackendSelector.findOrInsert(assignment, address, new HashMap<>());
+                BackendSelector.findOrInsert(assignment, worker.getId(), new HashMap<>());
         List<TScanRangeParams> scanRangeParamsList =
-                BackendSelector.findOrInsert(scanRanges, scanNode.getId().asInt(), new ArrayList<TScanRangeParams>());
+                BackendSelector.findOrInsert(scanRanges, scanNode.getId().asInt(), new ArrayList<>());
         // add scan range params
         TScanRangeParams scanRangeParams = new TScanRangeParams();
         scanRangeParams.scan_range = scanRangeLocations.scan_range;

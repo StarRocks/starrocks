@@ -18,16 +18,13 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Reference;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -69,12 +66,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
      * These three members record the workers used by the related job.
      * They are updated when calling {@code chooseXXX} methods.
      */
-    private final Set<Long> usedWorkerIDs;
-    private final Map<TNetworkAddress, ComputeNode> beAddr2UsedWorker;
-    /**
-     * Used only by channel stream load, recording the mapping from BE port to BE's HTTP port.
-     */
-    private final Map<TNetworkAddress, TNetworkAddress> beAddr2HttpAddr;
+    private final Set<Long> selectedWorkerIds;
 
     /**
      * Indicates whether there are available compute nodes.
@@ -133,30 +125,14 @@ public class DefaultWorkerProvider implements WorkerProvider {
         this.availableID2Backend = availableID2Backend;
         this.availableID2ComputeNode = availableID2ComputeNode;
 
-        this.usedWorkerIDs = Sets.newConcurrentHashSet();
-        this.beAddr2UsedWorker = Maps.newHashMap();
-        this.beAddr2HttpAddr = Maps.newHashMap();
+        this.selectedWorkerIds = Sets.newConcurrentHashSet();
 
         this.hasComputeNode = MapUtils.isNotEmpty(availableID2ComputeNode);
         this.usedComputeNode = hasComputeNode && preferComputeNode;
     }
 
     @Override
-    public TNetworkAddress chooseBackend(Long backendID) throws SchedulerException {
-        ComputeNode backend = getBackend(backendID);
-
-        if (backend == null) {
-            reportBackendNotFoundException();
-        }
-        Preconditions.checkNotNull(backend);
-
-        TNetworkAddress addr = backend.getAddress();
-        recordUsedWorker(backend.getId(), addr);
-        return addr;
-    }
-
-    @Override
-    public TNetworkAddress chooseNextWorker(Reference<Long> workerIdRef) throws SchedulerException {
+    public long selectNextWorker() throws NonRecoverableException {
         ComputeNode worker;
         if (usedComputeNode) {
             worker = getNextWorker(availableID2ComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
@@ -169,30 +145,34 @@ public class DefaultWorkerProvider implements WorkerProvider {
         }
         Preconditions.checkNotNull(worker);
 
-        TNetworkAddress addr = worker.getAddress();
-        recordUsedWorker(worker.getId(), addr);
-        workerIdRef.setRef(worker.getId());
-        return addr;
+        selectWorkerUnchecked(worker.getId());
+        return worker.getId();
     }
 
     @Override
-    public List<TNetworkAddress> chooseAllComputedNodes() {
+    public void selectWorker(Long workerId) throws NonRecoverableException {
+        if (getWorkerById(workerId) == null) {
+            reportWorkerNotFoundException();
+        }
+        selectWorkerUnchecked(workerId);
+    }
+
+    @Override
+    public List<Long> selectAllComputeNodes() {
         if (!usedComputeNode) {
             return Collections.emptyList();
         }
 
-        List<TNetworkAddress> addrs = new ArrayList<>(availableID2ComputeNode.size());
-        for (ComputeNode computeNode : availableID2ComputeNode.values()) {
-            TNetworkAddress addr = computeNode.getAddress();
-            recordUsedWorker(computeNode.getId(), addr);
-            addrs.add(addr);
-        }
+        List<Long> nodeIds = availableID2ComputeNode.values().stream()
+                .map(ComputeNode::getId)
+                .collect(Collectors.toList());
+        nodeIds.forEach(this::selectWorkerUnchecked);
 
-        return addrs;
+        return nodeIds;
     }
 
     @Override
-    public Collection<ComputeNode> getWorkers() {
+    public Collection<ComputeNode> getAllWorkers() {
         if (hasComputeNode) {
             return availableID2ComputeNode.values();
         } else {
@@ -201,54 +181,37 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @Override
-    public boolean isBackendAvailable(Long backendID) {
-        return getBackend(backendID) != null;
+    public ComputeNode getWorkerById(Long workerId) {
+        ComputeNode worker = availableID2Backend.get(workerId);
+        if (worker != null) {
+            return worker;
+        }
+        return availableID2ComputeNode.get(workerId);
     }
 
     @Override
-    public void reportBackendNotFoundException() throws SchedulerException {
+    public boolean isDataNodeAvailable(Long dataNodeId) {
+        return getBackend(dataNodeId) != null;
+    }
+
+    @Override
+    public void reportDataNodeNotFoundException() throws NonRecoverableException {
         reportWorkerNotFoundException(false);
     }
 
     @Override
-    public void reportWorkerNotFoundException() throws SchedulerException {
+    public void reportWorkerNotFoundException() throws NonRecoverableException {
         reportWorkerNotFoundException(usedComputeNode);
     }
 
     @Override
-    public void recordUsedWorker(Long workerID, TNetworkAddress beAddr) {
-        if (usedWorkerIDs.add(workerID)) {
-            ComputeNode worker = getWorker(workerID);
-            beAddr2UsedWorker.put(beAddr, worker);
-            beAddr2HttpAddr.put(beAddr, worker.getHttpAddress());
-        }
+    public boolean isWorkerSelected(Long workerId) {
+        return selectedWorkerIds.contains(workerId);
     }
 
     @Override
-    public boolean isUsingWorker(Long workerID) {
-        return usedWorkerIDs.contains(workerID);
-    }
-
-    @Override
-    public ComputeNode getUsedWorkerByBeAddr(TNetworkAddress addr) {
-        ComputeNode worker = beAddr2UsedWorker.get(addr);
-        return Preconditions.checkNotNull(worker, "Expect backend address [{}] to being used", addr);
-    }
-
-    @Override
-    public TNetworkAddress getUsedHttpAddrByBeAddr(TNetworkAddress addr) {
-        TNetworkAddress httpAddr = beAddr2HttpAddr.get(addr);
-        return Preconditions.checkNotNull(httpAddr, "Expect backend address [{}] to being used", addr);
-    }
-
-    @Override
-    public List<Long> getUsedWorkerIDs() {
-        return new ArrayList<>(usedWorkerIDs);
-    }
-
-    @Override
-    public Collection<TNetworkAddress> getUsedWorkerBeAddrs() {
-        return beAddr2UsedWorker.keySet();
+    public List<Long> getSelectedWorkerIds() {
+        return new ArrayList<>(selectedWorkerIds);
     }
 
     @Override
@@ -261,20 +224,15 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return availableID2Backend.get(backendID);
     }
 
-    @VisibleForTesting
-    ComputeNode getWorker(Long workerID) {
-        ComputeNode worker = availableID2Backend.get(workerID);
-        if (worker != null) {
-            return worker;
-        }
-        return availableID2ComputeNode.get(workerID);
-    }
-
     private String toString(boolean chooseComputeNode) {
         return chooseComputeNode ? computeNodesToString() : backendsToString();
     }
 
-    private void reportWorkerNotFoundException(boolean chooseComputeNode) throws SchedulerException {
+    private void selectWorkerUnchecked(Long workerId) {
+        selectedWorkerIds.add(workerId);
+    }
+
+    private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
         throw new NonRecoverableException(
                 FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode));
     }

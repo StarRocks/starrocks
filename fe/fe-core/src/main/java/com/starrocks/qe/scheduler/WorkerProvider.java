@@ -14,14 +14,20 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.starrocks.common.Reference;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.Collection;
 import java.util.List;
 
+/**
+ * WorkerProvider provides available workers to a job scheduler, and records the selected workers.
+ * - Each job has its own worker provider.
+ * - It only checks whether each worker is available before construction at {@code Factory#captureAvailableWorkers}.
+ * - There are two kinds of worker, data node (backend) and compute node. Some fragments can only select data node,
+ * such as fragments with OlapTableNode.
+ * - All the methods are thread safe.
+ */
 public interface WorkerProvider {
     interface Factory {
         /**
@@ -37,47 +43,38 @@ public interface WorkerProvider {
     }
 
     /**
-     * Choose the specific backend node.
+     * Select the next worker node.
      *
-     * @param backendID The ID of the backend node to choose.
-     * @return The address with the {@code ComputeNode#bePort} of the backend node.
-     * @throws SchedulerException if there is no available backend with {@code backendID}.
+     * @return The id of the worker node to choose.
+     * @throws NonRecoverableException if there is no available worker.
      */
-    TNetworkAddress chooseBackend(Long backendID) throws SchedulerException;
+    long selectNextWorker() throws NonRecoverableException;
 
     /**
-     * Choose the next worker node.
-     *
-     * @param workerIdRef storing ID of the worker node to choose.
-     * @return The address with the {@code ComputeNode#bePort} of the worker node.
-     * @throws SchedulerException if there is no available backend with {@code backendID}.
+     * Select the worker with the given id.
+     * @param workerId The id of the worker to choose.
+     * @throws NonRecoverableException if there is no available worker with the given id.
      */
-    TNetworkAddress chooseNextWorker(Reference<Long> workerIdRef) throws SchedulerException;
+    void selectWorker(Long workerId) throws NonRecoverableException;
 
     /**
-     * Choose all the available compute nodes.
+     * Select all the available compute nodes.
      *
-     * @return The address with the {@code ComputeNode#bePort} of the compute nodes to choose.
+     * @return The id of the compute nodes to choose.
      */
-    List<TNetworkAddress> chooseAllComputedNodes();
+    List<Long> selectAllComputeNodes();
 
-    Collection<ComputeNode> getWorkers();
+    Collection<ComputeNode> getAllWorkers();
 
-    boolean isBackendAvailable(Long backendID);
+    ComputeNode getWorkerById(Long workerId);
 
-    void reportBackendNotFoundException() throws SchedulerException;
+    boolean isDataNodeAvailable(Long dataNodeId);
 
-    void reportWorkerNotFoundException() throws SchedulerException;
+    void reportDataNodeNotFoundException() throws NonRecoverableException;
 
-    void recordUsedWorker(Long workerID, TNetworkAddress beAddr);
+    void reportWorkerNotFoundException() throws NonRecoverableException;
 
-    boolean isUsingWorker(Long workerID);
+    boolean isWorkerSelected(Long workerId);
 
-    ComputeNode getUsedWorkerByBeAddr(TNetworkAddress addr);
-
-    TNetworkAddress getUsedHttpAddrByBeAddr(TNetworkAddress addr);
-
-    List<Long> getUsedWorkerIDs();
-
-    Collection<TNetworkAddress> getUsedWorkerBeAddrs();
+    List<Long> getSelectedWorkerIds();
 }
