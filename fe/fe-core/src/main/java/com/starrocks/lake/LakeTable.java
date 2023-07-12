@@ -268,5 +268,5 @@ public class LakeTable extends OlapTable {
             throw new DdlException("You must specify 'BUCKETS' in shared_data mode");
         }
     }
-    
+
 }
