@@ -1186,7 +1186,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         needRefreshMvPartitionNames.addAll(rangePartitionDiff.getDeletes().stream().map(PartitionRange::getPartitionName).collect(
                 Collectors.toSet()));
         for (PartitionRange deleted : rangePartitionDiff.getDeletes()) {
-            mvPartitionRanges.remove(deleted.getPartitionName());
+            mvPartitionRanges.remove(deleted);
         }
         needRefreshMvPartitionNames.addAll(rangePartitionDiff.getAdds().stream().map(PartitionRange::getPartitionName).collect(
                 Collectors.toSet()));
