@@ -950,6 +950,17 @@ public class OlapTable extends Table {
         return defaultDistributionInfo;
     }
 
+    /*
+     * Infer the distribution info based on partitions and cluster status
+     */
+    public void inferDistribution(DistributionInfo info) {
+        if (info.getBucketNum() == 0) {
+            int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
+                    5, Config.enable_auto_tablet_distribution);
+            info.setBucketNum(numBucket);
+        }
+    }
+
     @Override
     public Set<String> getDistributionColumnNames() {
         Set<String> distributionColumnNames = Sets.newHashSet();
