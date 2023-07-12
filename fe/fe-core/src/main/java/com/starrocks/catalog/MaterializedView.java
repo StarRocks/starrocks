@@ -33,6 +33,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -1273,7 +1274,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * TODO: infer the bucket number according to MV pattern and cardinality
      */
     @Override
-    public void inferDistribution(DistributionInfo info) {
+    public void inferDistribution(DistributionInfo info) throws DdlException {
         if (info.getBucketNum() == 0) {
             int inferredBucketNum = 0;
             for (BaseTableInfo base : getBaseTableInfos()) {

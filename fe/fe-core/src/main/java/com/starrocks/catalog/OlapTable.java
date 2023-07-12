@@ -953,7 +953,7 @@ public class OlapTable extends Table {
     /*
      * Infer the distribution info based on partitions and cluster status
      */
-    public void inferDistribution(DistributionInfo info) {
+    public void inferDistribution(DistributionInfo info) throws DdlException {
         if (info.getBucketNum() == 0) {
             int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
                     5, Config.enable_auto_tablet_distribution);
