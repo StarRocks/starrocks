@@ -36,10 +36,17 @@ jobs:
           run_id: ${{ github.event.workflow_run.id }}
           workflow: test_fork.yml
           name: 'pr_num'
-
+          if_no_artifact_found: success
+      - name: check file
+        id: check
+        run: |
+          if [[ -e ./pr_num.txt ]]; then
+            echo "is_exist=true" >> $GITHUB_OUTPUT
+          fi
       - name: Read the pr_num file
         id: pr_num_reader
         uses: juliangruber/read-file-action@v1
+        if: steps.check.outpus.is_exist == 'true'
         with:
           path: ./pr_num.txt
 
