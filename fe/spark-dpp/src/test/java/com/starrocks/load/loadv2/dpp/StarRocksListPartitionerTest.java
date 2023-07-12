@@ -26,10 +26,10 @@ public class StarRocksListPartitionerTest {
                 10001, inKeys2, 3);
 
         List<List<Object>> inKeys3 = new ArrayList<>();
-        String[] arr3_1 = {"2022-02-01", "cn"};
-        inKeys3.add(Arrays.asList(arr3_1));
-        String[] arr3_2 = {"2022-02-01", "us"};
-        inKeys3.add(Arrays.asList(arr3_2));
+        String[] arr31 = {"2022-02-01", "cn"};
+        inKeys3.add(Arrays.asList(arr31));
+        String[] arr32 = {"2022-02-01", "us"};
+        inKeys3.add(Arrays.asList(arr32));
         EtlJobConfig.EtlPartition partition3 = new EtlJobConfig.EtlPartition(
                 10002, inKeys3, 3);
 
