@@ -134,8 +134,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
 
     @Override
     public boolean bindDbToStorageVolume(String svKey, long dbId) throws DdlException {
-        String svId = getStorageVolumeIdOfDb(svKey);
-        return bindDbToStorageVolume(svId, dbId, false);
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            String svId = getStorageVolumeIdOfDb(svKey);
+            return bindDbToStorageVolume(svId, dbId, false);
+        }
     }
 
     @Override
@@ -186,8 +188,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
 
     @Override
     public boolean bindTableToStorageVolume(String svKey, long dbId, long tableId) throws DdlException {
-        String svId = getStorageVolumeIdOfTable(svKey, dbId);
-        return bindTableToStorageVolume(svId, tableId, false);
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            String svId = getStorageVolumeIdOfTable(svKey, dbId);
+            return bindTableToStorageVolume(svId, tableId, false);
+        }
     }
 
     @Override
@@ -233,14 +237,16 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             return "";
         }
 
-        List<String> locations = parseLocationsFromConfig();
-        Map<String, String> params = parseParamsFromConfig();
-
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
             if (sv != null) {
                 return sv.getId();
             }
+
+            validateStorageVolumeConfig();
+            List<String> locations = parseLocationsFromConfig();
+            Map<String, String> params = parseParamsFromConfig();
+
             String svId = createStorageVolume(BUILTIN_STORAGE_VOLUME,
                     Config.cloud_native_storage_type, locations, params, Optional.of(true), "");
             if (getDefaultStorageVolumeId().isEmpty()) {

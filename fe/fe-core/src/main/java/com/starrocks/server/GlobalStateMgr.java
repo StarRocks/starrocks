@@ -761,12 +761,6 @@ public class GlobalStateMgr {
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
-        try {
-            storageVolumeMgr.validateStorageVolumeConfig();
-        } catch (InvalidConfException e) {
-            LOG.fatal(e.getMessage());
-            System.exit(-1);
-        }
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -1306,7 +1300,7 @@ public class GlobalStateMgr {
             throw t;
         }
 
-        createOrUpdateBuiltinStorageVolume();
+        createBuiltinStorageVolume();
     }
 
     // start all daemon threads only running on Master
@@ -4038,12 +4032,15 @@ public class GlobalStateMgr {
         return metaContext;
     }
 
-    public void createOrUpdateBuiltinStorageVolume() {
+    public void createBuiltinStorageVolume() {
         try {
             String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
             if (!builtinStorageVolumeId.isEmpty()) {
                 authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
             }
+        } catch (InvalidConfException e) {
+            LOG.fatal(e.getMessage());
+            System.exit(-1);
         } catch (DdlException | AlreadyExistsException e) {
             LOG.warn("Failed to create or update builtin storage volume", e);
         } catch (PrivilegeException e) {
