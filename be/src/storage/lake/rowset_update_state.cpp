@@ -162,10 +162,6 @@ void RowsetUpdateState::plan_read_by_rssid(const std::vector<uint64_t>& rowids, 
 
 Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema,
                                                    Tablet* tablet, Rowset* rowset_ptr) {
-    std::stringstream cost_str;
-    MonotonicStopWatch watch;
-    watch.start();
-
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
@@ -190,8 +186,9 @@ Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_wr
         }
         _deletes.emplace_back(std::move(col));
     }
-    cost_str << " [read deletes] " << watch.elapsed_time();
-    watch.reset();
+    if (op_write.dels_size() > 0) {
+        TRACE("end read $0 deletes files", op_write.dels_size());
+    }
 
     OlapReaderStatistics stats;
     auto res = rowset_ptr->get_each_segment_iterator(pkey_schema, &stats);
@@ -227,8 +224,9 @@ Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_wr
         }
         dest = std::move(col);
     }
-    cost_str << " [read upserts] " << watch.elapsed_time();
-    LOG(INFO) << "RowsetUpdateState do_load cost: " << cost_str.str();
+    if (itrs.size() > 0) {
+        TRACE("end read $0 upserts files", itrs.size());
+    }
 
     for (const auto& upsert : _upserts) {
         upsert->raw_data();
@@ -445,7 +443,6 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
 
 Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                           Tablet* tablet) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment");
     // const_cast for paritial update to rewrite segment file in op_write
     RowsetMetadata* rowset_meta = const_cast<TxnLogPB_OpWrite*>(&op_write)->mutable_rowset();
     auto root_path = tablet->metadata_root_location();
@@ -509,6 +506,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
             rowset_meta->set_segments(i, op_write.rewrite_segments(i));
         }
     }
+    TRACE("end rewrite segment");
     return Status::OK();
 }
 
