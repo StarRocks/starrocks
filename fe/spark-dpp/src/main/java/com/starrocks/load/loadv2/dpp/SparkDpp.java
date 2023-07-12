@@ -464,7 +464,20 @@ public final class SparkDpp implements java.io.Serializable {
             List<String> valueColumnNames,
             StructType dstTableSchema,
             EtlJobConfig.EtlIndex baseIndex) throws SparkDppException {
-        List<String> distributeColumns = partitionInfo.distributionColumnRefs;
+        List<String> distributeColumnRefs = partitionInfo.distributionColumnRefs;
+        List<EtlJobConfig.EtlColumn> distributeColumns = new ArrayList<>();
+        for (String columnName : distributeColumnRefs) {
+            for (EtlJobConfig.EtlColumn column : baseIndex.columns) {
+                if (columnName.equals(column.columnName)) {
+                    distributeColumns.add(column);
+                    break;
+                }
+            }
+        }
+        if (distributeColumnRefs.size() != distributeColumns.size()) {
+            throw new SparkDppException("wrong distribution columns size: " + distributeColumns.size());
+        }
+
         Partitioner partitioner = null;
         PartitionType partitionType = PartitionType.getByType(partitionInfo.partitionType);
         if (partitionType == null) {
