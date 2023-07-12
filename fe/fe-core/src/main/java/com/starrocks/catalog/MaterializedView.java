@@ -70,6 +70,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1266,7 +1267,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * TODO: infer the bucket number according to MV pattern and cardinality
      */
     @Override
-    public void inferDistribution(DistributionInfo info) {
+    public void inferDistribution(DistributionInfo info) throws DdlException {
         if (info.getBucketNum() == 0) {
             int inferredBucketNum = 0;
             for (BaseTableInfo base : getBaseTableInfos()) {
