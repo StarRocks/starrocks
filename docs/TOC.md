@@ -188,7 +188,7 @@
       + [CANCEL RESTORE](./sql-reference/sql-statements/data-definition/CANCEL%20RESTORE.md)
       + [CREATE ANALYZE](./sql-reference/sql-statements/data-definition/CREATE%20ANALYZE.md)
       + [CREATE DATABASE](./sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md)
-      + [CREATE EXTERNAL CATALOG](./sql-reference/sql-statements/data-definition/)
+      + [CREATE EXTERNAL CATALOG](./sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)
       + [CREATE FUNCTION](./sql-reference/sql-statements/data-definition/create-function.md)
       + [CREATE INDEX](./sql-reference/sql-statements/data-definition/CREATE%20INDEX.md)
       + [CREATE MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)
