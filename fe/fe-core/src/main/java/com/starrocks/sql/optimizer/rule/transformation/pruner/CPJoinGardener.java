@@ -24,7 +24,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.UnionFind;
@@ -37,7 +36,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -53,11 +51,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Spliterator;
-import java.util.Spliterators;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
 // CPJoinGardener is used to analysis cardinality-preserving joins and prune unused
 // tables from cardinality-preserving joins.
@@ -75,7 +70,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
     private final UnionFind<ColumnRefOperator> columnRefEquivClasses = new UnionFind<>();
     private final Map<OptExpression, RoaringBitmap> cpScanOps = Maps.newHashMap();
     private final Map<OptExpression, RoaringBitmap> scanOps = Maps.newHashMap();
-    private Map<OptExpression, Pair<OptExpression, Integer>> cpFrontiers = Maps.newHashMap();
+    private final Map<OptExpression, Pair<OptExpression, Integer>> cpFrontiers = Maps.newHashMap();
     private final Set<CPEdge> cpEdges = Sets.newHashSet();
     private final Map<OptExpression, CPNode> optToGraphNode = Maps.newHashMap();
     private final Set<CPNode> hubNodes = Sets.newHashSet();
@@ -86,15 +81,8 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
     private final Map<OptExpression, Integer> scanNodeOrdinals = Maps.newHashMap();
     private final List<OptExpression> ordinalToScanNodes = Lists.newArrayList();
 
-    private Optional<Long> updateTableId = Optional.empty();
-
-    public CPJoinGardener(
-            ColumnRefFactory columnRefFactory,
-            long updateTableId) {
+    public CPJoinGardener(ColumnRefFactory columnRefFactory) {
         this.columnRefFactory = columnRefFactory;
-        if (updateTableId > 0) {
-            this.updateTableId = Optional.of(updateTableId);
-        }
     }
 
     void computeOriginsOfColumnRefs(OptExpression optExpression) {
@@ -116,11 +104,6 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         });
     }
 
-    Stream<Integer> getIntStream(RoaringBitmap bitmap) {
-        Spliterator<Integer> iter = Spliterators.spliteratorUnknownSize(bitmap.iterator(), Spliterator.ORDERED);
-        return StreamSupport.stream(iter, false);
-    }
-
     public List<CPBiRel> getCardinalityPreserving(OptExpression optExpression,
                                                   Set<OptExpression> candidateLhsScanOpSet,
                                                   Set<OptExpression> candidateRhsScanOpSet) {
@@ -131,9 +114,9 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         if ((joinOp.getJoinType().isInnerJoin() || joinOp.getJoinType().isLeftOuterJoin()) &&
                 scanOps.containsKey(lhs) && cpScanOps.containsKey(rhs)) {
             List<CPBiRel> leftToRightBiRels =
-                    getIntStream(scanOps.get(lhs)).map(ordinalToScanNodes::get)
+                    Utils.getIntStream(scanOps.get(lhs)).map(ordinalToScanNodes::get)
                             .filter(candidateLhsScanOpSet::contains)
-                            .flatMap(lhsScan -> getIntStream(cpScanOps.get(rhs)).map(
+                            .flatMap(lhsScan -> Utils.getIntStream(cpScanOps.get(rhs)).map(
                                             ordinalToScanNodes::get)
                                     .filter(candidateRhsScanOpSet::contains)
                                     .flatMap(rhsScan -> CPBiRel.extractCPBiRels(lhsScan, rhsScan, true).stream()
@@ -143,9 +126,9 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         if ((joinOp.getJoinType().isInnerJoin() || joinOp.getJoinType().isRightOuterJoin()) &&
                 scanOps.containsKey(rhs) && cpScanOps.containsKey(lhs)) {
             List<CPBiRel> rightToLeftBiRels =
-                    getIntStream(scanOps.get(rhs)).map(ordinalToScanNodes::get)
+                    Utils.getIntStream(scanOps.get(rhs)).map(ordinalToScanNodes::get)
                             .filter(candidateRhsScanOpSet::contains)
-                            .flatMap(rhsScan -> getIntStream(cpScanOps.get(lhs)).map(
+                            .flatMap(rhsScan -> Utils.getIntStream(cpScanOps.get(lhs)).map(
                                             ordinalToScanNodes::get)
                                     .filter(candidateLhsScanOpSet::contains)
                                     .flatMap(lhsScan -> CPBiRel.extractCPBiRels(rhsScan, lhsScan, false).stream()
@@ -161,48 +144,8 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         return biRels;
     }
 
-    boolean collectCpNodesForPKTableUpdate(OptExpression joinOpt, OptExpression fromChild) {
-        RoaringBitmap cpNodes = cpScanOps.getOrDefault(fromChild, RoaringBitmap.bitmapOf());
-        scanOps.put(joinOpt, RoaringBitmap.bitmapOf());
-        if (updateTableId.isPresent() && !cpNodes.isEmpty()) {
-            RoaringBitmap joinCpNodes = RoaringBitmap.bitmapOf();
-            getIntStream(cpNodes).map(ordinal -> Pair.create(ordinal, ordinalToScanNodes.get(ordinal)))
-                    .filter(e -> ((LogicalScanOperator) e.second.getOp()).getTable().getId() == updateTableId.get())
-                    .forEach(e -> joinCpNodes.add(e.first));
-            cpScanOps.put(joinOpt, joinCpNodes);
-            return true;
-        } else {
-            return visit(joinOpt, null);
-        }
-    }
-
-    @Override
-    public Boolean visitLogicalJoin(OptExpression optExpression, Void context) {
-        LogicalJoinOperator joinOp = optExpression.getOp().cast();
-        JoinOperator joinType = joinOp.getJoinType();
-        if (!joinType.isInnerJoin() && !joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin()) {
-            return visit(optExpression, context);
-        }
-        if (joinOp.getPredicate() != null) {
-            return visit(optExpression, context);
-        }
-
-        Pair<List<BinaryPredicateOperator>, List<ScalarOperator>> onPredicates =
-                JoinHelper.separateEqualPredicatesFromOthers(optExpression);
-        List<BinaryPredicateOperator> eqOnPredicates = onPredicates.first;
-        List<ScalarOperator> otherOnPredicates = onPredicates.second;
-
-        if (!otherOnPredicates.isEmpty() || eqOnPredicates.isEmpty()) {
-            return visit(optExpression, context);
-        }
-
-        Set<Pair<ColumnRefOperator, ColumnRefOperator>> eqColumnRefPairs = Sets.newHashSet();
-        for (BinaryPredicateOperator eqPredicate : eqOnPredicates) {
-            ColumnRefOperator leftCol = eqPredicate.getChild(0).cast();
-            ColumnRefOperator rightCol = eqPredicate.getChild(1).cast();
-            eqColumnRefPairs.add(Pair.create(leftCol, rightCol));
-        }
-
+    private Pair<Set<OptExpression>, Set<OptExpression>> getCandidateScanOpSet(
+            Set<Pair<ColumnRefOperator, ColumnRefOperator>> eqColumnRefPairs) {
         Set<Pair<Integer, Integer>> joinColumnEqClasses =
                 eqColumnRefPairs.stream().map(biCol ->
                         Pair.create(
@@ -221,108 +164,86 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                         .flatMap(p ->
                                 columnRefEquivClasses.getGroup(p.second).stream().map(columnToScans::get))
                         .collect(Collectors.toSet());
+        return Pair.create(candidateLhsScanOpSet, candidateRhsScanOpSet);
+    }
+
+    private void synthesizeCPScanOpsOfJoin(OptExpression joinOpt, CPBiRel biRel,
+                                           Map<ColumnRefOperator, ColumnRefOperator> eqColumnRefs) {
+        OptExpression lhsOpt = joinOpt.inputAt(0);
+        OptExpression rhsOpt = joinOpt.inputAt(1);
+        RoaringBitmap lhsCardPreservingScanOps = cpScanOps.get(lhsOpt);
+        RoaringBitmap rhsCardPreservingScanOps = cpScanOps.get(rhsOpt);
+
+        RoaringBitmap lhsScanOps = scanOps.get(lhsOpt);
+        RoaringBitmap rhsScanOps = scanOps.get(rhsOpt);
+
+        scanOps.put(joinOpt, RoaringBitmap.or(lhsScanOps, rhsScanOps));
+        LogicalJoinOperator joinOp = joinOpt.getOp().cast();
+        JoinOperator joinType = joinOp.getJoinType();
+        Set<Pair<ColumnRefOperator, ColumnRefOperator>> pairs = biRel.getPairs();
+        RoaringBitmap currCPScanOps;
+        if (!biRel.isFromForeignKey() && joinType.isInnerJoin()) {
+            cpEdges.add(new CPEdge(biRel.getLhs(), biRel.getRhs(), false, eqColumnRefs));
+            currCPScanOps = RoaringBitmap.or(lhsCardPreservingScanOps, rhsCardPreservingScanOps);
+            uniqueKeyColRefs.computeIfAbsent(biRel.getLhs(), k -> Sets.newHashSet())
+                    .addAll(pairs.stream().map(p -> p.first).collect(Collectors.toList()));
+            uniqueKeyColRefs.computeIfAbsent(biRel.getRhs(), k -> Sets.newHashSet())
+                    .addAll(pairs.stream().map(p -> p.second).collect(Collectors.toList()));
+            pairs.forEach(p -> {
+                foreignKeyColRefs.computeIfAbsent(p.first, k -> Maps.newHashMap()).put(biRel.getRhs(), p.second);
+                foreignKeyColRefs.computeIfAbsent(p.second, k -> Maps.newHashMap()).put(biRel.getLhs(), p.first);
+            });
+        } else {
+            CPEdge edge = new CPEdge(biRel.getLhs(), biRel.getRhs(), true, eqColumnRefs);
+            currCPScanOps = biRel.isLeftToRight() ? lhsCardPreservingScanOps : rhsCardPreservingScanOps;
+            uniqueKeyColRefs.computeIfAbsent(biRel.getRhs(), k -> Sets.newHashSet())
+                    .addAll(pairs.stream().map(p -> p.second).collect(Collectors.toList()));
+            pairs.forEach(p -> foreignKeyColRefs.computeIfAbsent(p.second, k -> Maps.newHashMap())
+                    .put(biRel.getLhs(), p.first));
+            cpEdges.add(edge);
+        }
+        cpScanOps.merge(joinOpt, currCPScanOps, (a, b) -> RoaringBitmap.or(a, b));
+    }
+
+    @Override
+    public Boolean visitLogicalJoin(OptExpression optExpression, Void context) {
+        LogicalJoinOperator joinOp = optExpression.getOp().cast();
+        JoinOperator joinType = joinOp.getJoinType();
+        if (!joinType.isInnerJoin() && !joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin()) {
+            return visit(optExpression, context);
+        }
+        if (joinOp.getPredicate() != null) {
+            return visit(optExpression, context);
+        }
+
+        Set<Pair<ColumnRefOperator, ColumnRefOperator>> eqColumnRefPairs = Utils.getJoinEqualColRefPairs(optExpression);
+        Pair<Set<OptExpression>, Set<OptExpression>> candidateScanOpSets = getCandidateScanOpSet(eqColumnRefPairs);
+        Set<OptExpression> lhsCandidateScanOpSet = candidateScanOpSets.first;
+        Set<OptExpression> rhsCandidateScanOpSet = candidateScanOpSets.second;
 
         List<CPBiRel> biRels =
-                getCardinalityPreserving(optExpression, candidateLhsScanOpSet, candidateRhsScanOpSet);
-
-        if (biRels.isEmpty()) {
-            OptExpression lhsChild = optExpression.inputAt(0);
-            OptExpression rhsChild = optExpression.inputAt(1);
-            if (joinType.isLeftOuterJoin()) {
-                return collectCpNodesForPKTableUpdate(optExpression, lhsChild);
-            } else if (joinType.isRightJoin()) {
-                return collectCpNodesForPKTableUpdate(optExpression, rhsChild);
-            } else if (joinType.isInnerJoin()) {
-                return collectCpNodesForPKTableUpdate(optExpression, lhsChild) ||
-                        collectCpNodesForPKTableUpdate(optExpression, rhsChild);
-            }
-        }
+                getCardinalityPreserving(optExpression, lhsCandidateScanOpSet, rhsCandidateScanOpSet);
 
         for (CPBiRel biRel : biRels) {
             Set<Pair<ColumnRefOperator, ColumnRefOperator>> pairs = biRel.getPairs();
-            Set<Pair<Optional<Integer>, Optional<Integer>>> optGroupIdPairs = pairs.stream()
-                    .map(p -> Pair.create(
-                            columnRefEquivClasses.getGroupId(p.first),
-                            columnRefEquivClasses.getGroupId(p.second)))
-                    .collect(Collectors.toSet());
-
-            if (optGroupIdPairs.stream().anyMatch(p -> !p.first.isPresent() || !p.second.isPresent())) {
+            Set<Pair<ColumnRefOperator, ColumnRefOperator>> targetPairs = pairs;
+            if (!biRel.isLeftToRight()) {
+                targetPairs = targetPairs.stream().map(Pair::inverse).collect(Collectors.toSet());
+            }
+            if (!eqColRefPairsMatch(columnRefEquivClasses, eqColumnRefPairs, targetPairs)) {
                 continue;
             }
-
-            Set<Pair<Integer, Integer>> groupIdPairs =
-                    optGroupIdPairs.stream()
-                            .map(p -> biRel.isLeftToRight() ?
-                                    Pair.create(p.first.get(), p.second.get()) :
-                                    Pair.create(p.second.get(), p.first.get()))
-                            .collect(Collectors.toSet());
-
-            joinColumnEqClasses =
-                    eqColumnRefPairs.stream().map(biCol ->
-                            Pair.create(
-                                    columnRefEquivClasses.getGroupIdOrAdd(biCol.first),
-                                    columnRefEquivClasses.getGroupIdOrAdd(biCol.second))
-                    ).collect(Collectors.toSet());
-
-            Set<Pair<Integer, Integer>> symDiff = Sets.symmetricDifference(joinColumnEqClasses, groupIdPairs);
-            if (!symDiff.isEmpty() && symDiff.stream().anyMatch(p -> !Objects.equals(p.first, p.second))) {
-                continue;
-            }
-
             LogicalScanOperator lhsScanOp = biRel.getLhs().getOp().cast();
             LogicalScanOperator rhsScanOp = biRel.getRhs().getOp().cast();
             Map<ColumnRefOperator, ColumnRefOperator> eqColumnRefs = Maps.newHashMap();
             // two ScanOperators access the same tables, which are joined together on PK/UK
             if (!biRel.isFromForeignKey() && joinType.isInnerJoin()) {
-                Set<Column> lhsColumns = lhsScanOp.getColumnMetaToColRefMap().keySet();
-                Set<Column> rhsColumns = rhsScanOp.getColumnMetaToColRefMap().keySet();
-                Preconditions.checkArgument(lhsColumns.equals(rhsColumns));
-                for (Column column : lhsColumns) {
-                    ColumnRefOperator lhsColRef = lhsScanOp.getColumnMetaToColRefMap().get(column);
-                    ColumnRefOperator rhsColRef = rhsScanOp.getColumnMetaToColRefMap().get(column);
-                    columnRefEquivClasses.union(Objects.requireNonNull(lhsColRef),
-                            Objects.requireNonNull(rhsColRef));
-                    eqColumnRefs.put(lhsColRef, rhsColRef);
-                }
-
+                eqColumnRefs = Utils.makeEqColumRefMapFromSameTables(lhsScanOp, rhsScanOp);
             } else if (joinType.isInnerJoin()) {
-                pairs.forEach(p -> columnRefEquivClasses.union(p.first, p.second));
-                pairs.forEach(p -> eqColumnRefs.put(p.first, p.second));
+                eqColumnRefs = pairs.stream().collect(Collectors.toMap(p -> p.first, p -> p.second));
             }
-
-            OptExpression lhsOpt = optExpression.inputAt(0);
-            OptExpression rhsOpt = optExpression.inputAt(1);
-            RoaringBitmap lhsCardPreservingScanOps = cpScanOps.get(lhsOpt);
-            RoaringBitmap rhsCardPreservingScanOps = cpScanOps.get(rhsOpt);
-
-            RoaringBitmap lhsScanOps = scanOps.get(lhsOpt);
-            RoaringBitmap rhsScanOps = scanOps.get(rhsOpt);
-
-            scanOps.put(optExpression, RoaringBitmap.or(lhsScanOps, rhsScanOps));
-
-            RoaringBitmap currCPScanOps;
-            if (!biRel.isFromForeignKey() && joinType.isInnerJoin()) {
-                cpEdges.add(new CPEdge(biRel.getLhs(), biRel.getRhs(), false, eqColumnRefs));
-                currCPScanOps = RoaringBitmap.or(lhsCardPreservingScanOps, rhsCardPreservingScanOps);
-                uniqueKeyColRefs.computeIfAbsent(biRel.getLhs(), k -> Sets.newHashSet())
-                        .addAll(pairs.stream().map(p -> p.first).collect(Collectors.toList()));
-                uniqueKeyColRefs.computeIfAbsent(biRel.getRhs(), k -> Sets.newHashSet())
-                        .addAll(pairs.stream().map(p -> p.second).collect(Collectors.toList()));
-                pairs.forEach(p -> {
-                    foreignKeyColRefs.computeIfAbsent(p.first, k -> Maps.newHashMap()).put(biRel.getRhs(), p.second);
-                    foreignKeyColRefs.computeIfAbsent(p.second, k -> Maps.newHashMap()).put(biRel.getLhs(), p.first);
-                });
-            } else {
-                CPEdge edge = new CPEdge(biRel.getLhs(), biRel.getRhs(), true, eqColumnRefs);
-                currCPScanOps = biRel.isLeftToRight() ? lhsCardPreservingScanOps : rhsCardPreservingScanOps;
-                uniqueKeyColRefs.computeIfAbsent(biRel.getRhs(), k -> Sets.newHashSet())
-                        .addAll(pairs.stream().map(p -> p.second).collect(Collectors.toList()));
-                pairs.forEach(p -> foreignKeyColRefs.computeIfAbsent(p.second, k -> Maps.newHashMap())
-                        .put(biRel.getLhs(), p.first));
-                cpEdges.add(edge);
-            }
-
-            cpScanOps.merge(optExpression, currCPScanOps, (a, b) -> RoaringBitmap.or(a, b));
+            eqColumnRefs.forEach(columnRefEquivClasses::union);
+            synthesizeCPScanOpsOfJoin(optExpression, biRel, eqColumnRefs);
         }
         if (!joinOp.hasLimit() && cpScanOps.containsKey(optExpression)) {
             return true;
@@ -342,7 +263,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         scanOps.put(optExpression, RoaringBitmap.bitmapOf());
         cpScanOps.put(optExpression, RoaringBitmap.bitmapOf());
         computeOriginsOfColumnRefs(optExpression);
-        return updateTableId.isPresent();
+        return false;
     }
 
     @Override
@@ -356,10 +277,9 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
             return visit(optExpression, context);
         }
         OlapTable table = ((OlapTable) scanOp.getTable());
-        boolean isUpdateTarget = !updateTableId.isPresent() || updateTableId.get() == table.getId();
         // A Table that has no PK/UK/FK can not associate with other tables via
         // cardinality-preserving relations.
-        if (!table.hasUniqueConstraints() && !table.hasForeignKeyConstraints() && !isUpdateTarget) {
+        if (!table.hasUniqueConstraints() && !table.hasForeignKeyConstraints()) {
             return visit(optExpression, context);
         }
 
@@ -421,27 +341,36 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         return root.getOp().accept(this, root, null);
     }
 
-    private void plantCPTree() {
-        Set<CPEdge> edges = Sets.newHashSet();
+    // unilateral edge and its inverse counterpart are merged into bilateral edge
+    // drop unilateral edge if its bilateral edge already exists
+    private Set<CPEdge> mergeCPEdges(Set<CPEdge> cpEdges) {
+        Set<CPEdge> mergedEdges = Sets.newHashSet();
         for (CPEdge edge : cpEdges) {
-            if (edges.contains(edge)) {
+            if (mergedEdges.contains(edge)) {
                 continue;
             }
 
             if (!edge.isUnilateral()) {
-                if (!edges.contains(edge.inverse())) {
-                    edges.add(edge);
+                if (!mergedEdges.contains(edge.inverse())) {
+                    mergedEdges.add(edge);
                 }
-            } else if (!edges.contains(edge.toBiLateral()) && !edges.contains(edge.toBiLateral().inverse())) {
-                if (edges.contains(edge.inverse())) {
-                    edges.remove(edge.inverse());
-                    edges.add(edge.toBiLateral());
+            } else if (!mergedEdges.contains(edge.toBiLateral()) &&
+                    !mergedEdges.contains(edge.toBiLateral().inverse())) {
+                if (mergedEdges.contains(edge.inverse())) {
+                    mergedEdges.remove(edge.inverse());
+                    mergedEdges.add(edge.toBiLateral());
                 } else {
-                    edges.add(edge);
+                    mergedEdges.add(edge);
                 }
             }
         }
+        return mergedEdges;
+    }
 
+    // create a CPNode for each Scan Operator, a Scan Operator may be referenced as
+    // source node or sink node many times by multiple edges, but only one CPNode is
+    // created.
+    void prepareCPNode(Set<CPEdge> edges) {
         for (CPEdge e : edges) {
             OptExpression lhs = e.getLhs();
             OptExpression rhs = e.getRhs();
@@ -462,15 +391,13 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                 lhsNode.addEqColumnRefs(rhs, e.getEqColumnRefs());
             }
         }
-        List<CPEdge> unilateralEdges = Lists.newArrayList();
-        List<CPEdge> bilateralEdges = Lists.newArrayList();
-        for (CPEdge e : edges) {
-            if (e.isUnilateral()) {
-                unilateralEdges.add(e);
-            } else {
-                bilateralEdges.add(e);
-            }
-        }
+    }
+
+    // Add bilateral edges into cardinality-preserving tree (CPTree)
+    // create hub CPNode for bilateral edges, if two bilateral edges can be tied together,
+    // the corresponding hub CPNodes must be merged one. Each pair of these Scan Operators
+    // coming from tied bilateral edges forms cardinality-preserving relation.
+    void processBilateralEdges(List<CPEdge> bilateralEdges) {
         for (CPEdge e : bilateralEdges) {
             CPNode lhsNode = optToGraphNode.get(e.getLhs());
             CPNode rhsNode = optToGraphNode.get(e.getRhs());
@@ -484,7 +411,10 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                 hubNodes.add(CPNode.createHubNode(lhsNode, rhsNode));
             }
         }
+    }
 
+    // Add unilateral edges into cardinality-preserving tree (CPTree)
+    void processUnilateralEdges(List<CPEdge> unilateralEdges, Set<CPEdge> edges) {
         for (CPEdge e : unilateralEdges) {
             CPNode lhsNode = optToGraphNode.get(e.getLhs());
             CPNode rhsNode = optToGraphNode.get(e.getRhs());
@@ -525,22 +455,59 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         }
     }
 
+    private void plantCPTree() {
+        Set<CPEdge> edges = mergeCPEdges(cpEdges);
+        prepareCPNode(edges);
+        // split edges into bilateral edges and unilateral edges
+        List<CPEdge> unilateralEdges = Lists.newArrayList();
+        List<CPEdge> bilateralEdges = Lists.newArrayList();
+        for (CPEdge e : edges) {
+            if (e.isUnilateral()) {
+                unilateralEdges.add(e);
+            } else {
+                bilateralEdges.add(e);
+            }
+        }
+        processBilateralEdges(bilateralEdges);
+        processUnilateralEdges(unilateralEdges, edges);
+    }
+
+    public static boolean eqColRefPairsMatch(UnionFind<ColumnRefOperator> colRefEquivClasses,
+                                             Set<Pair<ColumnRefOperator, ColumnRefOperator>> pairsA,
+                                             Set<Pair<ColumnRefOperator, ColumnRefOperator>> pairsB) {
+        if (pairsA.isEmpty() || pairsB.isEmpty()) {
+            return false;
+        }
+        Set<Pair<Integer, Integer>> eqClassPairsA =
+                pairsA.stream().map(biCol ->
+                        Pair.create(colRefEquivClasses.getGroupIdOrAdd(biCol.first),
+                                colRefEquivClasses.getGroupIdOrAdd(biCol.second))
+                ).collect(Collectors.toSet());
+
+        Set<Pair<Optional<Integer>, Optional<Integer>>> optEqClassPairsB =
+                pairsB.stream().map(biCol ->
+                        Pair.create(colRefEquivClasses.getGroupId(biCol.first),
+                                colRefEquivClasses.getGroupId(biCol.second))
+                ).collect(Collectors.toSet());
+
+        if (!optEqClassPairsB.stream().allMatch(p -> p.first.isPresent() && p.second.isPresent())) {
+            return false;
+        }
+        Set<Pair<Integer, Integer>> eqClassPairsB =
+                optEqClassPairsB.stream().map(p -> Pair.create(p.first.get(), p.second.get()))
+                        .collect(Collectors.toSet());
+        Set<Pair<Integer, Integer>> symDiff = Sets.symmetricDifference(eqClassPairsA, eqClassPairsB);
+        return symDiff.isEmpty() || symDiff.stream().allMatch(p -> Objects.equals(p.first, p.second));
+    }
+
     public void collect(OptExpression root) {
         process(root);
-        if (updateTableId.isPresent()) {
-            cpFrontiers = cpFrontiers.entrySet().stream()
-                    .filter(e -> e.getKey() == root.inputAt(0))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        }
-        if (cpFrontiers.isEmpty()) {
-            return;
-        }
         plantCPTree();
     }
 
     public PruneContext markPrunedTables(OptExpression frontier) {
         Set<OptExpression> scanOpsLeadingByFrontier =
-                getIntStream(scanOps.get(frontier)).map(ordinalToScanNodes::get)
+                Utils.getIntStream(scanOps.get(frontier)).map(ordinalToScanNodes::get)
                         .collect(Collectors.toSet());
         PruneContext pruneContext = new PruneContext();
         if (scanOpsLeadingByFrontier.isEmpty()) {
@@ -638,123 +605,133 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         }
     }
 
-    private PruneContext markPrunedTable(CPNode root, ColumnRefSet originalColRefSet) {
-        // visit children of current GraphNode in post-order order.
+    private PruneContext markPrunedTableOfHubCPNode(CPNode root, ColumnRefSet originalColRefSet) {
         PruneContext pruneContext = new PruneContext();
-        if (root.isHub()) {
-            // try to prune non-cardinality-preserving children
-            for (CPNode child : root.getNonCPChildren()) {
-                pruneContext.merge(markPrunedTable(child, originalColRefSet));
-            }
+        // try to prune non-cardinality-preserving children
+        for (CPNode child : root.getNonCPChildren()) {
+            pruneContext.merge(markPrunedTable(child, originalColRefSet));
+        }
 
-            ColumnRefSet requiredColRefSet = new ColumnRefSet();
-            requiredColRefSet.union(originalColRefSet);
-            Set<OptExpression> childSet =
-                    root.getChildren().stream().map(child -> child.value).collect(Collectors.toSet());
-            for (ColumnRefOperator colRef : pruneContext.unprunedPkColRefs) {
-                Map<OptExpression, ColumnRefOperator> fkColRefMap =
-                        foreignKeyColRefs.getOrDefault(colRef, Collections.emptyMap());
-                List<ColumnRefOperator> fkColRefs =
-                        fkColRefMap.entrySet().stream().filter(e -> childSet.contains(e.getKey()))
-                                .map(Map.Entry::getValue).collect(
-                                        Collectors.toList());
-                requiredColRefSet.union(fkColRefs);
-            }
-            // try to prune cardinality-preserving children
-            // Sort the CPNode by their ordinals in ascend order, the larger the ordinal,
-            // the lower the LogicalScanOperator.
-            List<CPNode> children = root.getChildren().stream()
-                    .map(child -> Pair.create(child, scanNodeOrdinals.get(child.getValue())))
-                    .sorted(Pair.comparingBySecond()).map(p -> p.first).collect(Collectors.toList());
+        ColumnRefSet requiredColRefSet = new ColumnRefSet();
+        requiredColRefSet.union(originalColRefSet);
+        Set<OptExpression> childSet =
+                root.getChildren().stream().map(child -> child.value).collect(Collectors.toSet());
+        for (ColumnRefOperator colRef : pruneContext.unprunedPkColRefs) {
+            Map<OptExpression, ColumnRefOperator> fkColRefMap =
+                    foreignKeyColRefs.getOrDefault(colRef, Collections.emptyMap());
+            List<ColumnRefOperator> fkColRefs =
+                    fkColRefMap.entrySet().stream().filter(e -> childSet.contains(e.getKey()))
+                            .map(Map.Entry::getValue).collect(
+                                    Collectors.toList());
+            requiredColRefSet.union(fkColRefs);
+        }
+        // try to prune cardinality-preserving children
+        // Sort the CPNode by their ordinals in ascend order, the larger the ordinal,
+        // the lower the LogicalScanOperator.
+        List<CPNode> children = root.getChildren().stream()
+                .map(child -> Pair.create(child, scanNodeOrdinals.get(child.getValue())))
+                .sorted(Pair.comparingBySecond()).map(p -> p.first).collect(Collectors.toList());
 
-            Map<Long, List<CPNode>> tableIdToChildGroups = Maps.newHashMap();
-            for (CPNode child : children) {
-                LogicalOlapScanOperator scanOp = child.getValue().getOp().cast();
-                Long tableId = scanOp.getTable().getId();
-                tableIdToChildGroups.computeIfAbsent(tableId, k -> Lists.newArrayList()).add(child);
-            }
-            // we prefer to prune higher LogicalScanOperator and retain lower one, since pruning lower one, because
-            // the some Operator in mid of the path from the common ancestor to the lower one may use the ColumnRef
-            // yielded by the lower one, if the lower one was pruned, the in-mid Operator will missing its dependent
-            // ColumnRef. so we sort CP groups according their least ordinals(the last CPNode in the Group has the
-            // least ordinal).
-            List<List<CPNode>> childGroups = tableIdToChildGroups.values().stream().map(cpNodes -> Pair.create(cpNodes,
-                            scanNodeOrdinals.get(cpNodes.get(cpNodes.size() - 1).getValue())))
-                    .sorted(Pair.comparingBySecond()).map(p -> p.first).collect(Collectors.toList());
+        Map<Long, List<CPNode>> tableIdToChildGroups = Maps.newHashMap();
+        for (CPNode child : children) {
+            LogicalOlapScanOperator scanOp = child.getValue().getOp().cast();
+            Long tableId = scanOp.getTable().getId();
+            tableIdToChildGroups.computeIfAbsent(tableId, k -> Lists.newArrayList()).add(child);
+        }
+        // we prefer to prune higher LogicalScanOperator and retain lower one, since pruning lower one, because
+        // the some Operator in mid of the path from the common ancestor to the lower one may use the ColumnRef
+        // yielded by the lower one, if the lower one was pruned, the in-mid Operator will missing its dependent
+        // ColumnRef. so we sort CP groups according their least ordinals(the last CPNode in the Group has the
+        // least ordinal).
+        List<List<CPNode>> childGroups = tableIdToChildGroups.values().stream().map(cpNodes -> Pair.create(cpNodes,
+                        scanNodeOrdinals.get(cpNodes.get(cpNodes.size() - 1).getValue())))
+                .sorted(Pair.comparingBySecond()).map(p -> p.first).collect(Collectors.toList());
 
-            for (int g = 0; g < childGroups.size(); ++g) {
-                List<CPNode> group = childGroups.get(g);
-                Preconditions.checkArgument(!group.isEmpty());
-                CPNode lastNode = group.get(group.size() - 1);
-                for (int i = 0; i < group.size() - 1; ++i) {
-                    CPNode node = group.get(i);
-                    OptExpression optExpression = node.getValue();
-                    Set<ColumnRefOperator> pkColRefs =
-                            uniqueKeyColRefs.getOrDefault(optExpression, Collections.emptySet());
-                    Set<ColumnRefOperator> outputColRefs =
-                            pruneContext.getOutputColRefs(node.getValue(), requiredColRefSet, pkColRefs);
-                    pruneContext.addPrunedTable(node.getValue());
-                    Preconditions.checkArgument(node.getEquivColumnRefs().containsKey(lastNode.getValue()));
-                    Map<ColumnRefOperator, ColumnRefOperator> eqColRefs =
-                            node.getEquivColumnRefs().get(lastNode.getValue());
-                    Preconditions.checkArgument(eqColRefs.keySet().containsAll(outputColRefs));
-                    pruneContext.rewrite(outputColRefs, eqColRefs);
-                }
-
-                Set<ColumnRefOperator> pkColRefs = uniqueKeyColRefs.get(lastNode.getValue());
+        for (int g = 0; g < childGroups.size(); ++g) {
+            List<CPNode> group = childGroups.get(g);
+            Preconditions.checkArgument(!group.isEmpty());
+            CPNode lastNode = group.get(group.size() - 1);
+            for (int i = 0; i < group.size() - 1; ++i) {
+                CPNode node = group.get(i);
+                OptExpression optExpression = node.getValue();
+                Set<ColumnRefOperator> pkColRefs =
+                        uniqueKeyColRefs.getOrDefault(optExpression, Collections.emptySet());
                 Set<ColumnRefOperator> outputColRefs =
-                        pruneContext.getOutputColRefs(lastNode.getValue(), requiredColRefSet, pkColRefs);
-                if (!pkColRefs.containsAll(outputColRefs)) {
-                    pruneContext.toUnpruned(outputColRefs, pkColRefs);
-                } else {
-                    Optional<Map<ColumnRefOperator, ColumnRefOperator>> optEqColRefs =
-                            lastNode.getEquivColumnRefs().entrySet().stream()
-                                    .filter(e -> !pruneContext.getPrunedTables().contains(e.getKey()))
-                                    .findFirst().map(Map.Entry::getValue);
-                    if (optEqColRefs.isPresent() && optEqColRefs.get().keySet().containsAll(outputColRefs)) {
-                        pruneContext.rewrite(outputColRefs, optEqColRefs.get());
-                        pruneContext.addPrunedTable(lastNode.getValue());
-                    } else {
-                        pruneContext.toUnpruned(outputColRefs, pkColRefs);
-                    }
-                }
-            }
-        } else {
-            for (CPNode child : root.getChildren()) {
-                pruneContext.merge(markPrunedTable(child, originalColRefSet));
+                        pruneContext.getOutputColRefs(node.getValue(), requiredColRefSet, pkColRefs);
+                pruneContext.addPrunedTable(node.getValue());
+                Preconditions.checkArgument(node.getEquivColumnRefs().containsKey(lastNode.getValue()));
+                Map<ColumnRefOperator, ColumnRefOperator> eqColRefs =
+                        node.getEquivColumnRefs().get(lastNode.getValue());
+                Preconditions.checkArgument(eqColRefs.keySet().containsAll(outputColRefs));
+                pruneContext.rewrite(outputColRefs, eqColRefs);
             }
 
-            Set<ColumnRefOperator> pkColRefs = uniqueKeyColRefs.getOrDefault(root.getValue(), Collections.emptySet());
-
+            Set<ColumnRefOperator> pkColRefs = uniqueKeyColRefs.get(lastNode.getValue());
             Set<ColumnRefOperator> outputColRefs =
-                    pruneContext.getOutputColRefs(root.getValue(), originalColRefSet, pkColRefs);
-
-            if (!pruneContext.isPruned() || root.isRoot()) {
-                return pruneContext.toUnpruned(outputColRefs, pkColRefs);
-            }
-
-            CPNode parent = root.getParent();
-            Map<ColumnRefOperator, ColumnRefOperator> eqColRefMap;
-            if (!parent.isHub()) {
-                eqColRefMap = root.getEquivColumnRefs().getOrDefault(parent.getValue(), Collections.emptyMap());
+                    pruneContext.getOutputColRefs(lastNode.getValue(), requiredColRefSet, pkColRefs);
+            if (!pkColRefs.containsAll(outputColRefs)) {
+                pruneContext.toUnpruned(outputColRefs, pkColRefs);
             } else {
-                eqColRefMap = root.getEquivColumnRefs().values().stream().findFirst().orElse(Collections.emptyMap());
-            }
-            // eqColRefMap.isEmpty() = true means left join, if rhs of left join has predicates,
-            // then it is can not pruned.
-            if (eqColRefMap.isEmpty() && root.getValue().getOp().getPredicate() != null) {
-                return pruneContext.toUnpruned(outputColRefs, pkColRefs);
-            }
-            // If there exists any output column that can not substituted by its equivalent
-            // column on its parent, then current CPNode can not be pruned.
-            if (!eqColRefMap.keySet().containsAll(outputColRefs)) {
-                return pruneContext.toUnpruned(outputColRefs, pkColRefs);
-            } else {
-                pruneContext.rewrite(outputColRefs, eqColRefMap);
-                pruneContext.addPrunedTable(root.getValue());
+                Optional<Map<ColumnRefOperator, ColumnRefOperator>> optEqColRefs =
+                        lastNode.getEquivColumnRefs().entrySet().stream()
+                                .filter(e -> !pruneContext.getPrunedTables().contains(e.getKey()))
+                                .findFirst().map(Map.Entry::getValue);
+                if (optEqColRefs.isPresent() && optEqColRefs.get().keySet().containsAll(outputColRefs)) {
+                    pruneContext.rewrite(outputColRefs, optEqColRefs.get());
+                    pruneContext.addPrunedTable(lastNode.getValue());
+                } else {
+                    pruneContext.toUnpruned(outputColRefs, pkColRefs);
+                }
             }
         }
         return pruneContext;
+    }
+
+    private PruneContext markPrunedTableOfNonHubNode(CPNode root, ColumnRefSet originalColRefSet) {
+        // visit children of current GraphNode in post-order order.
+        PruneContext pruneContext = new PruneContext();
+        for (CPNode child : root.getChildren()) {
+            pruneContext.merge(markPrunedTable(child, originalColRefSet));
+        }
+
+        Set<ColumnRefOperator> pkColRefs = uniqueKeyColRefs.getOrDefault(root.getValue(), Collections.emptySet());
+
+        Set<ColumnRefOperator> outputColRefs =
+                pruneContext.getOutputColRefs(root.getValue(), originalColRefSet, pkColRefs);
+
+        if (!pruneContext.isPruned() || root.isRoot()) {
+            return pruneContext.toUnpruned(outputColRefs, pkColRefs);
+        }
+
+        CPNode parent = root.getParent();
+        Map<ColumnRefOperator, ColumnRefOperator> eqColRefMap;
+        if (!parent.isHub()) {
+            eqColRefMap = root.getEquivColumnRefs().getOrDefault(parent.getValue(), Collections.emptyMap());
+        } else {
+            eqColRefMap = root.getEquivColumnRefs().values().stream().findFirst().orElse(Collections.emptyMap());
+        }
+        // eqColRefMap.isEmpty() = true means left join, if rhs of left join has predicates,
+        // then it is can not pruned.
+        if (eqColRefMap.isEmpty() && root.getValue().getOp().getPredicate() != null) {
+            return pruneContext.toUnpruned(outputColRefs, pkColRefs);
+        }
+        // If there exists any output column that can not substituted by its equivalent
+        // column on its parent, then current CPNode can not be pruned.
+        if (!eqColRefMap.keySet().containsAll(outputColRefs)) {
+            return pruneContext.toUnpruned(outputColRefs, pkColRefs);
+        } else {
+            pruneContext.rewrite(outputColRefs, eqColRefMap);
+            pruneContext.addPrunedTable(root.getValue());
+        }
+        return pruneContext;
+    }
+
+    private PruneContext markPrunedTable(CPNode root, ColumnRefSet originalColRefSet) {
+        if (root.isHub()) {
+            return markPrunedTableOfHubCPNode(root, originalColRefSet);
+        } else {
+            return markPrunedTableOfNonHubNode(root, originalColRefSet);
+        }
     }
 
     public static class Pruner extends OptExpressionVisitor<Optional<OptExpression>, Void> {
@@ -1052,40 +1029,52 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         }
     }
 
+    public static void pruneFrontier(
+            ColumnRefFactory columnRefFactory,
+            OptExpression frontier,
+            OptExpression parent,
+            int idx,
+            Set<OptExpression> prunedTables,
+            Map<ColumnRefOperator, ScalarOperator> rewriteMapping,
+            Set<ColumnRefOperator> substColRefs) {
+        // step2: (Bottom-up) prune the sub-plan leading by the frontier, the ColumnRefOperators that escape from
+        // the pruned tables substituted by equivalent ColumnRefOperators originates from retained tables.
+        // the ScalarOperators in projection and predicate of pruned tables are collected.
+        Map<ColumnRefOperator, ScalarOperator> colRefMap = frontier.getRowOutputInfo().getColumnRefMap();
+        Pruner pruner = new Pruner(rewriteMapping, prunedTables, substColRefs);
+        frontier = pruner.prune(frontier).orElse(frontier);
+        // step3: (Bottom-up) seek for locations to graft the pruned ScalarOperators to right Operator.
+        Grafter grafter = new Grafter(pruner.prunedPredicates, pruner.prunedColRefMap);
+        frontier = grafter.graft(frontier).orElse(frontier);
+
+        // step4: (Top-down) remove the unused ColumnRefOperators.
+        colRefMap.replaceAll((k, v) -> pruner.columnRefRewriter.rewrite(v));
+        LogicalProjectOperator projectOperator = new LogicalProjectOperator(colRefMap);
+        frontier = OptExpression.create(projectOperator, frontier);
+        Cleaner cleaner = new Cleaner(columnRefFactory);
+        ColumnRefSet requiredColRefSet = new ColumnRefSet(colRefMap.keySet());
+        frontier = cleaner.clean(frontier, requiredColRefSet);
+        // finally, install the rewritten node to its parent.
+        parent.setChild(idx, frontier);
+    }
+
     public void rewrite() {
         for (Map.Entry<OptExpression, Pair<OptExpression, Integer>> e : cpFrontiers.entrySet()) {
             OptExpression frontier = e.getKey();
             OptExpression parent = e.getValue().first;
             int idx = e.getValue().second;
-
             // step1: (Bottom-up) mark the tables that will be pruned
             PruneContext pruneContext = markPrunedTables(frontier);
             if (pruneContext.getPrunedTables().isEmpty()) {
                 continue;
             }
-            // step2: (Bottom-up) prune the sub-plan leading by the frontier, the ColumnRefOperators that escape from
-            // the pruned tables substituted by equivalent ColumnRefOperators originates from retained tables.
-            // the ScalarOperators in projection and predicate of pruned tables are collected.
+            Set<OptExpression> prunedTables = pruneContext.getPrunedTables();
             Map<ColumnRefOperator, ScalarOperator> rewriteMapping = Maps.newHashMap();
-            Map<ColumnRefOperator, ScalarOperator> colRefMap = frontier.getRowOutputInfo().getColumnRefMap();
             pruneContext.getRewriteMapping().forEach((substColRef, originalColRefs) ->
                     originalColRefs.forEach(colRef -> rewriteMapping.put(colRef, substColRef)));
-            Pruner pruner = new Pruner(rewriteMapping,
-                    pruneContext.getPrunedTables(), pruneContext.rewriteMapping.keySet());
-            frontier = pruner.prune(frontier).orElse(frontier);
-            // step3: (Bottom-up) seek for locations to graft the pruned ScalarOperators to right Operator.
-            Grafter grafter = new Grafter(pruner.prunedPredicates, pruner.prunedColRefMap);
-            frontier = grafter.graft(frontier).orElse(frontier);
-
-            // step4: (Top-down) remove the unused ColumnRefOperators.
-            colRefMap.replaceAll((k, v) -> pruner.columnRefRewriter.rewrite(v));
-            LogicalProjectOperator projectOperator = new LogicalProjectOperator(colRefMap);
-            frontier = OptExpression.create(projectOperator, frontier);
-            Cleaner cleaner = new Cleaner(columnRefFactory);
-            ColumnRefSet requiredColRefSet = new ColumnRefSet(colRefMap.keySet());
-            frontier = cleaner.clean(frontier, requiredColRefSet);
-            // finally, install the rewritten node to its parent.
-            parent.setChild(idx, frontier);
+            Set<ColumnRefOperator> substColRefs = pruneContext.getRewriteMapping().keySet();
+            // step2~4: prune->graft->clean
+            pruneFrontier(columnRefFactory, frontier, parent, idx, prunedTables, rewriteMapping, substColRefs);
         }
     }
 }
