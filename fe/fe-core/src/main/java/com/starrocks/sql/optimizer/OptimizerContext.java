@@ -44,6 +44,9 @@ public class OptimizerContext {
     private OptimizerConfig optimizerConfig;
     private List<MaterializationContext> candidateMvs;
 
+    private long updateTableId = -1;
+    private boolean enableLeftRightJoinEquivalenceDerive = true;
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -141,5 +144,20 @@ public class OptimizerContext {
 
     public void addCandidateMvs(MaterializationContext candidateMv) {
         this.candidateMvs.add(candidateMv);
+    }
+
+    public void setEnableLeftRightJoinEquivalenceDerive(boolean enableLeftRightJoinEquivalenceDerive) {
+        this.enableLeftRightJoinEquivalenceDerive = enableLeftRightJoinEquivalenceDerive;
+    }
+
+    public boolean isEnableLeftRightJoinEquivalenceDerive() {
+        return enableLeftRightJoinEquivalenceDerive;
+    }
+
+    public void setUpdateTableId(long updateTableId) {
+        this.updateTableId = updateTableId;
+    }
+    public long getUpdateTableId() {
+        return updateTableId;
     }
 }

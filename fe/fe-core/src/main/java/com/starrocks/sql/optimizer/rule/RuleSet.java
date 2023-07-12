@@ -145,6 +145,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.Aggr
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
 
 import java.util.List;
 import java.util.Map;
@@ -404,6 +405,10 @@ public class RuleSet {
 
     public void addJoinCommutativityWithOutInnerRule() {
         transformRules.add(JoinCommutativityWithoutInnerRule.getInstance());
+    }
+
+    public void addCboTablePruneRule() {
+        transformRules.add(CboTablePruneRule.getInstance());
     }
 
     public void addMultiTableMvRewriteRule() {
