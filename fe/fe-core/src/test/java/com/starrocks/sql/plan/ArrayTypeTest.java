@@ -288,7 +288,7 @@ public class ArrayTypeTest extends PlanTestBase {
             expectedEx.expect(SemanticException.class);
             expectedEx.expectMessage(
                     String.format("No matching function with signature: %s(array<bigint(20)>)", fnName.toLowerCase()));
-            getFragmentPlan(sql);
+            System.out.println(getFragmentPlan(sql));
         }
     }
 

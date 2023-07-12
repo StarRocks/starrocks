@@ -85,6 +85,6 @@ public class AnalyzeArrayTest {
     public void testArrayConcat() {
         analyzeSuccess("select array_concat([1.0, 2.0, 3.0], [2.00, 2.0])");
         analyzeSuccess("select array_concat([1.0, 2.0, 3.0], ['2.00', '2.0'])");
-        analyzeFail("select array_concat([1, 2, 3], [[1, 1], [2, 2]])");
+        analyzeSuccess("select array_concat([1, 2, 3], [[1, 1], [2, 2]])");
     }
 }
