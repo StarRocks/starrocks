@@ -40,7 +40,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
@@ -48,7 +47,6 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -275,53 +273,33 @@ public class MaterializedViewHandler extends AlterHandler {
                     "the associated materialized views." + targetOlapTable);
         }
         // logical materialized view's column should be in the target table.
-        Set<String> mvColumnNames = mvColumns.stream().map(Column::getName).collect(Collectors.toSet());
-        Set<String> targetColumnNames = targetOlapTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+        Map<String, Column> mvColumnsMap = mvColumns.stream().collect(Collectors.toMap(item ->
+                MVUtils.parseMVColumnName(item.getName()), item -> item));
 
-        if (mvColumns.size() < targetOlapTable.getBaseSchema().size()) {
-            int j = 0;
-            List<Column> newMVColumns = Lists.newArrayList();
-            // We still need to keep the targets column order.
-            // eg:
-            // Target Table: c1, c2, c3, c4
-            // Logical MV  : c1, c3, c4
-            //  so c2 can be appended by default.
-            List<Column> targetBaseColumns = Lists.newArrayList(targetTable.getBaseSchema());
-            for (int i = 0; i < targetBaseColumns.size(); i++) {
-                Column targetCol = targetBaseColumns.get(i);
-                if (j < mvColumns.size() && targetCol.getName().equalsIgnoreCase(
-                        MVUtils.parseMVColumnName(mvColumns.get(j).getName()))) {
-                    newMVColumns.add(mvColumns.get(j));
-                    j++;
-                } else {
-                    if (!targetCol.isAllowNull()) {
-                        throw new DdlException(String.format("Target table %s's column %s is lost by default, it should be " +
-                                "nullable by default.", targetOlapTable.getName(), targetCol.getName()));
-                    }
-                    Column copiedTargetColumn = new Column(targetCol);
-                    // to distinguish with base table's column name, add `mv_` prefix
-                    copiedTargetColumn.setName(MVUtils.getMVColumnName(targetCol.getName()));
-                    copiedTargetColumn.setDefaultValue(null);
-                    copiedTargetColumn.setDefineExpr(NullLiteral.create(targetCol.getType()));
-                    newMVColumns.add(copiedTargetColumn);
+        List<Column> newMVColumns = Lists.newArrayList();
+        List<Column> targetBaseColumns = Lists.newArrayList(targetTable.getBaseSchema());
+        for (Column targetCol : targetBaseColumns) {
+            if (mvColumnsMap.containsKey(targetCol.getName())) {
+                newMVColumns.add(mvColumnsMap.get(targetCol.getName()));
+            } else {
+                if (!targetCol.isAllowNull()) {
+                    throw new DdlException(String.format("Target table %s's column %s is lost by default, it should be " +
+                            "nullable by default.", targetOlapTable.getName(), targetCol.getName()));
                 }
+                Column copiedTargetColumn = new Column(targetCol);
+                // to distinguish with base table's column name, add `mv_` prefix
+                copiedTargetColumn.setName(MVUtils.getMVColumnName(targetCol.getName()));
+                copiedTargetColumn.setDefaultValue(null);
+                copiedTargetColumn.setDefineExpr(NullLiteral.create(targetCol.getType()));
+                newMVColumns.add(copiedTargetColumn);
             }
-            mvColumns = newMVColumns;
         }
-        if (mvColumns.size() > targetOlapTable.getBaseSchema().size()) {
-            throw new DdlException("Logical materialized view columns' size "
-                    + mvColumns.size() + " should be less than the target table columns' size:"
-                    + targetOlapTable.getBaseSchema().size());
-        }
+        mvColumns = newMVColumns;
+
         // Ensure targetOlapTable's column is equal to mvColumns.
         for (int i = 0; i < targetOlapTable.getBaseSchema().size(); i++) {
             Column targetCol = targetTable.getBaseSchema().get(i);
             Column mvCol = mvColumns.get(i);
-            String parseMVColumnName = MVUtils.parseMVColumnName(mvCol.getName());
-            if (!targetColumnNames.contains(parseMVColumnName)) {
-                throw new DdlException(String.format("Logical materialized view column name %s is not found " +
-                                "in target table %s", parseMVColumnName, targetTable.getName()));
-            }
             if (!mvCol.getType().equals(targetCol.getType())) {
                 if (!Type.canCastTo(mvCol.getType(), targetCol.getType())) {
                     throw new DdlException("Logical materialized view column type "
@@ -394,15 +372,6 @@ public class MaterializedViewHandler extends AlterHandler {
                     getDefaultDistributionInfo().getBucketNum()) {
                 throw new DdlException("Base table's distribution bucket num should be the" +
                         " same with the target table: " + targetOlapTable);
-            }
-
-            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
-            for (Column distColumn : distributionColumns) {
-                if (!mvColumnNames.contains(distColumn.getName())) {
-                    throw new DdlException("Materialized view should contain" +
-                            " the distribution column: " + distColumn.toString());
-                }
             }
         } else {
             RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;
@@ -560,8 +529,6 @@ public class MaterializedViewHandler extends AlterHandler {
         short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, properties);
         // get timeout
         long timeoutMs = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second) * 1000;
-        boolean isColocateMVIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
-                PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false);
 
         // create rollup job
         long dbId = db.getId();
