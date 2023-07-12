@@ -281,6 +281,8 @@ private:
     // initial value is max value
     size_t _memtable_buffer_row = std::numeric_limits<size_t>::max();
     bool _partial_schema_with_sort_key_conflict = false;
+    // flush caused by memory limit
+    size_t _mem_limit_flush_count = 0;
     std::atomic<bool> _is_immutable = false;
 
     int64_t _last_write_ts = 0;
