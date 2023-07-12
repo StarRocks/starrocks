@@ -59,7 +59,7 @@ public:
             auto value = col.get(_row).template get<T>();
             std::string str = CastToString::apply<T, std::string>(value);
             _add_element(std::move(str));
-        } else if constexpr (std::is_integral_v<T>) {
+        } else if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) {
             auto value = col.get(_row).template get<T>();
             _add_element(std::move(value));
         } else {
@@ -206,6 +206,15 @@ StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column) {
         column_builder.append(std::move(json));
     }
     return column_builder.build(false);
+}
+
+StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx) {
+    vpack::Builder json_builder;
+    json_builder.clear();
+    RETURN_IF_ERROR(CastColumnItemVisitor::cast_datum_to_json(column, idx, "", &json_builder));
+    JsonValue json(json_builder.slice());
+
+    return json.to_string();
 }
 
 } // namespace starrocks

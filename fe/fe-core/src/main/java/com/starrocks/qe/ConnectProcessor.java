@@ -92,10 +92,10 @@ import java.util.Optional;
 public class ConnectProcessor {
     private static final Logger LOG = LogManager.getLogger(ConnectProcessor.class);
 
-    private final ConnectContext ctx;
+    protected final ConnectContext ctx;
     private ByteBuffer packetBuf;
 
-    private StmtExecutor executor = null;
+    protected StmtExecutor executor = null;
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -241,7 +241,7 @@ public class ConnectProcessor {
         return (sql.contains("--")) || sql.contains("#");
     }
 
-    private void addFinishedQueryDetail() {
+    protected void addFinishedQueryDetail() {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
@@ -275,7 +275,7 @@ public class ConnectProcessor {
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
     }
 
-    private void addRunningQueryDetail(StatementBase parsedStmt) {
+    protected void addRunningQueryDetail(StatementBase parsedStmt) {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
@@ -305,7 +305,7 @@ public class ConnectProcessor {
     }
 
     // process COM_QUERY statement,
-    private void handleQuery() {
+    protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
         // convert statement to Java string
         String originStmt = null;

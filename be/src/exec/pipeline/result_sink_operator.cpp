@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/http_result_writer.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
@@ -41,6 +42,9 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         break;
     case TResultSinkType::VARIABLE:
         _writer = std::make_shared<VariableResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        break;
+    case TResultSinkType::HTTP_PROTOCAL:
+        _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _format_type);
         break;
     default:
         return Status::InternalError("Unknown result sink type");

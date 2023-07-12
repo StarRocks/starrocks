@@ -73,6 +73,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.http.HttpConnectContext;
+import com.starrocks.http.HttpResultSender;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
@@ -213,6 +215,8 @@ public class StmtExecutor {
     private PQueryStatistics statisticsForAuditLog;
     private List<StmtExecutor> subStmtExecutors;
 
+    private HttpResultSender httpResultSender;
+
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
         this.context = context;
@@ -300,7 +304,8 @@ public class StmtExecutor {
         profile = buildTopLevelProfile();
         if (coord != null) {
             if (coord.getQueryProfile() != null) {
-                coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+                coord.getQueryProfile().getCounterTotalTime()
+                        .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 coord.endProfile();
                 profile.addChild(coord.buildMergedQueryProfile(getQueryStatisticsForAuditLog()));
             }
@@ -370,6 +375,12 @@ public class StmtExecutor {
         UUID uuid = context.getQueryId();
         context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+
+        // if use http protocal, use httpResultSender to send result to netty channel
+        if (context instanceof HttpConnectContext) {
+            httpResultSender = new HttpResultSender((HttpConnectContext) context);
+        }
+
         try {
             // parsedStmt may already by set when constructing this StmtExecutor();
             resolveParseStmtForForward();
@@ -532,7 +543,8 @@ public class StmtExecutor {
                         // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
                         // and hence there is no need to log it here.
                         if (i == 0 && context.getQueryDetail() == null && Config.log_plan_cancelled_by_crash_be) {
-                            LOG.warn("Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}] [Plan={}]",
+                            LOG.warn(
+                                    "Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}] [Plan={}]",
                                     DebugUtil.printId(context.getExecutionId()),
                                     originStmt == null ? "" : originStmt.originStmt,
                                     execPlan.getExplainString(TExplainLevel.COSTS),
@@ -844,55 +856,60 @@ public class StmtExecutor {
         coord.exec();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
 
-        // send result
-        // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
-        //    We will not send real query result to client. Instead, we only send OK to client with
-        //    number of rows selected. For example:
-        //          mysql> select * from tbl1 into outfile xxx;
-        //          Query OK, 10 rows affected (0.01 sec)
-        //
-        // 2. If this is a query, send the result expr fields first, and send result data back to client.
         RowBatch batch;
-        MysqlChannel channel = context.getMysqlChannel();
         boolean isOutfileQuery = false;
         if (queryStmt instanceof QueryStatement) {
             isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
         }
-        boolean isSendFields = false;
-        while (true) {
-            batch = coord.getNext();
-            // for outfile query, there will be only one empty batch send back with eos flag
-            if (batch.getBatch() != null && !isOutfileQuery) {
-                // For some language driver, getting error packet after fields packet will be recognized as a success result
-                // so We need to send fields after first batch arrived
-                if (!isSendFields) {
-                    sendFields(colNames, outputExprs);
-                    isSendFields = true;
-                }
-                if (!isProxy && channel.isSendBufferNull()) {
-                    int bufferSize = 0;
-                    for (ByteBuffer row : batch.getBatch().getRows()) {
-                        bufferSize += (row.position() - row.limit());
-                    }
-                    // +8 for header size
-                    channel.initBuffer(bufferSize + 8);
-                }
 
-                for (ByteBuffer row : batch.getBatch().getRows()) {
-                    if (isProxy) {
-                        proxyResultBuffer.add(row);
-                    } else {
-                        channel.sendOnePacket(row);
+        if (context instanceof HttpConnectContext) {
+            batch = httpResultSender.sendQueryResult(coord, execPlan);
+        } else {
+            // send mysql result
+            // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
+            //    We will not send real query result to client. Instead, we only send OK to client with
+            //    number of rows selected. For example:
+            //          mysql> select * from tbl1 into outfile xxx;
+            //          Query OK, 10 rows affected (0.01 sec)
+            //
+            // 2. If this is a query, send the result expr fields first, and send result data back to client.
+            MysqlChannel channel = context.getMysqlChannel();
+            boolean isSendFields = false;
+            while (true) {
+                batch = coord.getNext();
+                // for outfile query, there will be only one empty batch send back with eos flag
+                if (batch.getBatch() != null && !isOutfileQuery) {
+                    // For some language driver, getting error packet after fields packet will be recognized as a success result
+                    // so We need to send fields after first batch arrived
+                    if (!isSendFields) {
+                        sendFields(colNames, outputExprs);
+                        isSendFields = true;
                     }
+                    if (!isProxy && channel.isSendBufferNull()) {
+                        int bufferSize = 0;
+                        for (ByteBuffer row : batch.getBatch().getRows()) {
+                            bufferSize += (row.position() - row.limit());
+                        }
+                        // +8 for header size
+                        channel.initBuffer(bufferSize + 8);
+                    }
+
+                    for (ByteBuffer row : batch.getBatch().getRows()) {
+                        if (isProxy) {
+                            proxyResultBuffer.add(row);
+                        } else {
+                            channel.sendOnePacket(row);
+                        }
+                    }
+                    context.updateReturnRows(batch.getBatch().getRows().size());
                 }
-                context.updateReturnRows(batch.getBatch().getRows().size());
+                if (batch.isEos()) {
+                    break;
+                }
             }
-            if (batch.isEos()) {
-                break;
+            if (!isSendFields && !isOutfileQuery) {
+                sendFields(colNames, outputExprs);
             }
-        }
-        if (!isSendFields && !isOutfileQuery) {
-            sendFields(colNames, outputExprs);
         }
 
         statisticsForAuditLog = batch.getQueryStatistics();
@@ -1231,6 +1248,12 @@ public class StmtExecutor {
 
     public void sendShowResult(ShowResultSet resultSet) throws IOException {
         context.updateReturnRows(resultSet.getResultRows().size());
+        // Send result set for http.
+        if (context instanceof HttpConnectContext) {
+            httpResultSender.sendShowResult(resultSet);
+            return;
+        }
+
         // Send meta data.
         sendMetaData(resultSet.getMetaData());
 
@@ -1268,6 +1291,11 @@ public class StmtExecutor {
     }
 
     private void handleExplainStmt(String explainString) throws IOException {
+        if (context instanceof HttpConnectContext) {
+            httpResultSender.sendExplainResult(explainString);
+            return;
+        }
+
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setExplain(explainString);
         }
@@ -1650,7 +1678,8 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql
                         );
                     } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
                         // schema table does not need txn
@@ -1658,7 +1687,8 @@ public class StmtExecutor {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql,
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
                                 TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
                     }

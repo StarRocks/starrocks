@@ -73,6 +73,8 @@ public:
 
     TResultSinkType::type get_sink_type() const { return _sink_type; }
 
+    TResultSinkFormatType::type get_format_type() const { return _format_type; }
+
     const std::vector<TExpr>& get_output_exprs() const { return _t_output_expr; }
 
     std::shared_ptr<ResultFileOptions> get_file_opts() const { return _file_opts; }
@@ -80,6 +82,8 @@ public:
 private:
     Status prepare_exprs(RuntimeState* state);
     TResultSinkType::type _sink_type;
+    // set format_type when sink type is HTTP
+    TResultSinkFormatType::type _format_type;
     // set file options when sink type is FILE
     std::shared_ptr<ResultFileOptions> _file_opts;
 
