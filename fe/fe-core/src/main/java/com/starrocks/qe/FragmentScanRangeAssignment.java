@@ -17,7 +17,6 @@ package com.starrocks.qe;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeParams;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
@@ -34,18 +33,18 @@ import java.util.Map;
  * records scan range assignment for a single fragment
  */
 class FragmentScanRangeAssignment extends
-        HashMap<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> {
+        HashMap<Long, Map<Integer, List<TScanRangeParams>>> {
     public String toDebugString() {
         StringBuilder sb = new StringBuilder();
         sb.append("---------- FragmentScanRangeAssignment ----------\n");
-        for (TNetworkAddress addr : keySet()) {
-            Map<Integer, List<TScanRangeParams>> placement = get(addr);
+        for (Long workerId : keySet()) {
+            Map<Integer, List<TScanRangeParams>> placement = get(workerId);
             for (Integer scanNodeId : placement.keySet()) {
                 ArrayList<TScanRangeParams> scanRangeParams = new ArrayList<>(placement.get(scanNodeId));
                 Collections.sort(scanRangeParams);
                 TMemoryBuffer transport = new TMemoryBuffer(1024 * 1024);
                 TBinaryProtocol protocol = new TBinaryProtocol(transport);
-                String output = null;
+                String output;
                 try {
                     for (TScanRangeParams param : scanRangeParams) {
                         param.write(protocol);
@@ -56,9 +55,7 @@ class FragmentScanRangeAssignment extends
                 } catch (TException e) {
                     output = e.toString();
                 }
-                sb.append(
-                        String.format("Backend:%s, ScanNode:%s, Hash:%s\n", addr.toString(), scanNodeId.toString(),
-                                output));
+                sb.append(String.format("Backend:%s, ScanNode:%s, Hash:%s\n", workerId, scanNodeId.toString(), output));
 
             }
         }

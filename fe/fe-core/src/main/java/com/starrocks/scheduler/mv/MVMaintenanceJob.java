@@ -303,7 +303,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
             for (int i = 0; i < execParams.instanceExecParams.size(); i++) {
                 CoordinatorPreprocessor.FInstanceExecParam instanceParam = execParams.instanceExecParams.get(i);
                 // Get brpc address instead of the default address
-                TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instanceParam.getHost());
+                TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instanceParam.getWorkerId());
                 Long taskId = addr2TaskId.get(beRpcAddr);
                 MVMaintenanceTask task;
                 if (taskId == null) {

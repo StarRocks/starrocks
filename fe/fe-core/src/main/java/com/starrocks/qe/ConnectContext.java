@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
@@ -463,7 +464,7 @@ public class ConnectContext {
     }
 
     public void setErrorCodeOnce(String errorCode) {
-        if (this.errorCode == null || this.errorCode.isEmpty()) {
+        if (Strings.isNullOrEmpty(this.errorCode)) {
             this.errorCode = errorCode;
         }
     }
