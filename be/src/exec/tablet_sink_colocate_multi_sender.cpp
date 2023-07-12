@@ -54,7 +54,7 @@ Status TabletSinkColocateMultiSender::send_chunk(const OlapTableSchemaParam* sch
                 _index_tablet_ids[i][selection] = partitions[selection]->indexes[i].tablets[tablet_indexes[selection]];
             }
         }
-        // return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
+        return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
     } else { // Improve for all rows are selected
         size_t index_size = partitions[0]->indexes.size();
         _index_tablet_ids.resize(index_size);
@@ -67,9 +67,8 @@ Status TabletSinkColocateMultiSender::send_chunk(const OlapTableSchemaParam* sch
                 _index_tablet_ids[i][j] = partitions[j]->indexes[i].tablets[tablet_indexes[j]];
             }
         }
-        // return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
+        return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
     }
-    return Status::OK();
 }
 
 } // namespace starrocks::stream_load

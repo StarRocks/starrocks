@@ -46,12 +46,11 @@ public:
     bool is_full() override;
     bool is_close_done() override;
 
-private:
+protected:
     Status _send_chunks(const OlapTableSchemaParam* schema, Chunk* chunk,
                         const std::vector<std::vector<int64_t>>& index_tablet_ids,
                         const std::vector<uint16_t>& selection_idx);
 
-protected:
     bool _colocate_mv_index{true};
     std::vector<std::vector<int64_t>> _index_tablet_ids;
 };

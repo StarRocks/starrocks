@@ -9,7 +9,10 @@ CREATE TABLE `test1` (
   `k4` varchar(64) NULL
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k1`)
-DISTRIBUTED BY HASH(`k1`)BUCKETS 3;
+DISTRIBUTED BY HASH(`k1`)BUCKETS 3
+PROPERTIES (
+      "colocate_with" = "logical_mv"
+);
 -- result:
 -- !result
 drop table if exists target1;
@@ -22,7 +25,10 @@ CREATE TABLE `target1` (
   `k4` varchar(64) NULL
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k1`)
-DISTRIBUTED BY HASH(`k1`)BUCKETS 3;
+DISTRIBUTED BY HASH(`k1`)BUCKETS 3
+PROPERTIES (
+      "colocate_with" = "logical_mv"
+);
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW test_mv1 
@@ -53,7 +59,10 @@ CREATE TABLE `target2` (
   `sum_k3` bigint NULL
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k1`)
-DISTRIBUTED BY HASH(`k1`)BUCKETS 3;
+DISTRIBUTED BY HASH(`k1`)BUCKETS 3
+PROPERTIES (
+      "colocate_with" = "logical_mv"
+);
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW test_mv2
@@ -99,7 +108,10 @@ CREATE TABLE `test2` (
   `k4` varchar(64) NULL
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k1`)
-DISTRIBUTED BY HASH(`k1`)BUCKETS 3;
+DISTRIBUTED BY HASH(`k1`)BUCKETS 3
+PROPERTIES (
+      "colocate_with" = "logical_mv"
+);
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW test_mv3

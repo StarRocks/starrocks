@@ -9,7 +9,10 @@ CREATE TABLE `test1` (
   `k4` varchar(64) NULL
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k1`)
-DISTRIBUTED BY HASH(`k1`)BUCKETS 3;
+DISTRIBUTED BY HASH(`k1`)BUCKETS 3
+PROPERTIES (
+      "colocate_with" = "logical_mv"
+);
 
 -- Test1: basic case
 drop table if exists target1;
@@ -20,7 +23,10 @@ CREATE TABLE `target1` (
   `k4` varchar(64) NULL
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k1`)
-DISTRIBUTED BY HASH(`k1`)BUCKETS 3;
+DISTRIBUTED BY HASH(`k1`)BUCKETS 3
+PROPERTIES (
+      "colocate_with" = "logical_mv"
+);
 
 CREATE MATERIALIZED VIEW test_mv1 
 to target1
@@ -38,7 +44,10 @@ CREATE TABLE `target2` (
   `sum_k3` bigint NULL
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k1`)
-DISTRIBUTED BY HASH(`k1`)BUCKETS 3;
+DISTRIBUTED BY HASH(`k1`)BUCKETS 3
+PROPERTIES (
+      "colocate_with" = "logical_mv"
+);
 
 CREATE MATERIALIZED VIEW test_mv2
 to target2
@@ -59,7 +68,10 @@ CREATE TABLE `test2` (
   `k4` varchar(64) NULL
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k1`)
-DISTRIBUTED BY HASH(`k1`)BUCKETS 3;
+DISTRIBUTED BY HASH(`k1`)BUCKETS 3
+PROPERTIES (
+      "colocate_with" = "logical_mv"
+);
 
 CREATE MATERIALIZED VIEW test_mv3
 to target2
