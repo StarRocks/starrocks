@@ -203,6 +203,10 @@ public:
     // get the first column ref in expr
     ColumnRef* get_column_ref();
 
+#if BE_TEST
+    void set_type(TypeDescriptor t) { _type = t; }
+#endif
+
 protected:
     friend class MathFunctions;
     friend class StringFunctions;

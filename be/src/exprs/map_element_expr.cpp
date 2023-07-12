@@ -68,7 +68,7 @@ public:
             bool matched = false;
             selection[i] = idx;
             for (size_t j = offsets[i]; j < offsets[i + 1]; j++) {
-                if (!map_keys->is_null(j) && (map_keys->get(j).convert2DatumKey() == arg1->get(i).convert2DatumKey())) {
+                if (!map_keys->is_null(j) && (map_keys->equals(j, *arg1, i, false) == 1)) {
                     matched = true;
                     selection[i] = j;
                     idx = j;
@@ -78,7 +78,7 @@ public:
             null_flags[i] = null_flags[i] | (!matched);
         }
 
-        if (map_values->has_null()) {
+        if (map_values->is_nullable()) {
             auto* nullable_values = down_cast<NullableColumn*>(map_values);
             const uint8_t* nulls = nullable_values->null_column()->raw_data();
             for (size_t i = 0; i < num_rows; i++) {
