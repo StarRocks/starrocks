@@ -3267,7 +3267,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 mv.setInactiveAndReason(reason);
 
                 // recursive inactive
-                inactiveRelatedMaterializedView(db, mv, reason);
+                inactiveRelatedMaterializedView(db, mv, String.format("base table %s inactive", mv.getName()));
             } else {
                 LOG.info("Ignore materialized view {} does not exists", mvId);
             }
