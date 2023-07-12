@@ -156,7 +156,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // sync partitions between materialized view and base tables out of lock
             // do it outside lock because it is a time-cost operation
             syncPartitions();
-
+            // refresh external table meta cache before check the partition changed
+            refreshExternalTable(context);
             database.readLock();
             try {
                 // the following steps should be done in the same lock:
@@ -165,8 +166,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // 3. generate insert stmt
                 // 4. generate insert ExecPlan
 
-                // refresh external table meta cache before check the partition changed
-                refreshExternalTable(context);
                 // check whether there are partition changes for base tables, eg: partition rename
                 // retry to sync partitions if any base table changed the partition infos
                 if (checkBaseTablePartitionChange()) {
