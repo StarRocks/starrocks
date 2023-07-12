@@ -1557,4 +1557,15 @@ public class ExpressionTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_distinct[([NULL]); args: INVALID_TYPE; result: ARRAY<BOOLEAN>;");
     }
+
+    @Test
+    public void testDoubleCastToString() throws Exception {
+        String sql = "select concat(substr(DATE_SUB(CURDATE(), INTERVAL 1 DAY), 1, 4) -1, '-');";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "2022-");
+
+        sql = "select cast(cast(20.00 as double) as string);";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "'20'");
+    }
 }

@@ -325,10 +325,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (type.isDate()) {
             LocalDateTime time = (LocalDateTime) Optional.ofNullable(value).orElse(LocalDateTime.MIN);
             return time.format(DateUtils.DATE_FORMATTER);
-        } else if (type.isDouble()) {
+        } else if (type.isFloatingPointType()) {
             double val = (double) Optional.ofNullable(value).orElse((double) 0);
             BigDecimal decimal = BigDecimal.valueOf(val);
-            return decimal.toPlainString();
+            return decimal.stripTrailingZeros().toPlainString();
         }
 
         return String.valueOf(value);
