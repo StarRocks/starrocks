@@ -108,7 +108,19 @@ public class MetadataMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetTable(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException {
+=======
+    public void testGetTableWithDefaultCatalog() {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Assert.assertTrue(metadataMgr.getOptionalMetadata("").isPresent());
+        com.starrocks.catalog.Table internalTable = metadataMgr.getTable("default_catalog", "db1", "tbl1");
+        Assert.assertEquals(internalTable.getName(), "tbl1");
+    }
+
+    @Test
+    public void testGetTable(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException {
+>>>>>>> 058f9fed38 ([BugFix] check null as default catalog (#26944))
         List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "BIGINT", ""));
         List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
         String hdfsPath = "hdfs://127.0.0.1:10000/hive";

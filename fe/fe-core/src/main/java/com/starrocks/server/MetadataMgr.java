@@ -7,6 +7,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedIndexMeta;
+>>>>>>> 058f9fed38 ([BugFix] check null as default catalog (#26944))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -24,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.HashMap;
 import java.util.List;
@@ -47,7 +53,15 @@ public class MetadataMgr {
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
 
+    /** get ConnectorMetadata by catalog name
+     * if catalog is null or empty will return localMetastore
+     * @param catalogName catalog's name
+     * @return ConnectorMetadata
+     */
     public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+        if (Strings.isNullOrEmpty(catalogName)) {
+            catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        }
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
         } else {
