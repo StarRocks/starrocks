@@ -1,10 +1,8 @@
 # Overview
 
-This topic describes what catalog is, and how to manage and query internal data and external data by using A catalog.
+This topic describes what a catalog is, and how to manage and query internal data and external data by using a catalog.
 
-> **Note**
->
-> Only StarRocks 2.3 and later supports the catalog feature.
+StarRocks supports the catalog feature from v2.3 onwards.
 
 ## Basic concepts
 
