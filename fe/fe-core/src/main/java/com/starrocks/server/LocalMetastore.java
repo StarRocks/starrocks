@@ -3259,7 +3259,7 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setComment(clause.getNewComment());
     }
 
-    public static void inactiveRelatedMaterializedView(Database db, OlapTable olapTable, String reason) {
+    public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {

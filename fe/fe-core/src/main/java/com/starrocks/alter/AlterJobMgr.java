@@ -1005,6 +1005,7 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
 
+            LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 
@@ -1035,6 +1036,7 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
 
+            LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 
