@@ -203,13 +203,13 @@ const PrometheusMetricsVisitor::SummaryItems* PrometheusMetricsVisitor::_process
     if (metric_name.ends_with("_latency")) {
         metric_name.remove_suffix(8);
         SummaryItems* si = &_m[metric_name.as_string()];
-        si->latency_avg = strtoll(desc_str.data(), NULL, 10);
+        si->latency_avg = strtoll(desc_str.data(), nullptr, 10);
         return si;
     }
     if (metric_name.ends_with("_count")) {
         metric_name.remove_suffix(6);
         SummaryItems* si = &_m[metric_name.as_string()];
-        si->count = strtoll(desc_str.data(), NULL, 10);
+        si->count = strtoll(desc_str.data(), nullptr, 10);
         return si;
     }
     return nullptr;
