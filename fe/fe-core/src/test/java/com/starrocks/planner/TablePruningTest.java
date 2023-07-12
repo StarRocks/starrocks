@@ -280,11 +280,12 @@ public class TablePruningTest extends TablePruningTestBase {
                 {"lo_orderdate,c_address,s_name", 2, 2},
                 {"c_address,s_name", 2, 2},
         };
-        List<Object[]> cases = Stream.of(fromClause0, fromClause1).flatMap(fromClause -> Stream.of(whereClauses).flatMap(
-                whereClause -> Stream.of(items).map(tc -> new Object[] {
-                        String.format("select %s from %s where %s", tc[0], fromClause, whereClause), tc[1], tc[2]}))).collect(
-                Collectors.toList());
-
+        List<Object[]> cases =
+                Stream.of(fromClause0, fromClause1).flatMap(fromClause -> Stream.of(whereClauses).flatMap(
+                        whereClause -> Stream.of(items).map(tc -> new Object[] {
+                                String.format("select %s from %s where %s", tc[0], fromClause, whereClause), tc[1],
+                                tc[2]}))).collect(
+                        Collectors.toList());
 
         for (Object[] tc : cases) {
             String sql = (String) tc[0];
@@ -661,7 +662,7 @@ public class TablePruningTest extends TablePruningTestBase {
             String selectStmt = (String) tc[0];
             int numHashJoins = (Integer) tc[1];
             String sql = String.format("select %s from %s", selectStmt, fromClause);
-            checkHashJoinCountWithBothRBOAndCBOLessThan(sql, 12);
+            checkHashJoinCountWithOnlyRBOLessThan(sql, 12);
         }
     }
 

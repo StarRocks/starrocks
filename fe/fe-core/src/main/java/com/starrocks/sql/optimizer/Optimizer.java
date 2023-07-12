@@ -246,7 +246,7 @@ public class Optimizer {
         }
     }
 
-    private void pruneTables(OptExpression tree, TaskContext rootTaskContext) {
+    private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
         if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableRboTablePrune()) {
             // PARTITION_PRUNE is required to run before ReorderJoinRule because ReorderJoinRule's
             // Statistics calculation on Operators depends on row count yielded by the PARTITION_PRUNE.
@@ -261,8 +261,7 @@ public class Optimizer {
             deriveLogicalProperty(tree);
             tree = new RBOTablePruneRule().rewrite(tree, rootTaskContext);
             ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-            ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
-            rootTaskContext.setRequiredColumns(requiredColumns);
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
             context.setEnableLeftRightJoinEquivalenceDerive(true);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
@@ -314,7 +313,7 @@ public class Optimizer {
         rootTaskContext.setRequiredColumns(requiredColumns.clone());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
 
-        pruneTables(tree, rootTaskContext);
+        pruneTables(tree, rootTaskContext, requiredColumns);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
