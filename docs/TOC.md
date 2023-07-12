@@ -509,6 +509,7 @@
       + [time_slice](./sql-reference/sql-functions/date-time-functions/time_slice.md)
       + [time_to_sec](./sql-reference/sql-functions/date-time-functions/time_to_sec.md)
       + [timediff](./sql-reference/sql-functions/date-time-functions/timediff.md)
+      + [date_diff](./sql-reference/sql-functions/date-time-functions/date_diff.md)
       + [timestamp](./sql-reference/sql-functions/date-time-functions/timestamp.md)
       + [timestampadd](./sql-reference/sql-functions/date-time-functions/timestampadd.md)
       + [timestampdiff](./sql-reference/sql-functions/date-time-functions/timestampdiff.md)
