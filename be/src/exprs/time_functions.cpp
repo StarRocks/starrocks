@@ -2597,6 +2597,14 @@ StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Colu
             result.append(l.diff_microsecond(r) / USECS_PER_MILLIS);
         } else if (type_str == "day") {
             result.append(l.diff_microsecond(r) / USECS_PER_DAY);
+        } else if (type_str == "week") {
+            result.append(l.diff_microsecond(r) / USECS_PER_WEEK);
+        } else if (type_str == "quarter") {
+            result.append(months_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r) / 3);
+        } else if (type_str == "year") {
+            result.append(years_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r));
+        } else if (type_str == "month") {
+            result.append(months_diffImpl::apply<TimestampValue, TimestampValue, int>(l, r));
         } else {
             return Status::InvalidArgument("type column should be one of day/hour/minute/second/millisecond");
         }
