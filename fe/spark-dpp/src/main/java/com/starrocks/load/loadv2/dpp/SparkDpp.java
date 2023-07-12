@@ -462,9 +462,40 @@ public final class SparkDpp implements java.io.Serializable {
             List<String> valueColumnNames,
             StructType dstTableSchema,
             EtlJobConfig.EtlIndex baseIndex) throws SparkDppException {
+<<<<<<< HEAD
         List<String> distributeColumns = partitionInfo.distributionColumnRefs;
         Partitioner partitioner = new StarRocksRangePartitioner(partitionInfo, partitionKeyIndex, partitionRangeKeys);
 
+=======
+        List<String> distributeColumnRefs = partitionInfo.distributionColumnRefs;
+        List<EtlJobConfig.EtlColumn> distributeColumns = new ArrayList<>();
+        for (String columnName : distributeColumnRefs) {
+            for (EtlJobConfig.EtlColumn column : baseIndex.columns) {
+                if (columnName.equals(column.columnName)) {
+                    distributeColumns.add(column);
+                    break;
+                }
+            }
+        }
+        if (distributeColumnRefs.size() != distributeColumns.size()) {
+            throw new SparkDppException("wrong distribution columns size: " + distributeColumns.size());
+        }
+
+        Partitioner partitioner = null;
+        PartitionType partitionType = PartitionType.getByType(partitionInfo.partitionType);
+        if (partitionType == null) {
+            throw new SparkDppException("partition type is illegal");
+        }
+        switch (partitionType) {
+            case LIST:
+                partitioner = new StarRocksListPartitioner(partitionInfo, partitionKeyIndex, partitionListKeys);
+                break;
+            case RANGE:
+            case UNPARTITIONED:
+                partitioner = new StarRocksRangePartitioner(partitionInfo, partitionKeyIndex, partitionRangeKeys);
+                break;
+        }
+>>>>>>> c079401397 ([Feature] SparkDpp support date/datetime/decimal distribution column (#27005))
         List<ColumnParser> parsers = new ArrayList<>();
         for (EtlJobConfig.EtlColumn column : baseIndex.columns) {
             parsers.add(ColumnParser.create(column));
