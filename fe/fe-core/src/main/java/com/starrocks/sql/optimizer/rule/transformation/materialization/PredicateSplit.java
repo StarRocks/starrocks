@@ -4,12 +4,8 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-=======
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
-import com.starrocks.analysis.BinaryType;
->>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -108,26 +104,6 @@ public class PredicateSplit {
 
         List<ScalarOperator> columnEqualityPredicates = Lists.newArrayList();
         List<ScalarOperator> residualPredicates = Lists.newArrayList();
-<<<<<<< HEAD
-        for (ScalarOperator scalarOperator : predicateConjuncts) {
-            if (scalarOperator instanceof BinaryPredicateOperator) {
-                BinaryPredicateOperator binary = (BinaryPredicateOperator) scalarOperator;
-                ScalarOperator leftChild = scalarOperator.getChild(0);
-                ScalarOperator rightChild = scalarOperator.getChild(1);
-                if (binary.getBinaryType().isEqual()) {
-                    if (leftChild.isColumnRef() && rightChild.isColumnRef()) {
-                        columnEqualityPredicates.add(scalarOperator);
-                    } else if (leftChild.isColumnRef() && rightChild.isConstantRef()) {
-                        rangePredicates.add(scalarOperator);
-                    } else {
-                        residualPredicates.add(scalarOperator);
-                    }
-                } else if (binary.getBinaryType().isRangeOrNe()) {
-                    if (leftChild.isColumnRef() && rightChild.isConstantRef()) {
-                        rangePredicates.add(scalarOperator);
-                    } else {
-                        residualPredicates.add(scalarOperator);
-=======
 
         @Override
         public Map<ColumnRefOperator, TreeRangeSet<ConstantOperator>> visit(
@@ -212,7 +188,7 @@ public class PredicateSplit {
         }
     }
 
-    private static  <C extends Comparable<C>> TreeRangeSet<C> range(BinaryType type, C value) {
+    private static <C extends Comparable<C>> TreeRangeSet<C> range(BinaryPredicateOperator.BinaryType type, C value) {
         TreeRangeSet<C> rangeSet = TreeRangeSet.create();
         switch (type) {
             case EQ:
@@ -250,7 +226,6 @@ public class PredicateSplit {
                         if (!intersection.isEmpty()) {
                             ranges.add(intersection);
                         }
->>>>>>> 053daa6d45 ([Enhancement] mv rewrite predicate split support multi range (#24880))
                     }
                 }
             }
