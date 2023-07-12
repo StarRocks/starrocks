@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.common;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -53,8 +52,7 @@ import java.util.NavigableMap;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.TimeUnit;
-
-import static com.starrocks.sql.common.SyncPartitionUtils.PartitionRange.PARTITION_RANGE_COMPARATOR;
+import java.util.stream.Collectors;
 
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
@@ -305,34 +303,31 @@ public class SyncPartitionBench {
             return result;
         }
 
-        List<SyncPartitionUtils.PartitionRange> sortedSrcRangeMap = com.google.common.collect.Lists.newArrayList();
-        List<SyncPartitionUtils.PartitionRange> sortedDstRangeMap = Lists.newArrayList();
-        for (Map.Entry<String, Range<PartitionKey>> e : srcRangeMap.entrySet()) {
-            sortedSrcRangeMap.add(new SyncPartitionUtils.PartitionRange(e.getKey(), e.getValue()));
-        }
-        for (Map.Entry<String, Range<PartitionKey>> e : dstRangeMap.entrySet()) {
-            sortedDstRangeMap.add(new SyncPartitionUtils.PartitionRange(e.getKey(), e.getValue()));
-        }
-        Collections.sort(sortedSrcRangeMap, PARTITION_RANGE_COMPARATOR);
-        Collections.sort(sortedDstRangeMap, PARTITION_RANGE_COMPARATOR);
+        // TODO: Callers may use `List<PartitionRange>` directly.
+        List<PartitionRange> srcRanges = srcRangeMap.keySet().stream().map(name -> new PartitionRange(name,
+                srcRangeMap.get(name))).collect(Collectors.toList());
+        List<PartitionRange> dstRanges = dstRangeMap.keySet().stream().map(name -> new PartitionRange(name,
+                dstRangeMap.get(name))).collect(Collectors.toList());
+        Collections.sort(srcRanges, PartitionRange::compareTo);
+        Collections.sort(dstRanges, PartitionRange::compareTo);
 
-        for (SyncPartitionUtils.PartitionRange srcRange : sortedSrcRangeMap) {
-            int mid = Collections.binarySearch(sortedDstRangeMap, srcRange);
+        for (PartitionRange srcRange : srcRanges) {
+            int mid = Collections.binarySearch(dstRanges, srcRange);
             if (mid < 0) {
                 continue;
             }
             Set<String> addedSet = result.get(srcRange.getPartitionName());
-            addedSet.add(sortedDstRangeMap.get(mid).getPartitionName());
+            addedSet.add(dstRanges.get(mid).getPartitionName());
 
             int lower = mid - 1;
-            while (lower >= 0 && sortedDstRangeMap.get(lower).isInteract(srcRange)) {
-                addedSet.add(sortedDstRangeMap.get(lower).getPartitionName());
+            while (lower >= 0 && dstRanges.get(lower).isInteract(srcRange)) {
+                addedSet.add(dstRanges.get(lower).getPartitionName());
                 lower--;
             }
 
             int higher = mid + 1;
-            while (higher < sortedDstRangeMap.size() && sortedDstRangeMap.get(higher).isInteract(srcRange)) {
-                addedSet.add(sortedDstRangeMap.get(higher).getPartitionName());
+            while (higher < dstRanges.size() && dstRanges.get(higher).isInteract(srcRange)) {
+                addedSet.add(dstRanges.get(higher).getPartitionName());
                 higher++;
             }
         }
