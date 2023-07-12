@@ -16,65 +16,23 @@
 package com.starrocks.load.pipe;
 
 import com.starrocks.thrift.TBrokerFileStatus;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
-public class FileListRepo {
+/**
+ * Store and retrieve file-list for a pipe
+ */
+public abstract class FileListRepo {
 
-    private static final Logger LOG = LogManager.getLogger(FileListRepo.class);
+    protected PipeId pipeId;
 
-    // TODO: persist the file list
-    private final Map<String, PipeFile> fileList = new HashMap<>();
+    public abstract List<PipeFile> listFiles();
 
-    public List<PipeFile> listFiles() {
-        return new ArrayList<>(fileList.values());
-    }
+    public abstract List<PipeFile> listUnloadedFiles();
 
-    public List<PipeFile> getUnloadedFiles() {
-        return fileList.values().stream().filter(x -> x.state.equals(PipeFileState.UNLOADED))
-                .collect(Collectors.toList());
-    }
+    public abstract void addFiles(List<TBrokerFileStatus> files);
 
-    public int size() {
-        return fileList.size();
-    }
-
-    public void addBrokerFiles(List<TBrokerFileStatus> files) {
-        for (TBrokerFileStatus file : files) {
-            PipeFile pfile = new PipeFile(file.getPath(), file.getSize(), PipeFileState.UNLOADED);
-            fileList.put(file.getPath(), pfile);
-        }
-        LOG.debug("add broker-files into repo: " + files);
-    }
-
-    public void addFiles(List<PipeFile> files) {
-        for (PipeFile file : files) {
-            fileList.put(file.path, file);
-        }
-    }
-
-    public void updateFiles(List<PipeFile> files, PipeFileState state) {
-        // TODO: optimize the performance
-        for (PipeFile file : files) {
-            PipeFile existed = fileList.get(file.path);
-            if (existed != null) {
-                existed.state = state;
-            } else {
-                fileList.put(file.path, file);
-            }
-        }
-        LOG.debug("update file state to {}: {}", state, files);
-    }
-
-    public void gcFiles() {
-        // TODO: GC file list
-    }
+    public abstract void updateFileState(List<PipeFile> files, PipeFileState state);
 
     public enum PipeFileState {
         UNLOADED,

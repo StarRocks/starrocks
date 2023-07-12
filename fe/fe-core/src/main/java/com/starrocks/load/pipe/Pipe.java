@@ -105,9 +105,10 @@ public class Pipe implements GsonPostProcessable {
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
         PipeName pipeName = stmt.getPipeName();
         long dbId = GlobalStateMgr.getCurrentState().getDb(pipeName.getDbName()).getId();
-
-        Pipe res = new Pipe(new PipeId(dbId, id), pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
+        PipeId pipeId = new PipeId(dbId, id);
+        Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
                 stmt.getInsertSql());
+        stmt.getDataSource().setPipeId(pipeId);
         res.properties = stmt.getProperties();
         res.processProperties();
         return res;

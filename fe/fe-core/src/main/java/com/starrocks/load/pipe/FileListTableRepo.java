@@ -16,11 +16,11 @@
 package com.starrocks.load.pipe;
 
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.catalog.Database;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
@@ -60,12 +60,24 @@ public class FileListTableRepo {
                     "start_load datetime, " +
                     "finish_load datetime" +
                     ")" +
-                    "PRIMARY KEY() " +
-                    "DISTRIBUTED BY HASH() BUCKETS 8 " +
+                    "PRIMARY KEY(pipe_id, filename, file_version) " +
+                    "DISTRIBUTED BY HASH(pipe_id, filename) BUCKETS 8 " +
                     "properties('replication_num' = '%d') ";
 
     private static final String CORRECT_FILE_LIST_REPLICATION_NUM =
             "ALTER TABLE %s SET ('replication_num'='3')";
+
+    public void insertFiles(List<PipeFile> files) {
+
+    }
+
+    public void deleteFiles(List<PipeFile> files) {
+
+    }
+
+    public void updateFiles(List<PipeFile> files, FileListRepo.PipeFileState fileState) {
+
+    }
 
     /**
      * Execute SQL
@@ -91,7 +103,12 @@ public class FileListTableRepo {
         }
 
         public static void executeDDL(ConnectContext context, String sql) {
-
+            StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+            try {
+                DDLStmtExecutor.execute(parsedStmt, context);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
 
     }
@@ -139,14 +156,6 @@ public class FileListTableRepo {
             return GlobalStateMgr.getCurrentState().getDb(FILE_LIST_DB_NAME) != null;
         }
 
-        public static boolean checkTableExists() {
-            Database db = GlobalStateMgr.getCurrentState().getDb(FILE_LIST_DB_NAME);
-            if (db == null) {
-                return false;
-            }
-            return db.getTable(FILE_LIST_TABLE_NAME) != null;
-        }
-
         public static void createTable() {
             String sql = SQLBuilder.buildCreateTableSql();
             ConnectContext context = StatisticUtils.buildConnectContext();
@@ -178,7 +187,14 @@ public class FileListTableRepo {
         }
 
         public static String buildInsertSql(List<PipeFile> files) {
-            return "";
+            String tableName = CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME);
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("INSERT INTO %s VALUES ", tableName));
+            for (PipeFile file : files) {
+                sb.append(String.format("(%d,'%s',%d,%d,'%s', '%s','%s','%s','%s' )",
+                        ));
+            }
+            return sb.toString();
         }
 
         public static String buildUpdateStateSql(List<PipeFile> files, FileListRepo.PipeFileState state) {

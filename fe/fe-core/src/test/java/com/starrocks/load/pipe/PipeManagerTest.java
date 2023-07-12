@@ -232,7 +232,7 @@ public class PipeManagerTest {
         p1.schedule();
         p1.schedule();
         FilePipeSource source = (FilePipeSource) p1.getPipeSource();
-        FileListRepo repo = source.getFileListRepo();
+        FileListRepoInMemory repo = source.getFileListRepo();
         Assert.assertEquals(1, repo.size());
         List<PipeFile> files = repo.listFiles();
         Assert.assertEquals(

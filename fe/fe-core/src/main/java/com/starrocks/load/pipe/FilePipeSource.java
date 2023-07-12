@@ -36,6 +36,8 @@ public class FilePipeSource implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(FilePipeSource.class);
 
+    @SerializedName(value = "pipe_id")
+    private PipeId pipeId;
     @SerializedName(value = "path")
     private String path;
     @SerializedName(value = "format")
@@ -49,13 +51,18 @@ public class FilePipeSource implements GsonPostProcessable {
     @SerializedName(value = "eos")
     private boolean eos = false;
 
-    private FileListRepo fileListRepo;
+    private FileListRepoInMemory fileListRepo;
 
     public FilePipeSource(String path, String format, Map<String, String> sourceProperties) {
         this.path = Preconditions.checkNotNull(path);
         this.format = Preconditions.checkNotNull(format);
         this.tableProperties = Preconditions.checkNotNull(sourceProperties);
-        this.fileListRepo = new FileListRepo();
+        this.fileListRepo = new FileListRepoInMemory();
+    }
+
+    public void initPipeId(PipeId pipeId) {
+        this.pipeId = pipeId;
+        this.fileListRepo.set
     }
 
     public void poll() {
@@ -129,6 +136,10 @@ public class FilePipeSource implements GsonPostProcessable {
         this.format = format;
     }
 
+    public void setPipeId(PipeId id) {
+        this.pipeId = id;
+    }
+
     public String getPath() {
         return path;
     }
@@ -141,13 +152,13 @@ public class FilePipeSource implements GsonPostProcessable {
         return tableProperties;
     }
 
-    public FileListRepo getFileListRepo() {
+    public FileListRepoInMemory getFileListRepo() {
         return fileListRepo;
     }
 
     @Override
     public void gsonPostProcess() throws IOException {
-        this.fileListRepo = new FileListRepo();
+        this.fileListRepo = new FileListRepoInMemory();
     }
 
     @Override
