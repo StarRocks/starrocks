@@ -64,12 +64,11 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // two stage aggregate or three stage aggregate
     private final boolean isSplit;
     // flg for this aggregate operator could use streaming pre-aggregation
-    private boolean useStreamingPreAgg = true;
+    private boolean useStreamingPreAgg;
 
     private boolean useSortAgg = false;
 
     private DataSkewInfo distinctColumnDataSkew = null;
-
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
@@ -78,7 +77,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                                          boolean isSplit,
                                          long limit,
                                          ScalarOperator predicate,
-                                         Projection projection) {
+                                         Projection projection,
+                                         boolean useStreamingPreAgg) {
         super(OperatorType.PHYSICAL_HASH_AGG);
         this.type = type;
         this.groupBys = groupBys;
@@ -89,6 +89,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+        this.useStreamingPreAgg = useStreamingPreAgg;
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -109,9 +110,13 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     /**
      * Whether it is the first phase in three/four-phase agg whose second phase is pruned.
+     * Hence, the input data distribution has satisfied with the agg requirement. The local
+     * agg can directly do a global blocking agg job. Only local agg without distinct
+     * agg callOperator and cannot use streaming agg means it's the result from
+     * PruneAggregateNodeRule.
      */
     public boolean isMergedLocalAgg() {
-        return type.isLocal() && !useStreamingPreAgg;
+        return type.isLocal() && !useStreamingPreAgg && !hasSingleDistinct();
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
