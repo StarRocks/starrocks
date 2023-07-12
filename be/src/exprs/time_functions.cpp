@@ -2569,6 +2569,91 @@ StatusOr<ColumnPtr> TimeFunctions::make_date(FunctionContext* context, const Col
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+// date_diff
+StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (context->is_notnull_constant_column(2)) {
+        auto ctc = reinterpret_cast<DateDiffCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        return ctc->function(context, columns, ctc->type);
+    }
+
+    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
+    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
+    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
+    auto size = columns[2]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    for (int row = 0; row < size; ++row) {
+        TimestampValue l = (TimestampValue)lv_column.value(row);
+        TimestampValue r = (TimestampValue)rv_column.value(row);
+        auto type_str = type_column.value(row).to_string();
+        transform(type_str.begin(), type_str.end(), type_str.begin(), ::tolower);
+        if (type_str == "hour") {
+            result.append(l.diff_microsecond(r) / USECS_PER_HOUR);
+        } else if (type_str == "second") {
+            result.append(l.diff_microsecond(r) / USECS_PER_SEC);
+        } else if (type_str == "minute") {
+            result.append(l.diff_microsecond(r) / USECS_PER_MINUTE);
+        } else if (type_str == "millisecond") {
+            result.append(l.diff_microsecond(r) / USECS_PER_MILLIS);
+        } else if (type_str == "day") {
+            result.append(l.diff_microsecond(r) / USECS_PER_DAY);
+        } else {
+            return Status::InvalidArgument("type column should be one of day/hour/minute/second/millisecond");
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::date_diff_time(FunctionContext* context, const Columns& columns, int64_t t) {
+    ColumnViewer<TYPE_DATETIME> lv_column(columns[0]);
+    ColumnViewer<TYPE_DATETIME> rv_column(columns[1]);
+    ColumnViewer<TYPE_VARCHAR> type_column(columns[2]);
+    auto size = columns[2]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    for (int row = 0; row < size; ++row) {
+        TimestampValue l = (TimestampValue)lv_column.value(row);
+        TimestampValue r = (TimestampValue)rv_column.value(row);
+        result.append(l.diff_microsecond(r) / t);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status TimeFunctions::datediff_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_notnull_constant_column(2)) {
+        return Status::OK();
+    }
+    ColumnPtr column = context->get_constant_column(2);
+    auto type_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(column).to_string();
+    transform(type_str.begin(), type_str.end(), type_str.begin(), ::tolower);
+    if (type_str != "day" && type_str != "hour" && type_str != "minute" && type_str != "second" &&
+        type_str != "millisecond") {
+        return Status::InvalidArgument("type column should be one of day/hour/minute/second/millisecond");
+    }
+    auto fc = new TimeFunctions::DateDiffCtx();
+    fc->function = &TimeFunctions::date_diff_time;
+    if (type_str == "day") {
+        fc->type = USECS_PER_DAY;
+    } else if (type_str == "hour") {
+        fc->type = USECS_PER_HOUR;
+    } else if (type_str == "minute") {
+        fc->type = USECS_PER_MINUTE;
+    } else if (type_str == "second") {
+        fc->type = USECS_PER_SEC;
+    } else if (type_str == "millisecond") {
+        fc->type = USECS_PER_MILLIS;
+    }
+    context->set_function_state(scope, fc);
+    return Status::OK();
+}
+
+Status TimeFunctions::datediff_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto fc = reinterpret_cast<DateDiffCtx*>(context->get_function_state(scope));
+        delete fc;
+    }
+    return Status::OK();
+}
+
 // last_day
 StatusOr<ColumnPtr> TimeFunctions::last_day(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DATETIME> data_column(columns[0]);
