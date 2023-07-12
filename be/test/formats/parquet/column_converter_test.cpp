@@ -455,6 +455,19 @@ TEST_F(ColumnConverterTest, Int96Test) {
     }
 }
 
+TEST_F(ColumnConverterTest, Int96TimeZoneTest) {
+    const std::string file_path = "./be/test/formats/parquet/test_data/column_converter/int96_new_york_timestamp.parquet";
+    const size_t expected_rows = 1;
+
+    {
+        const std::string col_name = "time";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2023-04-29 00:40:22.618760]", expected_rows);
+        }
+    }
+}
+
 TEST_F(ColumnConverterTest, FloatTest) {
     const std::string file_path = "./be/test/formats/parquet/test_data/column_converter/float.parquet";
     const size_t expected_rows = 5;
