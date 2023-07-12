@@ -567,6 +567,15 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _stream_mgr = new DataStreamMgr();
     _result_mgr = new ResultBufferMgr();
     _result_queue_mgr = new ResultQueueMgr();
+
+    _monitor_manager = new MonitorManager();
+    _thread_pool_checker = new ThreadPoolChecker();
+    _brpc_thread_checker = new BrpcThreadChecker();
+    _disk_checker = new DiskChecker();
+    (void)_monitor_manager->register_monitor(_brpc_thread_checker->get_name(), _brpc_thread_checker);
+    (void)_monitor_manager->register_monitor(_disk_checker->get_name(), _disk_checker);
+    (void)_monitor_manager->register_monitor(_thread_pool_checker->get_name(), _thread_pool_checker);
+
     _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
@@ -665,6 +674,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
     _max_executor_threads = std::max<int64_t>(1, _max_executor_threads);
     LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", _max_executor_threads);
+
+    if (config::enable_health_checker) {
+        _monitor_manager->start_all_monitors();
+    }
 
     _driver_limiter =
             new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
@@ -940,6 +953,10 @@ void ExecEnv::stop() {
 
     if (_diagnose_daemon) {
         _diagnose_daemon->stop();
+    }
+
+    if (config::enable_health_checker) {
+        _monitor_manager->stop_all_monitors();
     }
 
 #ifndef BE_TEST

@@ -95,6 +95,8 @@ public:
 
     void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) override;
 
+    ThreadPool* get_thread_pool() { return _thread_pool.get(); }
+
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();

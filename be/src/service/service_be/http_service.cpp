@@ -64,6 +64,7 @@
 #include "http/download_action.h"
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
+#include "http/monitor_action.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
@@ -149,6 +150,13 @@ Status HttpServiceBE::start() {
     auto* stop_be_action = new StopBeAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_stop_be", stop_be_action);
     _http_handlers.emplace_back(stop_be_action);
+
+    // Register monitor action
+    auto* monitor_action = new MonitorAction();
+    // Register all monitors
+    starrocks::ExecEnv::GetInstance()->get_monitor_manager()->register_monitors_to_http_action(monitor_action);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/monitor", monitor_action);
+    _http_handlers.emplace_back(monitor_action);
 
     // register pprof actions
     if (!config::pprof_profile_dir.empty()) {

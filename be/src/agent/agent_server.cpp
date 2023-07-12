@@ -49,6 +49,7 @@
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+#include "runtime/health_check/thread_pool_checker.h"
 #include "storage/snapshot_manager.h"
 #include "testutil/sync_point.h"
 #include "util/phmap/phmap.h"
@@ -191,6 +192,8 @@ void AgentServer::Impl::init_or_die() {
 #ifdef BE_TEST
         BUILD_DYNAMIC_TASK_THREAD_POOL(publish_version, 1, 3, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
                                        _thread_pool_publish_version);
+        (void)_exec_env->thread_pool_checker()->register_thread_pool("publish_version_pool",
+                                                                     _thread_pool_publish_version.get());
 #else
         int max_publish_version_worker_count = calc_real_num_threads(config::transaction_publish_version_worker_count);
         max_publish_version_worker_count =
@@ -200,15 +203,20 @@ void AgentServer::Impl::init_or_die() {
         BUILD_DYNAMIC_TASK_THREAD_POOL(publish_version, min_publish_version_worker_count,
                                        max_publish_version_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_publish_version);
+        (void)_exec_env->thread_pool_checker()->register_thread_pool("publish_version_pool",
+                                                                     _thread_pool_publish_version.get());
 #endif
         int real_drop_tablet_worker_count = (config::drop_tablet_worker_count > 0)
                                                     ? config::drop_tablet_worker_count
                                                     : std::max((int)(CpuInfo::num_cores() / 2), (int)1);
         BUILD_DYNAMIC_TASK_THREAD_POOL(drop, 1, real_drop_tablet_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_drop);
+        (void)_exec_env->thread_pool_checker()->register_thread_pool("drop_tablet_pool", _thread_pool_drop.get());
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(create_tablet, 1, config::create_tablet_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_create_tablet);
+        (void)_exec_env->thread_pool_checker()->register_thread_pool("create_tablet_pool",
+                                                                     _thread_pool_create_tablet.get());
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(alter_tablet, 0, config::alter_tablet_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_alter_tablet);

@@ -97,6 +97,11 @@ set(RUNTIME_FILES
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
     profile_report_worker.cpp
+        health_check/monitor_manager.cpp
+        health_check/thread_pool_checker.cpp
+        health_check/brpc_thread_checker.cpp
+        health_check/base_monitor.cpp
+        health_check/disk_checker.cpp
     schema_table_sink.cpp
     command_executor.cpp
     iceberg_table_sink.cpp

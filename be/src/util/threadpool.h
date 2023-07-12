@@ -276,6 +276,16 @@ public:
         return _total_queued_tasks;
     }
 
+    int num_max_queue_size() const {
+        std::lock_guard l(_lock);
+        return _max_queue_size;
+    }
+
+    int num_active_threads() const {
+        std::lock_guard l(_lock);
+        return _active_threads;
+    }
+
     MonoTime last_active_timestamp() const {
         std::lock_guard l(_lock);
         return _last_active_timestamp;
