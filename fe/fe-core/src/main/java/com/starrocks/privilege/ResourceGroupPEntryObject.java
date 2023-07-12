@@ -122,7 +122,7 @@ public class ResourceGroupPEntryObject implements PEntryObject {
             if (resourceGroup == null) {
                 throw new MetaNotFoundException("Can't find resource group : " + id);
             }
-            return resourceGroup.toString();
+            return resourceGroup.getName();
         }
     }
 }
