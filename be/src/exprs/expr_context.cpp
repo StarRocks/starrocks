@@ -184,11 +184,7 @@ std::string ExprContext::get_error_msg() const {
     return "";
 }
 
-StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk) {
-    return evaluate(_root, chunk, nullptr);
-}
-
-StatusOr<ColumnPtr> ExprContext::evaluate_with_filter(vectorized::Chunk* chunk, uint8_t* filter) {
+StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk, uint8_t* filter) {
     return evaluate(_root, chunk, filter);
 }
 
@@ -205,9 +201,9 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk, uin
     try {
         ColumnPtr ptr = nullptr;
         if (filter == nullptr) {
-            ptr = e->evaluate(this, chunk);
+            ASSIGN_OR_RETURN(ptr, e->evaluate_checked(this, chunk));
         } else {
-            ptr = e->evaluate_with_filter(this, chunk, filter);
+            ASSIGN_OR_RETURN(ptr, e->evaluate_with_filter(this, chunk, filter));
         }
         DCHECK(ptr != nullptr);
         if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {

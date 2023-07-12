@@ -240,6 +240,7 @@ message PTabletWriterCancelRequest {
     optional int64 txn_id = 4;
     optional int64 tablet_id = 5;
     repeated int64 tablet_ids = 6;
+    optional string reason = 7;
 };
 
 message PTabletWriterCancelResult {

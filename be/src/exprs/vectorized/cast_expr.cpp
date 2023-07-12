@@ -1057,8 +1057,8 @@ template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException
 class VectorizedCastExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        ColumnPtr column = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
         }
@@ -1133,8 +1133,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return Status::OK();                                                                                \
         }                                                                                                       \
                                                                                                                 \
-        ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {                             \
-            ColumnPtr column = _children[0]->evaluate(context, ptr);                                            \
+        StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {           \
+            ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));                   \
             if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {                   \
                 return ColumnHelper::create_const_null_column(column->size());                                  \
             }                                                                                                   \
@@ -1231,8 +1231,8 @@ template <PrimitiveType Type, bool AllowThrowException>
 class VectorizedCastToStringExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastToStringExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        ColumnPtr column = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
         }

@@ -51,7 +51,9 @@
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
-  + [Bulk load using Apache Spark™](./loading/SparkLoad.md)
+  + Load data using Apache Spark™
+    + [Load data using Spark Connector](./loading/Spark-connector-starrocks.md)
+    + [Load data in bulk using Spark Load](./loading/SparkLoad.md)
   + [Load data using INSERT](./loading/InsertInto.md)
   + [Load data using Stream Load transaction interface](./loading/Stream_Load_transaction_interface.md)
   + [Synchronize data from MySQL in real time](./loading/Flink_cdc_load.md)
@@ -240,6 +242,7 @@
       + [SHOW BACKUP](./sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md)
       + [SHOW CATALOGS](./sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)
       + [SHOW CREATE CATALOG](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md)
+      + [SHOW CREATE DATABASE](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20DATABASE.md)
       + [SHOW CREATE MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20MATERIALIZED%20VIEW.md)
       + [SHOW CREATE TABLE](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md)
       + [SHOW CREATE VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20VIEW.md)

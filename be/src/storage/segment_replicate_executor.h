@@ -99,6 +99,8 @@ public:
 
     const std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos() const { return &_failed_tablet_infos; }
 
+    const std::vector<int64_t> replica_node_ids() const { return _replica_node_ids; }
+
 private:
     friend class SegmentReplicateTask;
 
@@ -122,6 +124,7 @@ private:
     std::set<int64_t> _failed_node_id;
 
     int64_t _max_fail_replica_num;
+    std::vector<int64_t> _replica_node_ids;
 };
 
 class SegmentReplicateExecutor {

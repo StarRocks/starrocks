@@ -386,7 +386,7 @@ public:
     * @return: TypeColumn
     */
     template <PrimitiveType Type>
-    static ColumnPtr least(FunctionContext* context, const Columns& columns) {
+    static StatusOr<ColumnPtr> least(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
             return columns[0];
         }
@@ -427,7 +427,7 @@ public:
      * @return: TypeColumn
      */
     template <PrimitiveType Type>
-    static ColumnPtr greatest(FunctionContext* context, const Columns& columns) {
+    static StatusOr<ColumnPtr> greatest(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
             return columns[0];
         }
@@ -462,7 +462,7 @@ public:
     }
 
     template <DecimalRoundRule rule>
-    static ColumnPtr decimal_round(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> decimal_round(FunctionContext* context, const Columns& columns);
 
     // Specifically, keep_scale means whether to keep the original scale of lv
     // Given an example
@@ -512,7 +512,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(pmodFloatImpl, a, b) {
 }
 
 // fmod
-DEFINE_BINARY_FUNCTION(fmodImpl, fmod);
+DEFINE_BINARY_FUNCTION(fmodImpl, fmod)
 
 // mod
 DEFINE_BINARY_FUNCTION_WITH_IMPL(modImpl, a, b) {

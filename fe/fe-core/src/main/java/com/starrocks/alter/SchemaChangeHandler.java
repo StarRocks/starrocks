@@ -521,6 +521,11 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             int sortKeyIdx = targetIndexSchema.indexOf(oneCol.get());
             sortKeyIdxes.add(sortKeyIdx);
+            Type t = oneCol.get().getType();
+            if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
+                    t.isDatetime())) {
+                throw new DdlException("Sort key column[" + colName + "] type not supported: " + t);
+            }
         }
     }
 
@@ -1214,6 +1219,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                    return null;
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                    GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
                     return null;
                 }
             }

@@ -31,6 +31,9 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private final List<ScalarOperator> prunedPartitionPredicates;
     private final boolean usePkIndex;
 
+    // record if this scan is derived from SplitScanORToUnionRule
+    private boolean fromSplitOR;
+
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
         this(table, Maps.newHashMap(), Maps.newHashMap(), null, Operator.DEFAULT_LIMIT, null);
@@ -113,6 +116,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.hintsTabletIds = builder.hintsTabletIds;
         this.prunedPartitionPredicates = builder.prunedPartitionPredicates;
         this.usePkIndex = builder.usePkIndex;
+        this.fromSplitOR = builder.fromSplitOR;
     }
 
     public HashDistributionSpec getDistributionSpec() {
@@ -149,6 +153,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     public List<ScalarOperator> getPrunedPartitionPredicates() {
         return prunedPartitionPredicates;
+    }
+
+
+    public boolean isFromSplitOR() {
+        return fromSplitOR;
     }
 
     @Override
@@ -194,6 +203,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         private List<ScalarOperator> prunedPartitionPredicates;
 
         private boolean usePkIndex;
+
+        private boolean fromSplitOR;
 
         @Override
         public LogicalOlapScanOperator build() {
@@ -243,6 +254,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         public Builder setUsePkIndex(boolean usePkIndex) {
             this.usePkIndex = usePkIndex;
+            return this;
+        }
+
+        public Builder setFromSplitOR(boolean fromSplitOR) {
+            this.fromSplitOR = fromSplitOR;
             return this;
         }
     }

@@ -6,7 +6,7 @@ This topic describes FE, BE, and system parameters. It also provides suggestions
 
 FE parameters are classified into dynamic parameters and static parameters.
 
-- Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid after you restart your FE.
+- Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid if you restart your FE. Therefore, we recommend that you also modify the configuration items in the `fe.conf` file to prevent the loss of modifications.
 
 - Static parameters can only be configured and adjusted in the FE configuration file **fe.conf**. **After you modify this file, you must restart your FE for the changes to take effect.**
 
@@ -36,6 +36,10 @@ You can configure or modify the settings of FE dynamic parameters using [ADMIN S
 ADMIN SET FRONTEND CONFIG ("key" = "value");
 ```
 
+> **NOTE**
+>
+> The configurations will be restored to the default values in the `fe.conf` file after the FE restarts. Therefore, we recommend that you also modify the configuration items in `fe.conf` to prevent the loss of modifications.
+
 #### Logging
 
 | Parameter      | Unit | Default | Description                                                  |
@@ -53,7 +57,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |meta_delay_toleration_second      | s    | 300     | The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds.<br> If this duration is exceeded, the non-leader FE stops providing services. |
 | drop_backend_after_decommission  | -    | TRUE    | Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned.<br>`FALSE` indicates that the BE is not deleted after it is decommissioned. |
 | enable_collect_query_detail_info | -    | FALSE   | Whether to view the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query.<br>If this parameter is set to `FALSE`, the system does not collect the profile of the query. |
-| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This parameter is supported from v2.5.5 onwards. |
+| enable_background_refresh_connector_metadata | -    | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This parameter is supported from v2.5.5 onwards. |
 | background_refresh_metadata_interval_millis                  | ms   | 600000 | The interval between two consecutive Hive metadata cache refreshes. This parameter is supported from v2.5.5 onwards. |
 | background_refresh_metadata_time_secs_since_last_access_secs | s    | 86400  | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cahced metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards. |
 
@@ -132,9 +136,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | Parameter                                     | Unit | Default                | Description                                                  |
 | --------------------------------------------- | ---- | ---------------------- | ------------------------------------------------------------ |
 | enable_strict_storage_medium_check            | -    | FALSE                  | Whether the FE strictly checks the storage medium of BEs when users create tables. If this parameter is set to `TRUE`, the FE checks the storage medium of BEs when users create tables and returns an error if the storage medium of the BE is different from the `storage_medium` parameter specified in the CREATE TABLE statement. For example, the storage medium specified in the CREATE TABLE statement is SSD but the actual storage medium of BEs is HDD. As a result, the table creation fails. If this parameter is `FALSE`, the FE does not check the storage medium of BEs when users create table. |
-| capacity_used_percent_high_water              | -    | 0.75                   | The upper limit of disk usage on a BE. If this value is exceeded, table creation or clone jobs will not be sent to this BE, until the disk usage returns to normal. |
-| storage_high_watermark_usage_percent          | %    | 85                     | The upper limit of storage space usage for BE's storage directory.  If this value is exceeded, data can no longer be stored in this storage path. |
-| storage_min_left_capacity_bytes               | Byte | 2 \* 1024 \* 1024 \* 1024 | The minimum remaining storage space allowed in the BE storage directory, in Bytes. If this value is exceeded, data can no longer be stored in this storage path. |
+| enable_auto_tablet_distribution               | -    | TRUE                   | Whether to automatically set the number of buckets. <ul><li> If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets. For the strategy of automatically setting the number of buckets, see [Determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).</li><li>If this parameter is set to `FALSE`, you need to manually specify the the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.</li></ul>Starting from version 2.5.7, StarRocks supports setting this parameter.|
+| storage_usage_soft_limit_percent              | %    | 90                     | If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_usage_soft_limit_reserve_bytes`, tablets cannot be cloned into this directory. |
+| storage_usage_soft_limit_reserve_bytes        | Byte | 200 \* 1024 \* 1024 \* 1024 | If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_soft_limit_percent`, tablets cannot be cloned into this directory. |
 | catalog_trash_expire_second                   | s    | 86400                  | The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds. |
 | alter_table_timeout_second                    | s    | 86400                  | The timeout duration for the schema change operation (ALTER TABLE). Unit: seconds. |
 | recover_with_empty_tablet                     | -    | FALSE                  | Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones and the query fails. |
@@ -252,7 +256,7 @@ This section provides an overview of the static parameters that you can configur
 
 | Parameter                         | Default                                                      | Description                                                  |
 | --------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| async_load_task_pool_size         | 2                                                            | The size of the load task thread pool. This parameter is valid only for Broker Load. The value must be less than `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from 10 to 2.
+| max_broker_load_job_concurrency   | 2                                                            | The size of the load task thread pool. This parameter is valid only for Broker Load. The value must be less than `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from 10 to 2.
 | load_checker_interval_second      | 5                                                            | The time interval at which load jobs are processed on a rolling basis. Unit: second. |
 | transaction_clean_interval_second | 30                                                           | The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner. |
 | label_clean_interval_second       | 14400                                                        | The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner. |
@@ -365,8 +369,8 @@ BE dynamic parameters are as follows.
 | path_gc_check_step | 1000 | N/A | The maximum number of files that can be scanned continuously each time. |
 | path_gc_check_step_interval_ms | 10 | ms | The time interval between file scans. |
 | path_scan_interval_second | 86400 | Second | The time interval at which GC cleans expired data. |
-| storage_flood_stage_usage_percent | 95 | % | The storage usage threshold (in percentage) that can trigger the rejection of a Load or Restore job if it is reached. |
-| storage_flood_stage_left_capacity_bytes | 1073741824 | Byte | The minimum left capacity of the storage before the rejection of a Load or Restore job is triggered. |
+| storage_flood_stage_usage_percent | 95 | % | If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_flood_stage_left_capacity_bytes`, Load and Restore jobs are rejected. |
+| storage_flood_stage_left_capacity_bytes | 107374182400 | Byte | If the remaining storage space of the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_flood_stage_usage_percent`, Load and Restore jobs are rejected. |
 | tablet_meta_checkpoint_min_new_rowsets_num | 10 | N/A | The minimum number of rowsets to create since the last TabletMeta Checkpoint. |
 | tablet_meta_checkpoint_min_interval_secs | 600 | Second | The time interval of thread polling for a TabletMeta Checkpoint. |
 | max_runnings_transactions_per_txn_map | 100 | N/A | The maximum number of transactions that can run concurrently in each partition. |

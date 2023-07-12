@@ -141,7 +141,7 @@ Status LikePredicate::like_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-ColumnPtr LikePredicate::like(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::like(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
     return (state->function)(context, columns);
 }
@@ -203,30 +203,33 @@ Status LikePredicate::regex_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-ColumnPtr LikePredicate::regex(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::regex(FunctionContext* context, const Columns& columns) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
     return (state->function)(context, columns);
 }
 
 // like_fn
-ColumnPtr LikePredicate::like_fn(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::like_fn(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     return regex_match(context, columns, true);
 }
 
-ColumnPtr LikePredicate::regex_fn(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::regex_fn(FunctionContext* context, const Columns& columns) {
     return regex_match(context, columns, false);
 }
 
-ColumnPtr LikePredicate::like_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::like_fn_with_long_constant_pattern(FunctionContext* context,
+                                                                      const Columns& columns) {
     return match_fn_with_long_constant_pattern<true>(context, columns);
 }
 
-ColumnPtr LikePredicate::regex_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::regex_fn_with_long_constant_pattern(FunctionContext* context,
+                                                                       const Columns& columns) {
     return match_fn_with_long_constant_pattern<false>(context, columns);
 }
 
 template <bool full_match>
-ColumnPtr LikePredicate::match_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::match_fn_with_long_constant_pattern(FunctionContext* context,
+                                                                       const Columns& columns) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     const auto& value_column = VECTORIZED_FN_ARGS(0);
@@ -260,8 +263,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(ConstantEndsImpl, value, pattern) {
     return (value.size >= pattern.size) && (pattern == Slice(value.data + value.size - pattern.size, pattern.size));
 }
 
-ColumnPtr LikePredicate::constant_ends_with_fn(FunctionContext* context,
-                                               const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::constant_ends_with_fn(FunctionContext* context,
+                                                         const starrocks::vectorized::Columns& columns) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     const auto& value = VECTORIZED_FN_ARGS(0);
@@ -275,8 +278,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(ConstantStartsImpl, value, pattern) {
     return (value.size >= pattern.size) && (pattern == Slice(value.data, pattern.size));
 }
 
-ColumnPtr LikePredicate::constant_starts_with_fn(FunctionContext* context,
-                                                 const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::constant_starts_with_fn(FunctionContext* context,
+                                                           const starrocks::vectorized::Columns& columns) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     const auto& value = VECTORIZED_FN_ARGS(0);
@@ -290,7 +293,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(ConstantEqualsImpl, value, pattern) {
     return value == pattern;
 }
 
-ColumnPtr LikePredicate::constant_equals_fn(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::constant_equals_fn(FunctionContext* context,
+                                                      const starrocks::vectorized::Columns& columns) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     const auto& value = VECTORIZED_FN_ARGS(0);
@@ -299,8 +303,8 @@ ColumnPtr LikePredicate::constant_equals_fn(FunctionContext* context, const star
     return VectorizedStrictBinaryFunction<ConstantEqualsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);
 }
 
-ColumnPtr LikePredicate::constant_substring_fn(FunctionContext* context,
-                                               const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* context,
+                                                         const starrocks::vectorized::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
@@ -380,8 +384,8 @@ ColumnPtr LikePredicate::constant_substring_fn(FunctionContext* context,
 }
 
 // regex_match
-ColumnPtr LikePredicate::regex_match(FunctionContext* context, const starrocks::vectorized::Columns& columns,
-                                     bool is_like_pattern) {
+StatusOr<ColumnPtr> LikePredicate::regex_match(FunctionContext* context, const starrocks::vectorized::Columns& columns,
+                                               bool is_like_pattern) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     if (is_like_pattern) {
@@ -391,9 +395,9 @@ ColumnPtr LikePredicate::regex_match(FunctionContext* context, const starrocks::
     }
 }
 
-ColumnPtr LikePredicate::_predicate_const_regex(FunctionContext* context, ColumnBuilder<TYPE_BOOLEAN>* result,
-                                                const ColumnViewer<TYPE_VARCHAR>& value_viewer,
-                                                const ColumnPtr& value_column) {
+StatusOr<ColumnPtr> LikePredicate::_predicate_const_regex(FunctionContext* context, ColumnBuilder<TYPE_BOOLEAN>* result,
+                                                          const ColumnViewer<TYPE_VARCHAR>& value_viewer,
+                                                          const ColumnPtr& value_column) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     hs_scratch_t* scratch = nullptr;
@@ -433,7 +437,8 @@ ColumnPtr LikePredicate::_predicate_const_regex(FunctionContext* context, Column
     return result->build(value_column->is_constant());
 }
 
-ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::regex_match_full(FunctionContext* context,
+                                                    const starrocks::vectorized::Columns& columns) {
     const auto& value_column = VECTORIZED_FN_ARGS(0);
     const auto& pattern_column = VECTORIZED_FN_ARGS(1);
     auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
@@ -481,7 +486,8 @@ ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starro
     return result.build(all_const);
 }
 
-ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> LikePredicate::regex_match_partial(FunctionContext* context,
+                                                       const starrocks::vectorized::Columns& columns) {
     const auto& value_column = VECTORIZED_FN_ARGS(0);
     const auto& pattern_column = VECTORIZED_FN_ARGS(1);
     auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);

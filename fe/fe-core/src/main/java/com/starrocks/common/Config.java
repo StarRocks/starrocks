@@ -810,8 +810,8 @@ public class Config extends ConfigBase {
      * Currently, it only limits the load task of broker load, pending and loading phases.
      * It should be less than 'max_running_txn_num_per_db'
      */
-    @ConfField
-    public static int async_load_task_pool_size = 2;
+    @ConfField(mutable = true, aliases = {"async_load_task_pool_size"})
+    public static int max_broker_load_job_concurrency = 2;
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
@@ -1229,6 +1229,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_routine_load_job_num = 100;
+
+    /**
+     * enable replicated storage as default table engine
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_replicated_storage_as_default_engine = true;
 
     /**
      * the max concurrent routine load task num of a single routine load job

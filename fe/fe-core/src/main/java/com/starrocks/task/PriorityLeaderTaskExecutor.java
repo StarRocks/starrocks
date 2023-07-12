@@ -93,6 +93,14 @@ public class PriorityLeaderTaskExecutor {
         }
     }
 
+    public int getCorePoolSize() {
+        return executor.getCorePoolSize();
+    }
+
+    public void setCorePoolSize(int corePoolSize) {
+        executor.setCorePoolSize(corePoolSize);
+    }
+
     private class TaskChecker implements Runnable {
         @Override
         public void run() {

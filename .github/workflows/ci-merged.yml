@@ -16,6 +16,11 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
     steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
       - uses: dorny/paths-filter@v2
         id: changes
         with:
@@ -27,8 +32,10 @@ jobs:
       - name: update image
         if: steps.changes.outputs.thirdparty == 'true'
         run: |
-          rm -rf ./elastic-service
-          cp -rf /var/lib/elastic-service ./elastic-service
-          cd elastic-service && git pull
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER
-          
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*

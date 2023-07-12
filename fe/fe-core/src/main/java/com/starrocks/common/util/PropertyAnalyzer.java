@@ -44,7 +44,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -74,7 +73,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_REPLICATION_NUM = "replication_num";
     public static final String PROPERTIES_STORAGE_TYPE = "storage_type";
     public static final String PROPERTIES_STORAGE_MEDIUM = "storage_medium";
-    public static final String PROPERTIES_STORAGE_COLDOWN_TIME = "storage_cooldown_time";
+    public static final String PROPERTIES_STORAGE_COOLDOWN_TIME = "storage_cooldown_time";
     // for 1.x -> 2.x migration
     public static final String PROPERTIES_VERSION_INFO = "version_info";
     // for restore
@@ -137,10 +136,20 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
 
-    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
+    public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
+
+    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty inferredDataProperty,
+                                                   boolean isDefault)
             throws AnalysisException {
+        String mediumKey = PROPERTIES_STORAGE_MEDIUM;
+        String coolDownKey = PROPERTIES_STORAGE_COOLDOWN_TIME;
+        if (isDefault) {
+            mediumKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_MEDIUM;
+            coolDownKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_COOLDOWN_TIME;
+        }
+
         if (properties == null) {
-            return oldDataProperty;
+            return inferredDataProperty;
         }
 
         TStorageMedium storageMedium = null;
@@ -151,7 +160,7 @@ public class PropertyAnalyzer {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
-            if (!hasMedium && key.equalsIgnoreCase(PROPERTIES_STORAGE_MEDIUM)) {
+            if (!hasMedium && key.equalsIgnoreCase(mediumKey)) {
                 hasMedium = true;
                 if (value.equalsIgnoreCase(TStorageMedium.SSD.name())) {
                     storageMedium = TStorageMedium.SSD;
@@ -160,7 +169,7 @@ public class PropertyAnalyzer {
                 } else {
                     throw new AnalysisException("Invalid storage medium: " + value);
                 }
-            } else if (!hasCooldown && key.equalsIgnoreCase(PROPERTIES_STORAGE_COLDOWN_TIME)) {
+            } else if (!hasCooldown && key.equalsIgnoreCase(coolDownKey)) {
                 hasCooldown = true;
                 DateLiteral dateLiteral = new DateLiteral(value, Type.DATETIME);
                 coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
@@ -168,11 +177,11 @@ public class PropertyAnalyzer {
         } // end for properties
 
         if (!hasCooldown && !hasMedium) {
-            return oldDataProperty;
+            return inferredDataProperty;
         }
 
-        properties.remove(PROPERTIES_STORAGE_MEDIUM);
-        properties.remove(PROPERTIES_STORAGE_COLDOWN_TIME);
+        properties.remove(mediumKey);
+        properties.remove(coolDownKey);
 
         if (hasCooldown && !hasMedium) {
             throw new AnalysisException("Invalid data property. storage medium property is not found");
@@ -191,11 +200,7 @@ public class PropertyAnalyzer {
 
         if (storageMedium == TStorageMedium.SSD && !hasCooldown) {
             // set default cooldown time
-            coolDownTimeStamp = ((Config.tablet_sched_storage_cooldown_second <= 0) ||
-                    ((DataProperty.MAX_COOLDOWN_TIME_MS - currentTimeMs) / 1000L <
-                            Config.tablet_sched_storage_cooldown_second)) ?
-                    DataProperty.MAX_COOLDOWN_TIME_MS :
-                    currentTimeMs + Config.tablet_sched_storage_cooldown_second * 1000L;
+            coolDownTimeStamp = DataProperty.getSsdCooldownTimeMs();
         }
 
         Preconditions.checkNotNull(storageMedium);
@@ -324,7 +329,7 @@ public class PropertyAnalyzer {
 
     public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault)
             throws AnalysisException {
-        String key = "default.";
+        String key = PROPERTIES_DEFAULT_PREFIX;
         if (isDefault) {
             key += PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
         } else {

@@ -96,13 +96,14 @@ public:
     }
 
     Status get_dict_values(vectorized::Column* column) override { return _reader->get_dict_values(column); }
-
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) override {
-        return _reader->get_dict_values(dict_codes, column);
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, const vectorized::NullableColumn& nulls,
+                           vectorized::Column* column) override {
+        return _reader->get_dict_values(dict_codes, nulls, column);
     }
 
-    Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) override {
-        return _reader->get_dict_codes(dict_values, dict_codes);
+    Status get_dict_codes(const std::vector<Slice>& dict_values, const vectorized::NullableColumn& nulls,
+                          std::vector<int32_t>* dict_codes) override {
+        return _reader->get_dict_codes(dict_values, nulls, dict_codes);
     }
 
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }

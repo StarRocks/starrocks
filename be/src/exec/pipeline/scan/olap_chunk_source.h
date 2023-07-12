@@ -125,6 +125,7 @@ private:
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
+    RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
 };
 } // namespace pipeline
 } // namespace starrocks

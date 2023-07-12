@@ -140,12 +140,16 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     PrimaryKeyEncoder::encode(*tablet_schema.schema(), *keys, 0, keys->num_rows(), pk_column.get());
 
     // get rowid using pk index
-    EditVersion read_version;
     std::vector<uint64_t> rowids(1);
-    RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *pk_column, &read_version, &rowids));
-    if (rowids.size() != 1) {
-        return Status::InternalError(strings::Substitute("get rowid size not match tablet:$0 $1 != $2",
-                                                         _tablet->tablet_id(), rowids.size(), 1));
+    {
+        SCOPED_RAW_TIMER(&_stats.read_pk_index_ns);
+        EditVersion read_version;
+        RETURN_IF_ERROR(
+                _tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *pk_column, &read_version, &rowids, 3000));
+        if (rowids.size() != 1) {
+            return Status::InternalError(strings::Substitute("get rowid size not match tablet:$0 $1 != $2",
+                                                             _tablet->tablet_id(), rowids.size(), 1));
+        }
     }
     // do not check read version in use_pk_index mode
     uint32_t rssid = rowids[0] >> 32;
@@ -207,7 +211,8 @@ Status TabletReader::do_get_next(Chunk* chunk) {
     if (UNLIKELY(_collect_iter == nullptr)) {
         auto st = _init_collector_for_pk_index_read();
         if (!st.ok()) {
-            LOG(WARNING) << "using pk index for pointer read failed, fallback to normal read " << st;
+            LOG(WARNING) << "using pk index for pointer read failed, fallback to normal read " << st
+                         << " tablet:" << _tablet->tablet_id();
             RETURN_IF_ERROR(_init_collector(*_reader_params));
         }
     }

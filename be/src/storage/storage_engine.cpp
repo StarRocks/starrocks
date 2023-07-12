@@ -444,7 +444,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
         for (auto& it : _store_map) {
             if (it.second->is_used()) {
                 if (_available_storage_medium_type_count == 1 || it.second->storage_medium() == storage_medium) {
-                    if (it.second->available_bytes() > config::storage_flood_stage_left_capacity_bytes) {
+                    if (!it.second->capacity_limit_reached(0)) {
                         stores.push_back(it.second);
                     }
                 }
@@ -452,13 +452,31 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
         }
     }
 
+    // sort by disk usage in asc order
     std::sort(stores.begin(), stores.end(),
-              [](const auto& a, const auto& b) { return a->available_bytes() > b->available_bytes(); });
+              [](const auto& a, const auto& b) { return a->disk_usage(0) < b->disk_usage(0); });
 
-    const int mid = stores.size() / 2 + 1;
-    //  TODO(lingbin): should it be a global util func?
+    // compute average usage of all disks
+    double avg_disk_usage = 0.0;
+    double usage_sum = 0.0;
+    for (const auto& v : stores) {
+        usage_sum += v->disk_usage(0);
+    }
+    avg_disk_usage = usage_sum / stores.size();
+
+    // find the last root path which will participate in vector shuffle so that all the paths
+    // before and included can be chosen to create tablet on preferentially
+    size_t last_candidate_idx = 0;
+    for (const auto v : stores) {
+        if (v->disk_usage(0) > avg_disk_usage + config::storage_high_usage_disk_protect_ratio) {
+            break;
+        }
+        last_candidate_idx++;
+    }
+
+    // randomize the preferential paths to balance number of tablets each disk has
     std::srand(std::random_device()());
-    std::shuffle(stores.begin(), stores.begin() + mid, std::mt19937(std::random_device()()));
+    std::shuffle(stores.begin(), stores.begin() + last_candidate_idx, std::mt19937(std::random_device()()));
     return stores;
 }
 

@@ -294,8 +294,8 @@ class ParquetScannerTest : public ::testing::Test {
 
     template <bool is_nullable>
     ChunkPtr get_chunk(const std::vector<std::string>& columns_from_file,
-                              const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
-                              std::string specific_file, size_t expected_rows) {
+                       const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs, std::string specific_file,
+                       size_t expected_rows) {
         std::vector<std::string> file_names{std::move(specific_file)};
         const std::vector<std::string>& column_names = columns_from_file;
 
@@ -602,4 +602,4 @@ TEST_F(ParquetScannerTest, int96_timestamp) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

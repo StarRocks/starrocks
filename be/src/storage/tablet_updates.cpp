@@ -724,8 +724,7 @@ void TabletUpdates::_check_for_apply() {
     auto st = StorageEngine::instance()->update_manager()->apply_thread_pool()->submit(std::move(task));
     if (!st.ok()) {
         std::string msg = Substitute("submit apply task failed: $0 $1", st.to_string(), _debug_string(false, false));
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        LOG(FATAL) << msg;
     }
 }
 
@@ -3644,9 +3643,17 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
 }
 
 Status TabletUpdates::get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
-                                           std::vector<uint64_t>* rss_rowids) {
-    std::lock_guard lg(_index_lock);
-    return get_rss_rowids_by_pk_unlock(tablet, keys, read_version, rss_rowids);
+                                           std::vector<uint64_t>* rss_rowids, int64_t timeout_ms) {
+    if (timeout_ms <= 0) {
+        _index_lock.lock();
+    } else {
+        if (!_index_lock.try_lock_for(std::chrono::milliseconds(timeout_ms))) {
+            return Status::TimedOut("get_rss_rowids_by_pk try lock timeout");
+        }
+    }
+    auto st = get_rss_rowids_by_pk_unlock(tablet, keys, read_version, rss_rowids);
+    _index_lock.unlock();
+    return st;
 }
 
 Status TabletUpdates::get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& keys, EditVersion* read_version,

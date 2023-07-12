@@ -225,7 +225,7 @@ TEST(ObjectColumnTest, Percentile_test_swap_column) {
     s->append(3);
     columns.push_back(s);
 
-    auto column = PercentileFunctions::percentile_hash(ctx, columns);
+    auto column = PercentileFunctions::percentile_hash(ctx, columns).value();
     ASSERT_TRUE(column->is_object());
 
     auto percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
@@ -237,7 +237,7 @@ TEST(ObjectColumnTest, Percentile_test_swap_column) {
     s1->append(4);
     columns.clear();
     columns.push_back(s1);
-    auto column1 = PercentileFunctions::percentile_hash(ctx, columns);
+    auto column1 = PercentileFunctions::percentile_hash(ctx, columns).value();
     ASSERT_TRUE(column1->is_object());
 
     std::vector<uint32_t> idx = {1};

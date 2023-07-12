@@ -956,7 +956,7 @@ public class Alter {
         // get value from properties here
         // 1. data property
         DataProperty newDataProperty =
-                PropertyAnalyzer.analyzeDataProperty(properties, null);
+                PropertyAnalyzer.analyzeDataProperty(properties, null, false);
         // 2. replication num
         short newReplicationNum =
                 PropertyAnalyzer.analyzeReplicationNum(properties, (short) -1);

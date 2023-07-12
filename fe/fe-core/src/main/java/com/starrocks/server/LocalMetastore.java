@@ -80,7 +80,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
-import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AlreadyExistsException;
@@ -99,7 +98,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableInfo;
@@ -575,6 +573,12 @@ public class LocalMetastore implements ConnectorMetadata {
             if (!recycleBin.recoverTable(db, tableName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
+
+            Table recoverTable = db.getTable(tableName);
+            if (recoverTable instanceof OlapTable) {
+                DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), (OlapTable) recoverTable);
+            }
+
         } finally {
             db.writeUnlock();
         }
@@ -2129,7 +2133,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                 }
                 dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                        DataProperty.getInferredDefaultDataProperty());
+                        DataProperty.getInferredDefaultDataProperty(), false);
                 if (hasMedium) {
                     olapTable.setStorageMedium(dataProperty.getStorageMedium());
                 }
@@ -2300,7 +2304,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                                DataProperty.getInferredDefaultDataProperty());
+                                DataProperty.getInferredDefaultDataProperty(), false);
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
                         if (olapTable.dynamicPartitionExists() && olapTable.getColocateGroup() != null) {
                             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
@@ -2372,10 +2376,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 addToColocateGroupSuccess = true;
             }
             LOG.info("Successfully create table[{};{}]", tableName, tableId);
-            // register or remove table from DynamicPartition after table created
-            DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), olapTable);
-            stateMgr.getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
-                    tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
+            DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), olapTable);
         } finally {
             if (!createTblSuccess) {
                 for (Long tabletId : tabletIdSet) {
@@ -2620,7 +2621,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         }
                     }
                 } // end for partitions
-                DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(dbId, olapTable);
+                DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), olapTable);
             }
         }
     }
@@ -3346,13 +3347,13 @@ public class LocalMetastore implements ConnectorMetadata {
             // set storage medium
             boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.getInferredDefaultDataProperty());
+                    DataProperty.getInferredDefaultDataProperty(), false);
             if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
                 // set storage cooldown time into table property,
                 // because we don't have property in MaterializedView
                 materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME,
+                        .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                                 String.valueOf(dataProperty.getCooldownTimeMs()));
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
@@ -3420,6 +3421,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 List<ForeignKeyConstraint> foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(
                         properties, db, materializedView);
                 materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                materializedView.setEnableReplicatedStorage(PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, false));
             }
 
             if (!properties.isEmpty()) {
@@ -3844,13 +3849,41 @@ public class LocalMetastore implements ConnectorMetadata {
             tableProperty.buildDynamicProperty();
         }
 
-        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), table);
-        stateMgr.getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
-                table.getName(), DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
+        DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), table);
+
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
         editLog.logDynamicPartition(info);
     }
+
+    public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        Map<String, String> logProperties = new HashMap<>(properties);
+        DataProperty dataProperty = DataProperty.getInferredDefaultDataProperty();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            try {
+                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, dataProperty, false);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
+        if (!properties.isEmpty()) {
+            throw new DdlException("Modify failed because unknown properties: " + properties);
+        }
+        TableProperty tableProperty = table.getTableProperty();
+        if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            TStorageMedium storageMedium = dataProperty.getStorageMedium();
+            table.setStorageMedium(storageMedium);
+            tableProperty.getProperties()
+                    .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
+                            String.valueOf(dataProperty.getCooldownTimeMs()));
+        }
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+    }
+
 
     /**
      * Set replication number for unpartitioned table.
@@ -4357,7 +4390,6 @@ public class LocalMetastore implements ConnectorMetadata {
             final Cluster cluster = defaultCluster;
             cluster.removeBackend(id);
             backend.setDecommissioned(false);
-            backend.clearClusterName();
             backend.setBackendState(Backend.BackendState.free);
         }
     }
@@ -4962,4 +4994,5 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         return newPartitions;
     }
+
 }

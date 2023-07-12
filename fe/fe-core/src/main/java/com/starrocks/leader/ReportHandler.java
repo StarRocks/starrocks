@@ -1056,19 +1056,12 @@ public class ReportHandler extends Daemon {
                         continue;
                     }
 
-                    for (TTabletInfo tTabletInfo : backendTablets.get(tabletId).getTablet_infos()) {
-                        if (tTabletInfo.getSchema_hash() == schemaHash) {
-                            if (tTabletInfo.isSetUsed() && !tTabletInfo.isUsed()) {
-                                if (replica.setBad(true)) {
-                                    LOG.warn("set bad for replica {} of tablet {} on backend {}",
-                                            replica.getId(), tabletId, backendId);
-                                    ReplicaPersistInfo replicaPersistInfo = ReplicaPersistInfo.createForReport(
-                                            dbId, tableId, partitionId, indexId, tabletId, backendId, replica.getId());
-                                    backendTabletsInfo.addReplicaInfo(replicaPersistInfo);
-                                }
-                                break;
-                            }
-                        }
+                    if (replica.setBad(true)) {
+                        LOG.warn("set bad for replica {} of tablet {} on backend {}",
+                                replica.getId(), tabletId, backendId);
+                        ReplicaPersistInfo replicaPersistInfo = ReplicaPersistInfo.createForReport(
+                                dbId, tableId, partitionId, indexId, tabletId, backendId, replica.getId());
+                        backendTabletsInfo.addReplicaInfo(replicaPersistInfo);
                     }
                 }
             } finally {

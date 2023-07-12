@@ -42,7 +42,6 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
-import edu.umd.cs.findbugs.annotations.CheckForNull;
 
 import java.util.List;
 import java.util.Map;
@@ -99,7 +98,6 @@ public class AlterTableStatementAnalyzer {
 
         @Override
         public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
-            @CheckForNull
             Map<String, String> properties = clause.getProperties();
             if (properties.isEmpty()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Properties is not set");
@@ -158,6 +156,9 @@ public class AlterTableStatementAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
                 }
                 properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Short.toString(defaultReplicationNum));
+            } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                String storageMedium = properties.remove("default." + PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
                 clause.setNeedTableStable(false);
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
@@ -363,7 +364,7 @@ public class AlterTableStatementAnalyzer {
             // 1. data property
             DataProperty newDataProperty = null;
             newDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.getInferredDefaultDataProperty());
+                    DataProperty.getInferredDefaultDataProperty(), false);
             Preconditions.checkNotNull(newDataProperty);
 
             // 2. replication num

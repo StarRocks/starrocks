@@ -62,22 +62,33 @@ import java.util.stream.Collectors;
 
 /*
  * SystemHandler is for
- * 1. add/drop/decommisson backends
+ * 1. add/drop/decommission backends
  * 2. add/drop frontends
  * 3. add/drop/modify brokers
  */
 public class SystemHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SystemHandler.class);
 
+    private static final long MAX_REMAINED_TABLET_TO_CHECK_ON_DECOMM = 1000;
+
     public SystemHandler() {
         super("cluster");
     }
-
 
     @Override
     protected void runAfterCatalogReady() {
         super.runAfterCatalogReady();
         runAlterJobV2();
+    }
+
+    private void dropDecommissionedBackend(SystemInfoService systemInfoService, long beId) {
+        try {
+            systemInfoService.dropBackend(beId);
+            LOG.info("no tablet on decommission backend {}, drop it", beId);
+        } catch (DdlException e) {
+            // does not matter, maybe backend not exists
+            LOG.info("backend {} drop failed after decommission {}", beId, e.getMessage());
+        }
     }
 
     // check all decommissioned backends, if there is no tablet on that backend, drop it.
@@ -92,19 +103,15 @@ public class SystemHandler extends AlterHandler {
             }
 
             List<Long> backendTabletIds = invertedIndex.getTabletIdsByBackendId(beId);
-            if (backendTabletIds.isEmpty() && Config.drop_backend_after_decommission) {
-                try {
-                    systemInfoService.dropBackend(beId);
-                    LOG.info("no tablet on decommission backend {}, drop it", beId);
-                } catch (DdlException e) {
-                    // does not matter, may be backend not exist
-                    LOG.info("backend {} is dropped failed after decommission {}", beId, e.getMessage());
+            if (backendTabletIds.isEmpty()) {
+                if (Config.drop_backend_after_decommission) {
+                    dropDecommissionedBackend(systemInfoService, beId);
                 }
-                continue;
+            } else {
+                LOG.info("backend {} lefts {} replicas to decommission(show up to 20): {}", beId,
+                        backendTabletIds.size(),
+                        backendTabletIds.stream().limit(20).collect(Collectors.toList()));
             }
-
-            LOG.info("backend {} lefts {} replicas to decommission(show up to 20): {}", beId, backendTabletIds.size(),
-                     backendTabletIds.stream().limit(20).collect(Collectors.toList()));
         }
     }
 
@@ -223,7 +230,6 @@ public class SystemHandler extends AlterHandler {
     @Override
     public synchronized void cancel(CancelStmt stmt) throws DdlException {
         CancelAlterSystemStmt cancelAlterSystemStmt = (CancelAlterSystemStmt) stmt;
-        cancelAlterSystemStmt.getHostPortPairs();
 
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         // check if backends is under decommission

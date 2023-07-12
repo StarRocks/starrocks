@@ -18,8 +18,8 @@ DEFINE_UNARY_FN_WITH_IMPL(hllCardinalityFromStringImpl, str) {
     return hll.estimate_cardinality();
 }
 
-ColumnPtr HyperloglogFunction::hll_cardinality_from_string(FunctionContext* context,
-                                                           const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_cardinality_from_string(FunctionContext* context,
+                                                                      const starrocks::vectorized::Columns& columns) {
     return VectorizedStrictUnaryFunction<hllCardinalityFromStringImpl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(columns[0]);
 }
 
@@ -28,13 +28,13 @@ DEFINE_UNARY_FN_WITH_IMPL(hllCardinalityImpl, hll_ptr) {
     return hll_ptr->estimate_cardinality();
 }
 
-ColumnPtr HyperloglogFunction::hll_cardinality(FunctionContext* context,
-                                               const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_cardinality(FunctionContext* context,
+                                                          const starrocks::vectorized::Columns& columns) {
     return VectorizedStrictUnaryFunction<hllCardinalityImpl>::evaluate<TYPE_HLL, TYPE_BIGINT>(columns[0]);
 }
 
 // hll_hash
-ColumnPtr HyperloglogFunction::hll_hash(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_hash(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
 
     auto hll_column = HyperLogLogColumn::create();
@@ -59,7 +59,7 @@ ColumnPtr HyperloglogFunction::hll_hash(FunctionContext* context, const Columns&
 }
 
 // hll_empty
-ColumnPtr HyperloglogFunction::hll_empty(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_empty(FunctionContext* context, const Columns& columns) {
     auto p = HyperLogLogColumn::create();
 
     p->append_default();
@@ -74,12 +74,12 @@ DEFINE_UNARY_FN_WITH_IMPL(HllSerializeImpl, hll) {
     return std::string(data, size);
 }
 
-ColumnPtr HyperloglogFunction::hll_serialize(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_serialize(FunctionContext* context, const Columns& columns) {
     return VectorizedStringStrictUnaryFunction<HllSerializeImpl>::evaluate<TYPE_HLL, TYPE_VARCHAR>(columns[0]);
 }
 
 // hll_deserialize
-ColumnPtr HyperloglogFunction::hll_deserialize(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_deserialize(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
     auto hll_column = HyperLogLogColumn::create();
     size_t size = columns[0]->size();

@@ -2130,7 +2130,6 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
     EXPECT_EQ(262144, total_row_nums);
 }
 
-
 TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
     // Schema:
     //  message schema {

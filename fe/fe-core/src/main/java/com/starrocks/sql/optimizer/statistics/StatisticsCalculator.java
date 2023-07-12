@@ -107,16 +107,12 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
-import com.starrocks.statistic.StatsConstants;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -219,9 +215,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
         // 1. get table row count
-        long tableRowCount = getTableRowCount(table, node);
+        long tableRowCount = StatisticsCalcUtils.getTableRowCount(table, node, optimizerContext);
         // 2. get required columns statistics
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table, colRefToColumnMetaMap, optimizerContext);
         if (tableRowCount <= 1) {
             builder.setTableRowCountMayInaccurate(true);
         }
@@ -372,38 +368,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
     }
 
-    private Statistics.Builder estimateScanColumns(Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        Statistics.Builder builder = Statistics.builder();
-        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(colRefToColumnMetaMap.keySet());
-        List<String> columns = new ArrayList<>(colRefToColumnMetaMap.values())
-                .stream().map(Column::getName).collect(Collectors.toList());
-        List<ColumnStatistic> columnStatisticList =
-                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
-        Preconditions.checkState(requiredColumnRefs.size() == columnStatisticList.size());
-
-        Map<String, Histogram> histogramStatistics =
-                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
-
-        for (int i = 0; i < requiredColumnRefs.size(); ++i) {
-            ColumnStatistic columnStatistic;
-            if (histogramStatistics.containsKey(requiredColumnRefs.get(i).getName())) {
-                columnStatistic = ColumnStatistic.buildFrom(columnStatisticList.get(i)).setHistogram(
-                        histogramStatistics.get(requiredColumnRefs.get(i).getName())).build();
-            } else {
-                columnStatistic = columnStatisticList.get(i);
-            }
-            builder.addColumnStatistic(requiredColumnRefs.get(i), columnStatistic);
-            optimizerContext.getDumpInfo()
-                    .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatisticList.get(i));
-        }
-
-        return builder;
-    }
-
     private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
                                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                                     int outputRowCount) {
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table, colRefToColumnMetaMap, optimizerContext);
         builder.setOutputRowCount(outputRowCount);
 
         context.setStatistics(builder.build());
@@ -437,7 +405,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalSchemaScan(LogicalSchemaScanOperator node, ExpressionContext context) {
         Table table = node.getTable();
-        Statistics.Builder builder = estimateScanColumns(table, node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table,
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(1);
 
         context.setStatistics(builder.build());
@@ -447,7 +416,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
         Table table = node.getTable();
-        Statistics.Builder builder = estimateScanColumns(table, node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table,
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(1);
 
         context.setStatistics(builder.build());
@@ -456,7 +426,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalMetaScan(LogicalMetaScanOperator node, ExpressionContext context) {
-        Statistics.Builder builder = estimateScanColumns(node.getTable(), node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(node.getTable(),
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(node.getAggColumnIdToNames().size());
 
         context.setStatistics(builder.build());
@@ -465,7 +436,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalMetaScan(PhysicalMetaScanOperator node, ExpressionContext context) {
-        Statistics.Builder builder = estimateScanColumns(node.getTable(), node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(node.getTable(),
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(node.getAggColumnIdToNames().size());
 
         context.setStatistics(builder.build());
@@ -546,80 +518,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
         }
         return null;
-    }
-
-    private long getTableRowCount(Table table, Operator node) {
-        if (table.isNativeTable()) {
-            OlapTable olapTable = (OlapTable) table;
-            List<Partition> selectedPartitions;
-            Column smallColumn = table.getColumns().stream().filter(Column::isKey).findAny().orElse(null);
-            if (node.isLogical()) {
-                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
-                selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
-                smallColumn =
-                        olapScanOperator.getColRefToColumnMetaMap().values().stream().findAny().orElse(smallColumn);
-            } else {
-                PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) node;
-                selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
-                smallColumn =
-                        olapScanOperator.getColRefToColumnMetaMap().values().stream().findAny().orElse(smallColumn);
-            }
-            long rowCount = 0;
-
-            BasicStatsMeta basicStatsMeta =
-                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
-            if (basicStatsMeta != null && basicStatsMeta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
-                Preconditions.checkNotNull(smallColumn);
-                // The basicStatsMeta.getUpdateRows() interface can get the number of
-                // loaded rows in the table since the last statistics update. But this number is at the table level.
-                // So here we can count the number of partitions that have changed since the last statistics update,
-                // and then evenly distribute the number of updated rows at the table level to the partition boundaries
-                // The purpose of this is to make the statistics of the number of rows more accurate.
-                // For example, a large amount of data LOAD may cause the number of rows to change greatly.
-                // This leads to very inaccurate row counts.
-                int partitionCountModifiedAfterLastAnalyze = 0;
-                int partitionCount = 0;
-                for (Partition partition : ((OlapTable) table).getPartitions()) {
-                    LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                    if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
-                        partitionCountModifiedAfterLastAnalyze++;
-                    }
-
-                    partitionCount++;
-                }
-
-                ColumnStatistic cs =
-                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, smallColumn.getName());
-                long avgRowCount = (long) (cs.getRowCount() / Math.max(partitionCount, 1));
-                for (Partition partition : selectedPartitions) {
-                    long partitionRowCount = cs.isUnknown() ? partition.getRowCount() : avgRowCount;
-                    if (partitionCountModifiedAfterLastAnalyze > 0) {
-                        LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                        if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
-                            partitionRowCount +=
-                                    basicStatsMeta.getUpdateRows() / partitionCountModifiedAfterLastAnalyze;
-                        }
-                    }
-
-                    rowCount += partitionRowCount;
-                    optimizerContext.getDumpInfo()
-                            .addPartitionRowCount(table, partition.getName(), partitionRowCount);
-                }
-            } else {
-                for (Partition partition : selectedPartitions) {
-                    rowCount += partition.getRowCount();
-                    optimizerContext.getDumpInfo()
-                            .addPartitionRowCount(table, partition.getName(), partition.getRowCount());
-                }
-            }
-            // Currently, after FE just start, the row count of table is always 0.
-            // Explicitly set table row count to 1 to make our cost estimate work.
-            return Math.max(rowCount, 1);
-        }
-
-        return 1;
     }
 
     @Override

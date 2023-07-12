@@ -51,7 +51,7 @@ public:
 
     void abort() override;
 
-    void abort(const std::vector<int64_t>& tablet_ids);
+    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override;
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -109,6 +109,16 @@ private:
             _response->add_failed_tablet_vec()->Swap(tablet_info);
         }
 
+        void add_failed_replica_node_id(int64_t node_id, int64_t tablet_id) {
+            DCHECK(_response != nullptr);
+            std::lock_guard l(_response_lock);
+            (*_node_id_to_abort_tablets)[node_id].emplace_back(tablet_id);
+        }
+
+        void set_node_id_to_abort_tablets(std::unordered_map<int64_t, std::vector<int64_t>>* node_id_to_abort_tablets) {
+            _node_id_to_abort_tablets = node_id_to_abort_tablets;
+        }
+
         void set_count_down_latch(BThreadCountDownLatch* latch) { _latch = latch; }
 
     private:
@@ -121,6 +131,7 @@ private:
         vectorized::Chunk _chunk;
         std::unique_ptr<uint32_t[]> _row_indexes;
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
+        std::unordered_map<int64_t, std::vector<int64_t>>* _node_id_to_abort_tablets;
     };
 
     class WriteCallback : public AsyncDeltaWriterCallback {
@@ -150,6 +161,9 @@ private:
 
     void _commit_tablets(const PTabletWriterAddChunkRequest& request,
                          std::shared_ptr<LocalTabletsChannel::WriteContext> context);
+
+    void _abort_replica_tablets(const PTabletWriterAddChunkRequest& request, const std::string& abort_reason,
+                                const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets);
 
     LoadChannel* _load_channel;
 
@@ -182,6 +196,9 @@ private:
     bool _is_replicated_storage = false;
 
     std::unordered_map<int64_t, PNetworkAddress> _node_id_to_endpoint;
+
+    mutable bthread::Mutex _status_lock;
+    Status _status = Status::OK();
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

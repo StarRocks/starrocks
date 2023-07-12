@@ -255,6 +255,14 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         (maybe_chunk.value()->num_rows() > 0 ||
                          (maybe_chunk.value()->owner_info().is_last_chunk() && is_multilane(next_op)))) {
                         size_t row_num = maybe_chunk.value()->num_rows();
+                        if (UNLIKELY(row_num > runtime_state->chunk_size())) {
+                            return Status::InternalError(
+                                    fmt::format("Intermediate chunk size must not be greater than {}, actually {} "
+                                                "after {}-th operator {} in {}",
+                                                runtime_state->chunk_size(), row_num, i, curr_op->get_name(),
+                                                to_readable_string()));
+                        }
+
                         total_rows_moved += row_num;
                         {
                             SCOPED_TIMER(next_op->_push_timer);

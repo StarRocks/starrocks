@@ -203,11 +203,25 @@ public class LeaderImpl {
                 String errMsg = "task type: " + taskType + ", status_code: " + taskStatus.getStatus_code().toString() +
                         ", backendId: " + backend + ", signature: " + signature;
                 task.setErrorMsg(errMsg);
+                LOG.warn(errMsg);
                 // We start to let FE perceive the task's error msg
                 if (taskType != TTaskType.MAKE_SNAPSHOT && taskType != TTaskType.UPLOAD
                         && taskType != TTaskType.DOWNLOAD && taskType != TTaskType.MOVE
                         && taskType != TTaskType.CLONE && taskType != TTaskType.PUBLISH_VERSION
                         && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO) {
+                    if (taskType == TTaskType.REALTIME_PUSH) {
+                        PushTask pushTask = (PushTask) task;
+                        if (pushTask.getPushType() == TPushType.DELETE) {
+                            LOG.info("remove push replica. tabletId: {}, backendId: {}", task.getSignature(),
+                                     pushTask.getBackendId());
+
+                            String failMsg = "Backend: " + task.getBackendId() + "Tablet: " + pushTask.getTabletId() +
+                                             " error msg: " + taskStatus.getError_msgs().toString();
+                            pushTask.countDownLatch(pushTask.getBackendId(), pushTask.getTabletId(), failMsg);
+                            AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH, 
+                                                      task.getSignature());
+                        }
+                    }
                     return result;
                 }
             }

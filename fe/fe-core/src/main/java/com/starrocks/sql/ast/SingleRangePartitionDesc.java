@@ -116,7 +116,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
         // analyze data property
         partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                DataProperty.getInferredDefaultDataProperty());
+                DataProperty.getInferredDefaultDataProperty(), false);
         Preconditions.checkNotNull(partitionDataProperty);
 
         // analyze replication num

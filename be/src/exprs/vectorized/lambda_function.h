@@ -31,7 +31,7 @@ public:
 
     Status prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) override;
 
-    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
     // the slot ids of lambda expression may be originally from the arguments of this lambda function
     // or its parent lambda functions, or captured columns, remove the first one.

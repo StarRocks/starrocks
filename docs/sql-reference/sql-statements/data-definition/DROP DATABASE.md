@@ -4,7 +4,7 @@
 
 Drops a database in StarRocks.
 
-Syntax:
+## Syntax
 
 ```sql
 DROP DATABASE [IF EXISTS] <db_name> [FORCE]
@@ -22,3 +22,11 @@ Note:
     ```sql
     DROP DATABASE db_test;
     ```
+
+## References
+
+- [CREATE DATABASE](../data-definition/CREATE%20DATABASE.md)
+- [SHOW CREATE DATABASE](SHOW%20CREATE%20DATABASE.md)
+- [USE](../data-definition/USE.md)
+- [DESC](../Utility/DESCRIBE.md)
+- [SHOW DATABASES](../data-manipulation/SHOW%20DATABASES.md)

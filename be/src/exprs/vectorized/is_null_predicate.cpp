@@ -22,8 +22,8 @@ class VectorizedIsNullPredicate final : public Predicate {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIsNullPredicate);
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        ColumnPtr column = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
 
         if (column->only_null()) {
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, column->size());
@@ -46,8 +46,8 @@ class VectorizedIsNotNullPredicate final : public Predicate {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIsNotNullPredicate);
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        ColumnPtr column = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
 
         if (column->only_null()) {
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, column->size());

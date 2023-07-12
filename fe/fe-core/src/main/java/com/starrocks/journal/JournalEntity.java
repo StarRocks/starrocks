@@ -285,6 +285,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
+            case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
                 break;

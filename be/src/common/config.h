@@ -111,7 +111,7 @@ CONF_Int32(delete_worker_count_normal_priority, "2");
 // The count of thread to high priority delete.
 CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
-CONF_Int32(alter_tablet_worker_count, "3");
+CONF_mInt32(alter_tablet_worker_count, "3");
 // The count of parallel clone task per storage path
 CONF_mInt32(parallel_clone_task_per_path, "8");
 // The count of thread to clone. Deprecated
@@ -533,13 +533,13 @@ CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
 // this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
-// kafka reqeust timeout
+// kafka request timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
 
-// pulsar reqeust timeout
+// pulsar request timeout
 CONF_Int32(routine_load_pulsar_timeout_second, "10");
 
-// Is set to true, index loading failure will not causing BE exit,
+// Is set to true, index loading failure will not cause BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
 // CONF_Bool(auto_recover_index_loading_failure, "false");
 
@@ -582,7 +582,11 @@ CONF_mInt32(path_scan_interval_second, "86400");
 // The percent of max used capacity of a data dir
 CONF_mInt32(storage_flood_stage_usage_percent, "95"); // 95%
 // The min bytes that should be left of a data dir
-CONF_mInt64(storage_flood_stage_left_capacity_bytes, "1073741824"); // 1GB
+CONF_mInt64(storage_flood_stage_left_capacity_bytes, "107374182400"); // 100GB
+// When choosing storage root path for tablet creation, disks with usage larger than the
+// average value by `storage_high_usage_disk_protect_ratio` won't be chosen at first.
+CONF_mDouble(storage_high_usage_disk_protect_ratio, "0.1"); // 10%
+
 // Number of thread for flushing memtable per store.
 CONF_mInt32(flush_thread_num_per_store, "2");
 
@@ -596,21 +600,21 @@ CONF_Int64(brpc_max_body_size, "2147483648");
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 
 // Max number of txns for every txn_partition_map in txn manager.
-// this is a self protection to avoid too many txns saving in manager.
+// this is a self-protection to avoid too many txns saving in manager.
 CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 
 // The tablet map shard size, the value must be power of two.
-// this is a an enhancement for better performance to manage tablet.
+// this is an enhancement for better performance to manage tablet.
 CONF_Int32(tablet_map_shard_size, "32");
 
 CONF_String(plugin_path, "${STARROCKS_HOME}/plugin");
 
 // txn_map_lock shard size, the value is 2^n, n=0,1,2,3,4
-// this is a an enhancement for better performance to manage txn.
+// this is an enhancement for better performance to manage txn.
 CONF_Int32(txn_map_shard_size, "128");
 
 // txn_lock shard size, the value is 2^n, n=0,1,2,3,4
-// this is a an enhancement for better performance to commit and publish txn.
+// this is an enhancement for better performance to commit and publish txn.
 CONF_Int32(txn_shard_size, "1024");
 
 // Whether to continue to start be when load tablet from header failed.
@@ -656,7 +660,7 @@ CONF_mInt16(storage_format_version, "2");
 // 1 for LZ4_NULL
 CONF_mInt16(null_encoding, "0");
 
-// Do pre-aggregate if effect great than the factor, factor range:[1-100].
+// Do pre-aggregate if effect greater than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
 
 #ifdef __x86_64__
@@ -946,4 +950,6 @@ CONF_mBool(enable_pk_value_column_zonemap, "true");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
+CONF_mBool(enable_http_stream_load_limit, "false");
+
 } // namespace starrocks::config
