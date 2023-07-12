@@ -470,6 +470,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setActive(boolean active) {
         this.active = active;
+        this.inactiveReason = null;
     }
 
     public void setInactiveAndReason(String reason) {

@@ -94,6 +94,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -901,6 +902,12 @@ public class AlterJobMgr {
                 throw new DdlException("Materialized view can only SWAP WITH materialized view");
             }
         }
+
+        // inactive the related MVs
+        LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
+                String.format("based table %s swapped", origTblName));
+        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
+                String.format("based table %s swapped", newTblName));
 
         swapTableInternal(db, origTable, olapNewTbl);
 
