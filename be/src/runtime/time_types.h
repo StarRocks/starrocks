@@ -67,7 +67,7 @@ static const int32_t HOURS_PER_DAY = 24;
 
 static const int64_t USECS_PER_YEAR = 31536000000000;
 static const int64_t USECS_PER_QUARTER = 788400000000;
-static const int64_t USECS_PER_MONTH= 2592000000000;
+static const int64_t USECS_PER_MONTH = 2592000000000;
 static const int64_t USECS_PER_WEEK = 604800000000;
 static const int64_t USECS_PER_DAY = 86400000000;
 static const int64_t USECS_PER_HOUR = 3600000000;
