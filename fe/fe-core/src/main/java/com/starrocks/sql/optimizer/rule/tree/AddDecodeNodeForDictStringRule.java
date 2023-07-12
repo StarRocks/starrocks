@@ -739,7 +739,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             final PhysicalHashAggregateOperator newHashAggregator =
                     new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
                             aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
-                            aggOperator.getPredicate(), aggOperator.getProjection());
+                            aggOperator.getPredicate(), aggOperator.getProjection(), aggOperator.isUseStreamingPreAgg());
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
             return newHashAggregator;
         }

@@ -365,7 +365,6 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select distinct cast(2.0 as decimal) * v1 from t0_not_null";
         plan = getVerboseExplain(sql);
-        System.out.println(plan);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  group by: [4: expr, DECIMAL128(28,0), true]");
     }
@@ -506,7 +505,6 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select intersect_count(b1, v1, 999999) from test_object;";
         String plan = getThriftPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "int_literal:TIntLiteral(value:999999), " +
                 "output_scale:-1, " +
                 "has_nullable_child:false, is_nullable:false, is_monotonic:true)])], " +
@@ -782,7 +780,6 @@ public class AggregateTest extends PlanTestBase {
     public void testDistinctPushDown() throws Exception {
         String sql = "select distinct k1 from (select distinct k1 from test.pushdown_test) t where k1 > 1";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "RESULT SINK\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
@@ -1039,7 +1036,6 @@ public class AggregateTest extends PlanTestBase {
     public void testAggWithSubquery() throws Exception {
         String sql = "select sum(case when v4 = (select v1 from t0) then v4 end) from t1";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
 
         Assert.assertTrue(plan.contains("  7:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(if(1: v4 = 4: v1, 1: v4, NULL))\n" +
@@ -1635,7 +1631,6 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         String sql = "select distinct t0.v1  from t0 full outer join[shuffle] t1 on t0.v1 = t1.v4;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "  7:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: v1\n" +
                 "  |  \n" +
@@ -2311,7 +2306,6 @@ public class AggregateTest extends PlanTestBase {
                 "    EXCHANGE ID: 07\n" +
                 "    HASH_PARTITIONED: 2: v2, 3: v3",
                 "9:AGGREGATE (update serialize)\n" +
-                        "  |  STREAMING\n" +
                         "  |  output: count(2: v2), count(8: count)\n" +
                         "  |  group by: 3: v3");
 
@@ -2328,13 +2322,45 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select count(distinct v2), count(v3) from t0 join t1 group by 'a'";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertCContains(plan, "STREAM DATA SINK\n" +
                         "    EXCHANGE ID: 07\n" +
                         "    HASH_PARTITIONED: 2: v2",
                 "10:AGGREGATE (update serialize)\n" +
-                        "  |  STREAMING\n" +
                         "  |  output: count(2: v2), count(9: count)\n" +
                         "  |  group by: 7: expr");
+    }
+
+    @Test
+    public void testStreamingAgg() throws Exception {
+        String sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ " +
+                "count(*) from t0 join t1 group by v3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 3: v3");
+
+        sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ " +
+                "count(distinct v2), sum(v4) from t0 join t1 group by v3";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(4: v4)\n" +
+                "  |  group by: 2: v2, 3: v3",
+                "7:AGGREGATE (update serialize)\n" +
+                        "  |  output: count(2: v2), sum(8: sum)\n" +
+                        "  |  group by: 3: v3");
+
+        sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ " +
+                "count(distinct v2), array_length(array_agg(v1)) from t0 join t1 group by 'a'";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "6:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: array_agg(1: v1)\n" +
+                        "  |  group by: 2: v2",
+                "8:AGGREGATE (merge serialize)\n" +
+                        "  |  output: array_agg(9: array_agg)\n" +
+                        "  |  group by: 2: v2");
+
     }
 }
