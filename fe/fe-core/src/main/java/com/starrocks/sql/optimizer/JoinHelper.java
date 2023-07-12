@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -153,6 +154,30 @@ public class JoinHelper {
             }
         }
         return eqConjuncts;
+    }
+
+    public static Pair<List<BinaryPredicateOperator>, List<ScalarOperator>> separateEqualPredicatesFromOthers(
+            OptExpression optExpression) {
+        Preconditions.checkArgument(optExpression.getOp() instanceof LogicalJoinOperator);
+        LogicalJoinOperator joinOp = optExpression.getOp().cast();
+        List<ScalarOperator> onPredicates = Utils.extractConjuncts(joinOp.getOnPredicate());
+
+        ColumnRefSet leftChildColumns = optExpression.inputAt(0).getOutputColumns();
+        ColumnRefSet rightChildColumns = optExpression.inputAt(1).getOutputColumns();
+
+        List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
+                leftChildColumns, rightChildColumns, onPredicates);
+
+        onPredicates.removeAll(eqOnPredicates);
+        List<BinaryPredicateOperator> lhsEqRhsOnPredicates = Lists.newArrayList();
+        for (BinaryPredicateOperator s : eqOnPredicates) {
+            if (!leftChildColumns.containsAll(s.getChild(0).getUsedColumns())) {
+                lhsEqRhsOnPredicates.add(new BinaryPredicateOperator(s.getBinaryType(), s.getChild(1), s.getChild(0)));
+            } else {
+                lhsEqRhsOnPredicates.add(s);
+            }
+        }
+        return Pair.create(lhsEqRhsOnPredicates, onPredicates);
     }
 
     /**

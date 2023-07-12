@@ -68,7 +68,10 @@ public class UpdatePlanner {
             // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
+            Table table = updateStmt.getTable();
+            long tableId = table.getId();
             Optimizer optimizer = new Optimizer();
+            optimizer.setUpdateTableId(tableId);
             OptExpression optimizedPlan = optimizer.optimize(
                     session,
                     logicalPlan.getRoot(),
@@ -80,8 +83,6 @@ public class UpdatePlanner {
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
-            Table table = updateStmt.getTable();
-            long tableId = table.getId();
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             for (Column column : table.getFullSchema()) {
                 if (updateStmt.usePartialUpdate() && !column.isMaterializedColumn() &&
