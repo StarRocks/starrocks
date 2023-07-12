@@ -34,12 +34,14 @@ public class PushDownPredicateJoinRule extends TransformationRule {
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))));
     }
 
+
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
         OptExpression joinOpt = input.getInputs().get(0);
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(
-                joinOpt, false, false, context.getColumnRefFactory());
+                joinOpt, false, false, context.getColumnRefFactory(),
+                context.isEnableLeftRightJoinEquivalenceDerive());
         return Lists.newArrayList(joinPredicatePushdown.pushdown(filter.getPredicate()));
     }
 }
