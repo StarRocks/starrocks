@@ -55,7 +55,6 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
 }
 
 void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("apply_opwrite");
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
     rowset->set_id(_tablet_meta->next_rowset_id());
@@ -147,8 +146,6 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
 
     // 3. write to delvec file
     if (_buf.size() > 0) {
-        MonotonicStopWatch watch;
-        watch.start();
         auto delvec_file_name = gen_delvec_filename(txn_id);
         auto delvec_file_path = _tablet.delvec_location(delvec_file_name);
         // keep delete vector file name in tablet meta
@@ -159,9 +156,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         ASSIGN_OR_RETURN(auto writer_file, fs::new_writable_file(options, delvec_file_path));
         RETURN_IF_ERROR(writer_file->append(Slice(_buf.data(), _buf.size())));
         RETURN_IF_ERROR(writer_file->close());
-        if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
-            LOG(INFO) << "MetaFileBuilder sync delvec cost(ms): " << watch.elapsed_time() / 1000000;
-        }
+        TRACE("end write delvel");
     }
 
     // 4. clear delvec file record in version_to_file if it's not refered any more
@@ -188,16 +183,10 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
 }
 
 Status MetaFileBuilder::finalize(int64_t txn_id) {
-    MonotonicStopWatch watch;
-    watch.start();
-
     auto version = _tablet_meta->version();
     // finalize delvec
     RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
     RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
-    if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
-        LOG(INFO) << "MetaFileBuilder finalize cost(ms): " << watch.elapsed_time() / 1000000;
-    }
     _update_mgr->update_primary_index_data_version(_tablet, version);
     _fill_delvec_cache();
     _has_finalized = true;
@@ -250,9 +239,6 @@ MetaFileReader::MetaFileReader(const std::string& filepath, bool fill_cache) {
 Status MetaFileReader::load() {
     if (_access_file == nullptr) return _err_status;
 
-    MonotonicStopWatch watch;
-    watch.start();
-
     ASSIGN_OR_RETURN(auto file_size, _access_file->get_size());
     if (file_size <= 4) {
         return Status::Corruption(
@@ -266,9 +252,7 @@ Status MetaFileReader::load() {
         return Status::Corruption(fmt::format("failed to parse tablet meta {}", _access_file->filename()));
     }
     _load = true;
-    if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
-        LOG(INFO) << "MetaFileReader load cost(ms): " << watch.elapsed_time() / 1000000;
-    }
+    TRACE("end load tablet metadata");
     return Status::OK();
 }
 
@@ -290,9 +274,6 @@ Status MetaFileReader::get_del_vec(TabletManager* tablet_mgr, uint32_t segment_i
     // find delvec by segment id
     auto iter = _tablet_meta->delvec_meta().delvecs().find(segment_id);
     if (iter != _tablet_meta->delvec_meta().delvecs().end()) {
-        // found it!
-        MonotonicStopWatch watch;
-        watch.start();
         VLOG(2) << fmt::format("MetaFileReader get_del_vec {} segid {}", _tablet_meta->delvec_meta().ShortDebugString(),
                                segment_id);
         std::string buf;
@@ -323,9 +304,7 @@ Status MetaFileReader::get_del_vec(TabletManager* tablet_mgr, uint32_t segment_i
         delvec_cache_ptr = std::make_shared<DelVector>();
         delvec_cache_ptr->copy_from(*delvec);
         tablet_mgr->cache_delvec(cache_key, delvec_cache_ptr);
-        if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
-            LOG(INFO) << "MetaFileReader read delvec cost(ms): " << watch.elapsed_time() / 1000000;
-        }
+        TRACE("end load delvec");
         return Status::OK();
     }
     VLOG(2) << fmt::format("MetaFileReader get_del_vec not found, segmentid {} tablet_meta {}", segment_id,

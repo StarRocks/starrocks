@@ -121,8 +121,8 @@ static size_t get_metacache_usage(void*) {
 static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capacity", get_metacache_capacity, nullptr);
 static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
 
-static StatusOr<TabletMetadataPtr> publish(Tablet* tablet, int64_t base_version, int64_t new_version,
-                                           const int64_t* txns, int txns_size);
+static StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, int64_t base_version,
+                                           int64_t new_version, const int64_t* txns, int txns_size);
 
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
@@ -403,6 +403,7 @@ Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     cache_tablet_latest_metadata(metadata);
     auto t1 = butil::gettimeofday_us();
     g_put_tablet_metadata_latency << (t1 - t0);
+    TRACE("end write tablet metadata");
     return Status::OK();
 }
 
@@ -429,8 +430,8 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& path, bool fill_cache) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("get_tablet_metadata");
     if (auto ptr = lookup_tablet_metadata(path); ptr != nullptr) {
+        TRACE("got cached tablet metadata");
         return ptr;
     }
     ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path, fill_cache));
@@ -438,6 +439,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         auto value_ptr = std::make_unique<CacheValue>(ptr);
         fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
     }
+    TRACE("end read tablet metadata");
     return ptr;
 }
 
@@ -491,8 +493,8 @@ StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path,
 }
 
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fill_cache) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("get_txn_log");
     if (auto ptr = lookup_txn_log(path); ptr != nullptr) {
+        TRACE("got cached txn log");
         return ptr;
     }
     ASSIGN_OR_RETURN(auto ptr, load_txn_log(path, fill_cache));
@@ -500,6 +502,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
         auto value_ptr = std::make_unique<CacheValue>(ptr);
         fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
     }
+    TRACE("end load txn log");
     return ptr;
 }
 
@@ -539,24 +542,24 @@ Status TabletManager::put_txn_log(const TxnLog& log) {
 }
 
 Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("del_txn_log");
     auto t0 = butil::gettimeofday_us();
     auto location = txn_log_location(tablet_id, txn_id);
     erase_metacache(location);
     auto st = fs::delete_file(location);
     auto t1 = butil::gettimeofday_us();
     g_del_txn_log_latency << (t1 - t0);
+    TRACE("end delete txn log");
     return st.is_not_found() ? Status::OK() : st;
 }
 
 Status TabletManager::delete_txn_vlog(int64_t tablet_id, int64_t version) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("del_txn_vlog");
     auto t0 = butil::gettimeofday_us();
     auto location = txn_vlog_location(tablet_id, version);
     erase_metacache(location);
     auto st = fs::delete_file(location);
     auto t1 = butil::gettimeofday_us();
     g_del_txn_log_latency << (t1 - t0);
+    TRACE("end delete txn vlog");
     return st.is_not_found() ? Status::OK() : st;
 }
 
@@ -668,11 +671,14 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
 StatusOr<TabletMetadataPtr> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
                                                            const int64_t* txns, int txns_size) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
-    return publish(&tablet, base_version, new_version, txns, txns_size);
+    return publish(this, &tablet, base_version, new_version, txns, txns_size);
 }
 
-StatusOr<TabletMetadataPtr> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
-                                    int txns_size) {
+StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, int64_t base_version,
+                                    int64_t new_version, const int64_t* txns, int txns_size) {
+    if (txns_size != 1) {
+        return Status::NotSupported("does not support publish multiple txns yet");
+    }
     // Read base version metadata
     auto res = tablet->get_metadata(base_version);
     if (res.status().is_not_found()) {
@@ -763,20 +769,28 @@ StatusOr<TabletMetadataPtr> publish(Tablet* tablet, int64_t base_version, int64_
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
 
-    // Delete txn logs
-    for (int i = 0; i < txns_size; i++) {
-        auto txn_id = txns[i];
-        auto st = tablet->delete_txn_log(txn_id);
+    CHECK_EQ(1, txns_size);
+    auto tablet_id = tablet->id();
+    auto txn_id = txns[0];
+    auto clear_task = [=]() {
+        // Delete txn logs
+        auto st = tablet_mgr->delete_txn_log(tablet_id, txn_id);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
-    }
-    // Delete vtxn logs
-    if (alter_version != -1 && alter_version + 1 < new_version) {
-        for (int64_t v = alter_version + 1; v < new_version; ++v) {
-            auto st = tablet->delete_txn_vlog(v);
-            LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << st;
+        // Delete vtxn logs
+        if (alter_version != -1 && alter_version + 1 < new_version) {
+            for (int64_t v = alter_version + 1; v < new_version; ++v) {
+                auto st = tablet_mgr->delete_txn_vlog(tablet_id, v);
+                LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << st;
+            }
         }
-    }
+    };
 
+    auto tp = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
+    auto st = tp->submit_func(std::move(clear_task));
+    LOG_IF(INFO, !st.ok()) << "Fail to submit clear task of txn " << txn_id << ", ignore this error";
+#ifdef BE_TEST
+    tp->wait();
+#endif
     return new_metadata;
 }
 
