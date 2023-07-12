@@ -1298,11 +1298,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, addPartitionClause).copy();
-            if (distributionInfo.getBucketNum() == 0) {
-                int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5,
-                        Config.enable_auto_tablet_distribution);
-                distributionInfo.setBucketNum(numBucket);
-            }
+            olapTable.inferDistribution(distributionInfo);
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
@@ -1588,25 +1584,15 @@ public class LocalMetastore implements ConnectorMetadata {
 
     Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
                               Long version, Set<Long> tabletIdSet) throws DdlException {
-        return createPartitionCommon(db, table, partitionId, partitionName, table.getPartitionInfo(), version,
-                tabletIdSet);
-    }
-
-    private Partition createPartitionCommon(Database db, OlapTable table, long partitionId, String partitionName,
-                                            PartitionInfo partitionInfo, Long version, Set<Long> tabletIdSet)
-            throws DdlException {
+        PartitionInfo partitionInfo = table.getPartitionInfo();
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         for (long indexId : table.getIndexIdToMeta().keySet()) {
             MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
             indexMap.put(indexId, rollup);
         }
-        DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
 
-        if (distributionInfo.getBucketNum() == 0) {
-            int numBucket =
-                    CatalogUtils.calAvgBucketNumOfRecentPartitions(table, 5, Config.enable_auto_tablet_distribution);
-            distributionInfo.setBucketNum(numBucket);
-        }
+        DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
+        table.inferDistribution(distributionInfo);
 
         // create shard group
         long shardGroupId = 0;
@@ -2694,7 +2680,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
-        DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
+        DistributionInfo baseDistribution = distributionDesc.toDistributionInfo(baseSchema);
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
@@ -2770,7 +2756,7 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 materializedView =
                         new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
-                                distributionInfo, mvRefreshScheme);
+                                baseDistribution, mvRefreshScheme);
             }
         } else {
             Preconditions.checkState(RunMode.getCurrentRunMode().isAllowCreateLakeTable());
@@ -2780,7 +2766,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             materializedView =
                     new LakeMaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
-                            distributionInfo, mvRefreshScheme);
+                            baseDistribution, mvRefreshScheme);
         }
 
         // set comment
@@ -2891,26 +2877,6 @@ public class LocalMetastore implements ConnectorMetadata {
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
                 Integer maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
                 materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
-            }
-
-            // bucket number
-            // infer bucket number of materialized view based on base-table,
-            // currently is max{bucket_num of base_table}
-            // TODO: infer the bucket number according to MV pattern and cardinality
-            DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
-            if (distributionInfo.getBucketNum() == 0) {
-                int inferredBucketNum = 0;
-                for (BaseTableInfo base : materializedView.getBaseTableInfos()) {
-                    if (base.getTable().isNativeTableOrMaterializedView()) {
-                        OlapTable olapTable = (OlapTable) base.getTable();
-                        DistributionInfo dist = olapTable.getDefaultDistributionInfo();
-                        inferredBucketNum = Math.max(inferredBucketNum, dist.getBucketNum());
-                    }
-                }
-                if (inferredBucketNum == 0) {
-                    inferredBucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-                }
-                distributionInfo.setBucketNum(inferredBucketNum);
             }
 
             // set storage medium
