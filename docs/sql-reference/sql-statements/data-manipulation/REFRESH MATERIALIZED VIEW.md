@@ -26,7 +26,7 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 | partition_start_date      | no           | The start date of the partitions to refresh manually.  |
 | partition_end_date        | no           | The end date of the partitions to refresh manually.    |
 | FORCE                     | no           | If you specify this parameter, StarRocks forcibly refreshes the corresponding materialized view or partitions. If you do not specify this parameter, StarRocks automatically judges if the data is updated and refreshes the partition only when needed.  |
-| WITH ... MODE             | no           | Make a synchronous or asynchronous call of the refresh task. `SYNC` indicates making a synchronous call of the refresh task, and the SQL statement is returned only when the task succeeds or fails. `ASYNC` indicates making an asynchronous call of the refresh task, and the SQL statement is returned right after the task is submitted. Default: `ASYNC`. |
+| WITH ... MODE             | no           | Make a synchronous or asynchronous call of the refresh task. `SYNC` indicates making a synchronous call of the refresh task, and the SQL statement is returned only when the task succeeds or fails. `ASYNC` indicates making an asynchronous call of the refresh task, and the SQL statement is returned right after the task is submitted. Default: `ASYNC`. Supported from v3.1.0 onwards. |
 
 > **CAUTION**
 >
