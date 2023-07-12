@@ -1457,6 +1457,7 @@ public class StmtExecutor {
 
         long loadedRows = 0;
         int filteredRows = 0;
+        long loadedBytes = 0;
         long jobId = -1;
         long estimateScanRows = -1;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
@@ -1557,6 +1558,10 @@ public class StmtExecutor {
                 filteredRows = Integer.parseInt(coord.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL));
             }
 
+            if (coord.getLoadCounters().get(LoadJob.LOADED_BYTES) != null) {
+                loadedBytes = Long.parseLong(coord.getLoadCounters().get(LoadJob.LOADED_BYTES));
+            }
+
             // if in strict mode, insert will fail if there are filtered rows
             if (context.getSessionVariable().getEnableInsertStrict()) {
                 if (filteredRows > 0) {
@@ -1585,6 +1590,7 @@ public class StmtExecutor {
                 }
             }
 
+<<<<<<< HEAD
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
                     || stmt instanceof UpdateStmt)) {
                 if (targetTable instanceof ExternalOlapTable) {
@@ -1608,6 +1614,8 @@ public class StmtExecutor {
                 return;
             }
 
+=======
+>>>>>>> 97bf1a062c ([BugFix] Fix insert empty result as canceled load (#26913))
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                 if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
@@ -1639,8 +1647,7 @@ public class StmtExecutor {
                                 TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
                         entity.counterInsertLoadFinishedTotal.increase(1L);
                         entity.counterInsertLoadRowsTotal.increase(loadedRows);
-                        entity.counterInsertLoadBytesTotal
-                                .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
+                        entity.counterInsertLoadBytesTotal.increase(loadedBytes);
                     }
                 } else {
                     txnStatus = TransactionStatus.COMMITTED;
