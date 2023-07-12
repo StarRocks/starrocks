@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.predicate.And;
 import org.apache.paimon.predicate.CompoundPredicate;
 import org.apache.paimon.predicate.Equal;
@@ -243,5 +244,15 @@ public class PaimonPredicateConverterTest {
         LeafPredicate p2 = (LeafPredicate) compoundPredicate.children().get(1);
         Assert.assertTrue(p2.function() instanceof LessOrEqual);
         Assert.assertEquals(22, p2.literals().get(0));
+    }
+
+    @Test
+    public void testBinaryString() {
+        ConstantOperator value = ConstantOperator.createVarchar("ttt");
+        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F1, value);;
+        Predicate result = CONVERTER.convert(op);
+        Assert.assertTrue(result instanceof LeafPredicate);
+        LeafPredicate leafPredicate = (LeafPredicate) result;
+        Assert.assertEquals(BinaryString.fromString("ttt"), leafPredicate.literals().get(0));
     }
 }
