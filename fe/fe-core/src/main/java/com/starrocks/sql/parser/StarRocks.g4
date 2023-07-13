@@ -38,7 +38,7 @@ statement
     | useDatabaseStatement
     | useCatalogStatement
     | setCatalogStatement
-    | showDatabasesStatementWA
+    | showDatabasesStatement
     | alterDbQuotaStatement
     | createDbStatement
     | dropDbStatement
