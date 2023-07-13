@@ -220,6 +220,8 @@ public class ColocateTableIndex implements Writable {
     public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId,
                                    boolean isReplay)
             throws DdlException {
+        Preconditions.checkArgument(tbl.getDefaultDistributionInfo().supportColocate(),
+                "colocate not supported");
         writeLock();
         try {
             boolean groupAlreadyExist = true;
