@@ -36,9 +36,9 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OutFileClause;
-import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.http.HttpConnectContext;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
@@ -79,6 +79,9 @@ public class ResultSink extends DataSink {
         tResultSink.setType(sinkType);
         if (fileSinkOptions != null) {
             tResultSink.setFile_options(fileSinkOptions);
+        }
+        if (ConnectContext.get() instanceof HttpConnectContext) {
+            tResultSink.setFormat(((HttpConnectContext) ConnectContext.get()).getResultSinkFormatType());
         }
         result.setResult_sink(tResultSink);
         return result;

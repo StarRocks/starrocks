@@ -39,6 +39,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.privilege.PrivilegeActions;
@@ -112,8 +113,8 @@ public class ConnectScheduler {
 
         context.setConnectionId(nextConnectionId.getAndAdd(1));
         context.resetConnectionStartTime();
-        // no necessary for nio.
-        if (context instanceof NConnectContext) {
+        // no necessary for nio or Http.
+        if (context instanceof NConnectContext || context instanceof HttpConnectContext) {
             return true;
         }
         if (executor.submit(new LoopHandler(context)) == null) {

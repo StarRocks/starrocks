@@ -59,7 +59,13 @@ enum TResultSinkType {
     MYSQL_PROTOCAL,
     FILE,
     STATISTIC,
-    VARIABLE
+    VARIABLE,
+    HTTP_PROTOCAL
+}
+
+enum TResultSinkFormatType {
+    JSON,
+    OTHERS
 }
 
 struct TParquetOptions {
@@ -144,6 +150,7 @@ struct TMultiCastDataStreamSink {
 struct TResultSink {
     1: optional TResultSinkType type;
     2: optional TResultFileSinkOptions file_options;
+    3: optional TResultSinkFormatType format;
 }
 
 struct TMysqlTableSink {

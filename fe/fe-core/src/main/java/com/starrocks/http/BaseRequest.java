@@ -52,15 +52,17 @@ import java.util.Map;
 
 public class BaseRequest {
     protected ChannelHandlerContext context;
+    protected HttpConnectContext connectContext;
     protected HttpRequest request;
     protected Map<String, String> params = Maps.newHashMap();
 
     private boolean isAuthorized = false;
     private QueryStringDecoder decoder;
 
-    public BaseRequest(ChannelHandlerContext ctx, HttpRequest request) {
+    public BaseRequest(ChannelHandlerContext ctx, HttpRequest request, HttpConnectContext connectContext) {
         this.context = ctx;
         this.request = request;
+        this.connectContext = connectContext;
     }
 
     public ChannelHandlerContext getContext() {
@@ -169,5 +171,9 @@ public class BaseRequest {
         InetSocketAddress clientSocket = (InetSocketAddress) context.channel().remoteAddress();
         String clientIp = clientSocket.getHostString();
         return clientIp;
+    }
+
+    public HttpConnectContext getConnectContext() {
+        return connectContext;
     }
 }

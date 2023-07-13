@@ -475,18 +475,22 @@ class StarrocksSQLApiLib(object):
             act_code = act[0]
             act_std = act[1]
             act_std_is_json = act_std.startswith("{")
-
             # check json/str match
             tools.assert_equal(exp_std_is_json, act_std_is_json)
 
             if exp_std_is_json:
-                exp_std = json.loads(exp_std)
-                act_std = json.loads(act_std)
-                # check all key,values in exp_std
-                tools.assert_true(
-                    all(k in act_std and exp_std[k] == act_std[k] for k in exp_std),
-                    "shell result json not match, \n[exp]: %s,\n[act]: %s" % (exp_std, act_std),
-                )
+                try:
+                    exp_std = json.loads(exp_std)
+                    act_std = json.loads(act_std)
+                    # check all key,values in exp_std
+                    tools.assert_true(
+                        all(k in act_std and exp_std[k] == act_std[k] for k in exp_std),
+                        "shell result json not match, \n[exp]: %s,\n[act]: %s" % (exp_std, act_std),
+                    )
+                except Exception as e:
+                    # if can't be treat as json, cmp as str
+                    if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
+                        tools.assert_true(False, "shell result str not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
             else:
                 # str
                 if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
