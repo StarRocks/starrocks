@@ -378,7 +378,6 @@ BE dynamic parameters are as follows.
 | load_error_log_reserve_hours | 48 | Hour | The time for which data loading logs are reserved. |
 | streaming_load_max_mb | 10240 | MB | The maximum size of a file that can be streamed into StarRocks. |
 | streaming_load_max_batch_size_mb | 100 | MB | The maximum size of a JSON file that can be streamed into StarRocks. |
-| memory_maintenance_sleep_time_s | 10 | Second | The time interval at which TCMalloc GC is triggered. StarRocks executes GC periodically, and returns the released memory memory to the operating system. |
 | write_buffer_size | 104857600 | Byte | The buffer size of MemTable in the memory. This configuration item is the threshold to trigger a flush. |
 | tablet_stat_cache_update_interval_second | 300 | Second | The time interval at which to update Tablet Stat Cache. |
 | result_buffer_cancelled_interval_time | 300 | Second | The wait time before BufferControlBlock release data. |

@@ -24,7 +24,6 @@ Explanation:
 | Name | Default| Description|  
 | --- | --- | --- |
 | vector_chunk_size | 4096 | Number of chunk rows |
-| tc_use_memory_min | 10737418240 | minimum reserved memory for TCmalloc, exceeding which StarRocks will return free memory to the operating system |
 | mem_limit | 80% | The percentage of total memory that BE can use. If BE is deployed as a standalone, there is no need to configure it. If it is deployed with other services that consume more memory, it should be configured separately. |
 | disable_storage_page_cache | false | The boolean value to control if to disable PageCache. When PageCache is enabled, StarRocks caches the query results. PageCache can significantly improve the query performance when similar queries are repeated frequently. `true` indicates to disable PageCache. Use this item together with `storage_page_cache_limit`, you can accelerate query performance in scenarios with sufficient memory resources and much data scan. The value of this item has been changed from `true` to `false` since StarRocks v2.4. |
 | write_buffer_size | 104857600 |  The capacity limit of a single MemTable, exceeding which a disk swipe will be performed. |
@@ -53,37 +52,93 @@ Explanation:
 <http://be_ip:be_http_port/mem_tracker?type=query_pool&upper_level=3>
 ~~~
 
-* **tcmalloc**
+* **jemalloc**
 
 ~~~ bash
 <http://be_ip:be_http_port/memz>
 ~~~
 
 ~~~plain text
-------------------------------------------------
-MALLOC:      777276768 (  741.3 MiB) Bytes in use by application
-MALLOC: +   8851890176 ( 8441.8 MiB) Bytes in page heap freelist
-MALLOC: +    143722232 (  137.1 MiB) Bytes in central cache freelist
-MALLOC: +     21869824 (   20.9 MiB) Bytes in transfer cache freelist
-MALLOC: +    832509608 (  793.9 MiB) Bytes in thread cache freelists
-MALLOC: +     58195968 (   55.5 MiB) Bytes in malloc metadata
-MALLOC:   ------------
-MALLOC: =  10685464576 (10190.5 MiB) Actual memory used (physical + swap)
-MALLOC: +  25231564800 (24062.7 MiB) Bytes released to OS (aka unmapped)
-MALLOC:   ------------
-MALLOC: =  35917029376 (34253.1 MiB) Virtual address space used
-MALLOC:
-MALLOC:         112388              Spans in use
-MALLOC:            335              Thread heaps in use
-MALLOC:           8192              Tcmalloc page size
-------------------------------------------------
-Call ReleaseFreeMemory() to release freelist memory to the OS (via madvise()).
-Bytes released to the OS take up virtual address space but no physical memory.
+Mem Limit: 50.82 GB
+Mem Consumption: 21.67 GB
+___ Begin jemalloc statistics ___
+Version: "5.2.1-0-gea6b3e973b477b8061e0076bb257dbd7f3faa756"
+Build-time option settings
+  config.cache_oblivious: true
+  config.debug: false
+  config.fill: true
+  config.lazy_lock: false
+  config.malloc_conf: ""
+  config.opt_safety_checks: false
+  config.prof: true
+  config.prof_libgcc: true
+  config.prof_libunwind: false
+  config.stats: true
+  config.utrace: false
+  config.xmalloc: false
+Run-time option settings
+  opt.abort: false
+  opt.abort_conf: false
+  opt.confirm_conf: false
+  opt.retain: true
+  opt.dss: "secondary"
+  opt.narenas: 32
+  opt.percpu_arena: "percpu"
+  opt.oversize_threshold: 0
+  opt.metadata_thp: "auto"
+  opt.background_thread: true (background_thread: true)
+  opt.dirty_decay_ms: 5000 (arenas.dirty_decay_ms: 5000)
+  opt.muzzy_decay_ms: 5000 (arenas.muzzy_decay_ms: 5000)
+  opt.lg_extent_max_active_fit: 6
+  opt.junk: "false"
+  opt.zero: false
+  opt.tcache: true
+  opt.lg_tcache_max: 15
+  opt.thp: "default"
+  opt.prof: false
+  opt.prof_prefix: "jeprof"
+  opt.prof_active: true (prof.active: false)
+  opt.prof_thread_active_init: true (prof.thread_active_init: false)
+  opt.lg_prof_sample: 19 (prof.lg_sample: 0)
+  opt.prof_accum: false
+  opt.lg_prof_interval: -1
+  opt.prof_gdump: false
+  opt.prof_final: false
+  opt.prof_leak: false
+  opt.stats_print: false
+  opt.stats_print_opts: ""
+Profiling settings
+  prof.thread_active_init: false
+  prof.active: false
+  prof.gdump: false
+  prof.interval: 0
+  prof.lg_sample: 0
+Arenas: 32
+Quantum size: 16
+Page size: 4096
+Maximum thread-cached size class: 32768
+Number of bin size classes: 36
+Number of thread-cache bin size classes: 41
+Number of large size classes: 196
+Allocated: 23549031352, active: 25295286272, metadata: 1065318656 (n_thp 0), resident: 26613735424, mapped: 26898759680, retained: 160729759744
+Background threads: 4, num_runs: 2953297, run_interval: 553974185 ns
+                           n_lock_ops (#/sec)       n_waiting (#/sec)      n_spin_acq (#/sec)  n_owner_switch (#/sec)   total_wait_ns   (#/sec)     max_wait_ns  max_n_thds
+background_thread               54913       0               0       0               0       0              41       0               0         0               0           0
+ctl                            219482       0               0       0               0       0               2       0               0         0               0           0
+prof                                0       0               0       0               0       0               0       0               0         0               0           0
+Merged arenas stats:
+assigned threads: 1084
+uptime: 411881355428623
+dss allocation precedence: "N/A"
+decaying:  time       npages       sweeps     madvises       purged
+   dirty:   N/A        43823     16323126    344345699   7385082027
+   muzzy:   N/A        25602     16048407    309650104   6030684663
+                            allocated         nmalloc (#/sec)         ndalloc (#/sec)       nrequests   (#/sec)           nfill   (#/sec)          nflush   (#/sec)
+small:                    16484017080    146894107154  356642    146752101115  356297    291279410042    707193      5718896563     13884      2713220447      6587
+large:                     7065014272      2863530205    6952      2863421415    6952      4582347015     11125      2863530205      6952               0         0
+total:                    23549031352    149757637359  363594    149615522530  363249    295861757057    718318      8582426768     20837      2713220447      6587
+...
 ~~~
-
-The memory queried by this method is accurate. However, some memory in StarRocks is reserved but not in use. TcMalloc counts the memory that is reserved, not the memory used.
-
-Here `Bytes in use by application` refers to the memory currently in use.
 
 * **metrics**
 
