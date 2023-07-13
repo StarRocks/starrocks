@@ -508,6 +508,11 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitInPredicate(InPredicate node, Context context)
                 throws SemanticException {
+            List<Expr> lhsSubQueries = Lists.newArrayList();
+            node.getChild(0).collect(Subquery.class, lhsSubQueries);
+            if (!lhsSubQueries.isEmpty()) {
+                throw new SemanticException("Subquery in left-side child of in-predicate is not supported");
+            }
             if (!(node.getChild(1) instanceof Subquery)) {
                 return new InPredicateOperator(node.isNotIn(),
                         node.getChildren().stream()
