@@ -413,6 +413,7 @@ public:
 
     bool need_report_exec_state();
     void report_exec_state_if_necessary();
+    void runtime_report_action();
 
     std::string to_readable_string() const;
 

@@ -440,15 +440,19 @@ void PipelineDriver::report_exec_state_if_necessary() {
         return;
     }
 
+    _fragment_ctx->report_exec_state_if_necessary();
+}
+
+void PipelineDriver::runtime_report_action() {
     COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
     COUNTER_SET(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
+    _update_overhead_timer();
     for (auto& op : _operators) {
         COUNTER_SET(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +
                                               op->_finishing_timer->value() + op->_finished_timer->value() +
                                               op->_close_timer->value());
+        op->update_metrics(_fragment_ctx->runtime_state());
     }
-
-    _fragment_ctx->report_exec_state_if_necessary();
 }
 
 void PipelineDriver::mark_precondition_not_ready() {

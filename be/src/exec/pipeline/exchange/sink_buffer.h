@@ -173,7 +173,6 @@ private:
     std::atomic<int64_t> _rpc_cumulative_time = 0;
 
     // RuntimeProfile counters
-    std::atomic_bool _is_profile_updated = false;
     std::atomic<int64_t> _bytes_enqueued = 0;
     std::atomic<int64_t> _request_enqueued = 0;
     std::atomic<int64_t> _bytes_sent = 0;
