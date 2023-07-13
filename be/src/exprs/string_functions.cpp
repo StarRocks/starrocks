@@ -2867,7 +2867,6 @@ static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* st
             continue;
         }
         match_info_chain.info_chain.clear();
-        match_info_chain.last_to = 0;
 
         auto rpl_value = rpl_viewer.value(row);
 
@@ -2885,10 +2884,9 @@ static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* st
                         value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
                     } else if (value->info_chain.back().from == from) {
                         value->info_chain.back().to = to;
-                    } else {
+                    } else if (value->info_chain.back().to <= from) {
                         value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
                     }
-                    value->last_to = to;
                     return 0;
                 },
                 &match_info_chain);
