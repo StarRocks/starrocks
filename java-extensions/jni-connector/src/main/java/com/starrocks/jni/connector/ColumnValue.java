@@ -29,7 +29,7 @@ public interface ColumnValue {
 
     double getDouble();
 
-    String getString();
+    String getString(ColumnType.TypeValue type);
     String getTimestamp(ColumnType.TypeValue type);
     byte[] getBytes();
 
