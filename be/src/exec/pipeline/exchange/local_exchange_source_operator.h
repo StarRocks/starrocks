@@ -147,7 +147,7 @@ private:
     PendingPartitionChunks& _max_row_partition_chunks();
 
     bool _local_buffer_almost_full() const {
-        return _local_memory_usage >= _memory_manager->get_memory_limit_per_driver() * 0.8;
+        return _local_memory_usage >= _local_memory_limit;
     }
 
     bool _key_partition_pending_chunk_empty() const {
