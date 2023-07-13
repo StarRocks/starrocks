@@ -77,7 +77,6 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
     private final Map<Integer, ColumnRefSet> columnOrigins = Maps.newHashMap();
     private final Map<OptExpression, Set<ColumnRefOperator>> uniqueKeyColRefs = Maps.newHashMap();
     private final Map<ColumnRefOperator, Map<OptExpression, ColumnRefOperator>> foreignKeyColRefs = Maps.newHashMap();
-
     private final Map<OptExpression, Integer> scanNodeOrdinals = Maps.newHashMap();
     private final List<OptExpression> ordinalToScanNodes = Lists.newArrayList();
 
@@ -288,10 +287,9 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
             columnToScans.put(col, optExpression);
         });
 
-        int ordinal = scanNodeOrdinals.size();
-        scanNodeOrdinals.put(optExpression, ordinal);
-        ordinalToScanNodes.add(optExpression);
         computeOriginsOfColumnRefs(optExpression);
+        int ordinal = scanNodeOrdinals.getOrDefault(optExpression, -1);
+        Preconditions.checkArgument(ordinal >= 0);
         RoaringBitmap scanSet = RoaringBitmap.bitmapOf(ordinal);
         scanOps.put(optExpression, scanSet);
         cpScanOps.put(optExpression, scanSet);
@@ -326,6 +324,20 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
     }
 
     boolean process(OptExpression root) {
+        // Assign ordinal in ascending order in pre-order travel, so the larger the ordinal,
+        // the higher the Scan operator appears in plan, we prefer to prune the higher scan
+        // Operator if there are many Scan operator access the same tables and join on PK to
+        // prevent the operator who sits amid the path from the common ancestor of the
+        // pruned and the retained Scan operator to the pruned Scan operator from missing the
+        // referenced ColumnRef originates from the pruned Scan operator.
+        for (OptExpression child : root.getInputs()) {
+            if (child.getOp() instanceof LogicalOlapScanOperator) {
+                int ordinal = scanNodeOrdinals.size();
+                scanNodeOrdinals.put(child, ordinal);
+                ordinalToScanNodes.add(child);
+            }
+        }
+
         Map<OptExpression, Pair<OptExpression, Integer>> candidateFrontiers = Maps.newHashMap();
         for (int i = 0; i < root.getInputs().size(); ++i) {
             OptExpression child = root.inputAt(i);

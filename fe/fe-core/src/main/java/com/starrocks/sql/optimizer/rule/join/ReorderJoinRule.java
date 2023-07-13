@@ -16,6 +16,8 @@ package com.starrocks.sql.optimizer.rule.join;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.PlannerProfile;
@@ -180,6 +182,14 @@ public class ReorderJoinRule extends Rule {
                 Optional<OptExpression> newChild =
                         enumerate(new JoinReorderCardinalityPreserving(context), context, child, multiJoinNode, false);
                 if (newChild.isPresent()) {
+                    int prevNumCrossJoins =
+                            Utils.countJoinNodeSize(child, Sets.newHashSet(JoinOperator.CROSS_JOIN));
+                    int numCrossJoins =
+                            Utils.countJoinNodeSize(newChild.get(), Sets.newHashSet(JoinOperator.CROSS_JOIN));
+                    // we adopt result of reorder only if the number of cross joins is reduced
+                    if (numCrossJoins != 0 && prevNumCrossJoins <= numCrossJoins) {
+                        continue;
+                    }
                     if (parent != null) {
                         parent.setChild(childIdx, newChild.get());
                     } else {

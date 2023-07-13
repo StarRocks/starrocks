@@ -335,4 +335,27 @@ public class TablePruningCTETest extends TablePruningTestBase {
                 "  and cnation.n_regionkey = cregion.r_regionkey";
         checkHashJoinCountWithBothRBOAndCBO(sql, 3);
     }
+
+    @Test
+    public void testCteWithPredicates() {
+        String cte = getSqlList("sql/tpch_pk_tables/", "lineitem_flat_cte").get(0);
+        cte = cte.replaceAll("inner join", "left join");
+        cte = cte.replaceAll("lineitem_flat", "lineitem_flat_cte1");
+        Object[][] cases = {
+                {"select cn_name,o_orderdate,o_orderpriority \n" +
+                        "from lineitem_flat_cte1 where cn_name = 'VIETNAM'",
+                        3},
+                {" select  cr_name,l_quantity,l_shipdate,l_shipinstruct,p_name,sr_comment \n" +
+                        "from lineitem_flat_cte1 where\n" +
+                        "sn_name = 'EGYPT' and cn_name = 'BRAZIL'",
+                        8},
+        };
+        for (Object[] tc : cases) {
+            String selectItems = (String) tc[0];
+            int n = (Integer) tc[1];
+            String sql = String.format("%s %s", cte, selectItems);
+            String plan = checkHashJoinCountWithBothRBOAndCBO(sql, n);
+            Assert.assertFalse(plan.contains("NESTLOOP"));
+        }
+    }
 }
