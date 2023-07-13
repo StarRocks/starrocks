@@ -78,6 +78,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
@@ -160,6 +161,7 @@ import io.trino.sql.tree.TimestampLiteral;
 import io.trino.sql.tree.Trim;
 import io.trino.sql.tree.TryExpression;
 import io.trino.sql.tree.Union;
+import io.trino.sql.tree.Unnest;
 import io.trino.sql.tree.Values;
 import io.trino.sql.tree.WhenClause;
 import io.trino.sql.tree.Window;
@@ -394,6 +396,48 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
             return new ValuesRelation(records, colNames);
         }
+    }
+
+    @Override
+    protected ParseNode visitUnnest(Unnest node, ParseTreeContext context) {
+        List<Expr> arguments = visit(node.getExpressions(), context, Expr.class);
+        List<Expr> expressions = new ArrayList<>();
+
+        for (Expr arg : arguments) {
+            if (arg instanceof ArrayExpr) {
+                if (!arg.getChildren().isEmpty()) {
+                    // need to covert array[row(1,2), row(3,4))] to array[1,3], array[2,4], so SR could unnest it
+                    Expr firstArrayElement = arg.getChildren().get(0);
+                    if (firstArrayElement instanceof FunctionCallExpr && ((FunctionCallExpr) firstArrayElement).getFnName().
+                            getFunction().equalsIgnoreCase("row")) {
+                        List<List<Expr>> items = new ArrayList<>();
+                        for (Expr row : arg.getChildren()) {
+                            int rowIndex = 0;
+                            for (Expr literal : row.getChildren()) {
+                                if (items.size() <= rowIndex) {
+                                    items.add(new ArrayList<>());
+                                    items.get(rowIndex).add(literal);
+                                } else {
+                                    items.get(rowIndex).add(literal);
+                                }
+                                ++rowIndex;
+                            }
+                        }
+
+                        for (List<Expr> item : items) {
+                            Expr arrayExpr = new ArrayExpr(null, item);
+                            expressions.add(arrayExpr);
+                        }
+                        continue;
+                    }
+                }
+            }
+            expressions.add(arg);
+        }
+
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr("unnest", expressions);
+        TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
+        return tableFunctionRelation;
     }
 
     @Override
