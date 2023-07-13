@@ -260,6 +260,7 @@ public class Optimizer {
             // projection as LogicalProjectionOperator from the operator by applying SeparateProjectRule.
             ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
             tree = new UniquenessBasedTablePruneRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
             tree = new ReorderJoinRule().rewrite(tree, context);
             tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
