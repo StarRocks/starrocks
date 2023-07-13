@@ -173,7 +173,7 @@ public class PruneSubfieldsForComplexTypeTest {
         Type field2 = new StructType(list1);
 
         StructField topLevel1 = new StructField("field1", field1);
-        StructField topLevel2 = new StructField("field2", field2);
+        StructField topLevel2 = new StructField("Field2", field2);
         ArrayList<StructField> list2 = new ArrayList<>();
         list2.add(topLevel1);
         list2.add(topLevel2);
@@ -230,7 +230,7 @@ public class PruneSubfieldsForComplexTypeTest {
             ComplexTypeAccessGroup group = new ComplexTypeAccessGroup();
             group.addAccessPaths(new ComplexTypeAccessPaths(
                     ImmutableList.of(
-                            new ComplexTypeAccessPath(ComplexTypeAccessPathType.STRUCT_SUBFIELD, "field2"),
+                            new ComplexTypeAccessPath(ComplexTypeAccessPathType.STRUCT_SUBFIELD, "Field2"),
                             new ComplexTypeAccessPath(ComplexTypeAccessPathType.STRUCT_SUBFIELD, "subfield2"))));
             PruneComplexTypeUtil.setAccessGroup(cloneType, group);
 

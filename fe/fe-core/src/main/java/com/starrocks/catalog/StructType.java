@@ -173,7 +173,7 @@ public class StructType extends Type {
     }
 
     public int getFieldPos(String fieldName) {
-        return fieldMap.get(fieldName).getPosition();
+        return fieldMap.get(fieldName.toLowerCase()).getPosition();
     }
 
     public StructField getField(int pos) {
@@ -207,7 +207,7 @@ public class StructType extends Type {
             StructField structField = fields.get(pos);
             if (!selectedFields[pos]) {
                 fields.remove(pos);
-                fieldMap.remove(structField.getName());
+                fieldMap.remove(structField.getName().toLowerCase());
             }
         }
 
