@@ -59,6 +59,13 @@ public class AWSCloudConfiguration implements CloudConfiguration {
         configuration.set("fs.tos.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         configuration.set("fs.cosn.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
 
+        // By default, S3AFileSystem will need 4 minutes to timeout when endpoint is unreachable,
+        // after change, it will need 30 seconds.
+        // Default value is 7.
+        configuration.set("fs.s3a.retry.limit", "3");
+        // Default value is 20
+        configuration.set("fs.s3a.attempts.maximum", "5");
+
         configuration.set("fs.s3a.path.style.access", String.valueOf(enablePathStyleAccess));
         configuration.set("fs.s3a.connection.ssl.enabled", String.valueOf(enableSSL));
         awsCloudCredential.applyToConfiguration(configuration);
