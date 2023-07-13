@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.pruner;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -90,6 +91,7 @@ public class PrimaryKeyUpdateTableRule implements TreeRewriteRule {
 
     private static class Collector extends OptExpressionVisitor<Boolean, Void> {
         private final long updateTableId;
+        private final Map<OptExpression, Integer> scanToOrdinals = Maps.newHashMap();
         private final List<OptExpression> ordinalToScan = Lists.newArrayList();
         private final Map<OptExpression, RoaringBitmap> optToCPScanNodes = Maps.newHashMap();
         private final UnionFind<ColumnRefOperator> colRefEquivClasses = new UnionFind<>();
@@ -170,8 +172,8 @@ public class PrimaryKeyUpdateTableRule implements TreeRewriteRule {
             }
             OlapTable table = ((OlapTable) scanOp.getTable());
             if (table.getKeysType() == KeysType.PRIMARY_KEYS && table.getId() == updateTableId) {
-                int ordinal = ordinalToScan.size();
-                ordinalToScan.add(optExpression);
+                int ordinal = scanToOrdinals.getOrDefault(optExpression, -1);
+                Preconditions.checkArgument(ordinal >= 0);
                 optToCPScanNodes.put(optExpression, RoaringBitmap.bitmapOf(ordinal));
                 return true;
             }
@@ -206,6 +208,15 @@ public class PrimaryKeyUpdateTableRule implements TreeRewriteRule {
         }
 
         private boolean collect(OptExpression root) {
+            // Prefer to prune the Scan operator that sits higher in the plan.
+            // please to see CPGardener::process
+            for (OptExpression input : root.getInputs()) {
+                if (input.getOp() instanceof LogicalScanOperator) {
+                    int ordinal = scanToOrdinals.size();
+                    scanToOrdinals.put(input, ordinal);
+                    ordinalToScan.add(input);
+                }
+            }
             for (OptExpression input : root.getInputs()) {
                 collect(input);
             }
