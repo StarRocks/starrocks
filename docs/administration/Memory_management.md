@@ -24,7 +24,6 @@ Explanation:
 | Name | Default| Description|  
 | --- | --- | --- |
 | vector_chunk_size | 4096 | Number of chunk rows |
-| tc_use_memory_min | 10737418240 | minimum reserved memory for TCmalloc, exceeding which StarRocks will return free memory to the operating system |
 | mem_limit | 80% | The percentage of total memory that BE can use. If BE is deployed as a standalone, there is no need to configure it. If it is deployed with other services that consume more memory, it should be configured separately. |
 | disable_storage_page_cache | false | The boolean value to control if to disable PageCache. When PageCache is enabled, StarRocks caches the query results. PageCache can significantly improve the query performance when similar queries are repeated frequently. `true` indicates to disable PageCache. Use this item together with `storage_page_cache_limit`, you can accelerate query performance in scenarios with sufficient memory resources and much data scan. The value of this item has been changed from `true` to `false` since StarRocks v2.4. |
 | write_buffer_size | 104857600 |  The capacity limit of a single MemTable, exceeding which a disk swipe will be performed. |

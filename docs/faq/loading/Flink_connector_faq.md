@@ -43,19 +43,7 @@ Kafka communication needs the hostname. Users need to configure the host name re
 
 **Solution:**
 
-You can use Doris Tools to export the statements.
-
-## When the query is not happening, BE memory usage and cpu usage are still 100%
-
-**Issue description:**
-
-Why are they still 100%?
-
-**Solution:**
-
-This is because of regular collection of statistics. CUP is not occupied for a long term. Memory of 10G or less, once fully taken, will not be released. BE will manage it by itself. Users can limit memory usage limit through tc_use_memory_min.
-
-tc_use_memory_min is set to be 10737418240 by default. TCmalloc defines the minimum reserved memory. StarRocks only gives idle memory back to the operation system when the memory usage exceeds this value. Users can configure it in the BE configuration file "be.conf".
+You can use StarRocks Tools to export the statements.
 
 ## Memory requested by BE is not released back to to the operation system
 
