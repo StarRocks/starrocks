@@ -130,7 +130,7 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
     return path;
 }
 
-const std::string& ColumnAccessPath::to_string() const {
+const std::string ColumnAccessPath::to_string() const {
     std::stringstream ss;
     ss << _path << "(" << _type << ")";
     return ss.str();

@@ -670,7 +670,7 @@ public class PlanFragmentBuilder {
 
                 String name = scan.getColRefToColumnMetaMap().get(key).getName();
                 ColumnAccessPath path = normalizer.normalizePath(key, name);
-                if  (path.onlyRoot()) {
+                if (path.onlyRoot()) {
                     continue;
                 }
                 path.setFromPredicate(true);
