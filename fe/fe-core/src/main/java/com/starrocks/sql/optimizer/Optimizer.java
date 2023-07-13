@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxCountOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
@@ -93,6 +94,7 @@ public class Optimizer {
     private final OptimizerConfig optimizerConfig;
 
     private long updateTableId = -1;
+
     public Optimizer() {
         this(OptimizerConfig.defaultConfig());
     }
@@ -235,12 +237,13 @@ public class Optimizer {
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !optimizerConfig.isRuleBased()) {
             MvRewritePreprocessor preprocessor =
-                        new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
+                    new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
                 preprocessor.prepareMvCandidatesForPlan();
             }
             if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
-                try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessSyncMvs")) {
+                try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer(
+                        "Optimizer.preprocessSyncMvs")) {
                     preprocessor.prepareSyncMvCandidatesForPlan();
                 }
             }
@@ -273,6 +276,7 @@ public class Optimizer {
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
         }
     }
+
     private OptExpression logicalRuleRewrite(ConnectContext connectContext,
                                              OptExpression tree,
                                              TaskContext rootTaskContext) {
@@ -387,6 +391,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new RewriteMinMaxCountOnScanRule());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
