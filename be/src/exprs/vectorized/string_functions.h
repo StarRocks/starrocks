@@ -44,7 +44,6 @@ struct MatchInfo {
 
 struct MatchInfoChain {
     std::vector<MatchInfo> info_chain;
-    unsigned long long last_to = 0;
 };
 
 class StringFunctions {
