@@ -130,7 +130,6 @@ import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.SetWarehouseStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
@@ -576,8 +575,6 @@ public class StmtExecutor {
                 handleSetStmt();
             } else if (parsedStmt instanceof UseDbStmt) {
                 handleUseDbStmt();
-            } else if (parsedStmt instanceof SetWarehouseStmt) {
-                handleSetWarehouseStmt();
             } else if (parsedStmt instanceof UseCatalogStmt) {
                 handleUseCatalogStmt();
             } else if (parsedStmt instanceof SetCatalogStmt) {
@@ -1178,18 +1175,6 @@ public class StmtExecutor {
         try {
             String catalogName = setCatalogStmt.getCatalogName();
             context.getGlobalStateMgr().changeCatalog(context, catalogName);
-        } catch (Exception e) {
-            context.getState().setError(e.getMessage());
-            return;
-        }
-        context.getState().setOk();
-    }
-
-    // Process use warehouse statement
-    private void handleSetWarehouseStmt() throws AnalysisException {
-        SetWarehouseStmt setWarehouseStmt = (SetWarehouseStmt) parsedStmt;
-        try {
-            context.getGlobalStateMgr().changeWarehouse(context, setWarehouseStmt.getWarehouseName());
         } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;

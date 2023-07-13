@@ -749,10 +749,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitSetWarehouseStatement(SetWarehouseStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     // ---------------------------------------- Storage Volume Statement ----------------------------------------------------
 
     public R visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, C context) {
