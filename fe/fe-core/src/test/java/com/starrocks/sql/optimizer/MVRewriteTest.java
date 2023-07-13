@@ -621,8 +621,6 @@ public class MVRewriteTest {
         String query = "select k1, k2 from agg_table;";
         starRocksAssert.withRollup(createRollupSQL).query(query)
                 .explainContains("OFF", "old_key");
-        starRocksAssert.withRollup(createRollupSQL).query(query)
-                .explainContains("OFF", "old_key");
     }
 
     @Test
@@ -1577,8 +1575,8 @@ public class MVRewriteTest {
                 "        PROPERTIES ( \"enable_populate\" = \"false\" )\n" +
                 "        to target2\n" +
                 "        as\n" +
-                "        select k1, cast(k1 * 2 as tinyint(4)) as k1, length(k2) as k2, sum(k3), hll_union(hll_hash(k4)) as k5 " +
-                "from test2 group by k1, k2;";
+                "        select k1, cast(k1 * 2 as tinyint(4)) as k1, length(k2) as k2, sum(k3) as k4, " +
+                "hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2;";
         starRocksAssert.withTable(t1)
                 .withTable(t2)
                 .withMaterializedView(mv1);
@@ -1617,7 +1615,7 @@ public class MVRewriteTest {
                 "        PROPERTIES ( \"enable_populate\" = \"false\" )\n" +
                 "        to target3\n" +
                 "        as\n" +
-                "        select k1, k1 * 2 as k1, length(k2) as k2, sum(k3), hll_union(hll_hash(k4)) as k5 " +
+                "        select k1, k1 * 2 as k1, length(k2) as k2, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 " +
                 "from test3 group by k1, k2;";
         starRocksAssert.withTable(t1)
                 .withTable(t2)

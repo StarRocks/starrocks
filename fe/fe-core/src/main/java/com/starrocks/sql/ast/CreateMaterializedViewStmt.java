@@ -380,10 +380,15 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                             "const expr in select " + "statement: {}", selectListItemExpr.toMySql()));
                 }
                 // TODO: support multi slot-refs later.
-                if (slots.size() > 1) {
+                if (slots.size() > 1 && targetTable == null) {
                     throw new UnsupportedMVException(
                             String.format("The materialized view currently does not support multi-slot-refs expr: {}",
                                     selectListItemExpr.toSql()));
+                }
+                if (targetTable != null && !(selectListItem.getExpr() instanceof SlotRef) &&
+                        Strings.isNullOrEmpty(selectListItem.getAlias())) {
+                    throw new SemanticException("Create materialized view non-slot ref expression in logical mv should have an " +
+                            "alias:" + selectListItem);
                 }
             }
             MVColumnItem mvColumnItem;
@@ -478,7 +483,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName().toLowerCase()).
                 collect(Collectors.toSet());
         return new MVColumnItem(columnName, type, null, false, defineExpr,
-                defineExpr.isNullable(),  baseColumnNames);
+                defineExpr.isNullable(),  baseColumnNames, selectListItem.getAlias());
     }
 
     // Convert the aggregate function to MVColumn.
@@ -567,7 +572,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName().toLowerCase()).
                 collect(Collectors.toSet());
         return new MVColumnItem(mvColumnName, type, mvAggregateType, false,
-                defineExpr, functionCallExpr.isNullable(), baseColumnNames);
+                defineExpr, functionCallExpr.isNullable(), baseColumnNames, selectListItem.getAlias());
     }
 
     private void analyzeOrderByClause(SelectRelation selectRelation,

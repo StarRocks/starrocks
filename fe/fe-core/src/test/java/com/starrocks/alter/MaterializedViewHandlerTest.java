@@ -193,7 +193,7 @@ public class MaterializedViewHandlerTest {
         final String mvName = "mv1";
         final String mvColumName = "mv_sum_k1";
         MVColumnItem mvColumnItem = new MVColumnItem(mvColumName, Type.BIGINT, AggregateType.SUM, false, null, true,
-                Sets.newHashSet());
+                Sets.newHashSet(), null);
         mvColumnItem.setIsKey(true);
         mvColumnItem.setAggregationType(null, false);
         new Expectations() {
@@ -249,7 +249,7 @@ public class MaterializedViewHandlerTest {
         final String columnName1 = "k1";
         Column baseColumn1 = new Column(columnName1, Type.VARCHAR, false, AggregateType.NONE, "", "");
         MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.VARCHAR, AggregateType.NONE, false, null, true,
-                Sets.newHashSet());
+                Sets.newHashSet(), null);
 
         mvColumnItem.setIsKey(true);
         mvColumnItem.setAggregationType(null, false);
@@ -289,7 +289,7 @@ public class MaterializedViewHandlerTest {
                                            @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
-        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.BIGINT, null, false, null, true, Sets.newHashSet());
+        MVColumnItem mvColumnItem = new MVColumnItem(columnName1, Type.BIGINT, null, false, null, true, Sets.newHashSet(), null);
         mvColumnItem.setIsKey(false);
         mvColumnItem.setAggregationType(AggregateType.SUM, false);
         List<String> partitionColumnNames = Lists.newArrayList();

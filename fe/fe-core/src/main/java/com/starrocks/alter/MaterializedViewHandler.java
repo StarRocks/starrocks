@@ -272,9 +272,17 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new DdlException("create logical materialized failed. Target table should not have " +
                     "the associated materialized views." + targetOlapTable);
         }
+
         // logical materialized view's column should be in the target table.
-        Map<String, Column> mvColumnsMap = mvColumns.stream().collect(Collectors.toMap(item ->
-                MVUtils.parseMVColumnName(item.getName()), item -> item));
+        Map<String, Column> mvColumnsMap = Maps.newHashMap();
+        Preconditions.checkState(stmt.getMVColumnItemList().size() == mvColumns.size());
+        for (int i = 0; i < mvColumns.size(); i++) {
+            MVColumnItem mvColumnItem = stmt.getMVColumnItemList().get(i);
+            Column column = mvColumns.get(i);
+            String aliasName = Strings.isNullOrEmpty(mvColumnItem.getAliasName()) ? column.getName() :
+                    mvColumnItem.getAliasName();
+            mvColumnsMap.put(aliasName, column);
+        }
 
         List<Column> newMVColumns = Lists.newArrayList();
         List<Column> targetBaseColumns = Lists.newArrayList(targetTable.getBaseSchema());
