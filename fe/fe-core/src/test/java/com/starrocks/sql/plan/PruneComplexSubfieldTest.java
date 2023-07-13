@@ -268,6 +268,27 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         sql = "select array_length(a1), a1[1] from pc0";
         plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/a1/ALL]");
+
+        sql = "select a1[map1[1]] from pc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/a1/ALL, /map1/INDEX]");
+
+        sql = "select a1[map_size(map1)] from pc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/a1/ALL, /map1/OFFSET]");
+
+        sql = "select st6.m2[st1.s1].s3 from sc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st1/s1, /st6/m2/ALL/s3]");
+
+        sql = "select a1[a1[1]] from pc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/a1/ALL]");
+
+        sql = "select a1[a1[a1[a1[a1[2]]]]] from pc0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/a1/ALL]");
+
     }
 
     @Test

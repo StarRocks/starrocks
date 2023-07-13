@@ -14,16 +14,13 @@
 
 package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 
-import com.google.common.collect.ImmutableTable;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Table;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.StructType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -38,20 +35,6 @@ import java.util.stream.Collectors;
  * normalize expression to ColumnAccessPath
  */
 public class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Void> {
-    private static final Table<TAccessPathType, TAccessPathType, TAccessPathType> MERGE_PATH_MAP =
-            ImmutableTable.<TAccessPathType, TAccessPathType, TAccessPathType>builder()
-                    .put(TAccessPathType.INDEX, TAccessPathType.OFFSET, TAccessPathType.ALL)
-                    .put(TAccessPathType.INDEX, TAccessPathType.KEY, TAccessPathType.ALL)
-                    .put(TAccessPathType.INDEX, TAccessPathType.INDEX, TAccessPathType.INDEX)
-                    .put(TAccessPathType.KEY, TAccessPathType.OFFSET, TAccessPathType.KEY)
-                    .put(TAccessPathType.KEY, TAccessPathType.INDEX, TAccessPathType.ALL)
-                    .put(TAccessPathType.OFFSET, TAccessPathType.KEY, TAccessPathType.KEY)
-                    .put(TAccessPathType.OFFSET, TAccessPathType.INDEX, TAccessPathType.ALL)
-                    .put(TAccessPathType.ALL, TAccessPathType.INDEX, TAccessPathType.ALL)
-                    .put(TAccessPathType.ALL, TAccessPathType.KEY, TAccessPathType.ALL)
-                    .put(TAccessPathType.ALL, TAccessPathType.OFFSET, TAccessPathType.ALL)
-                    .build();
-
     private final Deque<AccessPath> allAccessPaths = Lists.newLinkedList();
 
     private AccessPath currentPath = null;
@@ -90,15 +73,14 @@ public class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Vo
                     TAccessPathType pathType = accessPath.pathTypes.get(i);
                     if (childPath.getType() != accessPath.pathTypes.get(i)) {
                         // if the path same but type different, must be PATH_PLACEHOLDER, the Type must be
-                        // INDEX, OFFSET, KEY, and we can merge them
-                        // 1. when only INDEX, we set the type to INDEX
-                        // 2. when contains INDEX and other (OFFSET, KEY), we set the type to ALL
-                        // 3. when contains OFFSET and KEY, we set the type to KEY
-                        TAccessPathType newType = TAccessPathType.ALL;
-                        if (MERGE_PATH_MAP.contains(childPath.getType(), pathType)) {
-                            newType = MERGE_PATH_MAP.get(childPath.getType(), pathType);
-                        }
-                        childPath.setType(newType);
+                        // INDEX, OFFSET, KEY, ALL, and we can merge them
+                        // 1. when contains OFFSET and KEY, we set the type to KEY
+                        // 2. other (OFFSET-ALL, OFFSET-INDEX, INDEX-KEY, KEY-ALL), we set the type to ALL
+                        boolean isOffsetOrKey =
+                                childPath.getType() == TAccessPathType.OFFSET && pathType == TAccessPathType.KEY;
+                        isOffsetOrKey = isOffsetOrKey ||
+                                (childPath.getType() == TAccessPathType.KEY && pathType == TAccessPathType.OFFSET);
+                        childPath.setType(isOffsetOrKey ? TAccessPathType.KEY : TAccessPathType.ALL);
                     }
                     parentPath = childPath;
                 } else {
@@ -158,11 +140,19 @@ public class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Vo
 
     @Override
     public Void visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
+        if (!collectionElementOp.getChild(1).isConstant()) {
+            collectionElementOp.getChild(1).accept(this, context);
+        }
+
         collectionElementOp.getChild(0).accept(this, context);
-        if (currentPath == null || !collectionElementOp.getChild(1).isConstantRef()) {
+        if (currentPath == null) {
             return null;
         }
-        ConstantOperator index = collectionElementOp.getChild(1).cast();
+
+        if (!collectionElementOp.getChild(1).isConstant()) {
+            currentPath.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.ALL);
+            return null;
+        }
         currentPath.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.INDEX);
         return null;
     }
