@@ -125,7 +125,7 @@ public class FileTable extends Table {
             }
             return remoteFileDescs;
         } catch (StarRocksConnectorException e) {
-            throw new DdlException("doesn't get file with path: " + getTableLocation());
+            throw new DdlException("doesn't get file with path: " + getTableLocation(), e);
         }
     }
 
