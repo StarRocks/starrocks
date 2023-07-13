@@ -55,7 +55,7 @@ Explanation:
 * **jemalloc**
 
 ~~~ bash
-<http://be_ip:be_http_port/memz>
+http://be_ip:be_http_port/memz
 ~~~
 
 ~~~plain text
