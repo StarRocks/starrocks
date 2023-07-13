@@ -31,6 +31,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -167,7 +168,11 @@ public class CompactionMgr {
 
     @NotNull
     public List<CompactionRecord> getHistory() {
-        return compactionScheduler.getHistory();
+        if (compactionScheduler != null) {
+            return compactionScheduler.getHistory();
+        } else {
+            return Collections.emptyList();
+        }
     }
 
     public static CompactionMgr loadCompactionManager(DataInput in) throws IOException {
