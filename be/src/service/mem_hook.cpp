@@ -16,6 +16,8 @@
 #include <iostream>
 
 #include "common/compiler_util.h"
+#include "common/config.h"
+#include "glog/logging.h"
 #include "jemalloc/jemalloc.h"
 #include "util/stack_util.h"
 
