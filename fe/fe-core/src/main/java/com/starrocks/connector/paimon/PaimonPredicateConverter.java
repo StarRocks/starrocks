@@ -171,9 +171,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
         if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
             if (operator.getChild(1).getType().isStringType()) {
                 String literal = ((BinaryString) getLiteral(operator.getChild(1))).toString();
-                if (literal != null && literal.length() > 1 &&
-                        literal.indexOf("%") == literal.length() - 1 &&
-                        literal.charAt(0) != '%') {
+                if (literal.length() > 1 && literal.indexOf("%") == literal.length() - 1 && literal.charAt(0) != '%') {
                     return builder.startsWith(idx, BinaryString.fromString(literal.substring(0, literal.length() - 1)));
                 }
             }

@@ -16,7 +16,10 @@ package com.starrocks.paimon.reader;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.paimon.data.Timestamp;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class PaimonColumnValue implements ColumnValue {
@@ -55,13 +58,25 @@ public class PaimonColumnValue implements ColumnValue {
     }
 
     @Override
-    public String getString() {
-        return fieldData.toString();
+    public String getString(ColumnType.TypeValue type) {
+        if (type == ColumnType.TypeValue.DATE) {
+            int epoch = (int) fieldData;
+            LocalDate date = LocalDate.ofEpochDay(epoch);
+            return PaimonScannerUtils.formatDate(date);
+        } else {
+            return fieldData.toString();
+        }
     }
 
     @Override
     public String getTimestamp(ColumnType.TypeValue type) {
-        return fieldData.toString();
+        if (type == ColumnType.TypeValue.DATETIME_MILLIS) {
+            Timestamp ts = (Timestamp) fieldData;
+            LocalDateTime dateTime = ts.toLocalDateTime();
+            return PaimonScannerUtils.formatDateTime(dateTime);
+        } else {
+            return fieldData.toString();
+        }
     }
 
     @Override
