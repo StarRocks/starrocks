@@ -162,6 +162,7 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 }
 
 Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
+<<<<<<< HEAD
     // wg is always non-nullable, when request.enable_resource_group is true.
     WorkGroupPtr wg = nullptr;
     if (request.common().__isset.enable_resource_group && request.common().enable_resource_group) {
@@ -175,6 +176,16 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
         DCHECK(wg != nullptr);
         RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
         _wg = wg;
+=======
+    WorkGroupPtr wg;
+    if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
+        wg = WorkGroupManager::instance()->get_default_workgroup();
+    } else if (request.common().workgroup.id == WorkGroup::DEFAULT_MV_WG_ID) {
+        wg = WorkGroupManager::instance()->get_default_mv_workgroup();
+    } else {
+        wg = std::make_shared<WorkGroup>(request.common().workgroup);
+        wg = WorkGroupManager::instance()->add_workgroup(wg);
+>>>>>>> 307fd104c3 ([BugFix] Fix error message when exceeding big query mem limit (#27097))
     }
     DCHECK(!_fragment_ctx->enable_resource_group() || _wg != nullptr);
 
@@ -196,16 +207,13 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->set_enable_pipeline_engine(true);
 
-    if (wg != nullptr && wg->use_big_query_mem_limit()) {
-        _query_ctx->init_mem_tracker(wg->big_query_mem_limit(), wg->mem_tracker());
-    } else {
-        auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
-        auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
-        auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
-        int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(
-                parent_mem_tracker->limit(), per_instance_mem_limit, degree_of_parallelism, option_query_mem_limit);
-        _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker);
-    }
+    auto* parent_mem_tracker = wg->mem_tracker();
+    auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
+    auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
+    int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
+                                                                  degree_of_parallelism, option_query_mem_limit);
+    int64_t big_query_mem_limit = wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
+    _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker, big_query_mem_limit, wg.get());
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
