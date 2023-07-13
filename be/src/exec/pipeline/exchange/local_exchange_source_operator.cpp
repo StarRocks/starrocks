@@ -36,7 +36,7 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
 
 // Used for PartitionExchanger.
 // Only enqueue the partition chunk information here, and merge chunk in pull_chunk().
-Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes,
+Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes,
                                               uint32_t from, uint32_t size, size_t memory_usage) {
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
@@ -50,7 +50,7 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<st
     return Status::OK();
 }
 
-Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes,
+Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes,
                                               uint32_t from, uint32_t size, Columns& partition_columns,
                                               const std::vector<ExprContext*>& partition_expr_ctxs,
                                               size_t memory_usage) {
