@@ -52,8 +52,8 @@ public:
 
     Status add_chunk(ChunkPtr chunk);
 
-    Status add_chunk(ChunkPtr chunk, std::shared_ptr<std::vector<uint32_t>> indexes, uint32_t from, uint32_t size,
-                     size_t memory_bytes);
+    Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
+                     uint32_t size, size_t memory_bytes);
 
     bool has_output() const override;
 
