@@ -142,7 +142,8 @@ TEST_P(StarletFileSystemTest, test_write_and_read) {
     EXPECT_EQ("lo world!", std::string_view(buf, nr));
 
     EXPECT_OK(fs->delete_file(uri));
-    EXPECT_TRUE(fs->new_random_access_file(uri).status().is_not_found());
+    ASSIGN_OR_ABORT(rf, fs->new_random_access_file(uri));
+    EXPECT_TRUE(rf->read_at(0, buf, sizeof(buf)).status().is_not_found());
 }
 
 TEST_P(StarletFileSystemTest, test_directory) {
