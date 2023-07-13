@@ -390,7 +390,8 @@ public class AggregateTest extends PlanTestBase {
         sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem group by L_PARTKEY";
         plan = getFragmentPlan(sql);
         // check use 3 stage agg plan
-        assertContains(plan, " 4:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
                 "  |  group by: 2: L_PARTKEY\n" +
                 "  |  \n" +
@@ -2348,6 +2349,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: sum(4: v4)\n" +
                 "  |  group by: 2: v2, 3: v3",
                 "7:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
                         "  |  output: count(2: v2), sum(8: sum)\n" +
                         "  |  group by: 3: v3");
 
@@ -2361,6 +2363,18 @@ public class AggregateTest extends PlanTestBase {
                 "8:AGGREGATE (merge serialize)\n" +
                         "  |  output: array_agg(9: array_agg)\n" +
                         "  |  group by: 2: v2");
+
+        sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ " +
+                "count(distinct v2), array_length(array_agg(v1)) from t0 join t1 group by v4";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "7:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(2: v2), array_agg(8: array_agg)\n" +
+                "  |  group by: 4: v4\n" +
+                "  |  \n" +
+                "  6:AGGREGATE (merge serialize)\n" +
+                "  |  output: array_agg(8: array_agg)\n" +
+                "  |  group by: 2: v2, 4: v4");
 
     }
 }
