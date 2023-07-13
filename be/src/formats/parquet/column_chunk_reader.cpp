@@ -20,7 +20,6 @@
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
-#include "formats/parquet/page_reader.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
@@ -87,6 +86,14 @@ Status ColumnChunkReader::skip_page() {
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();
+}
+
+Status ColumnChunkReader::next_page() {
+    if (_page_parse_state != PAGE_DATA_PARSED) {
+        _opts.stats->page_skip += 1;
+    }
+    _page_parse_state = PAGE_DATA_PARSED;
+    return _page_reader->next_page();
 }
 
 Status ColumnChunkReader::_parse_page_header() {

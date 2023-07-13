@@ -56,6 +56,10 @@ public:
 
     uint64_t get_offset() const { return _offset; }
 
+    Status next_page() { return seek_to_offset(_next_header_pos); }
+
+    bool is_last_page() { return _num_values_read >= _num_values_total; }
+
 private:
     io::SeekableInputStream* const _stream;
     tparquet::PageHeader _cur_header;

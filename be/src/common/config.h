@@ -760,6 +760,7 @@ CONF_mBool(orc_coalesce_read_enable, "true");
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
+CONF_Bool(parquet_late_materialization_v2_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");

@@ -335,10 +335,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
         for (;;) {                                                                        \
             chunk->reset();                                                               \
             status = scanner->get_next(_runtime_state, &chunk);                           \
-            if (status.is_end_of_file()) {                                                \
-                break;                                                                    \
-            }                                                                             \
-            if (!status.ok()) {                                                           \
+            if (!status.ok() && !status.is_end_of_file()) {                               \
                 std::cout << "status not ok: " << status.get_error_msg() << std::endl;    \
                 break;                                                                    \
             }                                                                             \
@@ -353,6 +350,9 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
                 EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());              \
             }                                                                             \
             records += chunk->num_rows();                                                 \
+            if (status.is_end_of_file()) {                                                \
+                break;                                                                    \
+            }                                                                             \
         }                                                                                 \
     } while (0)
 
