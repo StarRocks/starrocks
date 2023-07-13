@@ -146,9 +146,7 @@ private:
 
     PendingPartitionChunks& _max_row_partition_chunks();
 
-    bool _local_buffer_almost_full() const {
-        return _local_memory_usage >= _local_memory_limit;
-    }
+    bool _local_buffer_almost_full() const { return _local_memory_usage >= _local_memory_limit; }
 
     bool _key_partition_pending_chunk_empty() const {
         for (const auto& pending_chunks : _partitions) {
