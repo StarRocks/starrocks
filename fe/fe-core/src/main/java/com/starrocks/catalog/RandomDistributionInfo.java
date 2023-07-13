@@ -67,6 +67,11 @@ public class RandomDistributionInfo extends DistributionInfo {
     }
 
     @Override
+    public boolean supportColocate() {
+        return false;
+    }
+
+    @Override
     public int getBucketNum() {
         return bucketNum;
     }

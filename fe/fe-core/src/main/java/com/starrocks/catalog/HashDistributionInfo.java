@@ -72,6 +72,11 @@ public class HashDistributionInfo extends DistributionInfo {
         this.bucketNum = bucketNum;
     }
 
+    @Override
+    public boolean supportColocate() {
+        return true;
+    }
+
     public List<Column> getDistributionColumns() {
         return distributionColumns;
     }
