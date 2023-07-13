@@ -58,7 +58,7 @@ Status Partitioner::send_chunk(const ChunkPtr& chunk, std::shared_ptr<std::vecto
             continue;
         }
 
-        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, std::move(partition_row_indexes), from, size,
+        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size,
                                                              partition_memory_usage(i)));
     }
     return Status::OK();
