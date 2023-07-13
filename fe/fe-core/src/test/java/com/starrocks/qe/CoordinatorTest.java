@@ -58,6 +58,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.qe.CoordinatorPreprocessor.ColocatedBackendSelector.BucketSeqToScanRange;
+
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
     Coordinator coordinator;
@@ -137,8 +139,7 @@ public class CoordinatorTest extends PlanTestBase {
                                                              List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList) {
         CoordinatorPreprocessor.FragmentExecParams params =
                 coordinatorPreprocessor.new FragmentExecParams(genFragment());
-        CoordinatorPreprocessor.BucketSeqToScanRange bucketSeqToScanRange =
-                new CoordinatorPreprocessor.BucketSeqToScanRange();
+        BucketSeqToScanRange bucketSeqToScanRange = new BucketSeqToScanRange();
         for (Integer bucketSeq : bucketSeqToWorkerId.keySet()) {
             bucketSeqToScanRange.put(bucketSeq, createScanId2scanRanges(scanId, 1));
         }

@@ -14,6 +14,8 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
@@ -29,11 +31,24 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * map from an backend host address to the per-node assigned scan ranges;
+ * map from a backend host address to the per-node assigned scan ranges;
  * records scan range assignment for a single fragment
  */
-class FragmentScanRangeAssignment extends
+public class FragmentScanRangeAssignment extends
         HashMap<Long, Map<Integer, List<TScanRangeParams>>> {
+
+    public void put(Long workerId, int scanNodeId, TScanRangeParams scanRange) {
+        computeIfAbsent(workerId, k -> Maps.newHashMap())
+                .computeIfAbsent(scanNodeId, k -> Lists.newArrayList())
+                .add(scanRange);
+    }
+
+    public void putAll(Long workerId, int scanNodeId, List<TScanRangeParams> scanRanges) {
+        computeIfAbsent(workerId, k -> Maps.newHashMap())
+                .computeIfAbsent(scanNodeId, k -> Lists.newArrayList())
+                .addAll(scanRanges);
+    }
+
     public String toDebugString() {
         StringBuilder sb = new StringBuilder();
         sb.append("---------- FragmentScanRangeAssignment ----------\n");
