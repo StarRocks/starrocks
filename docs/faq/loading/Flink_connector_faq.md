@@ -43,7 +43,7 @@ Kafka communication needs the hostname. Users need to configure the host name re
 
 **Solution:**
 
-You can use Doris Tools to export the statements.
+You can use StarRocks Tools to export the statements.
 
 ## Memory requested by BE is not released back to to the operation system
 
