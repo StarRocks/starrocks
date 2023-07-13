@@ -263,14 +263,14 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) <= 0;
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match;
         Status s = iter->seek_dictionary(&this->_value, &exact_match);
         if (s.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal();
             rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
-            range->add(Range(seeked_ordinal, ordinal_limit));
+            range->add(Range<>(seeked_ordinal, ordinal_limit));
         } else if (!s.is_not_found()) {
             return s;
         }
@@ -298,14 +298,14 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) < 0;
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
         Status s = iter->seek_dictionary(&this->_value, &exact_match);
         if (s.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
             rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
-            range->add(Range(seeked_ordinal, ordinal_limit));
+            range->add(Range<>(seeked_ordinal, ordinal_limit));
         } else if (!s.is_not_found()) {
             return s;
         }
@@ -334,15 +334,15 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
         Status st = iter->seek_dictionary(&this->_value, &exact_match);
         if (st.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
-            range->add(Range(0, seeked_ordinal));
+            range->add(Range<>(0, seeked_ordinal));
         } else if (st.is_not_found()) {
-            range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+            range->add(Range<>(0, iter->bitmap_nums() - iter->has_null_bitmap()));
             st = Status::OK();
         }
         return st;
@@ -370,15 +370,15 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) > 0) & !max.is_null();
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
         Status st = iter->seek_dictionary(&this->_value, &exact_match);
         if (st.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal();
-            range->add(Range(0, seeked_ordinal));
+            range->add(Range<>(0, seeked_ordinal));
         } else if (st.is_not_found()) {
-            range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+            range->add(Range<>(0, iter->bitmap_nums() - iter->has_null_bitmap()));
             st = Status::OK();
         }
         return st;
@@ -407,14 +407,14 @@ public:
         return type_info->cmp(Datum(this->_value), min) >= 0 && type_info->cmp(Datum(this->_value), max) <= 0;
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
         Status s = iter->seek_dictionary(&this->_value, &exact_match);
         if (s.ok()) {
             if (exact_match) {
                 rowid_t ordinal = iter->current_ordinal();
-                range->add(Range(ordinal, ordinal + 1));
+                range->add(Range<>(ordinal, ordinal + 1));
             }
         } else if (!s.is_not_found()) {
             return s;
@@ -450,7 +450,7 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
     }
 
@@ -603,7 +603,7 @@ public:
         return bf->test_bytes(padded.data, padded.size);
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         // see the comment in `predicate_parser.cpp`.
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
@@ -612,7 +612,7 @@ public:
         if (s.ok()) {
             if (exact_match) {
                 rowid_t ordinal = iter->current_ordinal();
-                range->add(Range(ordinal, ordinal + 1));
+                range->add(Range<>(ordinal, ordinal + 1));
             }
         } else if (!s.is_not_found()) {
             return s;
@@ -635,7 +635,7 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) <= 0;
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         // Can NOT use `_value` here, see the comment in `predicate_parser.cpp`.
         Slice padded_value(Base::_zero_padded_str);
 
@@ -645,7 +645,7 @@ public:
         if (s.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal();
             rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
-            range->add(Range(seeked_ordinal, ordinal_limit));
+            range->add(Range<>(seeked_ordinal, ordinal_limit));
         } else if (!s.is_not_found()) {
             return s;
         }
@@ -667,7 +667,7 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) < 0;
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         // Can NOT use `_value` here, see comment in predicate_parser.cpp.
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
@@ -676,7 +676,7 @@ public:
         if (s.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
             rowid_t ordinal_limit = iter->bitmap_nums() - iter->has_null_bitmap();
-            range->add(Range(seeked_ordinal, ordinal_limit));
+            range->add(Range<>(seeked_ordinal, ordinal_limit));
         } else if (!s.is_not_found()) {
             return s;
         }
@@ -700,16 +700,16 @@ public:
         return (type_info->cmp(Datum(this->_value), min) > 0) & !max.is_null();
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
         bool exact_match = false;
         Status st = iter->seek_dictionary(&padded_value, &exact_match);
         if (st.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal();
-            range->add(Range(0, seeked_ordinal));
+            range->add(Range<>(0, seeked_ordinal));
         } else if (st.is_not_found()) {
-            range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+            range->add(Range<>(0, iter->bitmap_nums() - iter->has_null_bitmap()));
             st = Status::OK();
         }
         return st;
@@ -731,16 +731,16 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
         bool exact_match = false;
         Status st = iter->seek_dictionary(&padded_value, &exact_match);
         if (st.ok()) {
             rowid_t seeked_ordinal = iter->current_ordinal() + exact_match;
-            range->add(Range(0, seeked_ordinal));
+            range->add(Range<>(0, seeked_ordinal));
         } else if (st.is_not_found()) {
-            range->add(Range(0, iter->bitmap_nums() - iter->has_null_bitmap()));
+            range->add(Range<>(0, iter->bitmap_nums() - iter->has_null_bitmap()));
             st = Status::OK();
         }
         return st;
@@ -758,7 +758,7 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
     }
 };

@@ -137,9 +137,9 @@ public:
         page_decoder.seek_to_position_in_page(0);
         ASSERT_EQ(0, page_decoder.current_index());
         column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
-        SparseRange read_range;
-        read_range.add(Range(0, 2));
-        read_range.add(Range(4, 7));
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, 2));
+        read_range.add(Range<>(4, 7));
         status = page_decoder.next_batch(read_range, column.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(5, column->size());
@@ -237,10 +237,10 @@ public:
             ASSERT_TRUE(status.ok());
             size_t slice_num = page_start_ids[slice_index + 1] - page_start_ids[slice_index];
             auto dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
-            SparseRange read_range;
-            read_range.add(Range(0, slice_num / 3));
-            read_range.add(Range(slice_num / 2, (slice_num * 2 / 3)));
-            read_range.add(Range((slice_num * 3 / 4), slice_num));
+            SparseRange<> read_range;
+            read_range.add(Range<>(0, slice_num / 3));
+            read_range.add(Range<>(slice_num / 2, (slice_num * 2 / 3)));
+            read_range.add(Range<>((slice_num * 3 / 4), slice_num));
             size_t read_num = read_range.span_size();
 
             status = page_decoder.next_batch(read_range, dst.get());
@@ -248,9 +248,9 @@ public:
             ASSERT_EQ(read_num, dst->size());
 
             size_t offset = 0;
-            SparseRangeIterator read_iter = read_range.new_iterator();
+            SparseRangeIterator<> read_iter = read_range.new_iterator();
             while (read_iter.has_more()) {
-                Range r = read_iter.next(read_num);
+                Range<> r = read_iter.next(read_num);
                 for (int i = 0; i < r.span_size(); ++i) {
                     std::string expect = contents[page_start_ids[slice_index] + r.begin() + i].to_string();
                     std::string actual = dst->get(i + offset).get_slice().to_string();

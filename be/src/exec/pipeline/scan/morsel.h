@@ -47,7 +47,6 @@ struct ShortKeyOption;
 using ShortKeyOptionPtr = std::unique_ptr<ShortKeyOption>;
 class Schema;
 using SchemaPtr = std::shared_ptr<Schema>;
-class Range;
 
 namespace pipeline {
 
@@ -354,8 +353,8 @@ private:
     size_t _rowset_idx = 0;
     size_t _segment_idx = 0;
     std::vector<SeekRange> _tablet_seek_ranges;
-    SparseRange _segment_scan_range;
-    SparseRangeIterator _segment_range_iter;
+    SparseRange<> _segment_scan_range;
+    SparseRangeIterator<> _segment_range_iter;
     // The number of unprocessed rows of the current segment.
     size_t _num_segment_rest_rows = 0;
 

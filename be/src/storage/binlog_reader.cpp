@@ -268,7 +268,7 @@ Status BinlogReader::_init_segment_iterator() {
     if (log_entry_info->start_seq_id < _next_seq_id) {
         // for duplicate key, LogEntryInfo#start_row_id is 0
         rowid_t start_row_id = _next_seq_id - log_entry_info->start_seq_id;
-        seg_options.rowid_range_option = std::make_shared<SparseRange>(start_row_id, seg_ptr->num_rows());
+        seg_options.rowid_range_option = std::make_shared<SparseRange<>>(start_row_id, seg_ptr->num_rows());
     }
     ASSIGN_OR_RETURN(_segment_iterator, seg_ptr->new_iterator(_data_schema, seg_options));
     VLOG(3) << "Create segment iterator for reader: " << _reader_id << ", tablet: " << _tablet->full_name()

@@ -214,7 +214,7 @@ public:
 
     Status next_batch(size_t* count, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     bool append_range(uint32_t idx, uint32_t end, Column* dst) const;
 

@@ -188,7 +188,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.is_primary_keys = false;
 
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
-    auto rowid_range = std::make_shared<SparseRange>();
+    auto rowid_range = std::make_shared<SparseRange<>>();
     rowid_range->add({rowid, rowid + 1});
     if (segment_idx >= rowset->num_segments()) {
         return Status::InternalError(strings::Substitute("segment_idx out of range tablet:$0 $1 >= $2",

@@ -100,14 +100,14 @@ public:
         return false;
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         for (auto value : _values) {
             bool exact_match = false;
             Status s = iter->seek_dictionary(&value, &exact_match);
             if (s.ok() && exact_match) {
                 rowid_t seeked_ordinal = iter->current_ordinal();
-                range->add(Range(seeked_ordinal, seeked_ordinal + 1));
+                range->add(Range<>(seeked_ordinal, seeked_ordinal + 1));
             } else if (!s.ok() && !s.is_not_found()) {
                 return s;
             }
@@ -269,7 +269,7 @@ public:
         return false;
     }
 
-    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange* range) const override {
+    Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         for (const std::string& s : _zero_padded_strs) {
             Slice padded_value(s);
@@ -277,7 +277,7 @@ public:
             Status st = iter->seek_dictionary(&padded_value, &exact_match);
             if (st.ok() && exact_match) {
                 rowid_t seeked_ordinal = iter->current_ordinal();
-                range->add(Range(seeked_ordinal, seeked_ordinal + 1));
+                range->add(Range<>(seeked_ordinal, seeked_ordinal + 1));
             } else if (!st.ok() && !st.is_not_found()) {
                 return st;
             }

@@ -107,9 +107,9 @@ public:
 
         auto column2 = BinaryColumn::create();
         page_decoder.seek_to_position_in_page(0);
-        SparseRange read_range;
-        read_range.add(Range(0, 1));
-        read_range.add(Range(2, 3));
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, 1));
+        read_range.add(Range<>(2, 3));
         status = page_decoder.next_batch(read_range, column2.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(2, column2->size());
@@ -161,12 +161,12 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
     }
 
     auto column = BinaryColumn::create();
-    SparseRange range(0, 5);
+    SparseRange<> range(0, 5);
     ASSERT_OK(decoder.next_batch(range, column.get()));
     ASSERT_EQ(column->debug_string(), "['first value', 'second value', 'third value', 'fourth value', 'fifth value']");
 
     ASSERT_OK(decoder.seek_to_position_in_page(0));
-    ASSERT_OK(decoder.next_batch(SparseRange(0, 1), column.get()));
+    ASSERT_OK(decoder.next_batch(SparseRange<>(0, 1), column.get()));
     ASSERT_EQ(column->debug_string(),
               "['first value', 'second value', 'third value', 'fourth value', 'fifth value', 'first value']");
 }

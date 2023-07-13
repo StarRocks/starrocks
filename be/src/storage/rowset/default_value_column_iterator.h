@@ -71,12 +71,12 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override;
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) override;
 
     bool all_page_dict_encoded() const override { return false; }
 
