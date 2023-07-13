@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.pruner;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -59,6 +60,14 @@ public class CboTablePruneRule extends TransformationRule {
                 Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.LOGICAL_OLAP_SCAN,
                         OperatorType.LOGICAL_OLAP_SCAN));
     }
+
+    // the count of joins of these types exceeds certain threshold, this Rule would be time-consuming
+    public static final Set<JoinOperator> JOIN_TYPES = ImmutableSet.of(
+            JoinOperator.INNER_JOIN,
+            JoinOperator.LEFT_OUTER_JOIN,
+            JoinOperator.RIGHT_OUTER_JOIN,
+            JoinOperator.CROSS_JOIN
+    );
 
     private static final CboTablePruneRule INSTANCE = new CboTablePruneRule();
 
