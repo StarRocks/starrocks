@@ -106,67 +106,7 @@ public class CboTablePruneRule extends TransformationRule {
         Optional<ScalarOperator> optOtherJoinOnPredicate = otherOnPredicates.isEmpty() ?
                 Optional.empty() : Optional.of(Utils.compoundAnd(otherOnPredicates));
         if (joinType.isInnerJoin()) {
-            if (eqColRefPairs.stream().anyMatch(p -> p.first.isNullable() || p.second.isNullable())) {
-                return Collections.emptyList();
-            }
-            List<CPBiRel> biRels = Lists.newArrayList();
-            List<CPBiRel> lhsToRhsBiRels =
-                    CPBiRel.extractCPBiRels(input.inputAt(0), input.inputAt(1), true);
-            List<CPBiRel> rhsToLhsBiRels =
-                    CPBiRel.extractCPBiRels(input.inputAt(1), input.inputAt(0), false);
-            biRels.addAll(lhsToRhsBiRels);
-            biRels.addAll(rhsToLhsBiRels);
-
-            Set<Pair<ColumnRefOperator, ColumnRefOperator>> reverseEqColRefPairs =
-                    eqColRefPairs.stream().map(Pair::inverse).collect(Collectors.toSet());
-            List<CPBiRel> matchedBiRels =
-                    biRels.stream().filter(biRel -> biRel.isLeftToRight() ? biRel.getPairs().equals(eqColRefPairs) :
-                            biRel.getPairs().equals(reverseEqColRefPairs)).collect(Collectors.toList());
-            if (matchedBiRels.isEmpty()) {
-                return Collections.emptyList();
-            }
-            boolean sameTableJoinUK = false;
-            boolean hasLeftToRightFK = false;
-            boolean hasRightToLeftFK = false;
-            for (CPBiRel biRel : matchedBiRels) {
-                if (!biRel.isFromForeignKey()) {
-                    sameTableJoinUK = true;
-                } else {
-                    if (biRel.isLeftToRight()) {
-                        hasLeftToRightFK = true;
-                    } else {
-                        hasRightToLeftFK = true;
-                    }
-                }
-            }
-            boolean mutualJoinOnFK = hasLeftToRightFK && hasRightToLeftFK;
-
-            if (sameTableJoinUK) {
-                return handleSameTableInnerJoin(input, optOtherJoinOnPredicate);
-            } else {
-                Set<Pair<ColumnRefOperator, ColumnRefOperator>> colRefPairs =
-                        hasLeftToRightFK ? reverseEqColRefPairs : eqColRefPairs;
-                Map<ColumnRefOperator, ScalarOperator> rewriteMapping =
-                        colRefPairs.stream().collect(Collectors.toMap(e -> e.first, e -> e.second));
-                // for two tables joining on primary keys and their primary keys references each other as foreign keys,
-                // we should try to prune each side.
-                if (mutualJoinOnFK) {
-                    List<OptExpression> result =
-                            handleInnerJoin(input, lhs, rhs, rewriteMapping, Optional.empty(), optOtherJoinOnPredicate);
-                    if (!result.isEmpty()) {
-                        return result;
-                    }
-                    return handleInnerJoin(input, rhs, lhs, rewriteMapping, Optional.empty(), optOtherJoinOnPredicate);
-                } else {
-                    if (hasLeftToRightFK) {
-                        return handleInnerJoin(input, lhs, rhs, rewriteMapping, Optional.empty(),
-                                optOtherJoinOnPredicate);
-                    } else {
-                        return handleInnerJoin(input, rhs, lhs, rewriteMapping, Optional.empty(),
-                                optOtherJoinOnPredicate);
-                    }
-                }
-            }
+            return handleInnerJoin(input, eqColRefPairs, optOtherJoinOnPredicate);
         } else {
             List<ColumnRefOperator> lhsJoinCols =
                     eqColRefPairs.stream().map(p -> p.first).collect(Collectors.toList());
@@ -198,6 +138,70 @@ public class CboTablePruneRule extends TransformationRule {
         return table.getUniqueConstraints().stream()
                 .map(uc -> new ColumnRefSet(uc.getUniqueColumns().stream().map(colNameToColRefMap::get)
                         .collect(Collectors.toList()))).anyMatch(columnRefSet::containsAll);
+    }
+
+    private List<OptExpression> handleInnerJoin(
+            OptExpression input,
+            Set<Pair<ColumnRefOperator, ColumnRefOperator>> eqColRefPairs,
+            Optional<ScalarOperator> optOtherJoinOnPredicate) {
+        if (eqColRefPairs.stream().anyMatch(p -> p.first.isNullable() || p.second.isNullable())) {
+            return Collections.emptyList();
+        }
+        OptExpression lhs = input.inputAt(0);
+        OptExpression rhs = input.inputAt(1);
+        List<CPBiRel> biRels = Lists.newArrayList();
+        List<CPBiRel> lhsToRhsBiRels = CPBiRel.extractCPBiRels(lhs, rhs, true);
+        List<CPBiRel> rhsToLhsBiRels = CPBiRel.extractCPBiRels(rhs, lhs, false);
+        biRels.addAll(lhsToRhsBiRels);
+        biRels.addAll(rhsToLhsBiRels);
+
+        Set<Pair<ColumnRefOperator, ColumnRefOperator>> reverseEqColRefPairs =
+                eqColRefPairs.stream().map(Pair::inverse).collect(Collectors.toSet());
+        List<CPBiRel> matchedBiRels =
+                biRels.stream().filter(biRel -> biRel.isLeftToRight() ? biRel.getPairs().equals(eqColRefPairs) :
+                        biRel.getPairs().equals(reverseEqColRefPairs)).collect(Collectors.toList());
+        if (matchedBiRels.isEmpty()) {
+            return Collections.emptyList();
+        }
+        boolean sameTableJoinUK = false;
+        boolean hasLeftToRightFK = false;
+        boolean hasRightToLeftFK = false;
+        for (CPBiRel biRel : matchedBiRels) {
+            if (!biRel.isFromForeignKey()) {
+                sameTableJoinUK = true;
+                continue;
+            }
+            if (biRel.isLeftToRight()) {
+                hasLeftToRightFK = true;
+            } else {
+                hasRightToLeftFK = true;
+            }
+        }
+        boolean mutualJoinOnFK = hasLeftToRightFK && hasRightToLeftFK;
+
+        if (sameTableJoinUK) {
+            return handleSameTableInnerJoin(input, optOtherJoinOnPredicate);
+        }
+        Set<Pair<ColumnRefOperator, ColumnRefOperator>> colRefPairs =
+                hasLeftToRightFK ? reverseEqColRefPairs : eqColRefPairs;
+        Map<ColumnRefOperator, ScalarOperator> rewriteMapping =
+                colRefPairs.stream().collect(Collectors.toMap(e -> e.first, e -> e.second));
+        // for two tables joining on primary keys and their primary keys references each other as foreign keys,
+        // we should try to prune each side.
+        if (mutualJoinOnFK) {
+            List<OptExpression> result =
+                    pruneInnerJoin(input, lhs, rhs, rewriteMapping, Optional.empty(), optOtherJoinOnPredicate);
+            if (!result.isEmpty()) {
+                return result;
+            }
+            return pruneInnerJoin(input, rhs, lhs, rewriteMapping, Optional.empty(), optOtherJoinOnPredicate);
+        }
+
+        if (hasLeftToRightFK) {
+            return pruneInnerJoin(input, lhs, rhs, rewriteMapping, Optional.empty(), optOtherJoinOnPredicate);
+        } else {
+            return pruneInnerJoin(input, rhs, lhs, rewriteMapping, Optional.empty(), optOtherJoinOnPredicate);
+        }
     }
 
     private List<OptExpression> tryToHandleLeftOrRightJoinOnSameTableAsInnerJoin(
@@ -261,14 +265,14 @@ public class CboTablePruneRule extends TransformationRule {
                 .collect(Collectors.toMap(Function.identity(), colRefToColMap::get));
         newColRefToCols.putAll(rhsScanOp.getColRefToColumnMetaMap());
         // pruning either lhs or rhs is OK, here prune lhs and retain rhs.
-        return handleInnerJoin(joinOptExpression, rhs, lhs, rewriteMapping, Optional.of(newColRefToCols),
+        return pruneInnerJoin(joinOptExpression, rhs, lhs, rewriteMapping, Optional.of(newColRefToCols),
                 optOtherJoinOnPredicate);
     }
 
-    List<OptExpression> handleInnerJoin(OptExpression joinOp, OptExpression retainOp, OptExpression pruneOp,
-                                        Map<ColumnRefOperator, ScalarOperator> rewriteMapping,
-                                        Optional<Map<ColumnRefOperator, Column>> newColRefToColumnMap,
-                                        Optional<ScalarOperator> optOtherOnJoinPredicate) {
+    List<OptExpression> pruneInnerJoin(OptExpression joinOp, OptExpression retainOp, OptExpression pruneOp,
+                                       Map<ColumnRefOperator, ScalarOperator> rewriteMapping,
+                                       Optional<Map<ColumnRefOperator, Column>> newColRefToColumnMap,
+                                       Optional<ScalarOperator> optOtherOnJoinPredicate) {
 
         ColumnRefSet rewriteColRefSet = new ColumnRefSet(rewriteMapping.keySet());
         // if any of used column refs of both predicate and output exprs of prune-side ScanOperator
