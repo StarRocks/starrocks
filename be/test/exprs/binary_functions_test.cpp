@@ -51,8 +51,8 @@ public:
         return BinaryFunctions::from_binary(ctx.get(), columns);
     }
 
-    Slice hex_binary(const Slice str) {
-        std::stringstream ss;
+    Slice hex_binary(const Slice& str) {
+        ss.str("");
         ss << std::hex << std::uppercase << std::setfill('0');
         for (int i = 0; i < str.size; ++i) {
             ss << std::setw(2) << (static_cast<int32_t>(str.data[i]) & 0xFF);
@@ -61,6 +61,7 @@ public:
     }
 
 protected:
+    std::stringstream ss;
     std::unique_ptr<FunctionContext> ctx;
     std::unique_ptr<BinaryFormatState> state;
 };

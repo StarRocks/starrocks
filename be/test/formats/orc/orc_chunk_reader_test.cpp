@@ -1130,14 +1130,14 @@ TEST_F(OrcChunkReaderTest, TestReadBinaryColumn) {
         auto* c = starrocks::ColumnHelper::as_raw_column<starrocks::NullableColumn>(col);
         auto* nulls = c->null_column()->get_data().data();
         auto* values = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(c->data_column());
-        // auto& vb = values->get_bytes();
+        auto& vb = values->get_bytes();
         auto& vo = values->get_offset();
 
         EXPECT_FALSE(nulls[0]);
         EXPECT_EQ(vo[0], 0);
         EXPECT_EQ(vo[1], 2);
-        // EXPECT_EQ(vb[0], u'\n');
-        // EXPECT_EQ(vb[1], u'\274');
+        EXPECT_EQ((int)vb[0], 10);
+        EXPECT_EQ((int)vb[1], 188);
     }
 }
 

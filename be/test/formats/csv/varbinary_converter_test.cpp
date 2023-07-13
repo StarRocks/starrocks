@@ -32,16 +32,17 @@ public:
         _type.len = 6000;
     }
 
-    Slice hex_binary(const Slice str) {
-        std::stringstream ss;
+    Slice hex_binary(const Slice& str) {
+        ss.str("");
         ss << std::hex << std::uppercase << std::setfill('0');
         for (int i = 0; i < str.size; ++i) {
             ss << std::setw(2) << (static_cast<int32_t>(str.data[i]) & 0xFF);
         }
-        return ss.str();
+        return std::move(ss.str());
     }
 
 protected:
+    std::stringstream ss;
     TypeDescriptor _type;
 };
 
