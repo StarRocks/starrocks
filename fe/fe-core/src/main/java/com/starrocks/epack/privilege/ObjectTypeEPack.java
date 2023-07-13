@@ -12,6 +12,7 @@ public class ObjectTypeEPack extends ObjectType {
         super(id);
     }
 
+    @Override
     public String name() {
         if (OBJECT_TO_NAME.get(id) != null) {
             return OBJECT_TO_NAME.get(id).first;
@@ -24,6 +25,7 @@ public class ObjectTypeEPack extends ObjectType {
         }
     }
 
+    @Override
     public String plural() {
         if (OBJECT_TO_NAME.get(id) != null) {
             return OBJECT_TO_NAME.get(id).second;
