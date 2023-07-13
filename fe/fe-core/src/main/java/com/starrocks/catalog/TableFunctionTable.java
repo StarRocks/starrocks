@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
@@ -45,6 +44,8 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -55,8 +56,16 @@ import java.util.concurrent.Future;
 
 public class TableFunctionTable extends Table {
 
+<<<<<<< HEAD
     private static final String PROPERTY_PATH = "path";
     private static final String PROPERTY_FORMAT = "format";
+=======
+    private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
+
+    public static final String FAKE_PATH = "fake://";
+    public static final String PROPERTY_PATH = "path";
+    public static final String PROPERTY_FORMAT = "format";
+>>>>>>> 2ea3eb0d7 ([Enhancement] improve error message of table function (#26861))
 
     private String path;
     private String format;
@@ -135,7 +144,8 @@ public class TableFunctionTable extends Table {
         try {
             HdfsUtil.parseFile(path, new BrokerDesc(properties), fileStatuses);
         } catch (UserException e) {
-            throw new DdlException("failed to parse files: " + e.getMessage());
+            LOG.error("parse files error", e);
+            throw new DdlException("failed to parse files", e);
         }
 
         if (fileStatuses.isEmpty()) {
@@ -216,11 +226,10 @@ public class TableFunctionTable extends Table {
             result = future.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new DdlException("failed to get file schema: " + e.getMessage());
+            throw new DdlException("failed to get file schema", e);
         } catch (Exception e) {
-            throw new DdlException("failed to get file schema: " + e.getMessage());
+            throw new DdlException("failed to get file schema", e);
         }
-
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
