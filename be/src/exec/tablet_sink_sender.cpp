@@ -82,6 +82,11 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
     DCHECK(_index_id_to_tablet_be_map.find(channel->index_id()) != _index_id_to_tablet_be_map.end());
     auto& tablet_to_be = _index_id_to_tablet_be_map.find(channel->index_id())->second;
     for (auto& it : channel->_node_channels) {
+        NodeChannel* node = it.second.get();
+        if (channel->is_failed_channel(node)) {
+            // skip open fail channel
+            continue;
+        }
         int64_t be_id = it.first;
         _node_select_idx.clear();
         _node_select_idx.reserve(selection_idx.size());
@@ -109,7 +114,6 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
             }
         }
 
-        NodeChannel* node = it.second.get();
         auto st = node->add_chunk(chunk, _tablet_ids, _node_select_idx, 0, _node_select_idx.size());
 
         if (!st.ok()) {

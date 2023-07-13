@@ -93,6 +93,10 @@ Status TabletSinkColocateSender::_send_chunks(const OlapTableSchemaParam* schema
         _node_select_idx.reserve(selection_idx.size());
 
         auto* node = it.second;
+        if (_is_failed_channel(node)) {
+            // skip open fail channel
+            continue;
+        }
         bool has_send_data = false;
         if (_enable_replicated_storage) {
             for (unsigned short selection : selection_idx) {
