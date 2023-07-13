@@ -1,0 +1,6 @@
+-- name: test_show_proc
+show proc '/transactions/${db[0]}';
+-- result:
+running	0
+finished	0
+-- !result
