@@ -667,7 +667,7 @@ public class CTEPlanTest extends PlanTestBase {
         {
             String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 limit 1";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:Project\n" +
+            assertContains(plan, "2:Project\n" +
                     "  |  <slot 4> : 4: sum\n" +
                     "  |  <slot 5> : CAST(7: multi_distinct_sum AS DOUBLE) / CAST(6: multi_distinct_count AS DOUBLE)\n" +
                     "  |  limit: 1\n" +
@@ -675,15 +675,12 @@ public class CTEPlanTest extends PlanTestBase {
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: multi_distinct_sum(1: v1), multi_distinct_count(2: v2), multi_distinct_sum(2: v2)\n" +
                     "  |  group by: \n" +
-                    "  |  limit: 1\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode\n" +
-                    "     TABLE: t0");
+                    "  |  limit: 1");
         }
         {
             String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 group by v3 limit 1";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:Project\n" +
+            assertContains(plan, "2:Project\n" +
                     "  |  <slot 4> : 4: sum\n" +
                     "  |  <slot 5> : CAST(7: multi_distinct_sum AS DOUBLE) / CAST(6: multi_distinct_count AS DOUBLE)\n" +
                     "  |  limit: 1\n" +
@@ -691,10 +688,39 @@ public class CTEPlanTest extends PlanTestBase {
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: multi_distinct_sum(1: v1), multi_distinct_count(2: v2), multi_distinct_sum(2: v2)\n" +
                     "  |  group by: 3: v3\n" +
+                    "  |  limit: 1");
+        }
+        {
+            String sql = "select count(distinct v1, v2), avg(distinct(v2)) from t0 limit 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "29:Project\n" +
+                    "  |  <slot 4> : 4: count\n" +
+                    "  |  <slot 5> : CAST(8: sum AS DOUBLE) / CAST(10: count AS DOUBLE)\n" +
                     "  |  limit: 1\n" +
                     "  |  \n" +
-                    "  0:OlapScanNode\n" +
-                    "     TABLE: t0");
+                    "  28:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  limit: 1");
+        }
+        {
+            String sql = "select count(distinct v1, v2), avg(distinct(v2)) from t0 group by v3 limit 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "20:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 8: v3 <=> 14: v3\n" +
+                    "  |  limit: 1");
+        }
+        {
+            String sql = "select count(distinct v2, v3) from t0 limit 5;\n";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "6:AGGREGATE (merge finalize)\n" +
+                    "  |  output: count(4: count)\n" +
+                    "  |  group by: \n" +
+                    "  |  limit: 5\n" +
+                    "  |  \n" +
+                    "  5:EXCHANGE");
         }
     }
 
