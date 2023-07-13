@@ -272,6 +272,12 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
 
     @Override
     protected void enumerate() {
+        // If sub-plan contains joins of other types except CROSS JOIN and INNER JOIN, reorder would generate
+        // a worse plan, especially when the plan has multiple inner joins interleaved by left or right joins,
+        // so we not reorder the join conservatively only all of the atoms are Scan operators.
+        if (!atomOptExprs.stream().allMatch(op -> op.getOp() instanceof LogicalScanOperator)) {
+            return;
+        }
         // We only try to reorder atoms which are LogicalScanOperator, since at present,
         // we can extract cardinality-preserving relation from a pair of OlapTable.
         List<OptExpression> scanOps = atomOptExprs.stream().filter(opt -> {
