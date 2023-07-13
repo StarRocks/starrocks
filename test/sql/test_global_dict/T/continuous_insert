@@ -16,7 +16,7 @@ PROPERTIES (
 
 -- prepare init data and analyze
 insert into allstring select * from (select 'C4' union select 'A10' union select 1 )tb;
-analyze full table allstring;
+[UC]analyze full table allstring;
 function: wait_global_dict_ready('v1', 'allstring')
 -- insert the same value
 insert into allstring select * from (select 'C4' union select 'A10' union select 1 )tb;

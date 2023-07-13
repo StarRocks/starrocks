@@ -449,10 +449,11 @@ from emps right outer join depts using (deptno);
 select empid, depts.deptno
 from emps right outer join depts using (deptno) order by empid;
 -- result:
-NULL	1
+None	1
 1	1
 2	1
 3	1
+-- !result
 
 drop materialized view mv_right_outer;
 
@@ -469,14 +470,16 @@ explain logical select empid, depts.deptno
 from emps full outer join depts using (deptno);
 -- result:
 [REGEX]mv_full_outer
+-- !result
 
-select empid, depts.deptno 
+select empid, depts.deptno
 from emps full outer join depts using (deptno) order by empid;
 -- result:
-NULL	1
+None	2
 1	1
 2	1
 3	1
+-- !result
 
 drop materialized view mv_full_outer;
 
@@ -493,6 +496,7 @@ explain logical select empid
 from emps left semi join depts using (deptno);
 -- result:
 [REGEX]mv_left_semi
+-- !result
 
 select empid 
 from emps left semi join depts using (deptno) order by empid;
@@ -500,6 +504,7 @@ from emps left semi join depts using (deptno) order by empid;
 1
 2
 3
+-- !result
 
 drop materialized view mv_left_semi;
 
@@ -516,10 +521,12 @@ explain logical select empid
 from emps left anti join depts using (deptno);
 -- result:
 [REGEX]mv_left_anti
+-- !result
 
 select empid 
 from emps left anti join depts using (deptno) order by empid;
 -- result:
+-- !result
 
 drop materialized view mv_left_anti;
 
@@ -536,11 +543,13 @@ explain select deptno
 from emps right semi join depts using (deptno);
 -- result:
 [REGEX]mv_right_semi
+-- !result
 
 select deptno 
 from emps right semi join depts using (deptno) order by deptno;
 -- result:
 1
+-- !result
 
 drop materialized view mv_right_semi;
 
@@ -553,12 +562,13 @@ from emps right anti join depts using (deptno);
 
 refresh materialized view mv_right_anti with sync mode;
 
-explain select depts.deptno 
+ explain select depts.deptno
 from emps right anti join depts using (deptno);
 -- result:
 [REGEX]mv_right_anti
-
+-- !result
 select depts.deptno 
 from emps right anti join depts using (deptno);
 -- result:
 2
+-- !result

@@ -88,7 +88,7 @@ CREATE TABLE dt_minute( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) 
 CREATE TABLE dt_second( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('second', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 CREATE TABLE dt_week( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('week', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 CREATE TABLE dt_quarter( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('quarter', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
--- name: test_time_slice
+-- name: test_automatic_partition_time_slice
 CREATE TABLE ss_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 month) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss_month values('2023-02-14 12:31:07', 2);
 show partitions from ss_month;

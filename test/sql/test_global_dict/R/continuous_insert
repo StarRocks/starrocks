@@ -17,7 +17,7 @@ PROPERTIES (
 insert into allstring select * from (select 'C4' union select 'A10' union select 1 )tb;
 -- result:
 -- !result
-analyze full table allstring;
+[UC]analyze full table allstring;
 -- result:
 -- !result
 function: wait_global_dict_ready('v1', 'allstring')

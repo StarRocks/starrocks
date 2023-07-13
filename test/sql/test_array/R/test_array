@@ -100,7 +100,7 @@ select * from array_top_n order by c2[1] limit 4,10;
 select * from array_top_n order by c2[1] limit 5,10;
 -- result:
 -- !result
--- name: test01
+-- name: test_array_test01
 select ARRAY<INT>[], [], ARRAY<STRING>['abc'], [123, NULL, 1.0], ['abc', NULL];
 -- result:
 []	[]	["abc"]	[123.0,null,1.0]	["abc",null]
