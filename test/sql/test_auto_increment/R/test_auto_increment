@@ -1,0 +1,516 @@
+-- name: test_create_table_abnormal
+CREATE DATABASE test_create_table_abnormal_auto_increment;
+-- result:
+-- !result
+USE test_create_table_abnormal_auto_increment;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+-- result:
+E: (1064, 'Getting syntax error at line 1, column 17. Detail message: AUTO_INCREMENT column id must be NOT NULL.')
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT DEFAULT "100",  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+-- result:
+E: (1064, "Getting syntax error at line 1, column 51. Detail message: Unexpected input 'DEFAULT', the most similar input is {',', ')'}.")
+-- !result
+CREATE TABLE t ( id INT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 17 to line 1, column 33. Detail message: The AUTO_INCREMENT column must be BIGINT.')
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 53 to line 1, column 74. Detail message: More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.')
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 53 to line 1, column 74. Detail message: More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.')
+-- !result
+DROP DATABASE test_create_table_abnormal;
+-- result:
+E: (1064, "Unexpected exception: Can't drop database 'test_create_table_abnormal'; database doesn't exist")
+-- !result
+-- name: test_create_table_normal
+CREATE DATABASE test_create_table_normal_auto_increment;
+-- result:
+-- !result
+USE test_create_table_normal_auto_increment;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL ,  name BIGINT NOT NULL, job1 BIGINT AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+-- result:
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL ,  name BIGINT NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+-- result:
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+-- result:
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+-- result:
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+-- result:
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP DATABASE test_create_table_normal_auto_increment;
+-- result:
+-- !result
+-- name: test_table_with_null
+CREATE DATABASE test_table_with_null;
+-- result:
+-- !result
+USE test_table_with_null;
+-- result:
+-- !result
+SET enable_insert_strict = false;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "false");
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NULL, job2 BIGINT NULL) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t (id, name, job1, job2) VALUES (1,DEFAULT,NULL,2);
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	1	None	2
+-- !result
+INSERT INTO t (id, name, job1, job2) VALUES (1,NULL,NULL,2);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message:  `NULL` value is not supported for an AUTO_INCREMENT column: name You can use `default` for an AUTO INCREMENT column.')
+-- !result
+INSERT INTO t VALUES (1,NULL,NULL,2);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message:  `NULL` value is not supported for an AUTO_INCREMENT column: name You can use `default` for an AUTO INCREMENT column.')
+-- !result
+UPDATE t SET name = NULL where id = 1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: AUTO_INCREMENT column: name must not be NULL.')
+-- !result
+SELECT * FROM t;
+-- result:
+1	1	None	2
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+CREATE TABLE t2 ( id BIGINT NOT NULL, idx BIGINT NULL )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t2 VALUES (1, NULL), (2, NULL);
+-- result:
+-- !result
+INSERT INTO t1 SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 SELECT 1, NULL;
+-- result:
+-- !result
+SELECT * FROM t1;
+-- result:
+-- !result
+INSERT INTO t2 VALUES (10, 1), (20, 2);
+-- result:
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id) SELECT id FROM t2;
+-- result:
+-- !result
+SELECT * FROM t1;
+-- result:
+1	5
+2	6
+10	7
+20	8
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+DROP TABLE t2;
+-- result:
+-- !result
+SET enable_insert_strict = true;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "true");
+-- result:
+-- !result
+DROP DATABASE test_table_with_null;
+-- result:
+-- !result
+-- name: test_update_auto_increment
+CREATE DATABASE test_update_auto_increment;
+-- result:
+-- !result
+USE test_update_auto_increment;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t (id,name,job1,job2) values (DEFAULT,0,0,0);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	0	0	0
+-- !result
+UPDATE t SET job2 = 1 WHERE id = 1 AND name = 0;
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	0	0	1
+-- !result
+INSERT INTO t (id,name,job1,job2) values (DEFAULT,1,1,1);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	0	0	1
+2	1	1	1
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t (id,name,job1,job2) values (0,0,DEFAULT,0);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+0	0	1	0
+-- !result
+UPDATE t SET job2 = 1 WHERE id = 0 AND name = 0;
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+0	0	1	1
+-- !result
+INSERT INTO t (id,name,job1,job2) values (1,1,DEFAULT,1);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+0	0	1	1
+1	1	2	1
+-- !result
+UPDATE t SET job1 = 0 WHERE id = 1 AND name = 1;
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+0	0	1	1
+1	1	0	1
+-- !result
+INSERT INTO t (id,name,job1,job2) values (2,2,DEFAULT,2);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+0	0	1	1
+1	1	0	1
+2	2	3	2
+-- !result
+UPDATE t SET job1 = DEFAULT WHERE id = 0 AND name = 0;
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+0	0	4	1
+1	1	0	1
+2	2	3	2
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP DATABASE test_update_auto_increment;
+-- result:
+-- !result
+-- name: test_auto_increment_insert
+CREATE DATABASE test_insert_auto_increment;
+-- result:
+-- !result
+USE test_insert_auto_increment;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t (name,job1,job2) VALUES (1,1,1),(2,2,2);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	1	1	1
+2	2	2	2
+-- !result
+INSERT INTO t (id,name,job1,job2) VALUES (DEFAULT,3,3,3),(DEFAULT,4,4,4);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	1	1	1
+2	2	2	2
+3	3	3	3
+4	4	4	4
+-- !result
+INSERT INTO t (id,name,job1,job2) VALUES (100,5,5,5);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	1	1	1
+2	2	2	2
+3	3	3	3
+4	4	4	4
+100	5	5	5
+-- !result
+INSERT INTO t (id,name,job1,job2) VALUES (101,6,6,6),(DEFAULT,7,7,7);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	1	1	1
+2	2	2	2
+3	3	3	3
+4	4	4	4
+100	5	5	5
+101	6	6	6
+5	7	7	7
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t (id,name,job1,job2) VALUES (1,1,1,1),(100000,1,2,2);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY job1;
+-- result:
+1	1	1	1
+100000	1	2	2
+-- !result
+INSERT INTO t (name,job1,job2) VALUES (1,100,100);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY job1;
+-- result:
+100000	1	2	2
+1	1	100	100
+-- !result
+INSERT INTO t (id,name,job1,job2) VALUES (100000,1,100,100);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY job1;
+-- result:
+1	1	100	100
+100000	1	100	100
+-- !result
+INSERT INTO t (id,name,job1,job2) VALUES (100000,1,200,200), (10,10,99,99);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY job1;
+-- result:
+10	10	99	99
+1	1	100	100
+100000	1	200	200
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t (id,name,job2) VALUES (1,1,1),(2,2,2);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	1	1	1
+2	2	2	2
+-- !result
+INSERT INTO t (id,name,job1, job2) VALUES (3,3,DEFAULT,3),(4,4,DEFAULT,4);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	1	1	1
+2	2	2	2
+3	3	3	3
+4	4	4	4
+-- !result
+INSERT INTO t (id,name,job1, job2) VALUES (5,5,100,5);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	1	1	1
+2	2	2	2
+3	3	3	3
+4	4	4	4
+5	5	100	5
+-- !result
+INSERT INTO t (id,name,job1, job2) VALUES (6,6,101,6),(7,7,DEFAULT,7);
+-- result:
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	1	1	1
+2	2	2	2
+3	3	3	3
+4	4	4	4
+5	5	100	5
+6	6	101	6
+7	7	5	7
+-- !result
+SELECT * FROM t ORDER BY name;
+-- result:
+1	1	1	1
+2	2	2	2
+3	3	3	3
+4	4	4	4
+5	5	100	5
+6	6	101	6
+7	7	5	7
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t1 ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+CREATE TABLE t2 ( id BIGINT NOT NULL,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+CREATE TABLE t3 ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+CREATE TABLE t4 ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL AUTO_INCREMENT) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t1 (id,name,job1,job2) VALUES (DEFAULT,1,1,1);
+-- result:
+-- !result
+INSERT INTO t2 (id,name,job1,job2) VALUES (1,DEFAULT,1,1);
+-- result:
+-- !result
+INSERT INTO t3 (id,name,job1,job2) VALUES (1,1,DEFAULT,1);
+-- result:
+-- !result
+INSERT INTO t4 (id,name,job1,job2) VALUES (1,1,1,DEFAULT);
+-- result:
+-- !result
+INSERT INTO t1 (name,job1,job2) VALUES (1,1,1);
+-- result:
+-- !result
+INSERT INTO t2 (id,job1,job2) VALUES (1,1,1);
+-- result:
+-- !result
+INSERT INTO t3 (id,name,job2) VALUES (1,1,1);
+-- result:
+-- !result
+INSERT INTO t4 (id,name,job1) VALUES (1,1,1);
+-- result:
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+DROP TABLE t2;
+-- result:
+-- !result
+DROP TABLE t3;
+-- result:
+-- !result
+DROP TABLE t4;
+-- result:
+-- !result
+DROP DATABASE test_insert_auto_increment;
+-- result:
+-- !result
+-- name: test_schema_change;
+CREATE DATABASE test_schema_change_auto_increment;
+-- result:
+-- !result
+USE test_schema_change_auto_increment;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL AUTO_INCREMENT) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+ALTER TABLE t ADD COLUMN newcol BIGINT AUTO_INCREMENT;
+-- result:
+E: (1064, "Getting syntax error from line 1, column 25 to line 1, column 39. Detail message: Column 'newcol' can not be AUTO_INCREMENT when ADD COLUMN.")
+-- !result
+ALTER TABLE t MODIFY COLUMN job2 BIGINT;
+-- result:
+E: (1064, "Unexpected exception: Can't not modify a AUTO_INCREMENT column")
+-- !result
+ALTER TABLE t MODIFY COLUMN job2 BIGINT AUTO_INCREMENT;
+-- result:
+E: (1064, "Getting syntax error from line 1, column 28 to line 1, column 40. Detail message: Column 'job2' can not be AUTO_INCREMENT when MODIFY COLUMN.")
+-- !result
+ALTER TABLE t DROP COLUMN job2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP DATABASE test_schema_change_auto_increment;
+-- result:
+-- !result

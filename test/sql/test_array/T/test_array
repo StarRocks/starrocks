@@ -1,0 +1,84 @@
+-- name: test_array_test01
+select ARRAY<INT>[], [], ARRAY<STRING>['abc'], [123, NULL, 1.0], ['abc', NULL];
+
+-- name: testArrayPredicate
+CREATE TABLE array_data_type
+    (c1 int,
+    c2  array<bigint>, 
+    c3  array<bigint>,
+    c4  array<bigint> not null, 
+    c5  array<bigint> not null)
+    PRIMARY KEY(c1) 
+    DISTRIBUTED BY HASH(c1) 
+    BUCKETS 1 
+    PROPERTIES ("replication_num" = "1");
+
+insert into array_data_type (c1, c2, c3, c4,c5) values 
+    (1,NULL,NULL,[22, 11, 33],[22, 11, 33]);
+
+select c2 = c3 from array_data_type;   
+
+insert into array_data_type (c1, c2, c3, c4,c5) values 
+    (2,NULL,[22, 11, 33],[22, 11, 33],[22, 11, 33]),
+    (3,[22, 11, 33],[22, 11, 33],[22, 11, 33],[22, 11, 33]),
+    (4,[22, 11, 33],NULL,[22, 11, 33],[22, 11, 33]);
+
+select c2 <=> c3 from array_data_type;
+select c2 = c3 from array_data_type;
+select c3 = c4 from array_data_type;
+select c4 = c5 from array_data_type;
+
+insert into array_data_type (c1, c2, c3, c4,c5) values 
+    (5,[22, 11, 33],[22, 11, 33],[22, 11, 44],[22, 11, 33]);
+
+select c4 = c5 from array_data_type;
+select c4 > c5 from array_data_type;
+
+-- name: testArrayVarchar
+CREATE TABLE array_data_type_1
+    (c1 int,
+    c2  array<datetime>,
+    c3  array<float>,
+    c4  array<varchar(10)>,
+    c5  array<varchar(20)>,
+    c6  array<array<varchar(10)>>)
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+
+insert into array_data_type_1 values
+(1, ['2020-11-11', '2021-11-11', '2022-01-01'], [1.23, 1.35, 2.7894], ['a', 'b'], ['sss', 'eee', 'fff'], [['a', 'b']]),
+(2, ['2020-01-11', null, '2022-11-01'], [2.23, 2.35, 3.7894], ['aa', null], ['ssss', 'eeee', null], [['a', null], null]),
+(3, null, null, null, null, null);
+
+select * from array_data_type_1 where c4 != ['a'] or c6 = [['a', 'b']];
+select * from array_data_type_1 where c4 = ['a'] or c6 != [['a', 'b']];
+select * from array_data_type_1 where c4 = cast(c4 as array<char(10)>);
+select * from array_data_type_1 where c5 = c4 or c6 = [['a']];
+select * from array_data_type_1 where array_map((x) -> concat(x, 'a'), c5) = c4;
+select c6[0] = ['a'] from array_data_type_1;
+select c6[0] > array_map((x) -> concat(x, 'a'), c5) from array_data_type_1;
+
+-- name: testArrayTopN
+CREATE TABLE array_top_n
+    (c1 int,
+    c2 array<int>)
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+
+insert into array_top_n values
+(1, [1]),
+(2, [5, 6]),
+(3, [2, 3, 4]),
+(4, [12, 13, 14, 15]),
+(5, [7, 8, 9, 10, 11]);
+
+select * from array_top_n order by c2[1];
+select * from array_top_n order by c2[1] limit 1,10;
+select * from array_top_n order by c2[1] limit 2,10;
+select * from array_top_n order by c2[1] limit 3,10;
+select * from array_top_n order by c2[1] limit 4,10;
+select * from array_top_n order by c2[1] limit 5,10;

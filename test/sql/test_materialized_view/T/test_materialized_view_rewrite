@@ -237,7 +237,7 @@ from emps right anti join depts using (deptno);
 
 refresh materialized view mv_right_anti with sync mode;
 
-explain select depts.deptno 
+explain select depts.deptno
 from emps right anti join depts using (deptno);
 
 select depts.deptno 

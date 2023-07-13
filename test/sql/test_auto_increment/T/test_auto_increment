@@ -1,0 +1,216 @@
+-- name: test_create_table_normal
+CREATE DATABASE test_create_table_normal_auto_increment;
+USE test_create_table_normal_auto_increment;
+
+CREATE TABLE t ( id BIGINT NOT NULL ,  name BIGINT NOT NULL, job1 BIGINT AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL ,  name BIGINT NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+DROP TABLE t;
+
+DROP DATABASE test_create_table_normal_auto_increment;
+
+-- name: test_create_table_abnormal
+CREATE DATABASE test_create_table_abnormal_auto_increment;
+USE test_create_table_abnormal_auto_increment;
+
+CREATE TABLE t ( id BIGINT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT DEFAULT "100",  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+CREATE TABLE t ( id INT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true");
+
+DROP DATABASE test_create_table_abnormal;
+
+-- name: test_auto_increment_insert
+CREATE DATABASE test_insert_auto_increment;
+USE test_insert_auto_increment;
+
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+INSERT INTO t (name,job1,job2) VALUES (1,1,1),(2,2,2);
+SELECT * FROM t ORDER BY name;
+
+INSERT INTO t (id,name,job1,job2) VALUES (DEFAULT,3,3,3),(DEFAULT,4,4,4);
+SELECT * FROM t ORDER BY name;
+
+INSERT INTO t (id,name,job1,job2) VALUES (100,5,5,5);
+SELECT * FROM t ORDER BY name;
+
+INSERT INTO t (id,name,job1,job2) VALUES (101,6,6,6),(DEFAULT,7,7,7);
+SELECT * FROM t ORDER BY name;
+
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+
+INSERT INTO t (id,name,job1,job2) VALUES (1,1,1,1),(100000,1,2,2);
+SELECT * FROM t ORDER BY job1;
+
+INSERT INTO t (name,job1,job2) VALUES (1,100,100);
+SELECT * FROM t ORDER BY job1;
+
+INSERT INTO t (id,name,job1,job2) VALUES (100000,1,100,100);
+SELECT * FROM t ORDER BY job1;
+
+INSERT INTO t (id,name,job1,job2) VALUES (100000,1,200,200), (10,10,99,99);
+SELECT * FROM t ORDER BY job1;
+
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+
+INSERT INTO t (id,name,job2) VALUES (1,1,1),(2,2,2);
+SELECT * FROM t ORDER BY name;
+
+INSERT INTO t (id,name,job1, job2) VALUES (3,3,DEFAULT,3),(4,4,DEFAULT,4);
+SELECT * FROM t ORDER BY name;
+
+INSERT INTO t (id,name,job1, job2) VALUES (5,5,100,5);
+SELECT * FROM t ORDER BY name;
+
+INSERT INTO t (id,name,job1, job2) VALUES (6,6,101,6),(7,7,DEFAULT,7);
+SELECT * FROM t ORDER BY name;
+
+SELECT * FROM t ORDER BY name;
+
+DROP TABLE t;
+
+CREATE TABLE t1 ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+CREATE TABLE t2 ( id BIGINT NOT NULL,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+CREATE TABLE t3 ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+CREATE TABLE t4 ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL AUTO_INCREMENT) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+
+INSERT INTO t1 (id,name,job1,job2) VALUES (DEFAULT,1,1,1);
+INSERT INTO t2 (id,name,job1,job2) VALUES (1,DEFAULT,1,1);
+INSERT INTO t3 (id,name,job1,job2) VALUES (1,1,DEFAULT,1);
+INSERT INTO t4 (id,name,job1,job2) VALUES (1,1,1,DEFAULT);
+
+INSERT INTO t1 (name,job1,job2) VALUES (1,1,1);
+INSERT INTO t2 (id,job1,job2) VALUES (1,1,1);
+INSERT INTO t3 (id,name,job2) VALUES (1,1,1);
+INSERT INTO t4 (id,name,job1) VALUES (1,1,1);
+
+DROP TABLE t1;
+DROP TABLE t2;
+DROP TABLE t3;
+DROP TABLE t4;
+
+DROP DATABASE test_insert_auto_increment;
+
+-- name: test_update_auto_increment
+CREATE DATABASE test_update_auto_increment;
+USE test_update_auto_increment;
+
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+
+CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+INSERT INTO t (id,name,job1,job2) values (DEFAULT,0,0,0);
+SELECT * FROM t ORDER BY name;
+
+UPDATE t SET job2 = 1 WHERE id = 1 AND name = 0;
+SELECT * FROM t ORDER BY name;
+
+INSERT INTO t (id,name,job1,job2) values (DEFAULT,1,1,1);
+SELECT * FROM t ORDER BY name;
+
+DROP TABLE t;
+
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT, job2 BIGINT NOT NULL) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+
+INSERT INTO t (id,name,job1,job2) values (0,0,DEFAULT,0);
+SELECT * FROM t ORDER BY name;
+
+UPDATE t SET job2 = 1 WHERE id = 0 AND name = 0;
+SELECT * FROM t ORDER BY name;
+
+INSERT INTO t (id,name,job1,job2) values (1,1,DEFAULT,1);
+SELECT * FROM t ORDER BY name;
+
+UPDATE t SET job1 = 0 WHERE id = 1 AND name = 1;
+SELECT * FROM t ORDER BY name;
+
+INSERT INTO t (id,name,job1,job2) values (2,2,DEFAULT,2);
+SELECT * FROM t ORDER BY name;
+
+UPDATE t SET job1 = DEFAULT WHERE id = 0 AND name = 0;
+SELECT * FROM t ORDER BY name;
+
+DROP TABLE t;
+DROP DATABASE test_update_auto_increment;
+
+-- name: test_schema_change;
+CREATE DATABASE test_schema_change_auto_increment;
+USE test_schema_change_auto_increment;
+
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL, job2 BIGINT NOT NULL AUTO_INCREMENT) Primary KEY (id, name) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+
+ALTER TABLE t ADD COLUMN newcol BIGINT AUTO_INCREMENT;
+ALTER TABLE t MODIFY COLUMN job2 BIGINT;
+ALTER TABLE t MODIFY COLUMN job2 BIGINT AUTO_INCREMENT;
+ALTER TABLE t DROP COLUMN job2;
+function: wait_alter_table_finish()
+
+DROP TABLE t;
+DROP DATABASE test_schema_change_auto_increment;
+
+-- name: test_table_with_null
+CREATE DATABASE test_table_with_null;
+USE test_table_with_null;
+
+SET enable_insert_strict = false;
+ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "false");
+
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NULL, job2 BIGINT NULL) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+
+INSERT INTO t (id, name, job1, job2) VALUES (1,DEFAULT,NULL,2);
+SELECT * FROM t;
+
+INSERT INTO t (id, name, job1, job2) VALUES (1,NULL,NULL,2);
+INSERT INTO t VALUES (1,NULL,NULL,2);
+
+UPDATE t SET name = NULL where id = 1;
+
+SELECT * FROM t;
+
+DROP TABLE t;
+
+CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+
+CREATE TABLE t2 ( id BIGINT NOT NULL, idx BIGINT NULL )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+
+INSERT INTO t2 VALUES (1, NULL), (2, NULL);
+
+INSERT INTO t1 SELECT * FROM t2;
+INSERT INTO t1 (id, idx) SELECT * FROM t2;
+INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+INSERT INTO t1 SELECT 1, NULL;
+SELECT * FROM t1;
+INSERT INTO t2 VALUES (10, 1), (20, 2);
+DROP TABLE t1;
+CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
+Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+INSERT INTO t1 (id, idx) SELECT * FROM t2;
+INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+INSERT INTO t1 (id) SELECT id FROM t2;
+SELECT * FROM t1;
+
+DROP TABLE t1;
+DROP TABLE t2;
+
+SET enable_insert_strict = true;
+ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "true");
+
+DROP DATABASE test_table_with_null;
