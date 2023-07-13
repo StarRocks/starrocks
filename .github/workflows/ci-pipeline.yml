@@ -659,6 +659,14 @@ jobs:
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
           ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ -rf
           ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
+     
+      - name: Upload log
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: SQL-Tester Log
+          path: test/log/
+          retention-days: 1
           
       - name: Clean ENV
         if: always()

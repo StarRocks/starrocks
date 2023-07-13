@@ -1347,7 +1347,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         Assert.assertEquals("k4", uniqueConstraint4.getUniqueColumns().get(0));
 
         cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"\")");
-        Assert.assertNull(olapTable.getUniqueConstraints());
+        Assert.assertTrue(olapTable.getUniqueConstraints().isEmpty());
 
         cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2\")");
 

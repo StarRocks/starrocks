@@ -1,6 +1,6 @@
 -- name: test00
 SELECT * FROM TABLE(generate_series(-5, 0));
--- name: test01
+-- name: test_generate_series_test01
 SELECT * FROM TABLE(generate_series(65530, 65536));
 -- name: test02
 SELECT * FROM TABLE(generate_series(40000000, 40000005));

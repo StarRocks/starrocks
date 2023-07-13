@@ -122,7 +122,7 @@ private:
         for (const auto& col : inputs) {
             columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
-        auto res = ColumnHelper::cast_to_nullable_column(columns[0]->clone_empty());
+        auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
         NullColumnPtr null = nullptr;
 
@@ -196,7 +196,7 @@ private:
         for (const auto& col : inputs) {
             columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
-        auto res = ColumnHelper::cast_to_nullable_column(columns[0]->clone_empty());
+        auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
         auto right_data = columns[1];
         NullColumnPtr right_nulls = nullptr;
@@ -349,7 +349,7 @@ private:
             columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
         ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
-        ColumnPtr res = ColumnHelper::cast_to_nullable_column(columns[1]->clone_empty());
+        ColumnPtr res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
         if constexpr (check_null) {
             for (int row = 0; row < num_rows; ++row) {
@@ -455,7 +455,7 @@ private:
             columns.push_back(ColumnHelper::unfold_const_column(this->type(), size, col));
         }
         int col_size = columns.size();
-        auto res = ColumnHelper::cast_to_nullable_column(columns[0]->clone_empty());
+        auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(size);
         NullColumns nullColumns;
         nullColumns.resize(col_size);

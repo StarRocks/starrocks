@@ -144,20 +144,20 @@ public:
         ASSERT_EQ(size, for_page_decoder.count());
 
         auto column1 = ChunkHelper::column_from_field_type(Type, false);
-        SparseRange read_range;
-        read_range.add(Range(0, size / 3));
-        read_range.add(Range(size / 2, (size * 2 / 3)));
-        read_range.add(Range((size * 3 / 4), size));
+        SparseRange<> read_range;
+        read_range.add(Range<>(0, size / 3));
+        read_range.add(Range<>(size / 2, (size * 2 / 3)));
+        read_range.add(Range<>((size * 3 / 4), size));
         size_t read_num = read_range.span_size();
 
         status = for_page_decoder.next_batch(read_range, column1.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(read_num, column1->size());
 
-        SparseRangeIterator read_iter = read_range.new_iterator();
+        SparseRangeIterator<> read_iter = read_range.new_iterator();
         size_t offset = 0;
         while (read_iter.has_more()) {
-            Range r = read_iter.next(read_num);
+            Range<> r = read_iter.next(read_num);
             for (uint i = 0; i < r.span_size(); ++i) {
                 ASSERT_EQ(src[r.begin() + i], column1->get(offset + i).get<CppType>());
             }

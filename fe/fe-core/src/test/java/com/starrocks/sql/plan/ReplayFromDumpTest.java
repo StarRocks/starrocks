@@ -498,11 +498,21 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
         String plan = replayPair.second;
+        System.out.println(plan);
         Assert.assertTrue(plan, plan.contains("36:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone)," +
                 " multi_distinct_count(128: case), max(103: count)\n" +
                 "  |  group by: 40: city, 116: division_en, 104: department, 106: category, 126: concat, " +
                 "127: concat, 9: upc, 108: upc_desc"));
+        Assert.assertTrue(plan, plan.contains("20:AGGREGATE (update serialize)\n" +
+                "  |  output: count(60: order_id)\n" +
+                "  |  group by: 88: city\n" +
+                "  |  \n" +
+                "  19:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 88: city, 60: order_id\n" +
+                "  |  \n" +
+                "  18:EXCHANGE"));
+
     }
 
     @Test

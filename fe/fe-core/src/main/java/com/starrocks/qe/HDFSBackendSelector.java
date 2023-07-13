@@ -16,7 +16,6 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -24,7 +23,6 @@ import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
@@ -36,10 +34,11 @@ import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.scheduler.NonRecoverableException;
+import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsScanRange;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
@@ -50,7 +49,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -76,12 +74,9 @@ public class HDFSBackendSelector implements BackendSelector {
     private final ScanNode scanNode;
     private final List<TScanRangeLocations> locations;
     private final FragmentScanRangeAssignment assignment;
-    private final Set<Long> usedBackendIDs;
-    private final Map<TNetworkAddress, Long> addressToBackendId;
-    private final ImmutableCollection<ComputeNode> computeNodes;
-    private boolean forceScheduleLocal;
-    private boolean chooseComputeNode;
-    private boolean shuffleScanRange;
+    private final WorkerProvider workerProvider;
+    private final boolean forceScheduleLocal;
+    private final boolean shuffleScanRange;
     private final int kCandidateNumber = 3;
     private final int kMaxImbalanceRatio = 3;
     private final int kMaxNodeSizeUseRendezvousHashRing = 64;
@@ -140,20 +135,17 @@ public class HDFSBackendSelector implements BackendSelector {
         }
     }
 
-    private HdfsScanRangeHasher hdfsScanRangeHasher;
+    private final HdfsScanRangeHasher hdfsScanRangeHasher;
 
     public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                               FragmentScanRangeAssignment assignment, Map<TNetworkAddress, Long> addressToBackendId,
-                               Set<Long> usedBackendIDs, ImmutableCollection<ComputeNode> computeNodes,
-                               boolean chooseComputeNode, boolean forceScheduleLocal, boolean shuffleScanRange) {
+                               FragmentScanRangeAssignment assignment, WorkerProvider workerProvider,
+                               boolean forceScheduleLocal,
+                               boolean shuffleScanRange) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
-        this.computeNodes = computeNodes;
-        this.chooseComputeNode = chooseComputeNode;
+        this.workerProvider = workerProvider;
         this.forceScheduleLocal = forceScheduleLocal;
-        this.addressToBackendId = addressToBackendId;
-        this.usedBackendIDs = usedBackendIDs;
         this.hdfsScanRangeHasher = new HdfsScanRangeHasher();
         this.shuffleScanRange = shuffleScanRange;
     }
@@ -223,7 +215,7 @@ public class HDFSBackendSelector implements BackendSelector {
     }
 
     @Override
-    public void computeScanRangeAssignment() throws Exception {
+    public void computeScanRangeAssignment() throws UserException {
         if (locations.size() == 0) {
             return;
         }
@@ -231,16 +223,9 @@ public class HDFSBackendSelector implements BackendSelector {
         long avgScanRangeBytes = computeAverageScanRangeBytes();
         long maxImbalanceBytes = avgScanRangeBytes * kMaxImbalanceRatio;
 
-        // exclude non-alive or in-blacklist compute nodes.
-        for (ComputeNode computeNode : computeNodes) {
-            if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
-                continue;
-            }
+        for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
             assignedScansPerComputeNode.put(computeNode, 0L);
             hostToBackends.put(computeNode.getHost(), computeNode);
-        }
-        if (hostToBackends.isEmpty()) {
-            throw new UserException(FeConstants.getNodeNotFoundError(chooseComputeNode));
         }
 
         // schedule scan ranges to co-located backends.
@@ -289,23 +274,17 @@ public class HDFSBackendSelector implements BackendSelector {
         }
     }
 
-    private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations) {
-        TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
-        usedBackendIDs.add(node.getId());
-        addressToBackendId.put(address, node.getId());
+    private void recordScanRangeAssignment(ComputeNode worker, TScanRangeLocations scanRangeLocations)
+            throws NonRecoverableException {
+        workerProvider.selectWorker(worker.getId());
 
         // update statistic
         long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
-        assignedScansPerComputeNode.put(node, assignedScansPerComputeNode.get(node) + addedScans);
+        assignedScansPerComputeNode.put(worker, assignedScansPerComputeNode.get(worker) + addedScans);
 
-        // add in assignment
-        Map<Integer, List<TScanRangeParams>> scanRanges =
-                BackendSelector.findOrInsert(assignment, address, new HashMap<>());
-        List<TScanRangeParams> scanRangeParamsList =
-                BackendSelector.findOrInsert(scanRanges, scanNode.getId().asInt(), new ArrayList<TScanRangeParams>());
         // add scan range params
         TScanRangeParams scanRangeParams = new TScanRangeParams();
         scanRangeParams.scan_range = scanRangeLocations.scan_range;
-        scanRangeParamsList.add(scanRangeParams);
+        assignment.put(worker.getId(), scanNode.getId().asInt(), scanRangeParams);
     }
 }

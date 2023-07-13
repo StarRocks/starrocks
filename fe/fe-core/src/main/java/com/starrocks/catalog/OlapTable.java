@@ -950,6 +950,17 @@ public class OlapTable extends Table {
         return defaultDistributionInfo;
     }
 
+    /*
+     * Infer the distribution info based on partitions and cluster status
+     */
+    public void inferDistribution(DistributionInfo info) throws DdlException {
+        if (info.getBucketNum() == 0) {
+            int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
+                    5, Config.enable_auto_tablet_distribution);
+            info.setBucketNum(numBucket);
+        }
+    }
+
     @Override
     public Set<String> getDistributionColumnNames() {
         Set<String> distributionColumnNames = Sets.newHashSet();
@@ -2337,11 +2348,30 @@ public class OlapTable extends Table {
     }
 
     @Override
-    public List<UniqueConstraint> getUniqueConstraints() {
-        if (tableProperty == null) {
-            return null;
+    public boolean hasUniqueConstraints() {
+        if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
+            return true;
         }
-        return tableProperty.getUniqueConstraints();
+        return tableProperty != null &&
+                tableProperty.getUniqueConstraints() != null &&
+                !tableProperty.getUniqueConstraints().isEmpty();
+    }
+
+    @Override
+    public List<UniqueConstraint> getUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
+        if (!hasUniqueConstraints()) {
+            return uniqueConstraints;
+        }
+        if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
+            uniqueConstraints.add(
+                    new UniqueConstraint(null, null, null, getKeyColumns().stream().map(Column::getName).collect(
+                            Collectors.toList())));
+        }
+        if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
+            uniqueConstraints.addAll(tableProperty.getUniqueConstraints());
+        }
+        return uniqueConstraints;
     }
 
     @Override
@@ -2363,6 +2393,11 @@ public class OlapTable extends Table {
             return null;
         }
         return tableProperty.getForeignKeyConstraints();
+    }
+
+    public boolean hasForeignKeyConstraints() {
+        return tableProperty != null && tableProperty.getForeignKeyConstraints() != null &&
+                !tableProperty.getForeignKeyConstraints().isEmpty();
     }
 
     @Override

@@ -369,51 +369,6 @@ public class PlanFragmentBuilder {
         return execPlan;
     }
 
-    private static void maybeClearOlapScanNodePartitions(PlanFragment fragment) {
-        List<OlapScanNode> olapScanNodes = fragment.collectOlapScanNodes();
-        long numNodesWithBucketColumns =
-                olapScanNodes.stream().filter(node -> !node.getBucketColumns().isEmpty()).count();
-        // Either all OlapScanNode use bucketColumns for local shuffle, or none of them do.
-        // Therefore, clear bucketColumns if only some of them contain bucketColumns.
-        boolean needClear = numNodesWithBucketColumns > 0 && numNodesWithBucketColumns < olapScanNodes.size();
-        if (needClear) {
-            clearOlapScanNodePartitions(fragment.getPlanRoot());
-        }
-    }
-
-    /**
-     * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
-     * <p>
-     * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
-     * local shuffle partition exprs.
-     * Otherwise, the operators will use the original partition exprs (group by keys or join on keys).
-     * <p>
-     * The bucket keys can satisfy the required hash property of blocking aggregation except two scenarios:
-     * - OlapScanNode only has one tablet after pruned.
-     * - It is executed on the single BE.
-     * As for these two scenarios, which will generate ScanNode(k1)->LocalShuffle(c1)->BlockingAgg(c1),
-     * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
-     * local shuffle partition exprs.
-     *
-     * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
-     */
-    private static void clearOlapScanNodePartitions(PlanNode root) {
-        if (root instanceof OlapScanNode) {
-            OlapScanNode scanNode = (OlapScanNode) root;
-            scanNode.setBucketExprs(Lists.newArrayList());
-            scanNode.setBucketColumns(Lists.newArrayList());
-            return;
-        }
-
-        if (root instanceof ExchangeNode) {
-            return;
-        }
-
-        for (PlanNode child : root.getChildren()) {
-            clearOlapScanNodePartitions(child);
-        }
-    }
-
     private static class PhysicalPlanTranslator extends OptExpressionVisitor<PlanFragment, ExecPlan> {
         private final ColumnRefFactory columnRefFactory;
         private final IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator = RuntimeFilterId.createGenerator();
@@ -1758,7 +1713,7 @@ public class PlanFragmentBuilder {
                 }
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
-                if (!withLocalShuffle && !node.isUseStreamingPreAgg() &&
+                if (!withLocalShuffle && node.isMergedLocalAgg() &&
                         hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }

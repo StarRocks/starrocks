@@ -119,7 +119,7 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
     return Status::OK();
 }
 
-Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
+Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     MapColumn* map_column = nullptr;
     NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
@@ -139,7 +139,7 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
-    SparseRangeIterator iter = range.new_iterator();
+    SparseRangeIterator<> iter = range.new_iterator();
     size_t to_read = range.span_size();
 
     // array column can be nested, range may be empty
@@ -147,7 +147,7 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     SparseRange element_read_range;
     size_t read_rows = 0;
     while (iter.has_more()) {
-        Range r = iter.next(to_read);
+        Range<> r = iter.next(to_read);
 
         RETURN_IF_ERROR(_offsets->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
         size_t element_ordinal = _offsets->element_ordinal();
@@ -166,7 +166,7 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         size_t end_offset = data.back();
 
         size_t prev_array_size = offsets->size();
-        SparseRange size_read_range(r);
+        SparseRange<> size_read_range(r);
         RETURN_IF_ERROR(_offsets->next_batch(size_read_range, offsets));
         size_t curr_array_size = offsets->size();
 
@@ -178,7 +178,7 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         num_to_read = end_offset - num_to_read;
         read_rows += num_to_read;
 
-        element_read_range.add(Range(element_ordinal, element_ordinal + num_to_read));
+        element_read_range.add(Range<>(element_ordinal, element_ordinal + num_to_read));
     }
 
     // if array column is nullable, element_read_range may be empty
@@ -279,7 +279,7 @@ Status MapColumnIterator::seek_to_ordinal(ordinal_t ord) {
 }
 
 Status MapColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                     const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
+                                                     const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }

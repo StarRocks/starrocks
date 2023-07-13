@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
@@ -52,6 +53,9 @@ import java.util.stream.Collectors;
 public class StatementPlanner {
 
     public static ExecPlan plan(StatementBase stmt, ConnectContext session) {
+        if (session instanceof HttpConnectContext) {
+            return plan(stmt, session, TResultSinkType.HTTP_PROTOCAL);
+        }
         return plan(stmt, session, TResultSinkType.MYSQL_PROTOCAL);
     }
 
