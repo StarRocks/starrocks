@@ -42,6 +42,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -1953,6 +1954,19 @@ public class CreateMaterializedViewTest {
             currentState.getColocateTableIndex().clear();
         }
 
+    }
+
+    @Test
+    public void testRandomColocate() {
+        String sql = "create materialized view mv1 " +
+                "distributed by random " +
+                "refresh async " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n," +
+                "'colocate_with' = 'hehe' " +
+                ")" +
+                "as select k2, date_trunc('month',tbl1.k1) ss from tbl1;";
+        Assert.assertThrows(SemanticException.class, () -> starRocksAssert.withMaterializedView(sql));
     }
 
     // ========== other test ==========

@@ -58,6 +58,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -361,12 +362,18 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             // check colocation properties
             String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
-                    colocateGroup, false /* expectLakeTable */);
-            if (!(table instanceof ExternalOlapTable) && addedToColocateGroup) {
-                // Colocate table should keep the same bucket number across the partitions
-                DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
-                table.inferDistribution(defaultDistributionInfo);
+            if (StringUtils.isNotEmpty(colocateGroup)) {
+                if (!distributionInfo.supportColocate()) {
+                    throw new DdlException("random distribution does not support 'colocate_with'");
+                }
+
+                boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
+                        colocateGroup, false /* expectLakeTable */);
+                if (!(table instanceof ExternalOlapTable) && addedToColocateGroup) {
+                    // Colocate table should keep the same bucket number across the partitions
+                    DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
+                    table.inferDistribution(defaultDistributionInfo);
+                }
             }
 
             // get base index storage type. default is COLUMN
