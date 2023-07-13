@@ -910,10 +910,6 @@ CONF_mInt32(spill_init_partition, "16");
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 
-// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
-// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
-CONF_Int32(internal_service_async_thread_num, "10");
-
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
 /*
