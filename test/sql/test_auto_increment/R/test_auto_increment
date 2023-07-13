@@ -178,7 +178,7 @@ ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "true");
 DROP DATABASE test_table_with_null;
 -- result:
 -- !result
--- name: test_update
+-- name: test_update_auto_increment
 CREATE DATABASE test_update_auto_increment;
 -- result:
 -- !result
@@ -273,7 +273,7 @@ DROP TABLE t;
 DROP DATABASE test_update_auto_increment;
 -- result:
 -- !result
--- name: test_insert
+-- name: test_auto_increment_insert
 CREATE DATABASE test_insert_auto_increment;
 -- result:
 -- !result

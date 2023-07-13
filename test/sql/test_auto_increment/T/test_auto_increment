@@ -31,7 +31,7 @@ CREATE TABLE t ( id BIGINT NOT NULL AUTO_INCREMENT,  name BIGINT NOT NULL AUTO_I
 
 DROP DATABASE test_create_table_abnormal;
 
--- name: test_insert
+-- name: test_auto_increment_insert
 CREATE DATABASE test_insert_auto_increment;
 USE test_insert_auto_increment;
 
@@ -108,7 +108,7 @@ DROP TABLE t4;
 
 DROP DATABASE test_insert_auto_increment;
 
--- name: test_update
+-- name: test_update_auto_increment
 CREATE DATABASE test_update_auto_increment;
 USE test_update_auto_increment;
 
