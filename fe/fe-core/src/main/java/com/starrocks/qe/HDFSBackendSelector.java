@@ -23,6 +23,7 @@ import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.RendezvousHashRing;
@@ -48,7 +49,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -215,7 +215,7 @@ public class HDFSBackendSelector implements BackendSelector {
     }
 
     @Override
-    public void computeScanRangeAssignment() throws Exception {
+    public void computeScanRangeAssignment() throws UserException {
         if (locations.size() == 0) {
             return;
         }
@@ -282,14 +282,9 @@ public class HDFSBackendSelector implements BackendSelector {
         long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
         assignedScansPerComputeNode.put(worker, assignedScansPerComputeNode.get(worker) + addedScans);
 
-        // add in assignment
-        Map<Integer, List<TScanRangeParams>> scanRanges =
-                BackendSelector.findOrInsert(assignment, worker.getId(), new HashMap<>());
-        List<TScanRangeParams> scanRangeParamsList =
-                BackendSelector.findOrInsert(scanRanges, scanNode.getId().asInt(), new ArrayList<>());
         // add scan range params
         TScanRangeParams scanRangeParams = new TScanRangeParams();
         scanRangeParams.scan_range = scanRangeLocations.scan_range;
-        scanRangeParamsList.add(scanRangeParams);
+        assignment.put(worker.getId(), scanNode.getId().asInt(), scanRangeParams);
     }
 }
