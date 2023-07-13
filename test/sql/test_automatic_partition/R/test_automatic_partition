@@ -539,7 +539,7 @@ show partitions from dt_month;
 .*p203307.*
 .*p203308.*
 -- !result
--- name: test_time_slice
+-- name: test_automatic_partition_time_slice
 CREATE TABLE ss_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 month) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
 -- !result
@@ -626,3 +626,4 @@ insert into ss values('2021-01-01', 1);
 select * from ss;
 -- result:
 2021-01-01	1
+-- !result
