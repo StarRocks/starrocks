@@ -509,9 +509,9 @@ Status CrossJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
             });
 }
 
-Status CrossJoinNode::close(RuntimeState* state) {
+void CrossJoinNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     if (_build_chunk != nullptr) {
@@ -522,7 +522,7 @@ Status CrossJoinNode::close(RuntimeState* state) {
     }
 
     Expr::close(_join_conjuncts, state);
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 void CrossJoinNode::_init_row_desc() {

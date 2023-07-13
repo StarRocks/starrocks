@@ -153,11 +153,11 @@ Status AssertNumRowsNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
     return Status::OK();
 }
 
-Status AssertNumRowsNode::close(RuntimeState* state) {
+void AssertNumRowsNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {

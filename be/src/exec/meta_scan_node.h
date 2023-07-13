@@ -23,14 +23,14 @@ namespace starrocks {
 
 class RuntimeState;
 
-class MetaScanNode : public starrocks::ScanNode {
+class MetaScanNode final : public starrocks::ScanNode {
 public:
     MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~MetaScanNode() override;
 
     Status prepare(RuntimeState* state) override;
 
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
 protected:
