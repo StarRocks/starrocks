@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
@@ -22,6 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -45,6 +49,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.roaringbitmap.RoaringBitmap;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -52,14 +57,19 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static java.util.function.Function.identity;
 
@@ -578,5 +588,43 @@ public class Utils {
             }
         }
         return false;
+    }
+
+    public static Stream<Integer> getIntStream(RoaringBitmap bitmap) {
+        Spliterator<Integer> iter = Spliterators.spliteratorUnknownSize(bitmap.iterator(), Spliterator.ORDERED);
+        return StreamSupport.stream(iter, false);
+    }
+
+    public static Set<Pair<ColumnRefOperator, ColumnRefOperator>> getJoinEqualColRefPairs(OptExpression joinOp) {
+        Pair<List<BinaryPredicateOperator>, List<ScalarOperator>> onPredicates =
+                JoinHelper.separateEqualPredicatesFromOthers(joinOp);
+        List<BinaryPredicateOperator> eqOnPredicates = onPredicates.first;
+        List<ScalarOperator> otherOnPredicates = onPredicates.second;
+
+        if (!otherOnPredicates.isEmpty() || eqOnPredicates.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<Pair<ColumnRefOperator, ColumnRefOperator>> eqColumnRefPairs = Sets.newHashSet();
+        for (BinaryPredicateOperator eqPredicate : eqOnPredicates) {
+            ColumnRefOperator leftCol = eqPredicate.getChild(0).cast();
+            ColumnRefOperator rightCol = eqPredicate.getChild(1).cast();
+            eqColumnRefPairs.add(Pair.create(leftCol, rightCol));
+        }
+        return eqColumnRefPairs;
+    }
+
+    public static Map<ColumnRefOperator, ColumnRefOperator> makeEqColumRefMapFromSameTables(
+            LogicalScanOperator lhsScanOp, LogicalScanOperator rhsScanOp) {
+        Preconditions.checkArgument(lhsScanOp.getTable().getId() == rhsScanOp.getTable().getId());
+        Set<Column> lhsColumns = lhsScanOp.getColumnMetaToColRefMap().keySet();
+        Set<Column> rhsColumns = rhsScanOp.getColumnMetaToColRefMap().keySet();
+        Preconditions.checkArgument(lhsColumns.equals(rhsColumns));
+        Map<ColumnRefOperator, ColumnRefOperator> eqColumnRefs = Maps.newHashMap();
+        for (Column column : lhsColumns) {
+            ColumnRefOperator lhsColRef = lhsScanOp.getColumnMetaToColRefMap().get(column);
+            ColumnRefOperator rhsColRef = rhsScanOp.getColumnMetaToColRefMap().get(column);
+            eqColumnRefs.put(Objects.requireNonNull(lhsColRef), Objects.requireNonNull(rhsColRef));
+        }
+        return eqColumnRefs;
     }
 }
