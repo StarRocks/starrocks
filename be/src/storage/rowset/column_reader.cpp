@@ -469,15 +469,13 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
 
         ColumnAccessPath* value_path = nullptr;
         if (path != nullptr && !path->children().empty()) {
-            for (const auto& child : path->children()) {
-                if (child->is_index() || child->is_all()) {
-                    if (UNLIKELY(value_path != nullptr)) {
-                        // ignore error path, read all
-                        value_path = nullptr;
-                        LOG(WARNING) << "bad access path on column: " << *child;
-                        break;
-                    }
-                    value_path = child.get();
+            // must be OFFSET or INDEX or ALL
+            if (UNLIKELY(path->children().size() != 1)) {
+                LOG(WARNING) << "bad access path on column: " << *path;
+            } else {
+                auto* p = path->children()[0].get();
+                if (p->is_index() || p->is_all()) {
+                    value_path = p;
                 }
             }
         }
@@ -497,15 +495,13 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
 
         ColumnAccessPath* value_path = nullptr;
         if (path != nullptr && !path->children().empty()) {
-            for (const auto& child : path->children()) {
-                if (child->is_index() || child->is_all()) {
-                    if (UNLIKELY(value_path != nullptr)) {
-                        // ignore error path, read all
-                        value_path = nullptr;
-                        LOG(WARNING) << "bad access path on column: " << *child;
-                        break;
-                    }
-                    value_path = child.get();
+            // must be OFFSET or INDEX or ALL or KEY
+            if (UNLIKELY(path->children().size() != 1)) {
+                LOG(WARNING) << "bad access path on column: " << *path;
+            } else {
+                auto* p = path->children()[0].get();
+                if (p->is_index() || p->is_all()) {
+                    value_path = p;
                 }
             }
         }
