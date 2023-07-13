@@ -14,7 +14,9 @@
 
 #include "exprs/map_element_expr.h"
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "common/object_pool.h"
@@ -29,83 +31,113 @@ public:
     MapElementExpr(const MapElementExpr&) = default;
     MapElementExpr(MapElementExpr&&) = default;
 
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
+        RETURN_IF_ERROR(Expr::open(state, context, scope));
+        _const_input.resize(_children.size());
+        for (auto i = 0; i < _children.size(); ++i) {
+            if (_children[i]->is_constant()) {
+                // _const_input[i] maybe not be of ConstColumn
+                ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
+            } else {
+                _const_input[i] = nullptr;
+            }
+        }
+        return Status::OK();
+    }
+
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(2, _children.size());
         // check the map's value type is the same as the expr's type
+#if !BE_TEST
         DCHECK_EQ(_type, _children[0]->type().children[1]);
-        ASSIGN_OR_RETURN(ColumnPtr arg0, _children[0]->evaluate_checked(context, chunk));
-        ASSIGN_OR_RETURN(ColumnPtr arg1, _children[1]->evaluate_checked(context, chunk));
-        size_t num_rows = std::max(arg0->size(), arg1->size());
-        // No optimization for const column now.
-        arg0 = ColumnHelper::unfold_const_column(_children[0]->type(), num_rows, arg0);
-        arg1 = ColumnHelper::unfold_const_column(_children[1]->type(), num_rows, arg1);
-        auto* map_column = down_cast<MapColumn*>(get_data_column(arg0.get()));
-        auto* map_keys = map_column->keys_column().get();
-        auto* map_values = map_column->values_column().get();
-        DCHECK_EQ(num_rows, arg0->size());
-        DCHECK_EQ(num_rows, arg1->size());
-        DCHECK_EQ(num_rows + 1, map_column->offsets_column()->size());
+#endif
+        auto child_size = _children.size();
+        Columns inputs(child_size);
+        Columns input_data(child_size);
+        std::vector<NullColumnPtr> input_null(child_size);
+        std::vector<bool> is_const(child_size, true);
+        bool all_const = true;
+        for (auto i = 0; i < child_size; ++i) {
+            inputs[i] = _const_input[i];
+            if (inputs[i] == nullptr) {
+                ASSIGN_OR_RETURN(inputs[i], _children[i]->evaluate_checked(context, chunk));
+                is_const[i] = inputs[i]->is_constant();
+                all_const &= is_const[i];
+            }
+            if (i == 0 && inputs[0]->only_null()) {
+                DCHECK(chunk == nullptr || chunk->num_rows() == inputs[0]->size()); // chunk is null in tests.
+                return ColumnHelper::create_const_null_column(inputs[0]->size());
+            }
+            auto value = inputs[i];
+            if (value->is_constant()) {
+                value = down_cast<ConstColumn*>(value.get())->data_column();
+            }
+            if (value->is_nullable()) {
+                auto nullable = down_cast<const NullableColumn*>(value.get());
+                input_null[i] = nullable->null_column();
+                input_data[i] = nullable->data_column();
+            } else {
+                input_null[i] = nullptr;
+                input_data[i] = value;
+            }
+        }
+        auto size = inputs[0]->size();
+        DCHECK(chunk == nullptr || chunk->num_rows() == size); // chunk is null in tests.
 
-        const uint32_t* offsets = map_column->offsets_column()->get_data().data();
-
-        std::vector<uint8_t> null_flags;
-        raw::make_room(&null_flags, num_rows);
-
-        if (arg0->is_nullable()) {
-            auto* nullable = down_cast<NullableColumn*>(arg0.get());
-            const uint8_t* nulls = nullable->null_column()->raw_data();
-            memcpy(null_flags.data(), nulls, num_rows);
-        } else {
-            memset(null_flags.data(), 0, num_rows);
+        auto dest_size = size;
+        if (all_const) {
+            dest_size = 1;
         }
 
-        // construct selection list.
-        std::vector<uint32_t> selection;
-        starrocks::raw::make_room(&selection, num_rows);
+        DCHECK(input_data[0]->is_map());
+        auto* map_column = down_cast<MapColumn*>(input_data[0].get());
+        auto& map_keys = map_column->keys_column();
+        auto& map_values = map_column->values_column();
+        const auto& offsets = map_column->offsets().get_data();
 
-        uint32_t idx = 0;
-        for (size_t i = 0; i < num_rows; i++) {
-            bool matched = false;
-            selection[i] = idx;
-            for (size_t j = offsets[i]; j < offsets[i + 1]; j++) {
-                if (!map_keys->is_null(j) && (map_keys->equals(j, *arg1, i, false) == 1)) {
-                    matched = true;
-                    selection[i] = j;
-                    idx = j;
-                    break;
+        auto res = map_values->clone_empty(); // must be nullable
+        res->reserve(dest_size);
+        for (size_t i = 0; i < dest_size; i++) {
+            auto id_0 = is_const[0] ? 0 : i;
+            auto id_1 = is_const[1] ? 0 : i;
+            bool has_equal = false;
+            if ((input_null[0] == nullptr || !input_null[0]->get_data()[id_0]) &&
+                offsets[id_0 + 1] > offsets[id_0]) {                                   // map is not null and not empty
+                if (input_null[1] == nullptr || !input_null[1]->get_data()[id_1]) {    // target not null
+                    for (ssize_t j = offsets[id_0 + 1] - 1; j >= offsets[id_0]; j--) { // last win
+                        if (map_keys->equals(j, *input_data[1], id_1)) {
+                            res->append(*map_values, j, 1);
+                            has_equal = true;
+                            break;
+                        }
+                    }
+                } else { // target is null
+                    for (ssize_t j = offsets[id_0 + 1] - 1; j >= offsets[id_0]; j--) {
+                        if (map_keys->is_null(j)) {
+                            res->append(*map_values, j, 1);
+                            has_equal = true;
+                            break;
+                        }
+                    }
                 }
             }
-            null_flags[i] = null_flags[i] | (!matched);
-        }
-
-        if (map_values->is_nullable()) {
-            auto* nullable_values = down_cast<NullableColumn*>(map_values);
-            const uint8_t* nulls = nullable_values->null_column()->raw_data();
-            for (size_t i = 0; i < num_rows; i++) {
-                null_flags[i] |= nulls[selection[i]];
+            if (!has_equal) {
+                res->append_nulls(1);
             }
         }
 
-        auto* map_values_data = get_data_column(map_values);
-
-        ColumnPtr result = map_values_data->clone_empty();
-        NullColumnPtr result_null = NullColumn::create();
-        result_null->get_data().swap(null_flags);
-
-        if (!map_values_data->empty()) {
-            result->append_selective(*map_values_data, selection.data(), 0, num_rows);
+        if (all_const) {
+            return ConstColumn::create(std::move(res), size);
         } else {
-            result->append_default(num_rows);
+            return res;
         }
-        DCHECK_EQ(result_null->size(), result->size());
-
-        return NullableColumn::create(std::move(result), std::move(result_null));
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MapElementExpr(*this)); }
 
 private:
     Column* get_data_column(Column* column) { return ColumnHelper::get_data_column(column); }
+    Columns _const_input;
 };
 
 Expr* MapElementExprFactory::from_thrift(const TExprNode& node) {
