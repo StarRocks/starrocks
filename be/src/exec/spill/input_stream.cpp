@@ -116,9 +116,11 @@ private:
     size_t read_idx{};
     std::vector<ChunkPtr> _chunks;
     Spiller* _spiller = nullptr;
+    DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(SerdeContext& context) {
+    RACE_DETECT(detect_get_next, var1);
     if (read_idx >= _chunks.size()) {
         return Status::EndOfFile("eos");
     }

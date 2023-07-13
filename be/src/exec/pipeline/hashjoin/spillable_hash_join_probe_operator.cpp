@@ -60,6 +60,10 @@ bool SpillableHashJoinProbeOperator::has_output() const {
         return HashJoinProbeOperator::has_output();
     }
 
+    if (!is_ready()) {
+        return false;
+    }
+
     // if any partition hash_table is loading. just return false
     if (!_latch.ready()) {
         return false;
