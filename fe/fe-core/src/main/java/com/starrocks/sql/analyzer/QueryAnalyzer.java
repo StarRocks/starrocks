@@ -966,7 +966,7 @@ public class QueryAnalyzer {
         try {
             return new TableFunctionTable(properties);
         } catch (DdlException e) {
-            throw new SemanticException(e.getMessage());
+            throw new StorageAccessException(e);
         }
     }
 
