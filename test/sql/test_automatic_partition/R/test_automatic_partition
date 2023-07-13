@@ -1328,3 +1328,94 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- !result
+<<<<<<< HEAD
+=======
+-- name: test_automatic_partition_time_slice
+CREATE TABLE ss_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 month) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss_month values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_month;
+-- result:
+[REGEX].*p202301.*
+-- !result
+insert into ss_month values('2023-04-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_month;
+-- result:
+[REGEX].*p202301.*
+-- !result
+insert into ss_month values('2023-07-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_month;
+-- result:
+[REGEX].*p202301.*
+.*p202305.*
+-- !result
+CREATE TABLE ss_day( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 4 day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss_day values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_day;
+-- result:
+[REGEX].*p20230214.*
+-- !result
+insert into ss_day values('2023-02-16 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_day;
+-- result:
+[REGEX].*p20230214.*
+-- !result
+insert into ss_day values('2023-02-19 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_day;
+-- result:
+[REGEX].*p20230214.*
+.*p20230218.*
+-- !result
+CREATE TABLE ss_year( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY time_slice(event_day, interval 2 year) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into ss_year values('2023-02-14 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_year;
+-- result:
+[REGEX].*p2023.*
+-- !result
+insert into ss_year values('2024-02-16 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_year;
+-- result:
+[REGEX].*p2023.*
+-- !result
+insert into ss_year values('2026-02-19 12:31:07', 2);
+-- result:
+-- !result
+show partitions from ss_year;
+-- result:
+[REGEX].*p2023.*
+.*p2025.*
+-- !result
+
+-- name: test_without_property
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1;
+-- result:
+-- !result
+insert into ss values('2021-01-01', 1);
+-- result:
+-- !result
+select * from ss;
+-- result:
+2021-01-01	1
+-- !result
+>>>>>>> c11aeb189c ([Tool] SQL-Tester add check for empty result of SQL (#27027))
