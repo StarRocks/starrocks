@@ -33,11 +33,7 @@
 // under the License.
 
 #include "http/action/pprof_actions.h"
-#ifdef USE_JEMALLOC
 #include "jemalloc/jemalloc.h"
-#endif
-#include <gperftools/heap-profiler.h>
-#include <gperftools/malloc_extension.h>
 #include <gperftools/profiler.h>
 
 #include <fstream>
@@ -69,7 +65,7 @@ void HeapAction::handle(HttpRequest* req) {
     std::string str = "Heap profiling is not available with address sanitizer builds.";
 
     HttpChannel::send_reply(req, str);
-#elif defined(USE_JEMALLOC)
+#else
     (void)kPprofDefaultSampleSecs; // Avoid unused variable warning.
 
     std::lock_guard<std::mutex> lock(kPprofActionMutex);
@@ -85,30 +81,8 @@ void HeapAction::handle(HttpRequest* req) {
         std::ifstream f(fname_cstr);
         str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
     } else {
-        std::string str = "dump jemalloc prof file failed";
+        str = "dump jemalloc prof file failed";
     }
-    HttpChannel::send_reply(req, str);
-#else
-    std::lock_guard<std::mutex> lock(kPprofActionMutex);
-
-    int seconds = kPprofDefaultSampleSecs;
-    const std::string& seconds_str = req->param(SECOND_KEY);
-    if (!seconds_str.empty()) {
-        seconds = std::atoi(seconds_str.c_str());
-    }
-
-    std::stringstream tmp_prof_file_name;
-    // Build a temporary file name that is hopefully unique.
-    tmp_prof_file_name << config::pprof_profile_dir << "/heap_profile." << getpid() << "." << rand();
-
-    HeapProfilerStart(tmp_prof_file_name.str().c_str());
-    // Sleep to allow for some samples to be collected.
-    sleep(seconds);
-    const char* profile = GetHeapProfile();
-    HeapProfilerStop();
-    std::string str = profile;
-    delete profile;
-
     HttpChannel::send_reply(req, str);
 #endif
 }
@@ -117,18 +91,11 @@ void GrowthAction::handle(HttpRequest* req) {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     std::string str = "Growth profiling is not available with address sanitizer builds.";
     HttpChannel::send_reply(req, str);
-#elif defined(USE_JEMALLOC)
+#else
     std::string str =
             "Growth profiling is not available with jemalloc builds.You can set the `--base` flag to jeprof to compare "
             "the results of two Heap Profiling";
     HttpChannel::send_reply(req, str);
-#else
-    std::lock_guard<std::mutex> lock(kPprofActionMutex);
-
-    std::string heap_growth_stack;
-    MallocExtension::instance()->GetHeapGrowthStacks(&heap_growth_stack);
-
-    HttpChannel::send_reply(req, heap_growth_stack);
 #endif
 }
 
