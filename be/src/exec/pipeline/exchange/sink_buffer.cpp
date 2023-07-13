@@ -133,11 +133,6 @@ bool SinkBuffer::is_finished() const {
 }
 
 void SinkBuffer::update_profile(RuntimeProfile* profile) {
-    bool flag = false;
-    if (!_is_profile_updated.compare_exchange_strong(flag, true)) {
-        return;
-    }
-
     auto* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
     auto* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
     auto* network_timer = ADD_TIMER(profile, "NetworkTime");
@@ -153,7 +148,7 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     // WaitTime consists two parts
     // 1. buffer full time
     // 2. pending finish time
-    COUNTER_UPDATE(wait_timer, _full_time);
+    COUNTER_SET(wait_timer, _full_time);
     COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
 
     auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
@@ -416,7 +411,7 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         if (!res.ok()) {
             return res.status();
         }
-        res.value()->transmit_chunk_via_http(&closure->cntl, NULL, &closure->result, closure);
+        res.value()->transmit_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
     } else {
         closure->cntl.request_attachment().append(request.attachment);
         request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
