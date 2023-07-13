@@ -271,7 +271,6 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
-    | setWarehouseStatement
 
     // Storage Volume Statement
     | createStorageVolumeStatement
@@ -1758,10 +1757,6 @@ setUserPropertyStatement
 
 roleList
     : identifierOrString (',' identifierOrString)*
-    ;
-
-setWarehouseStatement
-    : SET WAREHOUSE identifierOrString
     ;
 
 executeScriptStatement
