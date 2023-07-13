@@ -1505,6 +1505,33 @@ public class Coordinator {
                     backendExecStates.keySet());
             return;
         }
+
+        // Update runtime profile when query is still in process.
+        //
+        // We need to export profile to ProfileManager before update this profile, because:
+        // Each fragment instance will report its state based on their on own timer, and basically, these
+        // timers are consistent. So we can assume that all the instances will report profile in a very short
+        // time range, if we choose to export the profile to profile manager after update this instance's profile,
+        // the whole profile may include the information from the previous report, except for the current instance,
+        // which leads to inconsistency.
+        //
+        // So the profile update strategy looks like this: During a short time interval, each instance will report
+        // its execution information. However, when receiving the information reported by the first instance of the
+        // current batch, the previous reported state will be synchronized to the profile manager.
+        if (!execState.done) {
+            long now = System.currentTimeMillis();
+            long lastTime = lastRuntimeProfileUpdateTime.get();
+            if (topProfileSupplier != null &&
+                    connectContext != null &&
+                    connectContext.getSessionVariable().isEnableProfile() &&
+                    now - lastTime > connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 1000L &&
+                    lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
+                RuntimeProfile profile = topProfileSupplier.get();
+                profile.addChild(buildMergedQueryProfile(null));
+                ProfileManager.getInstance().pushProfile(profile);
+            }
+        }
+
         lock();
         try {
             if (!execState.updateProfile(params)) {
@@ -1563,18 +1590,6 @@ public class Coordinator {
                 sinkCommitInfos.addAll(params.sink_commit_infos);
             }
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
-        } else {
-            long now = System.currentTimeMillis();
-            long lastTime = lastRuntimeProfileUpdateTime.get();
-            if (topProfileSupplier != null &&
-                    connectContext != null &&
-                    connectContext.getSessionVariable().isEnableProfile() &&
-                    now - lastTime > connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 1000L &&
-                    lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
-                RuntimeProfile profile = topProfileSupplier.get();
-                profile.addChild(buildMergedQueryProfile(null));
-                ProfileManager.getInstance().pushProfile(profile);
-            }
         }
 
         if (params.isSetLoad_type()) {
