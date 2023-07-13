@@ -10,6 +10,9 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
 
 insert into ts values ('abcd', '.*', 'xx'), ('abcd', 'a.*', 'xx'), ('abcd', '.*abc.*', 'xx'), ('abcd', '.*cd', 'xx'), ('abcd', 'bc', 'xx'), ('', '', 'xx'), (NULL, '', 'xx'), ('abc中文def', '[\\p{Han}]+', 'xx');
+insert into ts values ('a b c', " ", "-"), ('           XXXX', '       ', '');
+insert into ts values ('xxxx', "x", "-"), ('xxxx', "xx", "-"), ('xxxx', "xxx", "-"), ('xxxx', "xxxx", "-");
+insert into ts values ('xxxx', "not", "xxxxxxxx"), ('xxaxx', 'xx', 'aaa'), ('xaxaxax', 'xax', '-');
 
 select regexp_replace('abcd', '.*', 'xx');
 select regexp_replace('abcd', 'a.*', 'xx');
@@ -21,5 +24,13 @@ select regexp_replace(NULL, '', 'xx');
 select regexp_replace('abc中文def', '中文', 'xx');
 select regexp_replace('abc中文def', '[\\p{Han}]+', 'xx');
 select regexp_replace('a b c', " ", "-");
+select regexp_replace('           XXXX', '       ', '');
+select regexp_replace('xxxx', "x", "-");
+select regexp_replace('xxxx', "xx", "-"); 
+select regexp_replace('xxxx', "xxx", "-");
+select regexp_replace('xxxx', "xxxx", "-");
+select regexp_replace('xxxx', "not", "xxxxxxxx");
+select regexp_replace('xxaxx', 'xx', 'aaa'); 
+select regexp_replace('xaxaxax', 'xax', '-');
 
 select str, regex, replaced, regexp_replace(str, regex, replaced) from ts order by str, regex, replaced;
