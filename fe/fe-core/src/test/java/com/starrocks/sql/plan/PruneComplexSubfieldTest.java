@@ -288,7 +288,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         sql = "select a1[a1[a1[a1[a1[2]]]]] from pc0";
         plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/a1/ALL]");
-
     }
 
     @Test

@@ -190,9 +190,11 @@ public class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Vo
             } else if (predicate.getChild(0).getType().isStructType()) {
                 StructType type = (StructType) predicate.getChild(0).getType();
                 currentPath.appendPath(type.getFields().get(0).getName(), TAccessPathType.FIELD);
+            } else if (predicate.getChild(0).getType().isArrayType()) {
+                currentPath.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.OFFSET);
             }
         }
-
+        currentPath = null;
         return null;
     }
 }
