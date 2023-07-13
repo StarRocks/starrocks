@@ -34,7 +34,6 @@
 
 #include "http/default_path_handlers.h"
 
-#include "jemalloc/jemalloc.h"
 #include <gutil/strings/numbers.h>
 #include <gutil/strings/substitute.h>
 
@@ -43,6 +42,7 @@
 
 #include "common/configbase.h"
 #include "http/web_page_handler.h"
+#include "jemalloc/jemalloc.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"

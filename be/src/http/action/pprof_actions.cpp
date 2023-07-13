@@ -33,7 +33,7 @@
 // under the License.
 
 #include "http/action/pprof_actions.h"
-#include "jemalloc/jemalloc.h"
+
 #include <gperftools/profiler.h>
 
 #include <fstream>
@@ -47,6 +47,7 @@
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
+#include "jemalloc/jemalloc.h"
 #include "util/bfd_parser.h"
 
 namespace starrocks {
@@ -172,7 +173,7 @@ void SymbolAction::handle(HttpRequest* req) {
         std::string result;
         const char* ptr = request.c_str();
         const char* end = request.c_str() + request.size();
-        while (ptr < end && *ptr != '\0') {
+        while (ptr < end && * ptr != '\0') {
             std::string file_name;
             std::string func_name;
             unsigned int lineno = 0;
@@ -183,7 +184,7 @@ void SymbolAction::handle(HttpRequest* req) {
                 result.append(func_name);
                 result.push_back('\n');
             }
-            if (ptr < end && *ptr == '+') {
+            if (ptr < end && * ptr == '+') {
                 ptr++;
             }
         }

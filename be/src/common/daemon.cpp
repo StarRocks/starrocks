@@ -35,7 +35,6 @@
 #include "common/daemon.h"
 
 #include <gflags/gflags.h>
-#include "jemalloc/jemalloc.h"
 
 #include "column/column_helper.h"
 #include "column/column_pool.h"
@@ -43,6 +42,7 @@
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/cpu.h"
+#include "jemalloc/jemalloc.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
