@@ -76,4 +76,16 @@ TEST_F(IcebergTableSinkTest, TestFloatValueToString) {
     ASSERT_EQ("Partition value can't be float-4", st.message());
 }
 
+TEST_F(IcebergTableSinkTest, TestBooleanValueToString) {
+    auto boolean_column = BooleanColumn::create();
+    std::vector<uint8_t> values = {0};
+    boolean_column->append_numbers(values.data(), values.size() * sizeof(uint8_t));
+
+    std::string boolean_partition_value;
+    auto st = pipeline::IcebergTableSinkOperator::partition_value_to_string(boolean_column.get(),
+                                                                            boolean_partition_value);
+    ASSERT_OK(st);
+    ASSERT_EQ("false", boolean_partition_value);
+}
+
 } // namespace starrocks
