@@ -846,9 +846,11 @@ class StarrocksSQLApiLib(object):
         while True:
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][8]
-            if status == "FINISHED" or status == "CANCELLED" or status == "":
+            if status == "FINISHED":
+                time.sleep(5)
                 break
-            time.sleep(0.5)
+            else:
+                time.sleep(1)
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     def wait_alter_table_finish(self, alter_type="COLUMN"):
