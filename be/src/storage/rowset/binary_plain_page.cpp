@@ -13,16 +13,16 @@ namespace starrocks {
 
 template <LogicalType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch(size_t* count, Column* dst) {
-    SparseRange read_range;
+    SparseRange<> read_range;
     uint32_t begin = current_index();
-    read_range.add(Range(begin, begin + *count));
+    read_range.add(Range<>(begin, begin + *count));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *count = current_index() - begin;
     return Status::OK();
 }
 
 template <LogicalType Type>
-Status BinaryPlainPageDecoder<Type>::next_batch(const SparseRange& range, Column* dst) {
+Status BinaryPlainPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_idx >= _num_elems)) {
         return Status::OK();
@@ -31,11 +31,11 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const SparseRange& range, Column
     size_t to_read = std::min(range.span_size(), _num_elems - _cur_idx);
     std::vector<Slice> strs;
     strs.reserve(to_read);
-    SparseRangeIterator iter = range.new_iterator();
+    SparseRangeIterator<> iter = range.new_iterator();
     if constexpr (Type == TYPE_CHAR) {
         while (to_read > 0) {
             _cur_idx = iter.begin();
-            Range r = iter.next(to_read);
+            Range<> r = iter.next(to_read);
             size_t end = _cur_idx + r.span_size();
             for (; _cur_idx < end; _cur_idx++) {
                 Slice s = string_at_index(_cur_idx);
@@ -51,7 +51,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const SparseRange& range, Column
         bool append_status = true;
         while (to_read > 0) {
             _cur_idx = iter.begin();
-            Range r = iter.next(to_read);
+            Range<> r = iter.next(to_read);
             size_t end = _cur_idx + r.span_size();
             append_status &= append_range(_cur_idx, end, dst);
             to_read -= r.span_size();
@@ -64,7 +64,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const SparseRange& range, Column
         // other types
         while (to_read > 0) {
             _cur_idx = iter.begin();
-            Range r = iter.next(to_read);
+            Range<> r = iter.next(to_read);
             size_t end = _cur_idx + r.span_size();
             for (; _cur_idx < end; _cur_idx++) {
                 strs.emplace_back(string_at_index(_cur_idx));
