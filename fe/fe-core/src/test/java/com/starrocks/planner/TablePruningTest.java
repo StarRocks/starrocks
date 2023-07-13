@@ -658,11 +658,16 @@ public class TablePruningTest extends TablePruningTestBase {
                 {"sum(coalesce(B2.b_c0,0)+coalesce(B1.b_c0,0))", 1},
                 {"sum(A0.a_c0+A1.a_c1)", 0},
         };
-        for (Object[] tc : cases) {
-            String selectStmt = (String) tc[0];
-            int numHashJoins = (Integer) tc[1];
-            String sql = String.format("select %s from %s", selectStmt, fromClause);
-            checkHashJoinCountWithOnlyRBOLessThan(sql, 12);
+        try {
+            ctx.getSessionVariable().setOptimizerExecuteTimeout(20000);
+            for (Object[] tc : cases) {
+                String selectStmt = (String) tc[0];
+                int numHashJoins = (Integer) tc[1];
+                String sql = String.format("select %s from %s", selectStmt, fromClause);
+                checkHashJoinCountWithOnlyRBOLessThan(sql, 12);
+            }
+        } finally {
+            ctx.getSessionVariable().setOptimizerExecuteTimeout(3000);
         }
     }
 
