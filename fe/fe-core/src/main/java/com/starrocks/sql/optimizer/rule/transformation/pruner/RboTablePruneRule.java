@@ -19,14 +19,12 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
-public class RBOTablePruneRule implements TreeRewriteRule {
+public class RboTablePruneRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         ColumnRefFactory columnRefFactory = taskContext.getOptimizerContext().getColumnRefFactory();
-        long updateTableId = taskContext.getOptimizerContext().getUpdateTableId();
-        CPJoinGardener gardener = new CPJoinGardener(
-                columnRefFactory, updateTableId);
+        CPJoinGardener gardener = new CPJoinGardener(columnRefFactory);
         gardener.collect(root);
         gardener.rewrite();
         return root;
