@@ -590,6 +590,8 @@ public class Utils {
         return false;
     }
 
+    // RoaringBitmap can be considered as a Set<Integer> contains only unsigned integers,
+    // so getIntStream() resembles to Set<Integer>::stream()
     public static Stream<Integer> getIntStream(RoaringBitmap bitmap) {
         Spliterator<Integer> iter = Spliterators.spliteratorUnknownSize(bitmap.iterator(), Spliterator.ORDERED);
         return StreamSupport.stream(iter, false);
