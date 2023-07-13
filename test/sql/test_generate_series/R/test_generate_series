@@ -1,4 +1,4 @@
--- name: test01
+-- name: test_generate_series_test01
 SELECT * FROM TABLE(generate_series(65530, 65536));
 -- result:
 65530
