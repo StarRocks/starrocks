@@ -49,6 +49,7 @@ import static com.starrocks.connector.PartitionUtil.createPartitionKey;
 import static com.starrocks.connector.PartitionUtil.fromPartitionKey;
 import static com.starrocks.connector.PartitionUtil.getSuffixName;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
+import static com.starrocks.sql.common.SyncPartitionUtils.toMap;
 
 public class PartitionUtilTest {
     private final List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),
@@ -169,7 +170,7 @@ public class PartitionUtilTest {
             }
         };
 
-        Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
+        Map<String, Range<PartitionKey>> partitionMap = toMap(PartitionUtil.getPartitionRange(table, partitionColumn));
         Assert.assertEquals(partitionMap.size(), partitionNames.size());
         Assert.assertTrue(partitionMap.containsKey("p20221202"));
         PartitionKey upperBound = new PartitionKey();

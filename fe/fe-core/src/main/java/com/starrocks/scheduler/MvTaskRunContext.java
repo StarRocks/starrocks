@@ -15,11 +15,10 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.sql.common.PartitionRange;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.List;
@@ -30,7 +29,7 @@ public class MvTaskRunContext extends TaskRunContext {
 
     Map<String, Set<String>> baseToMvNameRef;
     Map<String, Set<String>> mvToBaseNameRef;
-    Map<String, Range<PartitionKey>> baseRangePartitionMap;
+    List<PartitionRange> basePartitionRanges;
 
     Map<String, List<List<String>>> baseListPartitionMap;
 
@@ -88,12 +87,12 @@ public class MvTaskRunContext extends TaskRunContext {
         this.nextPartitionEnd = nextPartitionEnd;
     }
 
-    public Map<String, Range<PartitionKey>> getBaseRangePartitionMap() {
-        return baseRangePartitionMap;
+    public List<PartitionRange> getBasePartitionRanges() {
+        return basePartitionRanges;
     }
 
-    public void setBaseRangePartitionMap(Map<String, Range<PartitionKey>> baseRangePartitionMap) {
-        this.baseRangePartitionMap = baseRangePartitionMap;
+    public void setBasePartitionRanges(List<PartitionRange> basePartitionRanges) {
+        this.basePartitionRanges = basePartitionRanges;
     }
 
     public Map<String, List<List<String>>> getBaseListPartitionMap() {

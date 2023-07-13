@@ -85,6 +85,7 @@ import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.common.PartitionRange;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -879,7 +880,23 @@ public class OlapTable extends Table {
         }
     }
 
+    public List<PartitionRange> getPartitionRanges() {
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        List<PartitionRange> partitionRanges = Lists.newArrayList();
+        for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
+            Long partitionId = partitionEntry.getKey();
+            String partitionName = partitionEntry.getValue().getName();
+            // FE and BE at the same time ignore the hidden partition at the same time
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
+            partitionRanges.add(new PartitionRange(partitionName, rangePartitionInfo.getRange(partitionId)));
+        }
+        return partitionRanges;
+    }
+
     // partition Name -> Range
+    @Deprecated
     public Map<String, Range<PartitionKey>> getRangePartitionMap() {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         Map<String, Range<PartitionKey>> rangePartitionMap = Maps.newHashMap();
@@ -1207,24 +1224,23 @@ public class OlapTable extends Table {
         return Sets.newHashSet(nameToPartition.keySet());
     }
 
-    public Map<String, Range<PartitionKey>> getValidRangePartitionMap(int lastPartitionNum) throws AnalysisException {
-        Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
+    public List<PartitionRange> getValidRangePartitionMap(int lastPartitionNum) throws AnalysisException {
+        List<PartitionRange> partitionRanges = getPartitionRanges();
         // less than 0 means not set
         if (lastPartitionNum < 0) {
-            return rangePartitionMap;
+            return partitionRanges;
         }
 
-        int partitionNum = rangePartitionMap.size();
+        int partitionNum = partitionRanges.size();
         if (lastPartitionNum > partitionNum) {
-            return rangePartitionMap;
+            return partitionRanges;
         }
 
         List<Column> partitionColumns = ((RangePartitionInfo) partitionInfo).getPartitionColumns();
         Column partitionColumn = partitionColumns.get(0);
         Type partitionType = partitionColumn.getType();
 
-        List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
-                .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
+        Collections.sort(partitionRanges, PartitionRange::compareTo);
         int startIndex;
         if (partitionType.isNumericType()) {
             startIndex = partitionNum - lastPartitionNum;
@@ -1236,8 +1252,8 @@ public class OlapTable extends Table {
                     ImmutableList.of(currentPartitionValue), partitionColumns);
             // For date types, ttl number should not consider future time
             int futurePartitionNum = 0;
-            for (int i = sortedRange.size(); i > 0; i--) {
-                PartitionKey lowerEndpoint = sortedRange.get(i - 1).lowerEndpoint();
+            for (int i = partitionRanges.size(); i > 0; i--) {
+                PartitionKey lowerEndpoint = partitionRanges.get(i - 1).getPartitionKeyRange().lowerEndpoint();
                 if (lowerEndpoint.compareTo(currentPartitionKey) > 0) {
                     futurePartitionNum++;
                 } else {
@@ -1246,7 +1262,7 @@ public class OlapTable extends Table {
             }
 
             if (partitionNum - lastPartitionNum - futurePartitionNum <= 0) {
-                return rangePartitionMap;
+                return partitionRanges;
             } else {
                 startIndex = partitionNum - lastPartitionNum - futurePartitionNum;
             }
@@ -1254,19 +1270,19 @@ public class OlapTable extends Table {
             throw new AnalysisException("Unsupported partition type: " + partitionType);
         }
 
-        PartitionKey lowerEndpoint = sortedRange.get(startIndex).lowerEndpoint();
-        PartitionKey upperEndpoint = sortedRange.get(partitionNum - 1).upperEndpoint();
+        PartitionKey lowerEndpoint = partitionRanges.get(startIndex).getPartitionKeyRange().lowerEndpoint();
+        PartitionKey upperEndpoint = partitionRanges.get(partitionNum - 1).getPartitionKeyRange().upperEndpoint();
         String start = AnalyzerUtils.parseLiteralExprToDateString(lowerEndpoint, 0);
         String end = AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0);
 
-        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        List<PartitionRange> result = Lists.newArrayList();
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
-        for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
-            Range<PartitionKey> rangeToCheck = entry.getValue();
+        for (PartitionRange range : partitionRanges) {
+            Range<PartitionKey> rangeToCheck = range.getPartitionKeyRange();
             int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
             int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
             if (!(lowerCmp >= 0 || upperCmp <= 0)) {
-                result.put(entry.getKey(), entry.getValue());
+                result.add(range);
             }
         }
         return result;
