@@ -140,23 +140,22 @@ public:
 protected:
     void check_flat_parquet_field(const std::vector<ParquetField>& expected, const std::vector<ParquetField>& actual) {
         ASSERT_EQ(expected.size(), actual.size());
-        if (expected.size() > 1) {
-            // is group node, need to check TypeDescriptor
-            for (size_t i = 0; i < expected.size(); i++) {
-                ASSERT_EQ(expected[i].name, actual[i].name);
-                ASSERT_EQ(expected[i].is_nullable, actual[i].is_nullable);
-                ASSERT_EQ(expected[0].type.type, actual[0].type.type);
-            }
-        } else if (expected.size() == 1) {
-            // is primitive node
-            ASSERT_EQ(expected[0].name, actual[0].name);
-            ASSERT_EQ(expected[0].is_nullable, actual[0].is_nullable);
-            ASSERT_EQ(expected[0].physical_type, actual[0].physical_type);
-        } else {
+        if (expected.size() == 0) {
             return;
         }
-        // recursive about children
         for (size_t i = 0; i < expected.size(); i++) {
+            if (expected[i].children.size() > 0) {
+                // Is group node
+                ASSERT_EQ(expected[i].name, actual[i].name);
+                ASSERT_EQ(expected[i].is_nullable, actual[i].is_nullable);
+                ASSERT_EQ(expected[i].type.type, actual[i].type.type);
+            } else {
+                // is primitive node
+                ASSERT_EQ(expected[i].name, actual[i].name);
+                ASSERT_EQ(expected[i].is_nullable, actual[i].is_nullable);
+                ASSERT_EQ(expected[i].physical_type, actual[i].physical_type);
+            }
+            // check for children
             check_flat_parquet_field(expected[i].children, actual[i].children);
         }
     }
