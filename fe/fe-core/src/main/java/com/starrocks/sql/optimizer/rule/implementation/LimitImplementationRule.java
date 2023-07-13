@@ -15,8 +15,9 @@
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -35,7 +36,10 @@ public class LimitImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
-        Preconditions.checkState(limit.isGlobal());
+        if (!limit.isGlobal()) {
+            throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
+                    "cannot contains local limit operator in implementation phase.\n%s", input.explain());
+        }
         return Lists.newArrayList(OptExpression
                 .create(new PhysicalLimitOperator(limit.getOffset(), limit.getLimit(), limit.getProjection()),
                         input.getInputs()));
