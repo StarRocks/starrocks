@@ -2970,6 +2970,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
                 String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                if (StringUtils.isNotEmpty(colocateGroup) &&
+                        !materializedView.getDefaultDistributionInfo().supportColocate()) {
+                    throw new AnalysisException(": random distribution does not support 'colocate_with'");
+                }
                 colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
                         materializedView.isCloudNativeMaterializedView());
             }
