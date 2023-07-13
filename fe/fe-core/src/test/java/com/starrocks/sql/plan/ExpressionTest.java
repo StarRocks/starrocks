@@ -1568,4 +1568,15 @@ public class ExpressionTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "'20'");
     }
+
+    @Test
+    public void testCastTDatetime() throws Exception {
+        String sql = "select cast('2020-05-01T13:45:57' as date);";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "'2020-05-01'");
+
+        sql = "select cast('2020-05-01T13:45:57' as datetime);";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "2020-05-01 13:45:57");
+    }
 }
