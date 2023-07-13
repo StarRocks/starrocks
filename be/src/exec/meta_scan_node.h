@@ -23,7 +23,7 @@ namespace starrocks {
 
 class RuntimeState;
 
-class MetaScanNode final : public starrocks::ScanNode {
+class MetaScanNode : public starrocks::ScanNode {
 public:
     MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~MetaScanNode() override;
