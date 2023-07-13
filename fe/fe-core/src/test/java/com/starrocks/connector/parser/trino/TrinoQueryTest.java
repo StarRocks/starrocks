@@ -1084,4 +1084,44 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select cast(v1 / v2 as real) from t0";
         assertPlanContains(sql, "CAST(CAST(1: v1 AS DOUBLE) / CAST(2: v2 AS DOUBLE) AS FLOAT)");
     }
+
+    @Test
+    public void testUnnest() throws Exception {
+        String sql = "select * from (\n" +
+                "    select 1 gid, array[11,12,13] aid, array[14,15,16] as bid union all select 2 gid, array[21,22,23] as aid, " +
+                "    array[24,25,26] as bid\n" +
+                ") a\n" +
+                "cross join unnest(array[1, 2]) as plat(plat)";
+        assertPlanContains(sql, "tableFunctionName: unnest");
+
+        sql = "select * from (\n" +
+                "    select 1 gid, array[11,12,13] aid, array[14,15,16] as bid union all select 2 gid, array[21,22,23] as aid, " +
+                "    array[24,25,26] as bid\n" +
+                ") a\n" +
+                "cross join unnest(array[row(1, aid), row(2, bid)]) as plat(plat, pid)";
+        assertPlanContains(sql, "[1,2]", "[10: expr,11: expr]");
+
+        sql = "select * from (\n" +
+                "select 1 gid, array[11,12,13] aid, array[14,15,16] as bid union all select 2 gid, array[21,22,23] as aid, " +
+                "array[24,25,26] as bid\n" +
+                ") a\n" +
+                "cross join unnest(array[row(1,2), row(3,4)],array[2,3]) as plat(a,b,c);";
+        assertPlanContains(sql, "[1,3]", "[2,4]", "[2,3]");
+
+        sql = "select * from (\n" +
+                "select 1 gid, array[11,12,13] aid, array[14,15,16] as bid union all select 2 gid, array[21,22,23] as aid, " +
+                "array[24,25,26] as bid\n" +
+                ") a\n" +
+                "cross join unnest(array[0,0], array[row(1,2), row(3,4)],array[2,3]) as plat(a,b,c,d);";
+        assertPlanContains(sql, "[0,0]", "[1,3]", "[2,4]", "[2,3]");
+
+        sql = "select * from (\n" +
+                "    select 1 gid, array[11,12,13] aid, array[14,15,16] as bid union all select 2 gid, array[21,22,23] as aid, " +
+                "  array[24,25,26] as bid\n" +
+                ") a\n" +
+                "cross join unnest(array[row(1, aid), row(2, bid)]) as plat(plat, pid)\n" +
+                "cross join unnest(plat.pid) as t(plat_id);";
+        assertPlanContains(sql, "[1,2]", "[10: expr,11: expr]", "returnTypes: [TINYINT, ARRAY<TINYINT>]",
+                "returnTypes: [TINYINT]");
+    }
 }
