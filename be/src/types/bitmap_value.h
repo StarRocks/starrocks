@@ -161,6 +161,7 @@ public:
 private:
     void _convert_to_smaller_type();
     void _from_set_to_bitmap();
+    void _convert_to_bitmap();
 
     enum BitmapDataType {
         EMPTY = 0,
