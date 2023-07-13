@@ -87,12 +87,20 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
     return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
 }
 
-void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
+void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
+                                    workgroup::WorkGroup* wg) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
-        mem_tracker_counter->set(bytes_limit);
-        _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
+        mem_tracker_counter->set(query_mem_limit);
+        _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
+        if (wg != nullptr && big_query_mem_limit > 0 && big_query_mem_limit < query_mem_limit) {
+            std::string label = "Group=" + wg->name() + ", " + _profile->name();
+            _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
+                                                        std::move(label), parent);
+        } else {
+            _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
+        }
     });
 }
 
