@@ -40,7 +40,7 @@ public:
 
     ColumnPredicateRewriter(const ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
                             const Schema& schema, std::vector<uint8_t>& need_rewrite, int column_size,
-                            SparseRange& scan_range)
+                            SparseRange<>& scan_range)
             : _column_iterators(column_iterators),
               _predicates(pushdown_predicates),
               _schema(schema),
@@ -63,7 +63,7 @@ private:
     const Schema& _schema;
     std::vector<uint8_t>& _need_rewrite;
     const int _column_size;
-    SparseRange& _scan_range;
+    SparseRange<>& _scan_range;
 };
 
 // For global dictionary columns, predicates can be rewriten

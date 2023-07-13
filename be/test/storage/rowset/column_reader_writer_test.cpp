@@ -226,11 +226,11 @@ protected:
                     ASSERT_TRUE(st.ok());
 
                     ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
-                    SparseRange read_range;
+                    SparseRange<> read_range;
                     size_t write_num = src.size();
-                    read_range.add(Range(0, write_num / 3));
-                    read_range.add(Range(write_num / 2, (write_num * 2 / 3)));
-                    read_range.add(Range((write_num * 3 / 4), write_num));
+                    read_range.add(Range<>(0, write_num / 3));
+                    read_range.add(Range<>(write_num / 2, (write_num * 2 / 3)));
+                    read_range.add(Range<>((write_num * 3 / 4), write_num));
                     size_t read_num = read_range.span_size();
 
                     st = iter->next_batch(read_range, dst.get());
@@ -238,9 +238,9 @@ protected:
                     ASSERT_EQ(read_num, dst->size());
 
                     size_t offset = 0;
-                    SparseRangeIterator read_iter = read_range.new_iterator();
+                    SparseRangeIterator<> read_iter = read_range.new_iterator();
                     while (read_iter.has_more()) {
-                        Range r = read_iter.next(read_num);
+                        Range<> r = read_iter.next(read_num);
                         for (int i = 0; i < r.span_size(); ++i) {
                             ASSERT_EQ(0, type_info->cmp(src.get(r.begin() + i), dst->get(i + offset)))
                                     << " row " << r.begin() + i << ": "

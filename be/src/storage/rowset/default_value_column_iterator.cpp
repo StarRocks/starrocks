@@ -119,7 +119,7 @@ Status DefaultValueColumnIterator::next_batch(size_t* n, Column* dst) {
     return Status::OK();
 }
 
-Status DefaultValueColumnIterator::next_batch(const SparseRange& range, Column* dst) {
+Status DefaultValueColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     size_t to_read = range.span_size();
     if (_is_default_value_null) {
         [[maybe_unused]] bool ok = dst->append_nulls(to_read);
@@ -151,7 +151,7 @@ Status DefaultValueColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, 
 
 Status DefaultValueColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                               const ColumnPredicate* del_predicate,
-                                                              SparseRange* row_ranges) {
+                                                              SparseRange<>* row_ranges) {
     DCHECK(row_ranges->empty());
     // TODO
     row_ranges->add({0, static_cast<rowid_t>(_num_rows)});

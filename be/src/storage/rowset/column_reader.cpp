@@ -285,7 +285,7 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
 }
 
-Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange* row_ranges) {
+Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges) {
     for (auto i : page_indexes) {
         ordinal_t page_first_id = _ordinal_index->get_first_ordinal(i);
         ordinal_t page_last_id = _ordinal_index->get_last_ordinal(i);
@@ -309,17 +309,17 @@ Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail)
 }
 
 // prerequisite: at least one predicate in |predicates| support bloom filter.
-Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange* row_ranges,
+Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
                                   const IndexReadOptions& opts) {
     RETURN_IF_ERROR(_load_bloom_filter_index(opts));
-    SparseRange bf_row_ranges;
+    SparseRange<> bf_row_ranges;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
     RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
     size_t range_size = row_ranges->size();
     // get covered page ids
     std::set<int32_t> page_ids;
     for (int i = 0; i < range_size; ++i) {
-        Range r = (*row_ranges)[i];
+        Range<> r = (*row_ranges)[i];
         int64_t idx = r.begin();
         auto iter = _ordinal_index->seek_at_or_before(r.begin());
         while (idx < r.end()) {
@@ -334,7 +334,7 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
         for (const auto* pred : predicates) {
             if (pred->support_bloom_filter() && pred->bloom_filter(bf.get())) {
                 bf_row_ranges.add(
-                        Range(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
+                        Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
             }
         }
     }
@@ -412,8 +412,8 @@ Status ColumnReader::seek_at_or_before(ordinal_t ordinal, OrdinalPageIndexIterat
 
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
-                                     std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange* row_ranges,
-                                     const IndexReadOptions& opts) {
+                                     std::unordered_set<uint32_t>* del_partial_filtered_pages,
+                                     SparseRange<>* row_ranges, const IndexReadOptions& opts) {
     RETURN_IF_ERROR(_load_zonemap_index(opts));
     std::vector<uint32_t> page_indexes;
     RETURN_IF_ERROR(_zone_map_filter(predicates, del_predicate, del_partial_filtered_pages, &page_indexes));

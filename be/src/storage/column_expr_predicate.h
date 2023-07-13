@@ -8,7 +8,6 @@ namespace starrocks {
 class ZoneMapDetail;
 class RuntimeState;
 class SlotDescriptor;
-class SparseRange;
 class ExprContext;
 class BitmapIndexIterator;
 class ObjectPool;

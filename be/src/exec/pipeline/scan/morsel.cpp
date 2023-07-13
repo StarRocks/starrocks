@@ -167,7 +167,7 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
             rowid_range = std::make_shared<RowidRangeOption>();
         }
 
-        SparseRange taken_range;
+        SparseRange<> taken_range;
         _segment_range_iter.next_range(_splitted_scan_rows, &taken_range);
         _num_segment_rest_rows -= taken_range.span_size();
         if (_num_segment_rest_rows < _splitted_scan_rows) {
@@ -184,7 +184,7 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
                  << "[range=" << taken_range.to_string() << "] ";
 
         num_taken_rows += taken_range.span_size();
-        rowid_range->add(_cur_rowset(), _cur_segment(), std::make_shared<SparseRange>(std::move(taken_range)));
+        rowid_range->add(_cur_rowset(), _cur_segment(), std::make_shared<SparseRange<>>(std::move(taken_range)));
 
         if (_is_last_split_of_current_morsel()) {
             return rowid_range;
@@ -335,7 +335,7 @@ Status PhysicalSplitMorselQueue::_init_segment() {
 
     // Find the rowid range of each key range in this segment.
     if (_tablet_seek_ranges.empty()) {
-        _segment_scan_range.add(Range(0, segment->num_rows()));
+        _segment_scan_range.add(Range<>(0, segment->num_rows()));
     } else {
         RETURN_IF_ERROR(segment->load_index());
         for (const auto& range : _tablet_seek_ranges) {

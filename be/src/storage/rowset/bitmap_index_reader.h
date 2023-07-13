@@ -39,6 +39,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
+#include "storage/range.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "util/once.h"
@@ -47,7 +48,6 @@ namespace starrocks {
 
 class FileSystem;
 class TypeInfo;
-class SparseRange;
 class BitmapIndexIterator;
 class IndexedColumnReader;
 class IndexedColumnIterator;
@@ -147,7 +147,7 @@ public:
     // for (size_t i = 0; i < range.size(); i++) {
     //     read_union_bitmap(range[i].begin(), range[i].end(), &result);
     // }
-    Status read_union_bitmap(const SparseRange& range, Roaring* result);
+    Status read_union_bitmap(const SparseRange<>& range, Roaring* result);
 
     rowid_t bitmap_nums() const { return _num_bitmap; }
 
