@@ -133,7 +133,7 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
 const std::string& ColumnAccessPath::to_string() const {
     std::stringstream ss;
     ss << _path << "(" << _type << ")";
-    return _path;
+    return ss.str();
 }
 
 } // namespace starrocks

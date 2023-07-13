@@ -49,17 +49,17 @@ public:
 
     std::vector<std::unique_ptr<ColumnAccessPath>>& children() { return _children; }
 
-    bool is_key() { return _type == TAccessPathType::type::KEY; }
+    bool is_key() const { return _type == TAccessPathType::type::KEY; }
 
-    bool is_offset() { return _type == TAccessPathType::type::OFFSET; }
+    bool is_offset() const { return _type == TAccessPathType::type::OFFSET; }
 
-    bool is_field() { return _type == TAccessPathType::type::FIELD; }
+    bool is_field() const { return _type == TAccessPathType::type::FIELD; }
 
-    bool is_all() { return _type == TAccessPathType::type::ALL; }
+    bool is_all() const { return _type == TAccessPathType::type::ALL; }
 
-    bool is_index() { return _type == TAccessPathType::type::INDEX; }
+    bool is_index() const { return _type == TAccessPathType::type::INDEX; }
 
-    bool is_from_predicate() { return _from_predicate; }
+    bool is_from_predicate() const { return _from_predicate; }
 
     // segement may have different column schema(because schema change),
     // we need copy one and set the offset of schema, to help column reader find column access path

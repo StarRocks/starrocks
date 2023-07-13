@@ -243,7 +243,7 @@ private:
 
     bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
 
-    void _init_column_paths();
+    void _init_column_access_paths();
 
     // search delta column group by column uniqueid, if this column exist in delta column group,
     // then return column iterator and delta column's fillname.
@@ -389,7 +389,7 @@ Status SegmentIterator::_init() {
     // init stage
     // The main task is to do some initialization,
     // initialize the iterator and check if certain optimizations can be applied
-    _init_column_paths();
+    _init_column_access_paths();
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
     // filter by index stage
@@ -466,7 +466,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
     return nullptr;
 }
 
-void SegmentIterator::_init_column_paths() {
+void SegmentIterator::_init_column_access_paths() {
     if (_opts.column_access_paths == nullptr || _opts.column_access_paths->empty()) {
         return;
     }
