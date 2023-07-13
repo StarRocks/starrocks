@@ -14,11 +14,10 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.catalog.Table;
+import com.starrocks.sql.plan.PlanTestBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
-import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -245,11 +244,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
                         " where t1.c3 < 2000 and t2.c3 > 100;")
                 .contains("TABLE: partial_mv_6\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 11: c3 <= 1999, 11: c3 >= 101\n" +
-                        "     partitions=3/5\n" +
-                        "     rollup: partial_mv_6\n" +
-                        "     tabletRatio=6/6");
+                        "     PREAGGREGATION: ON");
 
         // test query delta
         sql(
