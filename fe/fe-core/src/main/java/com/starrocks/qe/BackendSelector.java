@@ -14,17 +14,8 @@
 
 package com.starrocks.qe;
 
-import java.util.Map;
+import com.starrocks.common.UserException;
 
 public interface BackendSelector {
-    void computeScanRangeAssignment() throws Exception;
-
-    static <K, V> V findOrInsert(Map<K, V> m, final K key, final V defaultVal) {
-        V value = m.get(key);
-        if (value == null) {
-            m.put(key, defaultVal);
-            value = defaultVal;
-        }
-        return value;
-    }
+    void computeScanRangeAssignment() throws UserException;
 }
