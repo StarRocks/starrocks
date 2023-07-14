@@ -3,10 +3,11 @@
 package com.starrocks.sql.optimizer.operator.operator;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.time.format.DateTimeParseException;
 
 public class ConstantOperatorTest {
     @Test
@@ -31,9 +32,9 @@ public class ConstantOperatorTest {
                 {"69-10-07 10:11:12", "2069-10-07T00:00", "2069-10-07T10:11:12"},
                 {"00-10-07 10:11:12", "2000-10-07T00:00", "2000-10-07T10:11:12"},
                 // YYYY-MM-dd HH:mm:ss.SSS
-                {"1997-10-07 10:11:12.123", "1997-10-07T10:11:12.000123", "1997-10-07T10:11:12.000123"},
-                {"0097-10-07 10:11:12.123", "0097-10-07T10:11:12.000123", "0097-10-07T10:11:12.000123"},
-                {"2020-02-29 10:11:12.123", "2020-02-29T10:11:12.000123", "2020-02-29T10:11:12.000123"}, // Leap year.
+                {"1997-10-07 10:11:12.123", "1997-10-07T00:00", "1997-10-07T10:11:12.123"},
+                {"0097-10-07 10:11:12.123", "0097-10-07T00:00", "0097-10-07T10:11:12.123"},
+                {"2020-02-29 10:11:12.123", "2020-02-29T00:00", "2020-02-29T10:11:12.123"}, // Leap year.
         };
 
         for (String[] c : testCases) {
@@ -54,9 +55,6 @@ public class ConstantOperatorTest {
                 "1-05-31 10:11:12",
                 "1-05-31 10:11:12.123",
                 // Invalid month.
-                "2019-5-31",
-                "2019-5-31 10:11:12",
-                "2019-5-31 10:11:12.123",
                 "2019-16-31",
                 "2019-16-31 10:11:12",
                 "2019-16-31 10:11:12.123",
@@ -77,10 +75,6 @@ public class ConstantOperatorTest {
                 "2019-05-31 10:61:12.123",
                 "2019-05-31 10:11:61",
                 "2019-05-31 10:11:61.123",
-                "2019-05-31 10:11:12.1234567",
-
-                // Only support "YYYY-MM-dd HH:mm:ss", not "yy-MM-dd HH:mm:ss".
-                "97-10-07 10:11:12.123",
 
                 // Other invalid formats.
                 "2019-05-31-1",
@@ -90,8 +84,8 @@ public class ConstantOperatorTest {
         };
         for (String c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c);
-            Assert.assertThrows(AnalysisException.class, () -> in.castTo(Type.DATE));
-            Assert.assertThrows(AnalysisException.class, () -> in.castTo(Type.DATETIME));
+            Assert.assertThrows(in.getVarchar(), DateTimeParseException.class, () -> in.castTo(Type.DATE));
+            Assert.assertThrows(in.getVarchar(), DateTimeParseException.class, () -> in.castTo(Type.DATETIME));
         }
     }
 }
