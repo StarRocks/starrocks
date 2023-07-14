@@ -50,12 +50,8 @@ std::tuple<bool, Status> get_conv_func(const TypeDescriptor& type, const TypeDes
     std::shared_ptr<arrow::DataType> arrow_type;
     convert_to_arrow_type(to_arrow_type, &arrow_type);
     TypeDescriptor raw_type;
-    bool need_cast;
+    bool need_cast = false;
     auto st = ParquetScanner::build_dest(arrow_type.get(), &type, is_nullable, &raw_type, &cf, need_cast, false);
-#if 1
-    std::cout << type.debug_string() << "  " << to_arrow_type.debug_string() << "  " << raw_type.debug_string() << "  "
-              << need_cast << std::endl;
-#endif
     return {need_cast, st};
 }
 
