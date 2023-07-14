@@ -1566,7 +1566,7 @@ public class MaterializedViewRewriter {
     private OptExpression doPushdownPredicate(OptExpression joinOptExpression, ScalarOperator predicate) {
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
-                false, true, materializationContext.getQueryRefFactory());
+                false, true, materializationContext.getQueryRefFactory(), true);
         return joinPredicatePushdown.pushdown(predicate);
     }
 
@@ -2294,8 +2294,8 @@ public class MaterializedViewRewriter {
     }
 
     private ScalarOperator getCompensationRangePredicate(ScalarOperator srcPr, ScalarOperator targetPr) {
-        RangeSimplifier simplifier = new RangeSimplifier(Utils.extractConjuncts(srcPr));
-        return simplifier.simplify(Utils.extractConjuncts(targetPr));
+        RangeSimplifier simplifier = new RangeSimplifier(srcPr);
+        return simplifier.simplify(targetPr);
     }
 
     // compute the compensation equality predicates

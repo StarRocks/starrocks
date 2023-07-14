@@ -18,6 +18,9 @@ import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InstantiationUtil;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -25,7 +28,17 @@ import java.util.stream.Collectors;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class PaimonScannerUtils {
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final Base64.Decoder BASE64_DECODER = Base64.getUrlDecoder();
+
+    public static String formatDateTime(LocalDateTime dateTime) {
+        return dateTime.format(DATETIME_FORMATTER);
+    }
+
+    public static String formatDate(LocalDate date) {
+        return date.format(DATE_FORMATTER);
+    }
 
     public static <T> T decodeStringToObject(String encodedStr) {
         final byte[] bytes = BASE64_DECODER.decode(encodedStr.getBytes(UTF_8));

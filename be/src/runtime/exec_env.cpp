@@ -212,6 +212,15 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
     _query_rpc_pool = new PriorityThreadPool("query_rpc", query_rpc_threads, std::numeric_limits<uint32_t>::max());
 
+    // The _load_rpc_pool now handles routine load RPC and table function RPC.
+    RETURN_IF_ERROR(ThreadPoolBuilder("load_rpc") // thread pool for load rpc
+                            .set_min_threads(10)
+                            .set_max_threads(1000)
+                            .set_max_queue_size(0)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_load_rpc_pool));
+    REGISTER_GAUGE_STARROCKS_METRIC(load_rpc_threadpool_size, _load_rpc_pool->num_threads);
+
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
@@ -475,6 +484,10 @@ void ExecEnv::_stop() {
 void ExecEnv::_destroy() {
     if (_automatic_partition_pool) {
         _automatic_partition_pool->shutdown();
+    }
+
+    if (_load_rpc_pool) {
+        _load_rpc_pool->shutdown();
     }
 
     SAFE_DELETE(_agent_server);
