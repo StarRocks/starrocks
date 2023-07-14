@@ -2853,8 +2853,8 @@ public class LocalMetastore implements ConnectorMetadata {
         } catch (DdlException e) {
             if (materializedView.isCloudNativeMaterializedView()) {
                 GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(materializedView.getId());
-                throw e;
             }
+            throw e;
         }
         LOG.info("Successfully create materialized view [{}:{}]", mvName, materializedView.getMvId());
 
@@ -3124,9 +3124,6 @@ public class LocalMetastore implements ConnectorMetadata {
             Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(table.getId()));
             if (refreshTask != null) {
                 taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
-            }
-            if (view.isCloudNativeMaterializedView()) {
-                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(view.getId());
             }
         } else {
             stateMgr.getAlterJobMgr().processDropMaterializedView(stmt);

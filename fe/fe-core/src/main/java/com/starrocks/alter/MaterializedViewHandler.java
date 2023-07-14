@@ -765,9 +765,6 @@ public class MaterializedViewHandler extends AlterHandler {
             checkDropMaterializedView(mvName, olapTable);
             // Step2; drop data in memory
             long mvIndexId = dropMaterializedView(mvName, olapTable);
-            if (olapTable.isCloudNativeTable()) {
-                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(mvIndexId);
-            }
             // Step3: log drop mv operation
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexId, false));
