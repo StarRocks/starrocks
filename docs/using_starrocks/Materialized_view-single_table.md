@@ -12,14 +12,8 @@ The following table compares the asynchronous materialized views (ASYNC MVs) in 
 
 |                       | **Single-table aggregation** | **Multi-table join** | **Query rewrite** | **Refresh strategy** | **Base table** |
 | --------------------- | ---------------------------- | -------------------- | ----------------- | -------------------- | -------------- |
-<<<<<<< HEAD
-| **ASYNC MVs in v2.5** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs</li><li>Existing materialized views</li></ul> |
-| **ASYNC MVs in v2.4** | Yes | Yes | No | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from the default catalog |
-| **SYNC MV (Rollup)**  | Limited choices of operators | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
-=======
 | **ASYNC MV** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs (v2.5)</li><li>Existing materialized views (v2.5)</li><li>Existing views (v3.1)</li></ul> |
 | **SYNC MV (Rollup)**  | Limited choices of [aggregate functions](#correspondence-of-aggregate-functions) | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
->>>>>>> ad9b5aa680 ([Doc] Update MV Feature comparison (#27224))
 
 ## Basic concepts
 
