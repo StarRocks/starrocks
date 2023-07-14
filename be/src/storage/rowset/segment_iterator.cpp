@@ -127,7 +127,7 @@ private:
             return Status::OK();
         }
 
-        Status read_columns(Chunk* chunk, const SparseRange& range) {
+        Status read_columns(Chunk* chunk, const SparseRange<>& range) {
             bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
             for (size_t i = 0; i < _column_iterators.size(); i++) {
                 const ColumnPtr& col = chunk->get_column_by_index(i);
@@ -279,8 +279,8 @@ private:
 
     std::unordered_map<ColumnId, std::unique_ptr<RandomAccessFile>> _column_files;
 
-    SparseRange _scan_range;
-    SparseRangeIterator _range_iter;
+    SparseRange<> _scan_range;
+    SparseRangeIterator<> _range_iter;
 
     std::vector<const ColumnPredicate*> _vectorized_preds;
     std::vector<const ColumnPredicate*> _branchless_preds;
@@ -412,10 +412,10 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 const ColumnPredicate* del_pred;
                 auto iter = _del_predicates.find(cid);
                 del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
-                SparseRange r;
+                SparseRange<> r;
                 RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
                 size_t prev_size = _scan_range.span_size();
-                SparseRange res;
+                SparseRange<> res;
                 _range_iter = _range_iter.intersection(r, &res);
                 std::swap(res, _scan_range);
                 _range_iter.set_range(&_scan_range);
@@ -503,6 +503,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
 template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
+    SCOPED_RAW_TIMER(&_opts.stats->column_iterator_init_ns);
 
     const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
     _column_iterators.resize(n);
@@ -572,6 +573,7 @@ void SegmentIterator::_init_column_predicates() {
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
     StarRocksMetrics::instance()->segment_row_total.increment(num_rows());
+    SCOPED_RAW_TIMER(&_opts.stats->rows_key_range_filter_ns);
 
     if (!_opts.short_key_ranges.empty()) {
         RETURN_IF_ERROR(_get_row_ranges_by_short_key_ranges());
@@ -589,7 +591,7 @@ Status SegmentIterator::_get_row_ranges_by_key_ranges() {
     DCHECK_EQ(0, _scan_range.span_size());
 
     if (_opts.ranges.empty()) {
-        _scan_range.add(Range(0, num_rows()));
+        _scan_range.add(Range<>(0, num_rows()));
         return Status::OK();
     }
 
@@ -620,7 +622,7 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
 
     if (_opts.short_key_ranges.size() == 1 && _opts.short_key_ranges[0]->lower->is_infinite() &&
         _opts.short_key_ranges[0]->upper->is_infinite()) {
-        _scan_range.add(Range(0, num_rows()));
+        _scan_range.add(Range<>(0, num_rows()));
         return Status::OK();
     }
 
@@ -660,7 +662,8 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_zone_map() {
-    SparseRange zm_range(0, num_rows());
+    SCOPED_RAW_TIMER(&_opts.stats->zone_map_filter_ns);
+    SparseRange<> zm_range(0, num_rows());
 
     // -------------------------------------------------------------
     // group delete predicates by column id.
@@ -699,7 +702,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
         const ColumnPredicate* del_pred;
         auto iter = _del_predicates.find(cid);
         del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
-        SparseRange r;
+        SparseRange<> r;
         RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(query_preds, del_pred, &r));
         zm_range = zm_range.intersection(r);
     }
@@ -854,7 +857,7 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
 
 inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n) {
     size_t read_num = 0;
-    SparseRange range;
+    SparseRange<> range;
 
     if (_cur_rowid != _range_iter.begin() || _cur_rowid == 0) {
         _cur_rowid = _range_iter.begin();
@@ -874,9 +877,9 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 
     if (rowids != nullptr) {
         rowids->reserve(rowids->size() + n);
-        SparseRangeIterator iter = range.new_iterator();
+        SparseRangeIterator<> iter = range.new_iterator();
         while (iter.has_more()) {
-            Range r = iter.next(n);
+            Range<> r = iter.next(n);
             for (uint32_t i = r.begin(); i < r.end(); i++) {
                 rowids->push_back(i);
             }
@@ -1505,6 +1508,7 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
 
 Status SegmentIterator::_init_bitmap_index_iterators() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
+    SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
     _bitmap_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
     std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
     for (auto& field : _schema.fields()) {
@@ -1550,7 +1554,7 @@ Status SegmentIterator::_apply_bitmap_index() {
     //    bitmap index dictionary.
     // ---------------------------------------------------------
     std::vector<ColumnId> bitmap_columns;
-    std::vector<SparseRange> bitmap_ranges;
+    std::vector<SparseRange<>> bitmap_ranges;
     std::vector<bool> has_is_null_predicate;
     std::vector<const ColumnPredicate*> erased_preds;
 
@@ -1562,10 +1566,10 @@ Status SegmentIterator::_apply_bitmap_index() {
             continue;
         }
         size_t cardinality = bitmap_iter->bitmap_nums();
-        SparseRange selected(0, cardinality);
+        SparseRange<> selected(0, cardinality);
         bool has_is_null = false;
         for (const ColumnPredicate* pred : pred_list) {
-            SparseRange r;
+            SparseRange<> r;
             Status st = pred->seek_bitmap_dictionary(bitmap_iter, &r);
             if (st.ok()) {
                 selected &= r;
@@ -1646,6 +1650,7 @@ Status SegmentIterator::_apply_del_vector() {
 
 Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
     RETURN_IF(_opts.predicates.empty(), Status::OK());
+    SCOPED_RAW_TIMER(&_opts.stats->bf_filter_ns);
     size_t prev_size = _scan_range.span_size();
     for (const auto& [cid, preds] : _opts.predicates) {
         ColumnIterator* column_iter = _column_iterators[cid].get();

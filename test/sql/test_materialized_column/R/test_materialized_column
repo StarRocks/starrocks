@@ -67,7 +67,7 @@ DROP TABLE t;
 DROP DATABASE test_create_table;
 -- result:
 -- !result
--- name: test_insert
+-- name: test_materialized_column_insert
 CREATE DATABASE test_insert;
 -- result:
 -- !result
@@ -598,7 +598,7 @@ E: (1064, 'Getting analyzing error. Detail message: Can not add normal column an
 DROP DATABASE test_add_multiple_column;
 -- result:
 -- !result
--- name: test_update
+-- name: test_materialized_column_update
 CREATE DATABASE test_update;
 -- result:
 -- !result

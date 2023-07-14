@@ -19,7 +19,7 @@ DROP TABLE t;
 
 DROP DATABASE test_create_table;
 
--- name: test_insert
+-- name: test_materialized_column_insert
 CREATE DATABASE test_insert;
 USE test_insert;
 
@@ -195,7 +195,7 @@ ALTER TABLE t ADD COLUMN (newcol5 BIGINT DEFAULT "0", newcol6 BIGINT AS id * 100
 
 DROP DATABASE test_add_multiple_column;
 
--- name: test_update
+-- name: test_materialized_column_update
 CREATE DATABASE test_update;
 USE test_update;
 

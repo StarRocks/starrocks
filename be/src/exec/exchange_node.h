@@ -65,7 +65,7 @@ public:
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status collect_query_statistics(QueryStatistics* statistics) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     // the number of senders needs to be set after the c'tor, because it's not
     // recorded in TPlanNode, and before calling prepare()

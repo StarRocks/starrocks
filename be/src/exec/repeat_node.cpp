@@ -196,11 +196,11 @@ void RepeatNode::extend_and_update_columns(ChunkPtr* curr_chunk, ChunkPtr* chunk
     }
 }
 
-Status RepeatNode::close(RuntimeState* state) {
+void RepeatNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > RepeatNode::decompose_to_pipeline(

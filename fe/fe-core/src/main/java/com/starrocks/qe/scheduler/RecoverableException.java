@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "compute_service.h"
+package com.starrocks.qe.scheduler;
 
-namespace starrocks {
-
-ComputeService::ComputeService(ExecEnv* exec_env) : BackendServiceBase(exec_env) {}
-
-ComputeService::~ComputeService() = default;
-
-} // namespace starrocks
+public class RecoverableException extends SchedulerException {
+    public RecoverableException(String msg) {
+        super(msg);
+    }
+}

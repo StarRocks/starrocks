@@ -91,11 +91,12 @@ void convert_int_to_int(SourceType* __restrict__ src, DestType* __restrict__ dst
     }
 }
 
+// Support int => int and float => double
 template <typename SourceType, typename DestType>
-class IntToIntConverter : public ColumnConverter {
+class NumericToNumericConverter : public ColumnConverter {
 public:
-    IntToIntConverter() = default;
-    ~IntToIntConverter() override = default;
+    NumericToNumericConverter() = default;
+    ~NumericToNumericConverter() override = default;
 
     Status convert(const ColumnPtr& src, Column* dst) override {
         auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
@@ -346,13 +347,13 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         }
         switch (col_type) {
         case LogicalType::TYPE_TINYINT:
-            *converter = std::make_unique<IntToIntConverter<int32_t, int8_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int32_t, int8_t>>();
             break;
         case LogicalType::TYPE_SMALLINT:
-            *converter = std::make_unique<IntToIntConverter<int32_t, int16_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int32_t, int16_t>>();
             break;
         case LogicalType::TYPE_BIGINT:
-            *converter = std::make_unique<IntToIntConverter<int32_t, int64_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int32_t, int64_t>>();
             break;
         case LogicalType::TYPE_DATE:
             *converter = std::make_unique<Int32ToDateConverter>();
@@ -387,13 +388,13 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         }
         switch (col_type) {
         case LogicalType::TYPE_TINYINT:
-            *converter = std::make_unique<IntToIntConverter<int64_t, int8_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int64_t, int8_t>>();
             break;
         case LogicalType::TYPE_SMALLINT:
-            *converter = std::make_unique<IntToIntConverter<int64_t, int16_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int64_t, int16_t>>();
             break;
         case LogicalType::TYPE_INT:
-            *converter = std::make_unique<IntToIntConverter<int64_t, int32_t>>();
+            *converter = std::make_unique<NumericToNumericConverter<int64_t, int32_t>>();
             break;
             // when decimal precision is greater than 27, precision may be lost in the following
             // process. However to handle most enviroment, we also make progress other than
@@ -473,6 +474,11 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     case tparquet::Type::FLOAT: {
         if (col_type != LogicalType::TYPE_FLOAT) {
             need_convert = true;
+        }
+        if (col_type == LogicalType::TYPE_DOUBLE) {
+            auto _converter = std::make_unique<NumericToNumericConverter<float, double>>();
+            *converter = std::move(_converter);
+            break;
         }
         break;
     }

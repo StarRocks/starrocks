@@ -71,7 +71,7 @@ public:
 
     Status open(RuntimeState* state) override { return Status::OK(); }
 
-    Status close(RuntimeState* state) override { return Status::OK(); }
+    void close(RuntimeState* state) override {}
 
 private:
     int times{0};

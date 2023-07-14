@@ -689,7 +689,6 @@ set(STARROCKS_LINK_LIBS
     Runtime
     Service
     ServiceBE
-    ServiceCN
     Types
     Udf
     Util
@@ -808,16 +807,10 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     -static-libgcc
 )
 
-# Add sanitize static link flags or tcmalloc
+# Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
-    if (USE_JEMALLOC)
-        message("use jemalloc")
-        add_definitions(-DUSE_JEMALLOC)
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
-    else()
-        message("use tcmalloc")
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} tcmalloc)
-    endif()
+    message("use jemalloc")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
@@ -827,14 +820,8 @@ elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
-    if (USE_JEMALLOC)
-        message("use jemalloc")
-        add_definitions(-DUSE_JEMALLOC)
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
-    else()
-        message("use tcmalloc")
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan tcmalloc)
-    endif()
+    message("use jemalloc")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
 else()

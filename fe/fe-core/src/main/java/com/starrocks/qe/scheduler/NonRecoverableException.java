@@ -12,19 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.qe.scheduler;
 
-#include "service/backend_base.h"
-
-namespace starrocks {
-
-// This class just forward rpc requests to actual handlers, used
-// to bind multiple services on single port.
-class ComputeService : public BackendServiceBase {
-public:
-    explicit ComputeService(ExecEnv* exec_env);
-
-    ~ComputeService() override;
-};
-
-} // namespace starrocks
+public class NonRecoverableException extends SchedulerException {
+    public NonRecoverableException(String msg) {
+        super(msg);
+    }
+}

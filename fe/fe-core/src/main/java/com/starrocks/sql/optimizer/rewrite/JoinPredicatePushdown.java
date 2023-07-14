@@ -57,14 +57,16 @@ public class JoinPredicatePushdown {
 
     private List<ScalarOperator> leftPushDown;
     private List<ScalarOperator> rightPushDown;
+    private boolean enableLeftRightOuterJoinEquivalenceDerive = true;
 
     public JoinPredicatePushdown(
             OptExpression joinOptExpression, boolean isOnPredicate, boolean directToChild,
-            ColumnRefFactory columnRefFactory) {
+            ColumnRefFactory columnRefFactory, boolean enableLeftRightOuterJoinEquivalenceDerive) {
         this.joinOptExpression = joinOptExpression;
         this.isOnPredicate = isOnPredicate;
         this.directToChild = directToChild;
         this.columnRefFactory = columnRefFactory;
+        this.enableLeftRightOuterJoinEquivalenceDerive = enableLeftRightOuterJoinEquivalenceDerive;
         this.leftPushDown = Lists.newArrayList();
         this.rightPushDown = Lists.newArrayList();
     }
@@ -363,8 +365,12 @@ public class JoinPredicatePushdown {
                 return equivalenceDerive(predicate, true);
             } else {
                 ScalarOperator predicate = rangePredicateDerive(predicateToPush);
-                getPushdownPredicatesFromEquivalenceDerive(
-                        Utils.compoundAnd(join.getOnPredicate(), predicate), joinOptExpression, join);
+                JoinOperator joinType = join.getJoinType();
+                if (!joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin() ||
+                        enableLeftRightOuterJoinEquivalenceDerive) {
+                    getPushdownPredicatesFromEquivalenceDerive(
+                            Utils.compoundAnd(join.getOnPredicate(), predicate), joinOptExpression, join);
+                }
                 return predicate;
             }
         }

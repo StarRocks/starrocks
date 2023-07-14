@@ -47,6 +47,7 @@ public class OlapScanImplementationRule extends ImplementationRule {
                 scan.getProjection(),
                 scan.isUsePkIndex());
 
+        physicalOlapScan.setSalt(scan.getSalt());
         physicalOlapScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalOlapScan);
         return Lists.newArrayList(result);
