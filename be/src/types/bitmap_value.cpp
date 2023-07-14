@@ -922,30 +922,45 @@ void BitmapValue::_convert_to_smaller_type() {
     }
 }
 
-void BitmapValue::_convert_to_bitmap() {
+int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) {
     switch (_type) {
     case EMPTY:
-        _bitmap = std::make_shared<detail::Roaring64Map>();
-        break;
-    case SINGLE:
-        _bitmap = std::make_shared<detail::Roaring64Map>();
-        _bitmap->add(_sv);
-        break;
-    case SET:
-        _from_set_to_bitmap();
-        break;
-    case BITMAP:
-        break;
-    }
-    _type = BITMAP;
-}
-
-int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) {
-    if (_type == EMPTY || (_type == SINGLE && (offset >= 1 || offset < -1))) {
         return 0;
-    } else {
-        _convert_to_bitmap();
+    case SINGLE: {
+        if (offset >= 1 || offset < -1 || len <= 0) {
+            return 0;
+        } else {
+            ret_bitmap->add(_sv);
+            return 1;
+        }
+    }
+    case SET: {
+        if (offset > 0 && offset >= _set->size()) {
+            return 0;
+        }
+        if (offset < 0 && std::abs(offset) > _set->size()) {
+            return 0;
+        }
+        int64_t abs_offset = offset;
+        if (offset < 0) {
+            abs_offset = _set->size() + offset;
+        }
 
+        std::vector set_values(_set->begin(), _set->end());
+        std::sort(set_values.begin(), set_values.end());
+        int64_t count = 0;
+        int64_t offset_count = 0;
+        auto it = set_values.begin();
+        for (; it != set_values.end() && offset_count < abs_offset; ++it) {
+            ++offset_count;
+        }
+        for (; it != set_values.end() && count < len; ++it, ++count) {
+            ret_bitmap->add(*it);
+        }
+        return count;
+    }
+    default:
+        DCHECK_EQ(_type, BITMAP);
         if (offset > 0 && offset >= _bitmap->cardinality()) {
             return 0;
         }
@@ -972,20 +987,19 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
 
 int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit,
                                                   BitmapValue* ret_bitmap) {
-    if (_type == EMPTY) {
+    switch (_type) {
+    case EMPTY:
         return 0;
-    } else if (_type == SINGLE) {
+    case SINGLE: {
         if (_sv < range_start) {
             return 0;
         } else {
             ret_bitmap->add(_sv);
             return 1;
         }
-    } else {
-        _convert_to_bitmap();
-
+    }
+    case SET: {
         bool is_reverse = false;
-
         int64_t abs_limit = limit;
         if (limit < 0) {
             is_reverse = true;
@@ -993,10 +1007,48 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
         }
 
         int64_t count = 0;
-
         if (is_reverse) {
-            detail::Roaring64Map::const_iterator start = _bitmap->begin();
-            detail::Roaring64Map::const_iterator end = _bitmap->begin();
+            auto start = _set->begin();
+            auto end = _set->begin();
+
+            int64_t offset = 0;
+            for (; end != _set->end() && offset < abs_limit && *end <= range_start;) {
+                ++end;
+                ++offset;
+            }
+            if (offset == abs_limit) {
+                for (; end != _set->end() && *end <= range_start;) {
+                    ++start;
+                    ++end;
+                }
+            }
+            for (; start != end; ++start, ++count) {
+                ret_bitmap->add(*start);
+            }
+        } else {
+            auto it = _set->begin();
+            for (; it != _set->end() && *it < range_start;) {
+                ++it;
+            }
+            for (; it != _set->end() && count < abs_limit; ++it, ++count) {
+                ret_bitmap->add(*it);
+            }
+        }
+        return count;
+    }
+    default:
+        DCHECK_EQ(_type, BITMAP);
+        bool is_reverse = false;
+        int64_t abs_limit = limit;
+        if (limit < 0) {
+            is_reverse = true;
+            abs_limit = -limit;
+        }
+
+        int64_t count = 0;
+        if (is_reverse) {
+            auto start = _bitmap->begin();
+            auto end = _bitmap->begin();
 
             int64_t offset = 0;
             for (; end != _bitmap->end() && offset < abs_limit && *end <= range_start;) {
@@ -1029,29 +1081,38 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
 
 int64_t BitmapValue::bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
                                                      BitmapValue* ret_bitmap) {
-    if (_type == EMPTY) {
+    switch (_type) {
+    case EMPTY:
         return 0;
-    } else if (_type == SINGLE) {
+    case SINGLE: {
         if (_sv < range_start) {
             return 0;
         } else {
             ret_bitmap->add(_sv);
             return 1;
         }
-    } else {
-        _convert_to_bitmap();
-
+    }
+    case SET: {
+        auto it = _set->begin();
+        for (; it != _set->end() && *it < range_start;) {
+            ++it;
+        }
+        int64_t count = 0;
+        for (; it != _set->end() && *it < range_end; ++it, ++count) {
+            ret_bitmap->add(*it);
+        }
+        return count;
+    }
+    default:
+        DCHECK_EQ(_type, BITMAP);
         auto it = _bitmap->begin();
         for (; it != _bitmap->end() && *it < range_start;) {
             ++it;
         }
-
         int64_t count = 0;
-
         for (; it != _bitmap->end() && *it < range_end; ++it, ++count) {
             ret_bitmap->add(*it);
         }
-
         return count;
     }
 }
