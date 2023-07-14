@@ -44,6 +44,8 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
@@ -78,14 +80,9 @@ public class MvRewritePreprocessor {
 
     public void prepareMvCandidatesForPlan() {
         Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
-
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
-        if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "No Related Async MVs for plan");
-            return;
-        }
         prepareRelatedMVs(queryTables, relatedMvs);
     }
 
@@ -169,14 +166,25 @@ public class MvRewritePreprocessor {
                 }
             }
         }
-        if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "No Related Sync MVs");
-            return;
-        }
         prepareRelatedMVs(queryTables, relatedMvs);
     }
 
     private void prepareRelatedMVs(Set<Table> queryTables, Set<MaterializedView> relatedMvs) {
+        String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
+        String queryIncludingMVNames = connectContext.getSessionVariable().getQueryincludingMVNames();
+        if (!Strings.isNullOrEmpty(queryExcludingMVNames) || !Strings.isNullOrEmpty(queryIncludingMVNames)) {
+            Set<String> queryExcludingMVNamesSet = Sets.newHashSet(queryExcludingMVNames.split(","));
+            Set<String> queryIncludingMVNamesSet = Sets.newHashSet(queryIncludingMVNames.split(","));
+            relatedMvs = relatedMvs.stream()
+                    .filter(mv -> queryIncludingMVNamesSet.contains(mv.getName()))
+                    .filter(mv -> !queryExcludingMVNamesSet.contains(mv.getName()))
+                    .collect(Collectors.toSet());
+        }
+        if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related MVs for the query plan");
+            return;
+        }
+
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
             try {
@@ -209,7 +217,18 @@ public class MvRewritePreprocessor {
         if (mvRewriteContextCache == null) {
             // build mv query logical plan
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            mvRewriteContextCache = mvOptimizer.optimize(mv, connectContext);
+            // optimize the sql by rule and disable rule based materialized view rewrite
+            OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+            optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
+            optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
+            optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
+            // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
+            if (mv.getRefreshScheme().isSync()) {
+                optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
+            }
+            optimizerConfig.setMVRewritePlan(true);
+
+            mvRewriteContextCache = mvOptimizer.optimize(mv, connectContext, optimizerConfig);
             mv.setPlanContext(mvRewriteContextCache);
         }
         if (!mvRewriteContextCache.isValidMvPlan()) {
@@ -248,6 +267,12 @@ public class MvRewritePreprocessor {
             }
         }
 
+        // Add mv info into dump info
+        if (connectContext.getDumpInfo() != null) {
+            String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
+            connectContext.getDumpInfo().addTable(dbName, mv);
+        }
+
         List<Table> baseTables = MvUtils.getAllTables(mvPlan);
         List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
         MaterializationContext materializationContext =
@@ -258,8 +283,6 @@ public class MvRewritePreprocessor {
         // generate scan mv plan here to reuse it in rule applications
         LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext, partitionNamesToRefresh);
         materializationContext.setScanMvOperator(scanMvOp);
-        String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
-        connectContext.getDumpInfo().addTable(dbName, mv);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
         for (Column column : mv.getBaseSchema()) {
