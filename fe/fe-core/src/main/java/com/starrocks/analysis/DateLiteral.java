@@ -39,8 +39,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.ResolverStyle;
 import java.util.Date;
 import java.util.Objects;
 import java.util.TimeZone;
@@ -51,32 +49,7 @@ public class DateLiteral extends LiteralExpr {
     private static final DateLiteral MIN_DATETIME = new DateLiteral(0, 1, 1, 0, 0, 0);
     private static final DateLiteral MAX_DATETIME = new DateLiteral(9999, 12, 31, 23, 59, 59);
 
-    private static final DateTimeFormatter DATE_TIME_FORMATTER;
-    private static final DateTimeFormatter DATE_FORMATTER;
-    private static final DateTimeFormatter DATE_NO_SPLIT_FORMATTER;
-    /*
-     * Dates containing two-digit year values are ambiguous because the century is unknown.
-     * MySQL interprets two-digit year values using these rules:
-     * Year values in the range 70-99 are converted to 1970-1999.
-     * Year values in the range 00-69 are converted to 2000-2069.
-     * */
-    private static final DateTimeFormatter DATE_TIME_FORMATTER_TWO_DIGIT;
-    private static final DateTimeFormatter DATE_FORMATTER_TWO_DIGIT;
-
-    static {
-        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s")
-                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e")
-                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s")
-                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e")
-                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_NO_SPLIT_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y%m%e")
-                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-    }
-
-    //Date Literal persist type in meta
+    // Date Literal persist type in meta
     private enum DateLiteralType {
         DATETIME(0),
         DATE(1);
@@ -174,24 +147,7 @@ public class DateLiteral extends LiteralExpr {
     private void init(String s, Type type) throws AnalysisException {
         try {
             Preconditions.checkArgument(type.isDateType());
-            LocalDateTime dateTime;
-            if (type.isDate()) {
-                if (s.split("-")[0].length() == 2) {
-                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER_TWO_DIGIT);
-                } else if (s.length() == 8) {
-                    // 20200202
-                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_NO_SPLIT_FORMATTER);
-                } else {
-                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER);
-                }
-            } else {
-                if (s.split("-")[0].length() == 2) {
-                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_TIME_FORMATTER_TWO_DIGIT);
-                } else {
-                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_TIME_FORMATTER);
-                }
-            }
-
+            LocalDateTime dateTime = DateUtils.parseStrictDateTime(s);
             year = dateTime.getYear();
             month = dateTime.getMonthValue();
             day = dateTime.getDayOfMonth();
@@ -213,6 +169,7 @@ public class DateLiteral extends LiteralExpr {
         day = other.day;
         microsecond = other.microsecond;
         type = other.type;
+
     }
 
     @Override
@@ -346,7 +303,7 @@ public class DateLiteral extends LiteralExpr {
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
-        //set flag bit in meta, 0 is DATETIME and 1 is DATE
+        // set flag bit in meta, 0 is DATETIME and 1 is DATE
         if (this.type.isDatetime()) {
             out.writeShort(DateLiteralType.DATETIME.value());
         } else if (this.type.isDate()) {
