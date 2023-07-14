@@ -76,7 +76,7 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
         auto& info = _result.trackingLoads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
             if (slot_id < 1 || slot_id > 5) {
-                return Status::InternalError(strings::Substitute("invalid slot id: %0" ,slot_id));
+                return Status::InternalError(strings::Substitute("invalid slot id: $0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
             switch (slot_id) {
