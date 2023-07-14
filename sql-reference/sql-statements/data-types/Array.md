@@ -19,7 +19,7 @@ ARRAY<ARRAY<type>>
 ARRAY<type> NOT NULL
 ~~~
 
-数组列的定义形式为 `ARRAY<type>`，其中 `type` 表示数组内的元素类型。数组元素目前支持以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、CHAR、DATETIME、DATE。
+数组列的定义形式为 `ARRAY<type>`，其中 `type` 表示数组内的元素类型。数组元素目前支持以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、CHAR、DATETIME、DATE、JSON、BINARY (3.0 及以后)。
 
 数组内的元素默认可以为 NULL，比如 [NULL, 1, 2]。暂时不支持指定数组元素为 NOT NULL，但是您可以定义数组列本身为 NOT NULL，比如上面的第三个示例。
 
@@ -261,12 +261,3 @@ mysql> select [[1,2],[3,4]][2][1];
 |                   3 |
 +---------------------+
 ~~~
-
-
-
-create table t0(
-  c0 INT,
-  c1 GEOMETRY ST_Point
-)
-duplicate key(c0)
-distributed by hash(c0);
