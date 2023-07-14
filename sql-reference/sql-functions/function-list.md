@@ -11,10 +11,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 - [Bitmap 函数](#bitmap-函数)
 - [JSON 函数](#json-函数)
 - [Map 函数](#map-函数)
-- [Struct 函数](#struct-函数)
-- [表函数](#表函数)
 - [Bit 函数](#bit-函数)
-- [Binary 函数](#binary-函数)
 - [加密函数](#加密函数)
 - [模糊/正则匹配函数](#模糊正则匹配函数)
 - [条件函数](#条件函数)
@@ -110,8 +107,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [ends_with](/sql-reference/sql-functions/string-functions/ends_with.md) | 如果字符串以指定后缀结尾，返回 true，否则返回 false。  |
 | [find_in_set](/sql-reference/sql-functions/string-functions/find_in_set.md) | 返回指定的字符串在一系列字符串列表中第一次出现的位置。  |
 | [group_concat](/sql-reference/sql-functions/string-functions/group_concat.md) | 将结果集中的多行结果连接成一个字符串。  |
-| [hex_decode_binary](/sql-reference/sql-functions/string-functions/hex_decode_binary.md) |  将一个十六进制编码的字符串解码为 VARBINARY 类型的值。 |
-| [hex_decode_string](/sql-reference/sql-functions/string-functions/hex_decode_string.md) | 将输入字符串中每一对十六进制数字解析为一个数字，并将解析得到的数字转换为表示该数字的字节，然后返回一个二进制字符串。  |
 | [hex](/sql-reference/sql-functions/string-functions/hex.md) | 对于输入的数字或字符，返回十六进制的字符串表示形式。  |
 | [instr](/sql-reference/sql-functions/string-functions/instr.md) |  返回子字符串在指定的字符串中第一次出现的位置。 |
 | [left](/sql-reference/sql-functions/string-functions/left.md) | 从字符串左边部分返回指定长度的字符。  |
@@ -316,31 +311,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
-|  [cardinality](/sql-reference/sql-functions/map-functions/cardinality.md)| 计算 Map 中元素的个数。 |
-|  [distinct_map_keys](/sql-reference/sql-functions/map-functions/distinct_map_keys.md)| 删除 Map 中重复的 Key。 |
-|  [element_at](/sql-reference/sql-functions/map-functions/element_at.md)| 获取 Map 中指定键 (Key) 对应的值 (Value)。 |
-|  [map_apply](/sql-reference/sql-functions/map-functions/map_apply.md)| 返回 Map 中所有 Key 或 Value 进行 Lambda 函数运算后的 Map 值。 |
-|  [map_concat](/sql-reference/sql-functions/map-functions/map_concat.md)| 将多个 Map 合并成一个 Map。 |
-|  [map_filter](/sql-reference/sql-functions/map-functions/map_filter.md)| 根据设定的过滤函数返回 MAP 中匹配的 Key-value 对。 |
-|  [map_from_arrays](/sql-reference/sql-functions/map-functions/map_from_arrays.md)| 将两个 ARRAY 数组作为 Key 和 Value 组合成一个 MAP 对象。 |
 |  [map_keys](/sql-reference/sql-functions/map-functions/map_keys.md)| 返回 Map 中所有 key 组成的数组。 |
 |  [map_size](/sql-reference/sql-functions/map-functions/map_size.md)| 计算 Map 中元素的个数。 |
 |  [map_values](/sql-reference/sql-functions/map-functions/map_values.md)| 返回 Map 中所有 Value 组成的数组。 |
-|  [transform_keys](/sql-reference/sql-functions/map-functions/transform_keys.md)| 对 Map 中的 key 进行 Lambda 转换。 |
-|  [transform_values](/sql-reference/sql-functions/map-functions/transform_values.md)| 对 Map 中的 value 进行 lambda 转换。 |
-
-## Struct 函数
-
-| 函数                |                 功能      |
-|  :-:                |                :-:       |
-|  [named_struct](/sql-reference/sql-functions/struct-functions/named_struct.md)| 根据给定的字段名和字段值来构建 STRUCT。 |
-|  [row](/sql-reference/sql-functions/struct-functions/row.md)| 根据给定的一个或多个值来构建 STRUCT。 |
-
-## 表函数
-
-| 函数                |                 功能      |
-|  :-:                |                :-:       |
-| [generate_series](./table-functions/generate_series.md) | 生成一系列从 start 到 end 的数值，步长为 step。 |
 
 ## Bit 函数
 
@@ -354,20 +327,12 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bit_shift_right](/sql-reference/sql-functions/bit-functions/bit_shift_right.md)| 将一个数值或者数值表达式的二进制表示向右移动指定的位数。该函数执行算术右移。 |
 |  [bit_shift_right_logical](/sql-reference/sql-functions/bit-functions/bit_shift_right_logical.md)| 将一个数值或者数值表达式的二进制表示向右移动指定的位数。该函数执行逻辑右移。 |
 
-## Binary 函数
-
-| 函数                |                 功能      |
-|  :-:                |                :-:       |
-|  [from_binary](./sql-reference/sql-functions/binary-functions/from_binary.md)| 根据指定的格式，将二进制数据转化为 VARCHAR 类型的字符串。 |
-|  [to_binary](./sql-reference/sql-functions/binary-functions/to_binary.md)| 根据指定的二进制格式 (binary_type)，将 VARCHAR 字符串转换为二进制类型。|
-
 ## 加密函数
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
 |  [aes_decrypt](/sql-reference/sql-functions/crytographic-functions/aes_decrypt.md)| 使用 AES_128_ECB 算法将字符串解密并返回一个二进制字符串。 |
 |  [aes_encrypt](/sql-reference/sql-functions/crytographic-functions/aes_encrypt.md)| 使用 AES_128_ECB 算法对字符串进行加密并返回一个二进制字符串。 |
-|  [base64_decode_binary](/sql-reference/sql-functions/crytographic-functions/base64_decode_binary.md)| 解码某个 Base64 编码的字符串，并返回一个 VARBINARY 类型的值。 |
 |  [base64_decode_string](/sql-reference/sql-functions/crytographic-functions/base64_decode_string.md)| 用于解码某个 Base64 编码的字符串，是 to_base64() 函数的反向函数。 |
 |  [from_base64](/sql-reference/sql-functions/crytographic-functions/from_base64.md)| 将 Base64 编码过的字符串 str 进行解码。反向函数为 to_base64。 |
 |  [md5](/sql-reference/sql-functions/crytographic-functions/md5.md)| 使用 MD5 加密算法将给定字符串进行加密，输出一个 128-bit 的校验和 (checksum)，以 32 字符的十六进制字符串表示。 |
