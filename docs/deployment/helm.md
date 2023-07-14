@@ -17,7 +17,7 @@
    1. Add the Helm Chart Repo.
 
       ```Bash
-      helm repo add starrocks-community https://starrocks.github.io/helm-charts
+      helm repo add starrocks-community https://starrocks.github.io/starrocks-kubernetes-operator
       ```
 
    2. Update the Helm Chart Repo to the latest version.
@@ -31,10 +31,10 @@
       ```Bash
       $ helm search repo starrocks-community
       NAME                                      CHART VERSION        APP VERSION        DESCRIPTION                                       
-      starrocks-community/kube-starrocks        1.6.1                2.5.4              kube-starrocks collects Kubernetes manifests, s...
+      starrocks-community/kube-starrocks        1.7.0                3.0-latest         kube-starrocks collects Kubernetes manifests, s...
       ```
 
-2. Use the default **[values.yaml](https://github.com/StarRocks/helm-charts/blob/main/charts/kube-starrocks/values.yaml)** of the Helm Chart to deploy the StarRocks Operator and StarRocks cluster, or create a YAML file to customize your deployment configurations.
+2. Use the default **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** of the Helm Chart to deploy the StarRocks Operator and StarRocks cluster, or create a YAML file to customize your deployment configurations.
    1. Deployment with default configurations
 
       Run the following command to deploy the StarRocks Operator and the StarRocks cluster which consists of one FE and one BE:
@@ -57,7 +57,7 @@
       ```
 
    2. Deployment with custom configurations
-      - Create a YAML file, for example, **my-values.yaml**, and customize the configurations for the StarRocks Operator and StarRocks cluster in the YAML file. For the supported parameters and descriptions, see the comments in the default **[values.yaml](https://github.com/StarRocks/helm-charts/blob/main/charts/kube-starrocks/values.yaml)** of the Helm Chart.
+      - Create a YAML file, for example, **my-values.yaml**, and customize the configurations for the StarRocks Operator and StarRocks cluster in the YAML file. For the supported parameters and descriptions, see the comments in the default **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** of the Helm Chart.
       - Run the following command to deploy the StarRocks Operator and StarRocks cluster with the custom configurations in **my-values.yaml**.
 
         ```Bash
