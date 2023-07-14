@@ -17,10 +17,8 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -34,17 +32,14 @@ import java.util.List;
 import java.util.Set;
 
 // for a simple min/max/count aggregation query like
-// 'select min(c1),max(c2),count(*),count(not-null column) from olap_table',
-// we can use MetaScan directly to avoid reading a large amount of data.
-public class RewriteMinMaxCountOnScanRule extends TransformationRule {
-    public RewriteMinMaxCountOnScanRule() {
+// 'select min(c1),max(c2),count(c3) from table',
+// we add a label on scan node to indicates that pattern for further optimization
+
+public class LabelMinMaxCountOnScanRule extends TransformationRule {
+    public LabelMinMaxCountOnScanRule() {
         // agg -> project -> scan[checked in `check`]
         super(RuleType.TF_REWRITE_MIN_MAX_COUNT_AGG,
                 Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT)));
-    }
-
-    private void mark(LogicalAggregationOperator aggregationOperator, LogicalScanOperator scanOperator,
-                      OptimizerContext context) {
     }
 
     @Override
@@ -59,11 +54,10 @@ public class RewriteMinMaxCountOnScanRule extends TransformationRule {
         // we can only apply this rule to the queries met all the following conditions:
         // 1. no group by key
         // 2. no `having` condition or other filters
-        // 3. no limit(???)        // 5. only contain MIN/MAX/COUNT agg functions, no distinct
-        //        //        // 6. all arguments to agg functions are primitive columns
-        // 5. only contain MIN/MAX/COUNT agg functions, no distinct
-        // 6. all arguments to agg functions are primitive columns
-        // 7. no expr in arguments to agg functions
+        // 3. no limit(???)
+        // 4. only contain MIN/MAX/COUNT agg functions, no distinct
+        // 5. all arguments to agg functions are primitive columns
+        // 6. no expr in arguments to agg functions
 
         // no limit
         if (scanOperator.getLimit() != -1) {
@@ -88,20 +82,29 @@ public class RewriteMinMaxCountOnScanRule extends TransformationRule {
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(aggregator -> {
             AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
             String functionName = aggregateFunction.functionName();
-            ColumnRefSet usedColumns = aggregator.getUsedColumns();
-            Type type = aggregator.getType();
 
-            // primitive type.
-            if (type.isComplexType()) {
+            // min/max/count(a)
+            if (!(functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN) ||
+                    (functionName.equals(FunctionSet.COUNT) && !aggregator.isDistinct()))) {
                 return false;
             }
 
-            // min/max/count(a)
-            if (functionName.equals(FunctionSet.MAX) || functionName.equals(FunctionSet.MIN) ||
-                    (functionName.equals(FunctionSet.COUNT) && !aggregator.isDistinct())) {
-                return (usedColumns.size() == 1);
+            // check arguments
+            // 1. simple type
+            // 2. no expr
+            List<ScalarOperator> arguments = aggregator.getArguments();
+            if (arguments == null || arguments.size() != 1) {
+                return false;
             }
-            return false;
+            ScalarOperator arg = arguments.get(0);
+            if (!arg.isColumnRef()) {
+                return false;
+            }
+            ColumnRefOperator columnRefOperator = (ColumnRefOperator) arg;
+            if (columnRefOperator.getType().isComplexType()) {
+                return false;
+            }
+            return true;
         });
         return allValid;
     }
@@ -124,7 +127,7 @@ public class RewriteMinMaxCountOnScanRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
-        mark(aggregationOperator, scanOperator, context);
+        scanOperator.setCanUseMinMaxCountOpt(true);
         return Lists.newArrayList(input);
     }
 }
