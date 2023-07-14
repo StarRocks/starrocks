@@ -192,8 +192,7 @@ TEST_F(FileScanNodeTest, CSVBasic) {
     ASSERT_FALSE(eos);
     ASSERT_EQ(chunk->num_rows(), 3);
 
-    status = file_scan_node->close(_runtime_state.get());
-    ASSERT_TRUE(status.ok());
+    file_scan_node->close(_runtime_state.get());
 }
 
 } // namespace starrocks
