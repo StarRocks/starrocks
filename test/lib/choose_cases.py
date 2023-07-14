@@ -213,6 +213,8 @@ class ChooseCase(object):
 
             self.read_t_r_file(file, case_regex)
 
+        self.case_list = list(filter(lambda x: x.name.strip() != "", self.case_list))
+
     def read_t_r_file(self, file, case_regex):
         """read t r file and get case & result"""
         with open(file, "r") as f:
@@ -246,8 +248,11 @@ class ChooseCase(object):
                     if case_regex is not None and not re.compile(case_regex).search(name):
                         # case name don't match regex
                         pass
-                    elif any(each_attr not in tags for each_attr in attr):
+                    elif attr and any(each_attr not in tags for each_attr in attr):
                         # case attrs don't match attr filter
+                        pass
+                    elif not attr and "sequential" in tags:
+                        # no attr is confirmed, skip sequential cases in default
                         pass
                     else:
                         self.case_list.append(
@@ -312,8 +317,13 @@ class ChooseCase(object):
 
         if len(tmp_sql) > 0:
             if case_regex is not None and not re.compile(case_regex).search(name):
+                # case name don't match regex
                 pass
-            elif any(each_attr not in tags for each_attr in attr):
+            elif attr and any(each_attr not in tags for each_attr in attr):
+                # case attrs don't match attr filter
+                pass
+            elif not attr and "sequential" in tags:
+                # no attr is confirmed, skip sequential cases in default
                 pass
             else:
                 self.case_list.append(

@@ -5,7 +5,7 @@ create database test_drop_task_${uuid0};
 use test_drop_task_${uuid0};
 -- result:
 -- !result
-SUBMIT TASK test_kill AS CREATE TABLE TEST PROPERTIES ( "replication_num" = "1" ) AS SELECT sleep(1000);
+[UC]SUBMIT TASK test_kill AS CREATE TABLE TEST PROPERTIES ( "replication_num" = "1" ) AS SELECT sleep(1000);
 -- result:
 test_kill	SUBMITTED
 -- !result
