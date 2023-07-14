@@ -10,10 +10,10 @@ Creates a materialized view. Creating a materialized view is asynchronous operat
 
 StarRocks supports asynchronous materialized views from v2.4. The major differences between asynchronous materialized views and synchronous materialized views in previous versions are as follows:
 
-|                              | **ASYNC and MANUAL Refresh** | **Aggregated Column** | **Partitioning and Bucketing Changes** | **JOIN, WHERE, and GROUP BY clause** |
-| ---------------------------- | ---------------------------- | ------------ | -------------------- | ------------------------------ |
-| **Synchronous materialized view** | No (Materialized view in v2.3 and earlier only supports SYNC refresh)| No | No  | No |
-| **Asynchronous materialized view** | Yes | Yes | Yes  | Yes  |
+|                       | **Single-table aggregation** | **Multi-table join** | **Query rewrite** | **Refresh strategy** | **Base table** |
+| --------------------- | ---------------------------- | -------------------- | ----------------- | -------------------- | -------------- |
+| **ASYNC MV** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs (v2.5)</li><li>Existing materialized views (v2.5)</li><li>Existing views (v3.1)</li></ul> |
+| **SYNC MV (Rollup)**  | Limited choices of [aggregate functions](#correspondence-of-aggregate-functions) | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
 
 In StarRocks v2.5, asynchronous async refresh materialized views support query rewrite, nested materialized views, and creating materialized views based on Hive catalog, Hudi catalog, and Iceberg catalog.
 
