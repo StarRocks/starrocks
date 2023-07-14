@@ -2070,6 +2070,10 @@ Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionC
     Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     auto format_value = slice.to_string();
 
+    // to lower case
+    std::transform(format_value.begin(), format_value.end(), format_value.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
     ScalarFunction function;
     if (format_value == "second") {
         function = &TimeFunctions::datetime_trunc_second;
@@ -2185,6 +2189,10 @@ Status TimeFunctions::date_trunc_prepare(FunctionContext* context, FunctionConte
 
     Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     auto format_value = slice.to_string();
+
+    // to lower case
+    std::transform(format_value.begin(), format_value.end(), format_value.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
 
     ScalarFunction function;
     if (format_value == "day") {
