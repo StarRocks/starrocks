@@ -47,7 +47,7 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
     // Close the _schema_scanner, and report errors.
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     // this is no use in this class
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;

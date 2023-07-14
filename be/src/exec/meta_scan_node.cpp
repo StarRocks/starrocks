@@ -63,13 +63,13 @@ Status MetaScanNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status MetaScanNode::close(RuntimeState* state) {
+void MetaScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    return ScanNode::close(state);
+    ScanNode::close(state);
 }
 
 } // namespace starrocks

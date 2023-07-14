@@ -415,9 +415,9 @@ Status HashJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status HashJoinNode::close(RuntimeState* state) {
+void HashJoinNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     Expr::close(_build_expr_ctxs, state);
@@ -426,7 +426,7 @@ Status HashJoinNode::close(RuntimeState* state) {
 
     _ht.close();
 
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>

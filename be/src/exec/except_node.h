@@ -37,7 +37,7 @@ class TupleDescriptor;
 } // namespace starrocks
 
 namespace starrocks {
-class ExceptNode : public ExecNode {
+class ExceptNode final : public ExecNode {
 public:
     ExceptNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
@@ -51,7 +51,7 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* row_batch, bool* eos) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
