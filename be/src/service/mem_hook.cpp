@@ -12,19 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifdef USE_JEMALLOC
-#include "jemalloc/jemalloc.h"
-#else
-#include <gperftools/nallocx.h>
-#include <gperftools/tcmalloc.h>
-#endif
-
 #include <atomic>
 #include <iostream>
 
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "glog/logging.h"
+#include "jemalloc/jemalloc.h"
 #include "util/stack_util.h"
 
 #ifndef BE_TEST
@@ -191,7 +185,6 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 }
 */
 
-#ifdef USE_JEMALLOC
 #define STARROCKS_MALLOC_SIZE(ptr) je_malloc_usable_size(ptr)
 #define STARROCKS_NALLOX(size, flags) je_nallocx(size, flags)
 #define STARROCKS_MALLOC(size) je_malloc(size)
@@ -202,18 +195,6 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 #define STARROCKS_POSIX_MEMALIGN(ptr, align, size) je_posix_memalign(ptr, align, size)
 #define STARROCKS_CFREE(ptr) je_free(ptr)
 #define STARROCKS_VALLOC(size) je_valloc(size)
-#else
-#define STARROCKS_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
-#define STARROCKS_NALLOX(size, flags) tc_nallocx(size, flags)
-#define STARROCKS_MALLOC(size) tc_malloc(size)
-#define STARROCKS_FREE(ptr) tc_free(ptr)
-#define STARROCKS_REALLOC(ptr, size) tc_realloc(ptr, size)
-#define STARROCKS_CALLOC(number, size) tc_calloc(number, size)
-#define STARROCKS_ALIGNED_ALLOC(align, size) tc_memalign(align, size)
-#define STARROCKS_POSIX_MEMALIGN(ptr, align, size) tc_posix_memalign(ptr, align, size)
-#define STARROCKS_CFREE(ptr) tc_cfree(ptr)
-#define STARROCKS_VALLOC(size) tc_valloc(size)
-#endif
 
 #ifndef BE_TEST
 #define MEMORY_CONSUME_SIZE(size)                                      \
@@ -256,7 +237,6 @@ std::atomic<int64_t> g_mem_usage(0);
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
 
-#ifdef USE_JEMALLOC
 const size_t large_memory_alloc_report_threshold = 1073741824;
 inline thread_local bool skip_report = false;
 inline void report_large_memory_alloc(size_t size) {
@@ -271,9 +251,6 @@ inline void report_large_memory_alloc(size_t size) {
     }
 }
 #define STARROCKS_REPORT_LARGE_MEM_ALLOC(size) report_large_memory_alloc(size)
-#else
-#define STARROCKS_REPORT_LARGE_MEM_ALLOC(size) (void)0
-#endif
 
 extern "C" {
 // malloc
@@ -491,7 +468,5 @@ void* aligned_alloc(size_t align, size_t size) __THROW ALIAS(my_aligned_alloc);
 void* valloc(size_t size) __THROW ALIAS(my_valloc);
 void* pvalloc(size_t size) __THROW ALIAS(my_pvalloc);
 int posix_memalign(void** r, size_t a, size_t s) __THROW ALIAS(my_posix_memalign);
-#ifdef USE_JEMALLOC
 size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
-#endif
 }

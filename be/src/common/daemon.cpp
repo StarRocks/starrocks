@@ -35,11 +35,6 @@
 #include "common/daemon.h"
 
 #include <gflags/gflags.h>
-#ifdef USE_JEMALLOC
-#include "jemalloc/jemalloc.h"
-#else
-#include <gperftools/malloc_extension.h>
-#endif
 
 #include "column/column_helper.h"
 #include "column/column_pool.h"
@@ -47,6 +42,7 @@
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/cpu.h"
+#include "jemalloc/jemalloc.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
@@ -101,44 +97,14 @@ private:
 void gc_memory(void* arg_this) {
     using namespace starrocks;
     const static float kFreeRatio = 0.5;
-    GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
 
     auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
         sleep(static_cast<unsigned int>(config::memory_maintenance_sleep_time_s));
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
-        MallocExtension::instance()->MarkThreadBusy();
-#endif
+
         ReleaseColumnPool releaser(kFreeRatio);
         ForEach<ColumnPoolList>(releaser);
         LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
-
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
-        size_t used_size = 0;
-        size_t free_size = 0;
-        MallocExtension::instance()->GetNumericProperty("generic.current_allocated_bytes", &used_size);
-        MallocExtension::instance()->GetNumericProperty("tcmalloc.pageheap_free_bytes", &free_size);
-        size_t phy_size = used_size + free_size; // physical memory usage
-        size_t total_bytes_to_gc = 0;
-        if (phy_size > config::tc_use_memory_min) {
-            size_t max_free_size = phy_size * config::tc_free_memory_rate / 100;
-            if (free_size > max_free_size) {
-                total_bytes_to_gc = free_size - max_free_size;
-            }
-        }
-        size_t bytes_to_gc = gch.bytes_should_gc(MonoTime::Now(), total_bytes_to_gc);
-        if (bytes_to_gc > 0) {
-            size_t bytes = bytes_to_gc;
-            while (bytes >= GCBYTES_ONE_STEP) {
-                MallocExtension::instance()->ReleaseToSystem(GCBYTES_ONE_STEP);
-                bytes -= GCBYTES_ONE_STEP;
-            }
-            if (bytes > 0) {
-                MallocExtension::instance()->ReleaseToSystem(bytes);
-            }
-        }
-        MallocExtension::instance()->MarkThreadIdle();
-#endif
     }
 }
 
