@@ -40,7 +40,7 @@ public:
     Status(const Status& s) : _state(s._state == nullptr ? nullptr : copy_state(s._state)) {}
 
     // Move c'tor
-    Status(Status&& s) noexcept : _state(s._state) { s._state = moved_from_state(); }
+    Status(Status && s) noexcept : _state(s._state) { s._state = moved_from_state(); }
 
     // Same as copy c'tor
     Status& operator=(const Status& s) {
