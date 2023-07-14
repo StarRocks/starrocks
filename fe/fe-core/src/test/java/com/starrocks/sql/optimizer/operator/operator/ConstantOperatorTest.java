@@ -1,12 +1,29 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> d88b4657a5 ([BugFix] Fix double/float/date cast to string in FE (#27070))
 
 package com.starrocks.sql.optimizer.operator.operator;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.time.format.DateTimeParseException;
 
 public class ConstantOperatorTest {
     @Test
@@ -82,9 +99,6 @@ public class ConstantOperatorTest {
                 "2019-05-31 10:11:61.123",
                 "2019-05-31 10:11:12.1234567",
 
-                // Only support "YYYY-MM-dd HH:mm:ss", not "yy-MM-dd HH:mm:ss".
-                "97-10-07 10:11:12.123",
-
                 // Other invalid formats.
                 "2019-05-31-1",
                 "2019-05-31-1 10:11:12",
@@ -93,8 +107,8 @@ public class ConstantOperatorTest {
         };
         for (String c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c);
-            Assert.assertThrows(in.getVarchar(), AnalysisException.class, () -> in.castTo(Type.DATE));
-            Assert.assertThrows(in.getVarchar(), AnalysisException.class, () -> in.castTo(Type.DATETIME));
+            Assert.assertThrows(in.getVarchar(), DateTimeParseException.class, () -> in.castTo(Type.DATE));
+            Assert.assertThrows(in.getVarchar(), DateTimeParseException.class, () -> in.castTo(Type.DATETIME));
         }
     }
 }

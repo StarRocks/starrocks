@@ -26,7 +26,11 @@ AGGREGATE ([GLOBAL] aggregate [{30: sum=sum(28: case), 31: sum=sum(29: expr)}] g
 [plan-2]
 AGGREGATE ([GLOBAL] aggregate [{30: sum=sum(30: sum), 31: sum=sum(31: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
+<<<<<<< HEAD
         AGGREGATE ([LOCAL] aggregate [{30: sum=sum(28: case), 31: sum=sum(29: expr)}] group by [[]] having [null]
+=======
+        AGGREGATE ([LOCAL] aggregate [{30: sum=sum(if(22: P_TYPE LIKE PROMO%, 34: multiply, 0)), 31: sum=sum(29: expr)}] group by [[]] having [null]
+>>>>>>> d88b4657a5 ([BugFix] Fix double/float/date cast to string in FE (#27070))
             INNER JOIN (join-predicate [18: P_PARTKEY = 2: L_PARTKEY] post-join-predicate [null])
                 SCAN (columns[18: P_PARTKEY, 22: P_TYPE] predicate[null])
                 EXCHANGE BROADCAST
@@ -35,7 +39,11 @@ AGGREGATE ([GLOBAL] aggregate [{30: sum=sum(30: sum), 31: sum=sum(31: sum)}] gro
 [plan-3]
 AGGREGATE ([GLOBAL] aggregate [{30: sum=sum(30: sum), 31: sum=sum(31: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
+<<<<<<< HEAD
         AGGREGATE ([LOCAL] aggregate [{30: sum=sum(28: case), 31: sum=sum(29: expr)}] group by [[]] having [null]
+=======
+        AGGREGATE ([LOCAL] aggregate [{30: sum=sum(if(22: P_TYPE LIKE PROMO%, 34: multiply, 0)), 31: sum=sum(29: expr)}] group by [[]] having [null]
+>>>>>>> d88b4657a5 ([BugFix] Fix double/float/date cast to string in FE (#27070))
             INNER JOIN (join-predicate [18: P_PARTKEY = 2: L_PARTKEY] post-join-predicate [null])
                 SCAN (columns[18: P_PARTKEY, 22: P_TYPE] predicate[null])
                 EXCHANGE SHUFFLE[2]

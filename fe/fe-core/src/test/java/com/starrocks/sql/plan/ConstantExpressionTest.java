@@ -348,4 +348,62 @@ public class ConstantExpressionTest extends PlanTestBase {
                 "  |  <slot 2> : uuid()\n" +
                 "  |  <slot 3> : uuid()"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testNumericLiteralComparison() throws Exception {
+        String sql;
+        String plan;
+
+        final long prevSqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setSqlMode(prevSqlMode | SqlModeHelper.MODE_DOUBLE_LITERAL);
+
+            sql = "SELECT percentile_approx(2.25, 0), percentile_approx(2.25, 0.)";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:Project\n" +
+                    "  |  <slot 2> : 2: percentile_approx\n" +
+                    "  |  <slot 3> : 2: percentile_approx\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: percentile_approx(2.25, 0.0)\n" +
+                    "  |  group by: ");
+
+            sql = "SELECT COUNT(CASE WHEN 1 THEN 1 END), COUNT(CASE WHEN TRUE THEN 1 END), " +
+                    "COUNT(CASE WHEN 1.0 THEN 1 END), COUNT(CASE WHEN CAST(1 AS LARGEINT) THEN 1 END)";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:Project\n" +
+                    "  |  <slot 2> : 2: count\n" +
+                    "  |  <slot 3> : 2: count\n" +
+                    "  |  <slot 4> : 2: count\n" +
+                    "  |  <slot 5> : 2: count\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1)\n" +
+                    "  |  group by: ");
+
+            sql = "SELECT 1, TRUE, 0, FALSE, 1.1, 1, 1.1, TRUE, FALSE, 0";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 7> : 1\n" +
+                    "  |  <slot 8> : 1.1\n" +
+                    "  |  <slot 9> : TRUE\n" +
+                    "  |  <slot 10> : FALSE\n" +
+                    "  |  <slot 11> : 0");
+
+            sql = "SELECT TRUE, 1, FALSE, 0, 1.1, 1, 1.1, TRUE, FALSE, 0";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 7> : 1\n" +
+                    "  |  <slot 8> : 1.1\n" +
+                    "  |  <slot 9> : TRUE\n" +
+                    "  |  <slot 10> : FALSE\n" +
+                    "  |  <slot 11> : 0");
+
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(prevSqlMode);
+        }
+    }
+>>>>>>> d88b4657a5 ([BugFix] Fix double/float/date cast to string in FE (#27070))
 }
