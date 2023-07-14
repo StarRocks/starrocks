@@ -169,7 +169,7 @@ show partitions from ss;
 insert into ss values('2002-01-01', 2);
 show partitions from ss;
 
--- name: test_shadow_partition
+-- name: test_shadow_partition @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="true");
 show partitions from ss;
