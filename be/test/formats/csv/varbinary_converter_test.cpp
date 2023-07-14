@@ -32,17 +32,16 @@ public:
         _type.len = 6000;
     }
 
-    Slice hex_binary(const Slice& str) {
-        ss.str("");
+    std::string hex_binary(const Slice& str) {
+        std::stringstream ss;
         ss << std::hex << std::uppercase << std::setfill('0');
         for (int i = 0; i < str.size; ++i) {
             ss << std::setw(2) << (static_cast<int32_t>(str.data[i]) & 0xFF);
         }
-        return std::move(ss.str());
+        return ss.str();
     }
 
 protected:
-    std::stringstream ss;
     TypeDescriptor _type;
 };
 
@@ -57,10 +56,10 @@ TEST_F(VarBinaryConverterTest, test_read_varbinary) {
     EXPECT_TRUE(conv->read_string(col.get(), " 0101", Converter::Options()));
 
     EXPECT_EQ(4, col->size());
-    ASSERT_EQ(Slice("AB"), hex_binary(col->get(0).get_slice()));
-    ASSERT_EQ(Slice("0101"), hex_binary(col->get(1).get_slice()));
-    ASSERT_EQ(Slice("AB"), hex_binary(col->get(2).get_slice()));
-    ASSERT_EQ(Slice("0101"), hex_binary(col->get(3).get_slice()));
+    ASSERT_EQ(Slice("AB").to_string(), hex_binary(col->get(0).get_slice()));
+    ASSERT_EQ(Slice("0101").to_string(), hex_binary(col->get(1).get_slice()));
+    ASSERT_EQ(Slice("AB").to_string(), hex_binary(col->get(2).get_slice()));
+    ASSERT_EQ(Slice("0101").to_string(), hex_binary(col->get(3).get_slice()));
 
     EXPECT_FALSE(conv->read_string(col.get(), "xyz", Converter::Options()));
     EXPECT_FALSE(conv->read_string(col.get(), "1", Converter::Options()));
