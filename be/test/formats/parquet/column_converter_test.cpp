@@ -492,6 +492,10 @@ TEST_F(ColumnConverterTest, FloatTest) {
             check(file_path, col_type, col_name, "[-5.55]", expected_rows);
         }
         {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
+            check(file_path, col_type, col_name, "[-5.55]", expected_rows);
+        }
+        {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
             check(file_path, col_type, col_name, "[-5.55]", expected_rows, true);
         }
