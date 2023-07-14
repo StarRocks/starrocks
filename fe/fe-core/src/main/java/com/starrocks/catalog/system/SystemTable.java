@@ -39,6 +39,8 @@ public class SystemTable extends Table {
 
     private final TSchemaTableType schemaTableType;
 
+    private String catalogName;
+
     public SystemTable(long id, String name, TableType type, List<Column> baseSchema, TSchemaTableType schemaTableType) {
         super(id, name, type, baseSchema);
         this.schemaTableType = schemaTableType;
@@ -73,6 +75,14 @@ public class SystemTable extends Table {
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
     }
 
     public static class Builder {

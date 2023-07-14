@@ -95,6 +95,9 @@ struct TDescribeTableParams {
   4: optional string user_ip    // deprecated
   5: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
   6: optional i64 limit
+
+  // If not set, match default_catalog
+  7: optional string catalog_name 
 }
 
 // Results of a call to describeTable()
@@ -320,6 +323,9 @@ struct TGetDbsParams {
   2: optional string user   // deprecated
   3: optional string user_ip    // deprecated
   4: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
+
+  // If not set, match default_catalog
+  5: optional string catalog_name
 }
 
 // getDbNames returns a list of database names
@@ -340,6 +346,9 @@ struct TGetTablesParams {
   5: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
   20: optional Types.TTableType type // getting a certain type of tables
   21: optional i64 limit
+
+  // If not set, match default_catalog
+  22: optional string catalog_name
 }
 
 struct TTableStatus {
@@ -1202,6 +1211,9 @@ struct TAuthInfo {
     2: optional string user   // deprecated
     3: optional string user_ip    // deprecated
     4: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
+    
+    // If not set, match default_catalog
+    5: optional string catalog_name
 }
 
 struct TGetTablesConfigRequest {

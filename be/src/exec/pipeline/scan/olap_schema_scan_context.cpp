@@ -31,6 +31,10 @@ Status OlapSchemaScanContext::prepare(RuntimeState* state) {
 
 Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
     _param = std::make_shared<SchemaScannerParam>();
+    if (_tnode.schema_scan_node.__isset.catalog_name) {
+        _param->catalog = _obj_pool.add(new std::string(_tnode.schema_scan_node.catalog_name));
+    }
+
     if (_tnode.schema_scan_node.__isset.db) {
         _param->db = _obj_pool.add(new std::string(_tnode.schema_scan_node.db));
     }

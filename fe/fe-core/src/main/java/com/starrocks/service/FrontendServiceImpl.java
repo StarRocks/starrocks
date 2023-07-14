@@ -47,7 +47,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -124,6 +123,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -264,6 +264,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
 import static com.starrocks.thrift.TStatusCode.OK;
 import static com.starrocks.thrift.TStatusCode.RUNTIME_ERROR;
@@ -285,7 +286,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("get db request: {}", params);
         TGetDbsResult result = new TGetDbsResult();
 
-        List<String> dbs = Lists.newArrayList();
         PatternMatcher matcher = null;
         if (params.isSetPattern()) {
             try {
@@ -296,8 +296,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
+        String catalogName = DEFAULT_INTERNAL_CATALOG_NAME;
+        if (params.isSetCatalog_name()) {
+            catalogName = params.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> dbNames = metadataMgr.listDbNames(catalogName);
         LOG.debug("get db names: {}", dbNames);
 
         UserIdentity currentUser = null;
@@ -306,6 +311,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+
+        List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
             if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
                 continue;
@@ -339,17 +346,35 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         // database privs should be checked in analysis phase
-        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        String catalogName = DEFAULT_INTERNAL_CATALOG_NAME;
+        if (params.isSetCatalog_name()) {
+            catalogName = params.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Database db = metadataMgr.getDb(catalogName, params.db);
+
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+
         if (db != null) {
-            for (String tableName : db.getTableNamesViewWithLock()) {
+            for (String tableName : metadataMgr.listTableNames(catalogName, params.db)) {
                 LOG.debug("get table: {}, wait to check", tableName);
-                Table tbl = db.getTable(tableName);
+                Table tbl = null;
+                try {
+                    tbl = metadataMgr.getTable(catalogName, params.db, tableName);
+                } catch (Exception e) {
+                    LOG.warn(e.getMessage());
+                }
+
+                if (tbl == null) {
+                    continue;
+                }
+
                 if (tbl != null && !PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser,
                         null, params.db, tbl)) {
                     continue;
@@ -840,18 +865,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        String catalogName = DEFAULT_INTERNAL_CATALOG_NAME;
+        if (params.isSetCatalog_name()) {
+            catalogName = params.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Database db = metadataMgr.getDb(catalogName, params.db);
+
         if (db != null) {
             try {
                 db.readLock();
-                Table table = db.getTable(params.getTable_name());
+                Table table = metadataMgr.getTable(catalogName, params.db, params.table_name);
                 if (table == null) {
                     return result;
                 }
                 if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
                     return result;
                 }
-                setColumnDesc(columns, table, limit, false, params.db, params.getTable_name());
+                setColumnDesc(columns, table, limit, false, params.db, params.table_name);
             } finally {
                 db.readUnlock();
             }
@@ -1529,7 +1561,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             // Adapt to the situation that the Fe node before upgrading sends a request to the Fe node after upgrading.
             if (request.getCatalog_name() == null) {
-                request.setCatalog_name(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                request.setCatalog_name(DEFAULT_INTERNAL_CATALOG_NAME);
             }
             GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(request.getCatalog_name(),
                     request.getDb_name(), request.getTable_name()), request.getPartitions());

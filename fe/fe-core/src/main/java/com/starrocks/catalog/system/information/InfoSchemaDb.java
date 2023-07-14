@@ -17,17 +17,25 @@ package com.starrocks.catalog.system.information;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
+import com.starrocks.catalog.system.SystemTable;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
 // Information schema used for MySQL compatible.
 public class InfoSchemaDb extends Database {
     public static final String DATABASE_NAME = "information_schema";
 
     public InfoSchemaDb() {
-        super(SystemId.INFORMATION_SCHEMA_DB_ID, DATABASE_NAME);
+        this(DEFAULT_INTERNAL_CATALOG_NAME);
+    }
+
+    public InfoSchemaDb(String catalogName) {
+        super(SystemId.INFORMATION_SCHEMA_DB_ID, DATABASE_NAME); // do we need unique id for every catalog?
+        super.setCatalogName(catalogName);
 
         super.registerTableUnlocked(TablesSystemTable.create());
         super.registerTableUnlocked(PartitionsSystemTableSystemTable.create());
@@ -70,6 +78,10 @@ public class InfoSchemaDb extends Database {
         super.registerTableUnlocked(BeBvarsSystemTable.create());
         super.registerTableUnlocked(BeCloudNativeCompactionsSystemTable.create());
         super.registerTableUnlocked(PipeFileSystemTable.create());
+
+        for (Table table : this.getTables()) {
+            ((SystemTable) table).setCatalogName(catalogName);
+        }
     }
 
     @Override
