@@ -59,7 +59,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> names;
     _meta_helper->set_existed_column_names(&names);
-    _scanner_ctx->set_columns_from_file(names);
+    _scanner_ctx->update_materialized_columns(names);
 
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {

@@ -110,6 +110,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
         }
 
         if (scanOperator.getOutputColumns().equals(new ArrayList<>(scanColumns))) {
+            scanOperator.setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             try {

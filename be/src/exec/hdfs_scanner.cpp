@@ -129,6 +129,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
+    ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
     ctx.timezone = _runtime_state->timezone();
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_stats;
@@ -322,10 +323,13 @@ void HdfsScanner::update_counter() {
     do_update_counter(profile);
 }
 
-void HdfsScannerContext::set_columns_from_file(const std::unordered_set<std::string>& names) {
+void HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
+    std::vector<ColumnInfo> updated_columns;
+
     for (auto& column : materialized_columns) {
         auto col_name = column.formated_col_name(case_sensitive);
-        if (names.find(col_name) == names.end()) {
+        // if `can_use_any_column`, we can set this column to non-existed column without reading it.
+        if (names.find(col_name) == names.end() || can_use_any_column) {
             not_existed_slots.push_back(column.slot_desc);
             SlotId slot_id = column.slot_id;
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
@@ -334,8 +338,12 @@ void HdfsScannerContext::set_columns_from_file(const std::unordered_set<std::str
                 }
                 conjunct_ctxs_by_slot.erase(slot_id);
             }
+        } else {
+            updated_columns.emplace_back(column);
         }
     }
+
+    materialized_columns.swap(updated_columns);
 }
 
 void HdfsScannerContext::update_not_existed_columns_of_chunk(ChunkPtr* chunk, size_t row_count) {

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
@@ -44,7 +43,8 @@ public class FileScanImplementationRule extends ImplementationRule {
                     scan.getLimit(),
                     scan.getPredicate(),
                     scan.getProjection());
-
+            physicalFileScan.setCanUseAnyColumn(scan.getCanUseAnyColumn());
+            physicalFileScan.setCanUseMinMaxCountOpt(scan.getCanUseMinMaxCountOpt());
             result = new OptExpression(physicalFileScan);
         }
         return Lists.newArrayList(result);

@@ -173,6 +173,7 @@ struct HdfsScannerParams {
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
+    bool can_use_min_max_count_opt = false;
 };
 
 struct HdfsScannerContext {
@@ -216,6 +217,8 @@ struct HdfsScannerContext {
 
     bool can_use_any_column = false;
 
+    bool can_use_min_max_count_opt = false;
+
     std::string timezone;
 
     const TIcebergSchema* iceberg_schema = nullptr;
@@ -224,10 +227,10 @@ struct HdfsScannerContext {
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
-    // set column names from file.
+    // calibrate column names from file.
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
-    void set_columns_from_file(const std::unordered_set<std::string>& names);
+    void update_materialized_columns(const std::unordered_set<std::string>& names);
     // "not existed columns" are materialized columns not found in file
     // this usually happens when use changes schema. for example
     // user create table with 3 fields A, B, C, and there is one file F1

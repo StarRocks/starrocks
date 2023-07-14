@@ -210,6 +210,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.can_use_any_column) {
         _can_use_any_column = hdfs_scan_node.can_use_any_column;
     }
+    if (hdfs_scan_node.__isset.can_use_min_max_count_opt)     {
+        _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
+    }
 }
 
 Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
@@ -487,6 +490,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_block_cache = _use_block_cache;
     scanner_params.enable_populate_block_cache = _enable_populate_block_cache;
     scanner_params.can_use_any_column = _can_use_any_column;
+    scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
