@@ -931,8 +931,8 @@ public class ExpressionTest extends PlanTestBase {
     public void testProjectUsingConstantArgs() throws Exception {
         String sql = "select months_diff(\"2074-03-04T17:43:24\", \"2074-03-04T17:43:24\") from test_all_type";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("1:Project\n"
-                + "  |  <slot 11> : months_diff(12: cast, 12: cast)"));
+        Assert.assertTrue(planFragment, planFragment.contains("1:Project\n"
+                + "  |  <slot 11> : months_diff('2074-03-04 17:43:24', '2074-03-04 17:43:24')\n"));
     }
 
     @Test
