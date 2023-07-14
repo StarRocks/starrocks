@@ -515,9 +515,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         RangePartitionDiff rangePartitionDiff = new RangePartitionDiff();
         Map<String, Range<PartitionKey>> baseRangePartitionMap;
-
-        Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
+        
         database.readLock();
+        Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
         try {
             baseRangePartitionMap = PartitionUtil.getPartitionRange(partitionBaseTable, partitionColumn);
             if (partitionExpr instanceof SlotRef) {
