@@ -50,7 +50,7 @@ AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(34: expr)}] group by [[]] having [nu
 [plan-4]
 AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{35: sum=sum(subtract(multiply(22: L_EXTENDEDPRICE, subtract(1.0, 23: L_DISCOUNT)), multiply(14: PS_SUPPLYCOST, 21: L_QUANTITY)))}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{35: sum=sum(subtract(multiply(22: L_EXTENDEDPRICE, subtract(1, 23: L_DISCOUNT)), multiply(14: PS_SUPPLYCOST, 21: L_QUANTITY)))}] group by [[]] having [null]
             INNER JOIN (join-predicate [36: cast = 37: cast AND 12: PS_SUPPKEY = 19: L_SUPPKEY AND 11: PS_PARTKEY = 18: L_PARTKEY] post-join-predicate [null])
                 CROSS JOIN (join-predicate [null] post-join-predicate [null])
                     SCAN (columns[11: PS_PARTKEY, 12: PS_SUPPKEY, 14: PS_SUPPLYCOST] predicate[null])
@@ -62,7 +62,7 @@ AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [nul
 [plan-5]
 AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{35: sum=sum(subtract(multiply(22: L_EXTENDEDPRICE, subtract(1.0, 23: L_DISCOUNT)), multiply(14: PS_SUPPLYCOST, 21: L_QUANTITY)))}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{35: sum=sum(subtract(multiply(22: L_EXTENDEDPRICE, subtract(1, 23: L_DISCOUNT)), multiply(14: PS_SUPPLYCOST, 21: L_QUANTITY)))}] group by [[]] having [null]
             INNER JOIN (join-predicate [36: cast = 37: cast AND 12: PS_SUPPKEY = 19: L_SUPPKEY AND 11: PS_PARTKEY = 18: L_PARTKEY] post-join-predicate [null])
                 CROSS JOIN (join-predicate [null] post-join-predicate [null])
                     SCAN (columns[11: PS_PARTKEY, 12: PS_SUPPKEY, 14: PS_SUPPLYCOST] predicate[null])
@@ -75,7 +75,7 @@ AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [nul
 [plan-6]
 AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{35: sum=sum(subtract(multiply(22: L_EXTENDEDPRICE, subtract(1.0, 23: L_DISCOUNT)), multiply(14: PS_SUPPLYCOST, 21: L_QUANTITY)))}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{35: sum=sum(subtract(multiply(22: L_EXTENDEDPRICE, subtract(1, 23: L_DISCOUNT)), multiply(14: PS_SUPPLYCOST, 21: L_QUANTITY)))}] group by [[]] having [null]
             INNER JOIN (join-predicate [12: PS_SUPPKEY = 19: L_SUPPKEY AND 11: PS_PARTKEY = 18: L_PARTKEY] post-join-predicate [null])
                 SCAN (columns[11: PS_PARTKEY, 12: PS_SUPPKEY, 14: PS_SUPPLYCOST] predicate[null])
                 EXCHANGE SHUFFLE[18]

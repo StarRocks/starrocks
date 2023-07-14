@@ -172,4 +172,11 @@ public class PartitionPruneTest extends PlanTestBase {
             assertContains(plan, "partitions=4/4");
         }
     }
+
+    @Test
+    public void testRightCastDatePrune() throws Exception {
+        String sql = "select * from ptest where d2 <= '2020-05-01T13:45:57'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "partitions=3/4");
+    }
 }

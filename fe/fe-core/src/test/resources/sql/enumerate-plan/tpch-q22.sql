@@ -50,7 +50,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                             ASSERT LE 1
                                 AGGREGATE ([GLOBAL] aggregate [{19: avg=avg(15: C_ACCTBAL)}] group by [[]] having [null]
                                     EXCHANGE GATHER
-                                        SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0.0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+                                        SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                     EXCHANGE SHUFFLE[22]
                         EXCHANGE SHUFFLE[22]
                             SCAN (columns[22: O_CUSTKEY] predicate[null])
@@ -68,7 +68,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                                 AGGREGATE ([GLOBAL] aggregate [{19: avg=avg(19: avg)}] group by [[]] having [null]
                                     EXCHANGE GATHER
                                         AGGREGATE ([LOCAL] aggregate [{19: avg=avg(15: C_ACCTBAL)}] group by [[]] having [null]
-                                            SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0.0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+                                            SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                     EXCHANGE SHUFFLE[22]
                         EXCHANGE SHUFFLE[22]
                             SCAN (columns[22: O_CUSTKEY] predicate[null])
@@ -89,7 +89,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                                     ASSERT LE 1
                                         AGGREGATE ([GLOBAL] aggregate [{19: avg=avg(15: C_ACCTBAL)}] group by [[]] having [null]
                                             EXCHANGE GATHER
-                                                SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0.0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+                                                SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
 [end]
 [plan-4]
 TOP-N (order by [[32: substring ASC NULLS FIRST]])
@@ -108,5 +108,5 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                                         AGGREGATE ([GLOBAL] aggregate [{19: avg=avg(19: avg)}] group by [[]] having [null]
                                             EXCHANGE GATHER
                                                 AGGREGATE ([LOCAL] aggregate [{19: avg=avg(15: C_ACCTBAL)}] group by [[]] having [null]
-                                                    SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0.0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+                                                    SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
 [end]

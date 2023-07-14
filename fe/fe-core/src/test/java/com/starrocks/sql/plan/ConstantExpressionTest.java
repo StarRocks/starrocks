@@ -375,11 +375,11 @@ public class ConstantExpressionTest extends PlanTestBase {
             assertContains(plan, "  2:Project\n" +
                     "  |  <slot 2> : 2: count\n" +
                     "  |  <slot 3> : 2: count\n" +
-                    "  |  <slot 4> : 4: count\n" +
+                    "  |  <slot 4> : 2: count\n" +
                     "  |  <slot 5> : 2: count\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: count(1), count(if(CAST(1.0 AS BOOLEAN), 1, NULL))\n" +
+                    "  |  output: count(1)\n" +
                     "  |  group by: ");
 
             sql = "SELECT 1, TRUE, 0, FALSE, 1.1, 1, 1.1, TRUE, FALSE, 0";
