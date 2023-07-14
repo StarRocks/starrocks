@@ -26,6 +26,7 @@ Release date: July 7, 2023
 - Supports [random bucketing](../table_design/Data_distribution.md#choose-bucketing-columns), which relieves the need to configure bucketing columns at table creation. In big data and high performance-demanding scenarios, we recommend that you continue using hash bucketing.
 - Supports using the TABLE keyword in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3.
 - Supports [generated columns](../sql-reference/sql-statements/generated_columns.md). With the generated column feature, StarRocks can automatically generate and store the values of column expressions and automatically rewrite queries to improve query performance.
+- Supports loading data from Spark to StarRocks by using [Spark connector](../loading/Spark-connector-starrocks.md). Compared to [Spark Load](../loading/SparkLoad.md), the Spark connector provides more comprehensive capabilities. You can define a Spark job to perform ETL operations on the data, and the Spark connector serves as the sink in the Spark job.
 - Supports loading data into columns of the [MAP](../sql-reference/sql-statements/data-types/Map.md) and [STRUCT](../sql-reference/sql-statements/data-types/STRUCT.md) data types, and supports nesting Fast Decimal values in ARRAY, MAP, and STRUCT.
 
 #### SQL reference
