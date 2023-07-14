@@ -33,11 +33,7 @@
 // under the License.
 
 #include "util/system_metrics.h"
-#ifdef USE_JEMALLOC
-#include "jemalloc/jemalloc.h"
-#else
-#include <gperftools/malloc_extension.h>
-#endif
+
 #include <runtime/exec_env.h>
 
 #include <cstdio>
@@ -46,6 +42,7 @@
 #include "column/column_pool.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
+#include "jemalloc/jemalloc.h"
 
 namespace starrocks {
 
@@ -219,15 +216,6 @@ void SystemMetrics::_update_cpu_metrics() {
 
 void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     _memory_metrics = std::make_unique<MemoryMetrics>();
-#ifndef USE_JEMALLOC
-    registry->register_metric("memory_allocated_bytes", &_memory_metrics->allocated_bytes);
-    registry->register_metric("total_thread_cache_bytes", &_memory_metrics->total_thread_cache_bytes);
-    registry->register_metric("central_cache_free_bytes", &_memory_metrics->central_cache_free_bytes);
-    registry->register_metric("transfer_cache_free_bytes", &_memory_metrics->transfer_cache_free_bytes);
-    registry->register_metric("thread_cache_free_bytes", &_memory_metrics->thread_cache_free_bytes);
-    registry->register_metric("pageheap_free_bytes", &_memory_metrics->pageheap_free_bytes);
-    registry->register_metric("pageheap_unmapped_bytes", &_memory_metrics->pageheap_unmapped_bytes);
-#else
     registry->register_metric("jemalloc_allocated_bytes", &_memory_metrics->jemalloc_allocated_bytes);
     registry->register_metric("jemalloc_active_bytes", &_memory_metrics->jemalloc_active_bytes);
     registry->register_metric("jemalloc_metadata_bytes", &_memory_metrics->jemalloc_metadata_bytes);
@@ -235,7 +223,6 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("jemalloc_resident_bytes", &_memory_metrics->jemalloc_resident_bytes);
     registry->register_metric("jemalloc_mapped_bytes", &_memory_metrics->jemalloc_mapped_bytes);
     registry->register_metric("jemalloc_retained_bytes", &_memory_metrics->jemalloc_retained_bytes);
-#endif
 
     registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
     registry->register_metric("query_mem_bytes", &_memory_metrics->query_mem_bytes);
@@ -282,7 +269,7 @@ void SystemMetrics::_update_memory_metrics() {
     size_t value = 0;
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
-#elif defined(USE_JEMALLOC)
+#else
     // Update the statistics cached by mallctl.
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
@@ -309,28 +296,6 @@ void SystemMetrics::_update_memory_metrics() {
     if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_retained_bytes.set_value(value);
     }
-#else
-    MallocExtension* ext = MallocExtension::instance();
-    (void)ext->GetNumericProperty("generic.current_allocated_bytes", &value);
-    _memory_metrics->allocated_bytes.set_value(value);
-
-    (void)ext->GetNumericProperty("tcmalloc.current_total_thread_cache_bytes", &value);
-    _memory_metrics->total_thread_cache_bytes.set_value(value);
-
-    (void)ext->GetNumericProperty("tcmalloc.central_cache_free_bytes", &value);
-    _memory_metrics->central_cache_free_bytes.set_value(value);
-
-    (void)ext->GetNumericProperty("tcmalloc.transfer_cache_free_bytes", &value);
-    _memory_metrics->transfer_cache_free_bytes.set_value(value);
-
-    (void)ext->GetNumericProperty("tcmalloc.thread_cache_free_bytes", &value);
-    _memory_metrics->thread_cache_free_bytes.set_value(value);
-
-    (void)ext->GetNumericProperty("tcmalloc.pageheap_free_bytes", &value);
-    _memory_metrics->pageheap_free_bytes.set_value(value);
-
-    (void)ext->GetNumericProperty("tcmalloc.pageheap_unmapped_bytes", &value);
-    _memory_metrics->pageheap_unmapped_bytes.set_value(value);
 #endif
 
 #define SET_MEM_METRIC_VALUE(tracker, key)                                                \

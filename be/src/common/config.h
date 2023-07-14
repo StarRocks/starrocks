@@ -55,16 +55,6 @@ CONF_Int32(brpc_num_threads, "-1");
 // If no ip match this rule, will choose one randomly.
 CONF_String(priority_networks, "");
 
-////
-//// tcmalloc gc parameter
-////
-// Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
-CONF_mInt64(tc_use_memory_min, "0");
-// free memory rate.[0-100]
-CONF_mInt64(tc_free_memory_rate, "0");
-// tcmalloc gc period, default 60, it should be between [1, 180]
-CONF_mInt64(tc_gc_period, "60");
-
 CONF_mBool(enable_auto_adjust_pagecache, "true");
 // Memory urget water level, if the memory usage exceeds this level, reduce the size of
 // the Pagecache immediately, it should be between (memory_high_level, 100].
@@ -76,17 +66,6 @@ CONF_mInt64(memory_high_level, "75");
 CONF_mInt64(pagecache_adjust_period, "20");
 // Sleep time in seconds between pagecache adjust iterations.
 CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
-
-// Bound on the total amount of bytes allocated to thread caches.
-// This bound is not strict, so it is possible for the cache to go over this bound
-// in certain circumstances. The maximum value of this flag is capped to 1GB.
-// This value defaults to 1GB.
-// If you suspect your application is not scaling to many threads due to lock contention in TCMalloc,
-// you can try increasing this value. This may improve performance, at a cost of extra memory
-// use by TCMalloc.
-// reference: https://gperftools.github.io/gperftools/tcmalloc.html: TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES
-//            https://github.com/gperftools/gperftools/issues/1111
-CONF_Int64(tc_max_total_thread_cache_bytes, "1073741824");
 
 // process memory limit specified as number of bytes
 // ('<int>[bB]?'), megabytes ('<float>[mM]'), gigabytes ('<float>[gG]'),
