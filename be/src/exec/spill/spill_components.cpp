@@ -26,6 +26,7 @@ Status SpillerWriter::_decrease_running_flush_tasks() {
     if (_running_flush_tasks.fetch_sub(1) == 1) {
         if (_flush_all_callback) {
             RETURN_IF_ERROR(_flush_all_callback());
+            _write_finished = true;
         }
     }
     return Status::OK();
@@ -599,6 +600,7 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
 
 Status PartitionedSpillerWriter::_flush_task(const std::vector<SpilledPartition*>& splitting_partitions,
                                              const std::vector<SpilledPartition*>& spilling_partitions) {
+    CHECK(!_write_finished);
     // partition memory usage
     // now we partitioned sorted spill
     SerdeContext spill_ctx;

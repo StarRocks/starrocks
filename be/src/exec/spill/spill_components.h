@@ -110,6 +110,7 @@ protected:
     Spiller* _spiller;
     RuntimeState* _runtime_state;
     std::atomic_uint64_t _running_flush_tasks{};
+    std::atomic_bool _write_finished{};
 
     FlushAllCallBack _flush_all_callback;
 };
