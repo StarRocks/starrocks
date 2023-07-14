@@ -328,7 +328,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             // align zero, keep same with BE
             int scale = ((ScalarType) type).getScalarScale();
             BigDecimal val = (BigDecimal) value;
-            DecimalFormat df = new DecimalFormat("#." + StringUtils.repeat("0", scale));
+            DecimalFormat df = new DecimalFormat((scale == 0 ? "0" : "0.") + StringUtils.repeat("0", scale));
             return df.format(val);
         }
 
