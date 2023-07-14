@@ -48,9 +48,9 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public StorageVolume getStorageVolume(String storageVolumeId) {
+    public StorageVolume getStorageVolume(String svId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return idToSV.get(storageVolumeId);
+            return idToSV.get(svId);
         }
     }
 
@@ -117,7 +117,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public boolean bindDbToStorageVolume(String svKey, long dbId) {
+    public boolean bindDbToStorageVolume(String svName, long dbId) {
         return true;
     }
 
@@ -132,7 +132,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public boolean bindTableToStorageVolume(String svKey, long dbId, long tableId) {
+    public boolean bindTableToStorageVolume(String svName, long dbId, long tableId) {
         return true;
     }
 
