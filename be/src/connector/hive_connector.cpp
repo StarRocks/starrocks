@@ -210,7 +210,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.can_use_any_column) {
         _can_use_any_column = hdfs_scan_node.can_use_any_column;
     }
-    if (hdfs_scan_node.__isset.can_use_min_max_count_opt)     {
+    if (hdfs_scan_node.__isset.can_use_min_max_count_opt) {
         _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
     }
 }
