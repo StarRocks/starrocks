@@ -234,7 +234,7 @@ CREATE TABLE dt_quarter( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PAR
 -- result:
 E: (1064, "Getting syntax error from line 1, column 90 to line 1, column 121. Detail message: Unsupported expr 'date_trunc('quarter', event_day)' in PARTITION BY clause.")
 -- !result
--- name: test_shadow_partition
+-- name: test_shadow_partition @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
@@ -626,3 +626,7 @@ insert into ss values('2021-01-01', 1);
 select * from ss;
 -- result:
 2021-01-01	1
+<<<<<<< HEAD
+=======
+-- !result
+>>>>>>> fc928ad12 ([Enhancement] sequential run cases that modifies FE configs (#27126))

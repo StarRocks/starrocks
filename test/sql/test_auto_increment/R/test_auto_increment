@@ -69,7 +69,7 @@ DROP TABLE t;
 DROP DATABASE test_create_table_normal_auto_increment;
 -- result:
 -- !result
--- name: test_table_with_null
+-- name: test_table_with_null @sequential
 CREATE DATABASE test_table_with_null;
 -- result:
 -- !result
@@ -178,7 +178,11 @@ ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "true");
 DROP DATABASE test_table_with_null;
 -- result:
 -- !result
+<<<<<<< HEAD
 -- name: test_update
+=======
+-- name: test_update_auto_increment @sequential
+>>>>>>> fc928ad12 ([Enhancement] sequential run cases that modifies FE configs (#27126))
 CREATE DATABASE test_update_auto_increment;
 -- result:
 -- !result
@@ -273,7 +277,11 @@ DROP TABLE t;
 DROP DATABASE test_update_auto_increment;
 -- result:
 -- !result
+<<<<<<< HEAD
 -- name: test_insert
+=======
+-- name: test_auto_increment_insert @sequential
+>>>>>>> fc928ad12 ([Enhancement] sequential run cases that modifies FE configs (#27126))
 CREATE DATABASE test_insert_auto_increment;
 -- result:
 -- !result
