@@ -136,11 +136,9 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     if (enable_trace) {
         trace_gurad = scoped_refptr<Trace>(new Trace());
         trace = trace_gurad.get();
+        TRACE_TO(trace, "got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0),
+                 request->new_version(), request->tablet_ids_size());
     }
-
-    ADOPT_TRACE(trace);
-    TRACE("got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0), request->new_version(),
-          request->tablet_ids_size());
 
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
