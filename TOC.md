@@ -429,7 +429,7 @@
       + [split](/sql-reference/sql-functions/string-functions/split.md)
       + [split_part](/sql-reference/sql-functions/string-functions/split_part.md)
       + [starts_with](/sql-reference/sql-functions/string-functions/starts_with.md)
-      + [str_to_bitmap](/sql-reference/sql-functions/string-functions/str_to_map.md)
+      + [str_to_map](/sql-reference/sql-functions/string-functions/str_to_map.md)
       + [strleft](/sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](/sql-reference/sql-functions/string-functions/strright.md)
       + [substring](/sql-reference/sql-functions/string-functions/substr.md)
