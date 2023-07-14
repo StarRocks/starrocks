@@ -111,19 +111,6 @@ public:
         *num_levels = _levels_parsed;
     }
 
-    void append_default_levels(size_t row_nums) {
-        if (_need_parse_levels) {
-            size_t new_capacity = _levels_parsed + row_nums;
-            if (new_capacity > _levels_capacity) {
-                _def_levels.resize(new_capacity);
-                _levels_capacity = new_capacity;
-            }
-            memset(&_def_levels[_levels_parsed], 0x0, row_nums * sizeof(level_t));
-            _levels_parsed += row_nums;
-            _levels_decoded = _levels_parsed;
-        }
-    }
-
 private:
     void _decode_levels(size_t num_levels);
     Status _read_records_only(size_t* num_records, ColumnContentType content_type, Column* dst);
@@ -558,7 +545,6 @@ Status StoredColumnReader::next_page(size_t records_to_read, ColumnContentType c
     }
     if (_opts.context->filter) {
         dst->append_default(records_to_skip);
-        append_default_levels(records_to_skip);
         *records_read = records_to_skip;
     }
     return Status::OK();

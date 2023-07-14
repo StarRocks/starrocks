@@ -59,7 +59,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> names;
     _meta_helper->set_existed_column_names(&names);
-    _scanner_ctx->update_materialized_columns(names);
+    _scanner_ctx->set_columns_from_file(names);
 
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
@@ -456,7 +456,6 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
-    _group_reader_param.can_use_any_column = fd_scanner_ctx.can_use_any_column;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.

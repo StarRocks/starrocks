@@ -74,7 +74,6 @@ struct GroupReaderParam {
 
     // used to identify io coalesce
     std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
-    bool can_use_any_column = false;
 };
 
 class GroupReader {
@@ -180,16 +179,6 @@ private:
     int64_t _end_offset = 0;
 
     DictFilterContext _dict_filter_ctx;
-
-    struct UseAnyColumnContext {
-        size_t row_count = 0;
-        SlotDescriptor* slot_desc = nullptr;
-    };
-
-    bool _can_use_any_column() const;
-    Status _build_chunk_on_use_any_column(ChunkPtr* chunk, size_t* row_count);
-    void _init_use_any_column();
-    UseAnyColumnContext _use_any_column_ctx;
 };
 
 } // namespace starrocks::parquet

@@ -259,8 +259,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                                 file_column_id.children[i])); // use optional as default
             fields.push_back(std::move(child));
         }
-        return ::parquet::schema::GroupNode::Make(name, rep_type, fields, ::parquet::ConvertedType::NONE,
-                                                  file_column_id.field_id);
+        return ::parquet::schema::GroupNode::Make(name, rep_type, fields);
     }
     case TYPE_ARRAY: {
         DCHECK(type_desc.children.size() == 1);
@@ -283,7 +282,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                   file_column_id.field_id);
     }
     default: {
-        return arrow::Status::TypeError(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
+        return arrow::Status::TypeError(fmt::format("Type {} is not supported", type_desc.debug_string()));
     }
     }
 }

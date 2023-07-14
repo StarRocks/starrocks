@@ -86,11 +86,6 @@ protected:
 
     void update_read_context(size_t records_read);
 
-    // for RequiredColumn, there is no need to get levels.
-    // for RepeatedColumn, there is no possible to get default levels.
-    // for OptionalColumn, we will override it.
-    virtual void append_default_levels(size_t row_nums) {}
-
     std::unique_ptr<ColumnChunkReader> _reader;
     size_t _num_values_left_in_cur_page = 0;
     size_t _num_values_skip_in_cur_page = 0;
