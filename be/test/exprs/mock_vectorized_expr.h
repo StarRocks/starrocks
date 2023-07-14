@@ -196,4 +196,35 @@ public:
     ColumnPtr col;
 };
 
+<<<<<<< HEAD
+=======
+class MockColumnExpr : public MockCostExpr {
+public:
+    MockColumnExpr(const TExprNode& t, ColumnPtr column) : MockCostExpr(t), _column(column) {}
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        start();
+        auto col = _column->clone();
+        stop();
+        return std::move(col);
+    }
+
+    bool is_constant() const override { return false; }
+
+private:
+    ColumnPtr _column;
+};
+
+class FakeConstExpr : public starrocks::Expr {
+public:
+    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
+
+    Expr* clone(ObjectPool*) const override { return nullptr; }
+
+    ColumnPtr _column;
+};
+
+>>>>>>> f61a39039b ([Refactor] refactor map element to avoid a crash and optimize const intpus (#27167))
 } // namespace starrocks
