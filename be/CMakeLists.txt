@@ -622,7 +622,6 @@ set(STARROCKS_LINK_LIBS
     Runtime
     Service
     ServiceBE
-    ServiceCN
     Types
     Udf
     Util
