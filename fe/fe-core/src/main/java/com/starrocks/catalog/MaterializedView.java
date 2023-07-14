@@ -34,6 +34,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -615,6 +616,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return null;
         }
         Set<String> result = Sets.newHashSet();
+
+        // NOTE: For query dump replay, ignore updated partition infos only to check mv can rewrite query or not.
+        if (FeConstants.isReplayFromQueryDump) {
+            return result;
+        }
+
         Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
                 PartitionUtil.getPartitionNameWithPartitionInfo(baseTable);
 
@@ -878,7 +885,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         List<String> colDef = Lists.newArrayList();
         for (Column column : getBaseSchema()) {
             StringBuilder colSb = new StringBuilder();
-            colSb.append(column.getName());
+            // Since mv supports complex expressions as the output column, add `` to support to replay it.
+            colSb.append("`" + column.getName() + "`");
             if (!Strings.isNullOrEmpty(column.getComment())) {
                 colSb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
             }
