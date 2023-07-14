@@ -137,6 +137,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |export_task_default_timeout_second|7200|导出作业超时时长，单位为秒。|
 |empty_load_as_error|TRUE|导入数据为空时，是否返回报错提示 `all partitions have no load data`。取值：<br> - **TRUE**：当导入数据为空时，则显示导入失败，并返回报错提示 `all partitions have no load data`。<br> - **FALSE**：当导入数据为空时，则显示导入成功，并返回 `OK`，不返回报错提示。|
 |enable_pipeline_load_for_insert|FALSE|是否使用 pipeline 执行引擎来执行 `INSERT INTO` 语句。|
+| external_table_commit_timeout_ms|10000|发布写事务到 StarRocks 外表的超时时长，单位为毫秒。默认值 `10000` 表示超时时长为 10 秒。 |
 
 #### 存储相关动态参数
 
