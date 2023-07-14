@@ -121,6 +121,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | export_running_job_num_limit            | -    | 5                                               | The maximum number of data exporting tasks that can run in parallel. |
 | export_task_default_timeout_second      | s    | 7200                                            | The timeout duration for a data exporting task, in seconds.  |
 | empty_load_as_error                     | -    | TRUE                                            | Whether to return an error message "all partitions have no load data" if no data is loaded. Values:<br> - TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data". <br> - FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error. |
+| external_table_commit_timeout_ms        | ms    | 10000                                          | The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration. |
 
 #### Storage
 
