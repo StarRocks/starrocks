@@ -120,7 +120,7 @@ struct HdfsScannerParams {
 
     // all conjuncts except `conjunct_ctxs_by_slot`
     std::vector<ExprContext*> conjunct_ctxs;
-    std::unordered_set<SlotId> conjunct_slots;
+    std::unordered_set<SlotId> slots_in_conjunct;
     bool eval_conjunct_ctxs = true;
 
     // conjunct ctxs grouped by slot.
@@ -212,6 +212,8 @@ struct HdfsScannerContext {
 
     // runtime filters.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
+
+    std::vector<std::string>* hive_column_names = nullptr;
 
     bool case_sensitive = false;
 

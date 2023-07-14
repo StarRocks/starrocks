@@ -69,7 +69,7 @@ bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
     if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
         return false;
     }
-    if (conjunct_slots.find(slot_id) != conjunct_slots.end()) {
+    if (slots_in_conjunct.find(slot_id) != slots_in_conjunct.end()) {
         return false;
     }
     return true;
@@ -127,6 +127,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
+    ctx.hive_column_names = _scanner_params.hive_column_names;
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
