@@ -935,10 +935,7 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
         }
     }
     case SET: {
-        if (offset > 0 && offset >= _set->size()) {
-            return 0;
-        }
-        if (offset < 0 && std::abs(offset) > _set->size()) {
+        if (offset >= _set->size() || std::abs(offset) > _set->size()) {
             return 0;
         }
         int64_t abs_offset = offset;
@@ -961,10 +958,7 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
     }
     default:
         DCHECK_EQ(_type, BITMAP);
-        if (offset > 0 && offset >= _bitmap->cardinality()) {
-            return 0;
-        }
-        if (offset < 0 && std::abs(offset) > _bitmap->cardinality()) {
+        if (offset >= _set->size() || std::abs(offset) > _set->size()) {
             return 0;
         }
         int64_t abs_offset = offset;
