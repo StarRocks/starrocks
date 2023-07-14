@@ -587,7 +587,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
         _build_chunks_size = (_number_of_build_rows / runtime_state()->chunk_size()) * runtime_state()->chunk_size();
     }
 
-    RETURN_IF_ERROR(child(1)->close(state));
+    child(1)->close(state);
     return Status::OK();
 }
 
