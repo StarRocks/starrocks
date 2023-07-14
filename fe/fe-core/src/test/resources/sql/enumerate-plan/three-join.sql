@@ -160,7 +160,11 @@ AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(34: expr)}] group by [[]] having [nu
 [plan-15]
 AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
+<<<<<<< HEAD
         AGGREGATE ([LOCAL] aggregate [{35: sum=sum(34: expr)}] group by [[]] having [null]
+=======
+        AGGREGATE ([LOCAL] aggregate [{35: sum=sum(subtract(multiply(22: L_EXTENDEDPRICE, subtract(1, 23: L_DISCOUNT)), multiply(14: PS_SUPPLYCOST, 21: L_QUANTITY)))}] group by [[]] having [null]
+>>>>>>> d88b4657a ([BugFix] Fix double/float/date cast to string in FE (#27070))
             INNER JOIN (join-predicate [36: cast = 37: cast AND 12: PS_SUPPKEY = 19: L_SUPPKEY AND 11: PS_PARTKEY = 18: L_PARTKEY] post-join-predicate [null])
                 CROSS JOIN (join-predicate [null] post-join-predicate [null])
                     SCAN (columns[11: PS_PARTKEY, 12: PS_SUPPKEY, 14: PS_SUPPLYCOST] predicate[null])
@@ -171,6 +175,7 @@ AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [nul
 [plan-16]
 AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
+<<<<<<< HEAD
         AGGREGATE ([LOCAL] aggregate [{35: sum=sum(34: expr)}] group by [[]] having [null]
             INNER JOIN (join-predicate [36: cast = 37: cast AND 12: PS_SUPPKEY = 19: L_SUPPKEY AND 11: PS_PARTKEY = 18: L_PARTKEY] post-join-predicate [null])
                 CROSS JOIN (join-predicate [null] post-join-predicate [null])
@@ -205,6 +210,9 @@ AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [nul
 AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
         AGGREGATE ([LOCAL] aggregate [{35: sum=sum(34: expr)}] group by [[]] having [null]
+=======
+        AGGREGATE ([LOCAL] aggregate [{35: sum=sum(subtract(multiply(22: L_EXTENDEDPRICE, subtract(1, 23: L_DISCOUNT)), multiply(14: PS_SUPPLYCOST, 21: L_QUANTITY)))}] group by [[]] having [null]
+>>>>>>> d88b4657a ([BugFix] Fix double/float/date cast to string in FE (#27070))
             INNER JOIN (join-predicate [36: cast = 37: cast AND 12: PS_SUPPKEY = 19: L_SUPPKEY AND 11: PS_PARTKEY = 18: L_PARTKEY] post-join-predicate [null])
                 CROSS JOIN (join-predicate [null] post-join-predicate [null])
                     SCAN (columns[11: PS_PARTKEY, 12: PS_SUPPKEY, 14: PS_SUPPLYCOST] predicate[null])
@@ -215,11 +223,17 @@ AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [nul
 [plan-20]
 AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
+<<<<<<< HEAD
         AGGREGATE ([LOCAL] aggregate [{35: sum=sum(34: expr)}] group by [[]] having [null]
             INNER JOIN (join-predicate [36: cast = 37: cast AND 12: PS_SUPPKEY = 19: L_SUPPKEY AND 11: PS_PARTKEY = 18: L_PARTKEY] post-join-predicate [null])
                 CROSS JOIN (join-predicate [null] post-join-predicate [null])
                     SCAN (columns[11: PS_PARTKEY, 12: PS_SUPPKEY, 14: PS_SUPPLYCOST] predicate[null])
                     EXCHANGE BROADCAST
                         SCAN (columns[1: P_PARTKEY, 2: P_NAME] predicate[2: P_NAME LIKE %peru%])
+=======
+        AGGREGATE ([LOCAL] aggregate [{35: sum=sum(subtract(multiply(22: L_EXTENDEDPRICE, subtract(1, 23: L_DISCOUNT)), multiply(14: PS_SUPPLYCOST, 21: L_QUANTITY)))}] group by [[]] having [null]
+            INNER JOIN (join-predicate [12: PS_SUPPKEY = 19: L_SUPPKEY AND 11: PS_PARTKEY = 18: L_PARTKEY] post-join-predicate [null])
+                SCAN (columns[11: PS_PARTKEY, 12: PS_SUPPKEY, 14: PS_SUPPLYCOST] predicate[null])
+>>>>>>> d88b4657a ([BugFix] Fix double/float/date cast to string in FE (#27070))
                 EXCHANGE SHUFFLE[18]
                     SCAN (columns[18: L_PARTKEY, 19: L_SUPPKEY, 21: L_QUANTITY, 22: L_EXTENDEDPRICE, 23: L_DISCOUNT] predicate[cast(18: L_PARTKEY as bigint(20)) IS NOT NULL])

@@ -39,9 +39,12 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+<<<<<<< HEAD
 import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
 import java.util.Date;
+=======
+>>>>>>> d88b4657a ([BugFix] Fix double/float/date cast to string in FE (#27070))
 import java.util.Objects;
 import java.util.TimeZone;
 
@@ -52,6 +55,7 @@ public class DateLiteral extends LiteralExpr {
     private static final DateLiteral MIN_DATETIME = new DateLiteral(0, 1, 1, 0, 0, 0);
     private static final DateLiteral MAX_DATETIME = new DateLiteral(9999, 12, 31, 23, 59, 59);
 
+<<<<<<< HEAD
     private static final DateTimeFormatter DATE_TIME_FORMATTER;
     private static final DateTimeFormatter DATE_FORMATTER;
     private static final DateTimeFormatter DATE_NO_SPLIT_FORMATTER;
@@ -78,6 +82,9 @@ public class DateLiteral extends LiteralExpr {
     }
 
     //Date Literal persist type in meta
+=======
+    // Date Literal persist type in meta
+>>>>>>> d88b4657a ([BugFix] Fix double/float/date cast to string in FE (#27070))
     private enum DateLiteralType {
         DATETIME(0),
         DATE(1);
@@ -175,6 +182,7 @@ public class DateLiteral extends LiteralExpr {
     private void init(String s, Type type) throws AnalysisException {
         try {
             Preconditions.checkArgument(type.isDateType());
+<<<<<<< HEAD
             LocalDateTime dateTime;
             if (type.isDate()) {
                 if (s.split("-")[0].length() == 2) {
@@ -193,6 +201,9 @@ public class DateLiteral extends LiteralExpr {
                 }
             }
 
+=======
+            LocalDateTime dateTime = DateUtils.parseStrictDateTime(s);
+>>>>>>> d88b4657a ([BugFix] Fix double/float/date cast to string in FE (#27070))
             year = dateTime.getYear();
             month = dateTime.getMonthValue();
             day = dateTime.getDayOfMonth();
@@ -214,6 +225,7 @@ public class DateLiteral extends LiteralExpr {
         day = other.day;
         microsecond = other.microsecond;
         type = other.type;
+
     }
 
     @Override
@@ -285,7 +297,12 @@ public class DateLiteral extends LiteralExpr {
         if (type == PrimitiveType.DATE) {
             return String.format("%04d-%02d-%02d", year, month, day);
         } else {
+<<<<<<< HEAD
             return String.format("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
+=======
+            return String.format("%04d-%02d-%02d %02d:%02d:%02d.%06d", year, month, day, hour, minute, second,
+                    microsecond);
+>>>>>>> d88b4657a ([BugFix] Fix double/float/date cast to string in FE (#27070))
         }
     }
 
@@ -296,7 +313,15 @@ public class DateLiteral extends LiteralExpr {
 
     @Override
     public double getDoubleValue() {
+<<<<<<< HEAD
         return getLongValue();
+=======
+        if (microsecond > 0) {
+            return getLongValue() + ((double) microsecond / 1000000);
+        } else {
+            return getLongValue();
+        }
+>>>>>>> d88b4657a ([BugFix] Fix double/float/date cast to string in FE (#27070))
     }
 
     @Override
@@ -314,7 +339,12 @@ public class DateLiteral extends LiteralExpr {
             if (targetType.isDate()) {
                 return new DateLiteral(this.year, this.month, this.day);
             } else if (targetType.isDatetime()) {
+<<<<<<< HEAD
                 return new DateLiteral(this.year, this.month, this.day, this.hour, this.minute, this.second);
+=======
+                return new DateLiteral(this.year, this.month, this.day, this.hour, this.minute, this.second,
+                        this.microsecond);
+>>>>>>> d88b4657a ([BugFix] Fix double/float/date cast to string in FE (#27070))
             } else {
                 throw new AnalysisException("Error date literal type : " + type);
             }
@@ -335,7 +365,12 @@ public class DateLiteral extends LiteralExpr {
     }
 
     public java.time.LocalDateTime toLocalDateTime() {
+<<<<<<< HEAD
         return java.time.LocalDateTime.of((int) year, (int) month, (int) day, (int) hour, (int) minute, (int) second);
+=======
+        return java.time.LocalDateTime.of((int) year, (int) month, (int) day, (int) hour, (int) minute, (int) second,
+                (int) microsecond * 1000);
+>>>>>>> d88b4657a ([BugFix] Fix double/float/date cast to string in FE (#27070))
     }
 
     private long makePackedDatetime() {
@@ -347,7 +382,7 @@ public class DateLiteral extends LiteralExpr {
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
-        //set flag bit in meta, 0 is DATETIME and 1 is DATE
+        // set flag bit in meta, 0 is DATETIME and 1 is DATE
         if (this.type.isDatetime()) {
             out.writeShort(DateLiteralType.DATETIME.value());
         } else if (this.type.isDate()) {
