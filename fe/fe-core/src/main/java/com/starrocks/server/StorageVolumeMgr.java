@@ -20,6 +20,7 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
@@ -305,5 +306,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     public abstract void unbindTableToStorageVolume(long tableId);
 
-    public abstract String createOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException;
+    public abstract String createBuiltinStorageVolume() throws DdlException, AlreadyExistsException;
+
+    public abstract void validateStorageVolumeConfig() throws InvalidConfException;
 }

@@ -164,7 +164,7 @@ public class SharedNothingStorageVolumeMgrTest {
     @Test
     public void testCreateOrUpdateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
         StorageVolumeMgr svm = new SharedNothingStorageVolumeMgr();
-        Assert.assertEquals("", svm.createOrUpdateBuiltinStorageVolume());
+        Assert.assertEquals("", svm.createBuiltinStorageVolume());
         Assert.assertNull(svm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
     }
 }
