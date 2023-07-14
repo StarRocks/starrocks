@@ -191,7 +191,7 @@ Status UnionNode::_get_next_passthrough(RuntimeState* state, ChunkPtr* chunk) {
     while (true) {
         RETURN_IF_ERROR(child(_child_idx)->get_next(state, &tmp_chunk, &_child_eos));
         if (_child_eos) {
-            RETURN_IF_ERROR(child(_child_idx)->close(state));
+            child(_child_idx)->close(state);
             _child_idx++;
             break;
         }
@@ -218,7 +218,7 @@ Status UnionNode::_get_next_materialize(RuntimeState* state, ChunkPtr* chunk) {
     while (true) {
         RETURN_IF_ERROR(child(_child_idx)->get_next(state, &tmp_chunk, &_child_eos));
         if (_child_eos) {
-            RETURN_IF_ERROR(child(_child_idx)->close(state));
+            child(_child_idx)->close(state);
             _child_idx++;
             break;
         }
