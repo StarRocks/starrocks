@@ -133,7 +133,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [split](/sql-reference/sql-functions/string-functions/split.md) | 根据分隔符拆分字符串，将拆分后的所有字符串以 ARRAY 的格式返回。  |
 | [split_part](/sql-reference/sql-functions/string-functions/split_part.md) | 根据分割符拆分字符串，返回指定的分割部分。  |
 | [starts_with](/sql-reference/sql-functions/string-functions/starts_with.md) | 如果字符串以指定前缀开头返回 1，否则返回 0。  |
-| [str_to_bitmap](/sql-reference/sql-functions/string-functions/str_to_map.md) | 将给定的字符串分割成键值对 (Key-Value pair)，返回包含这些键值对的 Map。  |
+| [str_to_map](/sql-reference/sql-functions/string-functions/str_to_map.md) | 将给定的字符串分割成键值对 (Key-Value pair)，返回包含这些键值对的 Map。  |
 | [strleft](/sql-reference/sql-functions/string-functions/strleft.md) | 从字符串左边部分返回指定长度的字符。  |
 | [strright](/sql-reference/sql-functions/string-functions/strright.md) | 从字符串右边部分返回指定长度的字符。  |
 | [substr, substring](/sql-reference/sql-functions/string-functions/substr.md) | 返回字符串中从位置 pos 开始的指定长度的子字符串。  |
