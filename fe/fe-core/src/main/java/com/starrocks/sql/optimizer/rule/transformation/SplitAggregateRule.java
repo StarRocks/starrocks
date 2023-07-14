@@ -60,6 +60,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_SCALE_ROWS_LIMIT;
 
 public class SplitAggregateRule extends TransformationRule {
     private SplitAggregateRule() {
@@ -161,6 +162,7 @@ public class SplitAggregateRule extends TransformationRule {
         if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) || !aggOp.hasLimit()) {
             return false;
         }
+
         double inputRowCount = inputStatistics.getOutputRowCount();
         double aggOutputRow = StatisticsCalculator.computeGroupByStatistics(aggOp.getGroupingKeys(), inputStatistics,
                 Maps.newHashMap());
@@ -191,7 +193,8 @@ public class SplitAggregateRule extends TransformationRule {
         double distinctOutputRow = StatisticsCalculator.computeGroupByStatistics(groupKeys, inputStatistics,
                 Maps.newHashMap());
 
-        return aggOutputRow > LOW_AGGREGATE_EFFECT_COEFFICIENT
+        return inputRowCount < SMALL_SCALE_ROWS_LIMIT
+                || aggOutputRow > LOW_AGGREGATE_EFFECT_COEFFICIENT
                 || distinctOutputRow * MEDIUM_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount;
     }
 

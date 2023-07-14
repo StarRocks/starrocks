@@ -390,8 +390,7 @@ public class AggregateTest extends PlanTestBase {
         sql = "select count(distinct L_SHIPMODE,L_ORDERKEY) from lineitem group by L_PARTKEY";
         plan = getFragmentPlan(sql);
         // check use 3 stage agg plan
-        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
+        assertContains(plan, " 4:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(15: L_SHIPMODE IS NULL, NULL, 1: L_ORDERKEY))\n" +
                 "  |  group by: 2: L_PARTKEY\n" +
                 "  |  \n" +
@@ -706,7 +705,7 @@ public class AggregateTest extends PlanTestBase {
 
         queryStr = "select count(distinct k1, k2),  count(distinct k4) from baseall group by k3";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString, explainString.contains("17:HASH JOIN\n" +
+        Assert.assertTrue(explainString, explainString.contains("13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: k3 <=> 17: k3"));
@@ -1468,7 +1467,7 @@ public class AggregateTest extends PlanTestBase {
         sql =
                 "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "17:HASH JOIN\n" +
+        assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 13: t1a <=> 15: t1a");
@@ -1486,11 +1485,11 @@ public class AggregateTest extends PlanTestBase {
         sql = "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), " +
                 "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "17:HASH JOIN\n" +
+        assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: t1c <=> 17: t1c\n");
-        assertContains(plan, "26:HASH JOIN\n" +
+        assertContains(plan, "20:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: t1c <=> 20: t1c");
@@ -1502,7 +1501,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 2> : 2: t1b\n" +
                 "  |  <slot 3> : 3: t1c\n" +
                 "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
-        assertContains(plan, "27:HASH JOIN\n" +
+        assertContains(plan, "21:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: t1c <=> 23: t1c\n" +
@@ -1511,7 +1510,7 @@ public class AggregateTest extends PlanTestBase {
         sql = "select avg(distinct t1b) as cn_t1b, sum(t1b), " +
                 "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "33:HASH JOIN\n" +
+        assertContains(plan, "27:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: t1c <=> 27: t1c\n" +
@@ -2303,12 +2302,13 @@ public class AggregateTest extends PlanTestBase {
     public void testSplitTheTopGlobalAgg() throws Exception {
         String sql = "select count(distinct v2), count(v3) from t0 join t1 group by v3";
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 07\n" +
-                "    HASH_PARTITIONED: 2: v2, 3: v3",
-                "9:AGGREGATE (update serialize)\n" +
-                        "  |  output: count(2: v2), count(8: count)\n" +
-                        "  |  group by: 3: v3");
+        assertCContains(plan, "9:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: v2), count(8: count)\n" +
+                "  |  group by: 3: v3\n" +
+                "  |  \n" +
+                "  8:AGGREGATE (merge serialize)\n" +
+                "  |  output: count(8: count)\n" +
+                "  |  group by: 2: v2, 3: v3");
 
         // no need to split the top global agg for the below cases
         sql = "select count(distinct v2), count(v3) from t0 join t1";
@@ -2327,6 +2327,7 @@ public class AggregateTest extends PlanTestBase {
                         "    EXCHANGE ID: 07\n" +
                         "    HASH_PARTITIONED: 2: v2",
                 "10:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
                         "  |  output: count(2: v2), count(9: count)\n" +
                         "  |  group by: 7: expr");
     }
@@ -2348,8 +2349,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  STREAMING\n" +
                 "  |  output: sum(4: v4)\n" +
                 "  |  group by: 2: v2, 3: v3",
-                "7:AGGREGATE (update serialize)\n" +
-                        "  |  STREAMING\n" +
+                "7:AGGREGATE (update finalize)\n" +
                         "  |  output: count(2: v2), sum(8: sum)\n" +
                         "  |  group by: 3: v3");
 
@@ -2367,8 +2367,7 @@ public class AggregateTest extends PlanTestBase {
         sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ " +
                 "count(distinct v2), array_length(array_agg(v1)) from t0 join t1 group by v4";
         plan = getFragmentPlan(sql);
-        assertCContains(plan, "7:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
+        assertCContains(plan, "7:AGGREGATE (update finalize)\n" +
                 "  |  output: count(2: v2), array_agg(8: array_agg)\n" +
                 "  |  group by: 4: v4\n" +
                 "  |  \n" +

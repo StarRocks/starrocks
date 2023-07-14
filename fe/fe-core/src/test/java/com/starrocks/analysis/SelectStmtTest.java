@@ -317,6 +317,7 @@ public class SelectStmtTest {
                 "  |  group by: 3: expr\n" +
                 "  |  \n" +
                 "  4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(2: split)\n" +
                 "  |  group by: 3: expr\n" +
                 "  |  \n" +
