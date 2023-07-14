@@ -121,6 +121,41 @@ public:
     }
 };
 
+class FloatToDoubleConverter : public ColumnConverter {
+public:
+    FloatToDoubleConverter() = default;
+    ~FloatToDoubleConverter() override = default;
+
+    Status convert(const ColumnPtr& src, Column* dst) override {
+        auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
+        // hive only support null column
+        // TODO: support not null
+        auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
+        dst_nullable_column->resize_uninitialized(src_nullable_column->size());
+
+        auto* src_column =
+                ColumnHelper::as_raw_column<FixedLengthColumn<float>>(src_nullable_column->data_column());
+        auto* dst_column = ColumnHelper::as_raw_column<FixedLengthColumn<double>>(dst_nullable_column->data_column());
+
+        auto& src_data = src_column->get_data();
+        auto& dst_data = dst_column->get_data();
+        auto& src_null_data = src_nullable_column->null_column()->get_data();
+        auto& dst_null_data = dst_nullable_column->null_column()->get_data();
+
+        size_t size = src_column->size();
+        memcpy(dst_null_data.data(), src_null_data.data(), size);
+        convert_float_to_double(src_data.data(), dst_data.data(), size);
+        dst_nullable_column->set_has_null(src_nullable_column->has_null());
+        return Status::OK();
+    }
+private:
+    static inline void convert_float_to_double(float*  src, double* __restrict__ dst, size_t size) {
+        for (size_t i = 0; i < size; i++) {
+            dst[i] = double(src[i]);
+        }
+    }
+};
+
 template <typename SourceType, LogicalType DestType>
 class PrimitiveToDecimalConverter : public ColumnConverter {
 public:
@@ -473,6 +508,10 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     case tparquet::Type::FLOAT: {
         if (col_type != LogicalType::TYPE_FLOAT) {
             need_convert = true;
+        }
+        if (col_type == LogicalType::TYPE_DOUBLE) {
+            auto _converter = std::make_unique<FloatToDoubleConverter>();
+            *converter = std::move(_converter);
         }
         break;
     }
