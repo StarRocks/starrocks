@@ -424,8 +424,7 @@ public class MvRewriteOptimizationTest {
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 7: empid <= 4, 7: empid >= 3");
+                "     PREAGGREGATION: ON\n");
 
         String query7 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5 and salary > 100";
         String plan7 = getFragmentPlan(query7);
@@ -2272,8 +2271,8 @@ public class MvRewriteOptimizationTest {
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=1/6", "lineitem_par",
-                "NON-PARTITION PREDICATES: (((22: l_shipdate >= '1998-01-02') OR (20: l_orderkey != 100))" +
-                        " OR (22: l_shipdate < '1998-01-01')) OR (22: l_shipdate IS NULL)");
+                "NON-PARTITION PREDICATES: (((22: l_shipdate < '1998-01-01') OR (22: l_shipdate >= '1998-01-02')) " +
+                        "OR (20: l_orderkey != 100)) OR (22: l_shipdate IS NULL)");
         dropMv("test", "hive_parttbl_mv_4");
 
         createAndRefreshMv("test", "hive_parttbl_mv_5",

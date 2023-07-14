@@ -93,6 +93,14 @@ Status HiveDataSource::open(RuntimeState* state) {
     return Status::OK();
 }
 
+void HiveDataSource::_update_has_any_predicate() {
+    auto f = [&]() {
+        if (_runtime_filters != nullptr && _runtime_filters->size() > 0) return true;
+        return false;
+    };
+    _has_any_predicate = f();
+}
+
 Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (hdfs_scan_node.__isset.min_max_conjuncts) {
@@ -108,6 +116,7 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
+    _update_has_any_predicate();
 
     RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
     return Status::OK();

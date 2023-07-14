@@ -17,6 +17,7 @@
 
 package com.starrocks.load.loadv2.dpp;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.SparkDppException;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
@@ -28,16 +29,26 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
 import java.util.zip.CRC32;
 
 public class DppUtils {
     public static final String BUCKET_ID = "__bucketId__";
+
+    private static final BigDecimal[] SCALE_FACTOR = new BigDecimal[39];
+
+    static {
+        for (int i = 0; i < 39; ++i) {
+            SCALE_FACTOR[i] = new BigDecimal("1" + Strings.repeat("0", i));
+        }
+    }
 
     public static Class getClassFromDataType(DataType dataType) {
         if (dataType == null) {
@@ -78,7 +89,7 @@ public class DppUtils {
             case "INT":
                 return Integer.class;
             case "DATETIME":
-                return java.sql.Timestamp.class;
+                return Timestamp.class;
             case "BIGINT":
                 return Long.class;
             case "LARGEINT":
@@ -161,12 +172,84 @@ public class DppUtils {
         return dataType;
     }
 
-    public static ByteBuffer getHashValue(Object o, DataType type) {
-        ByteBuffer buffer = ByteBuffer.allocate(8);
+    private static ByteBuffer getDecimalV2ByteBuffer(BigDecimal d) {
+        ByteBuffer buffer = ByteBuffer.allocate(12);
         buffer.order(ByteOrder.LITTLE_ENDIAN);
+        long integerValue = d.longValue();
+        BigDecimal integerPart = new BigDecimal(d.toBigInteger());
+        BigDecimal fracPart = d.subtract(integerPart);
+        fracPart = fracPart.setScale(9, BigDecimal.ROUND_DOWN);
+        fracPart = fracPart.movePointRight(9);
+        int fracValue = fracPart.intValue();
+        buffer.putLong(integerValue);
+        buffer.putInt(fracValue);
+        return buffer;
+    }
 
+    private static ByteBuffer getDecimalByteBuffer(BigDecimal d, EtlJobConfig.EtlColumn column) {
+        ByteBuffer buffer;
+        switch (column.columnType) {
+            case "DECIMALV2": {
+                buffer = getDecimalV2ByteBuffer(d);
+                break;
+            }
+            case "DECIMAL32": {
+                buffer = ByteBuffer.allocate(8);
+                buffer.order(ByteOrder.LITTLE_ENDIAN);
+                BigDecimal scaledValue = d.multiply(SCALE_FACTOR[column.scale]);
+                buffer.putInt(scaledValue.intValue());
+                break;
+            }
+            case "DECIMAL64": {
+                buffer = ByteBuffer.allocate(8);
+                buffer.order(ByteOrder.LITTLE_ENDIAN);
+                BigDecimal scaledValue = d.multiply(SCALE_FACTOR[column.scale]);
+                buffer.putLong(scaledValue.longValue());
+                break;
+            }
+            case "DECIMAL128": {
+                int precision = column.precision;
+                int scale = column.scale;
+                if (precision == 27 && scale == 9) {
+                    buffer = getDecimalV2ByteBuffer(d);
+                } else {
+                    BigDecimal scaledValue = d.multiply(SCALE_FACTOR[scale]);
+                    BigInteger v = scaledValue.toBigInteger();
+                    buffer = ByteBuffer.allocate(16);
+                    buffer.order(ByteOrder.LITTLE_ENDIAN);
+                    byte[] byteArray = v.toByteArray();
+                    int len = byteArray.length;
+                    int end = 0;
+                    if (len > 16) {
+                        end = len - 16;
+                    }
+                    for (int i = len - 1; i >= end; --i) {
+                        buffer.put(byteArray[i]);
+                    }
+                    if (v.signum() >= 0) {
+                        while (len++ < 16) {
+                            buffer.put((byte) 0);
+                        }
+                    } else {
+                        while (len++ < 16) {
+                            buffer.put((byte) 0xFF);
+                        }
+                    }
+                }
+                break;
+            }
+            default:
+                buffer = ByteBuffer.allocate(8);
+                break;
+        }
+        return buffer;
+    }
+
+    public static ByteBuffer getHashValue(Object o, DataType type, EtlJobConfig.EtlColumn column) {
         // null as int 0
         if (o == null) {
+            ByteBuffer buffer = ByteBuffer.allocate(8);
+            buffer.order(ByteOrder.LITTLE_ENDIAN);
             buffer.putInt(0);
             buffer.flip();
             return buffer;
@@ -182,7 +265,47 @@ public class DppUtils {
             }
         }
 
-        // TODO(wyb): Support decimal date datetime
+        // date
+        // fe/fe-core/src/main/java/com/starrocks/analysis/DateLiteral.java#L273
+        if (type.equals(DataTypes.DateType)) {
+            try {
+                Date d = (Date) o;
+                String str = ColumnParser.DATE_FORMATTER.format(d.toLocalDate());
+                return ByteBuffer.wrap(str.getBytes("UTF-8"));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        // datetime
+        // fe/fe-core/src/main/java/com/starrocks/analysis/DateLiteral.java#L273
+        if (type.equals(DataTypes.TimestampType)) {
+            try {
+                Timestamp t = (Timestamp) o;
+                String str;
+                if (t.getNanos() > 1000) {
+                    str = ColumnParser.DATE_TIME_WITH_MS_FORMATTER.format(t.toLocalDateTime());
+                } else {
+                    str = ColumnParser.DATE_TIME_FORMATTER.format(t.toLocalDateTime());
+                }
+                return ByteBuffer.wrap(str.getBytes("UTF-8"));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        // decimal
+        // fe/fe-core/src/main/java/com/starrocks/analysis/DecimalLiteral.java#L292
+        if (type instanceof DecimalType) {
+            BigDecimal d = (BigDecimal) o;
+            ByteBuffer buffer = getDecimalByteBuffer(d, column);
+            buffer.flip();
+            return buffer;
+        }
+
+        // bool tinyint smallint int bigint
+        ByteBuffer buffer = ByteBuffer.allocate(8);
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
         if (type.equals(DataTypes.BooleanType)) {
             byte b = (boolean) o ? (byte) 1 : (byte) 0;
             buffer.put(b);
@@ -199,11 +322,13 @@ public class DppUtils {
         return buffer;
     }
 
-    public static long getHashValue(Row row, List<String> distributeColumns, StructType dstTableSchema) {
+    public static long getHashValue(Row row, List<EtlJobConfig.EtlColumn> distributeColumns,
+                                    StructType dstTableSchema) {
         CRC32 hashValue = new CRC32();
-        for (String distColumn : distributeColumns) {
-            Object columnObject = row.get(row.fieldIndex(distColumn));
-            ByteBuffer buffer = getHashValue(columnObject, dstTableSchema.apply(distColumn).dataType());
+        for (EtlJobConfig.EtlColumn distColumn : distributeColumns) {
+            Object columnObject = row.get(row.fieldIndex(distColumn.columnName));
+            ByteBuffer buffer = getHashValue(
+                    columnObject, dstTableSchema.apply(distColumn.columnName).dataType(), distColumn);
             hashValue.update(buffer.array(), 0, buffer.limit());
         }
         return hashValue.getValue();
