@@ -25,7 +25,7 @@ ARRAY<type> NOT NULL
 
 > **注意**
 >
-> 数组类型使用时有以下限制：
+> 数组类型的列在使用时有以下限制：
 >
 > * StarRocks 2.1 之前版本中，仅支持在明细模型表中（Duplicate Key）定义数组类型列。自 2.1 版本开始，支持在 Primary Key、Unique Key、Aggregate Key 模型表中定义数组类型列。注意在聚合模型表（Aggregate Key) 中，仅当聚合列的聚合函数为 replace 和 replace_if_not_null 时，才支持将该列定义为数组类型。
 > * 数组列暂时不能作为 Key 列。
