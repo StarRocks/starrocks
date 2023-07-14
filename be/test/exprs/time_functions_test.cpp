@@ -19,6 +19,8 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <utility>
+#include <vector>
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -2524,10 +2526,36 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
     tc->append(DateValue::create(2020, 5, 9));
     tc->append(DateValue::create(2020, 11, 3));
 
-    //day
-    {
+    std::vector<std::pair<std::string, std::vector<DateValue>>> test_cases = {
+            {/*fmt*/ "day",
+             /*expected_date */ {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 2),
+                                 DateValue::create(2020, 3, 6), DateValue::create(2020, 4, 8),
+                                 DateValue::create(2020, 5, 9), DateValue::create(2020, 11, 3)}},
+            {"DAY",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 2), DateValue::create(2020, 3, 6),
+              DateValue::create(2020, 4, 8), DateValue::create(2020, 5, 9), DateValue::create(2020, 11, 3)}},
+            {"month",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 1), DateValue::create(2020, 3, 1),
+              DateValue::create(2020, 4, 1), DateValue::create(2020, 5, 1), DateValue::create(2020, 11, 1)}},
+            {"MONTH",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 1), DateValue::create(2020, 3, 1),
+              DateValue::create(2020, 4, 1), DateValue::create(2020, 5, 1), DateValue::create(2020, 11, 1)}},
+            {"year",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
+              DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1)}},
+            {"YEAR",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
+              DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1)}},
+            {"week",
+             {DateValue::create(2019, 12, 30), DateValue::create(2020, 1, 27), DateValue::create(2020, 3, 2),
+              DateValue::create(2020, 4, 6), DateValue::create(2020, 5, 4), DateValue::create(2020, 11, 2)}},
+            {"WEEK",
+             {DateValue::create(2019, 12, 30), DateValue::create(2020, 1, 27), DateValue::create(2020, 3, 2),
+              DateValue::create(2020, 4, 6), DateValue::create(2020, 5, 4), DateValue::create(2020, 11, 2)}}};
+
+    for (const auto& test_case : test_cases) {
         auto text = BinaryColumn::create();
-        text->append("day");
+        text->append(test_case.first);
         auto format = ConstColumn::create(text, 1);
 
         Columns columns;
@@ -2547,137 +2575,7 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
 
         auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
 
-        DateValue check_result[6] = {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 2),
-                                     DateValue::create(2020, 3, 6), DateValue::create(2020, 4, 8),
-                                     DateValue::create(2020, 5, 9), DateValue::create(2020, 11, 3)};
-
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
-            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
-        }
-    }
-
-    //month
-    {
-        auto text = BinaryColumn::create();
-        text->append("month");
-        auto format = ConstColumn::create(text, 1);
-
-        Columns columns;
-        columns.emplace_back(format);
-        columns.emplace_back(tc);
-
-        _utils->get_fn_ctx()->set_constant_columns(columns);
-
-        ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
-                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        ColumnPtr result = TimeFunctions::date_trunc(_utils->get_fn_ctx(), columns).value();
-        ASSERT_TRUE(TimeFunctions::date_trunc_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
-
-        DateValue check_result[6] = {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 1),
-                                     DateValue::create(2020, 3, 1), DateValue::create(2020, 4, 1),
-                                     DateValue::create(2020, 5, 1), DateValue::create(2020, 11, 1)};
-
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
-            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
-        }
-    }
-
-    //year
-    {
-        auto text = BinaryColumn::create();
-        text->append("year");
-        auto format = ConstColumn::create(text, 1);
-
-        Columns columns;
-        columns.emplace_back(format);
-        columns.emplace_back(tc);
-
-        _utils->get_fn_ctx()->set_constant_columns(columns);
-
-        ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
-                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        ColumnPtr result = TimeFunctions::date_trunc(_utils->get_fn_ctx(), columns).value();
-        ASSERT_TRUE(TimeFunctions::date_trunc_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
-
-        DateValue check_result[6] = {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
-                                     DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
-                                     DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1)};
-
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
-            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
-        }
-    }
-
-    //week
-    {
-        auto text = BinaryColumn::create();
-        text->append("week");
-        auto format = ConstColumn::create(text, 1);
-
-        Columns columns;
-        columns.emplace_back(format);
-        columns.emplace_back(tc);
-
-        _utils->get_fn_ctx()->set_constant_columns(columns);
-
-        ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
-                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        ColumnPtr result = TimeFunctions::date_trunc(_utils->get_fn_ctx(), columns).value();
-        ASSERT_TRUE(TimeFunctions::date_trunc_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
-
-        DateValue check_result[6] = {DateValue::create(2019, 12, 30), DateValue::create(2020, 1, 27),
-                                     DateValue::create(2020, 3, 2),   DateValue::create(2020, 4, 6),
-                                     DateValue::create(2020, 5, 4),   DateValue::create(2020, 11, 2)};
-
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
-            ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
-        }
-    }
-
-    //quarter
-    {
-        auto text = BinaryColumn::create();
-        text->append("quarter");
-        auto format = ConstColumn::create(text, 1);
-
-        Columns columns;
-        columns.emplace_back(format);
-        columns.emplace_back(tc);
-
-        _utils->get_fn_ctx()->set_constant_columns(columns);
-
-        ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
-                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        ColumnPtr result = TimeFunctions::date_trunc(_utils->get_fn_ctx(), columns).value();
-        ASSERT_TRUE(TimeFunctions::date_trunc_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
-
-        auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
-
-        DateValue check_result[6] = {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
-                                     DateValue::create(2020, 1, 1), DateValue::create(2020, 4, 1),
-                                     DateValue::create(2020, 4, 1), DateValue::create(2020, 10, 1)};
+        auto check_result = test_case.second;
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
