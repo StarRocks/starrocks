@@ -159,7 +159,7 @@ public class ConnectContext {
     // used to set mysql result package
     protected boolean isLastStmt;
     // set true when user dump query through HTTP
-    protected boolean isQueryDump = false;
+    protected boolean isHTTPQueryDump = false;
 
     protected boolean isStatisticsConnection = false;
 
@@ -213,7 +213,6 @@ public class ConnectContext {
         userVariables = new HashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
-        dumpInfo = new QueryDumpInfo(sessionVariable);
         plannerProfile = new PlannerProfile();
         plannerProfile.init(this);
 
@@ -223,6 +222,10 @@ public class ConnectContext {
         }
 
         this.sslContext = sslContext;
+
+        if (shouldDumpQuery()) {
+            this.dumpInfo = new QueryDumpInfo(this);
+        }
     }
 
     public long getStmtId() {
@@ -516,12 +519,16 @@ public class ConnectContext {
         this.isLastStmt = isLastStmt;
     }
 
-    public void setIsQueryDump(boolean isQueryDump) {
-        this.isQueryDump = isQueryDump;
+    public void setIsHTTPQueryDump(boolean isHTTPQueryDump) {
+        this.isHTTPQueryDump = isHTTPQueryDump;
     }
 
-    public boolean isQueryDump() {
-        return this.isQueryDump;
+    public boolean isHTTPQueryDump() {
+        return isHTTPQueryDump;
+    }
+
+    public boolean shouldDumpQuery() {
+        return this.isHTTPQueryDump || sessionVariable.getEnableQueryDump();
     }
 
     public DumpInfo getDumpInfo() {

@@ -68,7 +68,7 @@ public class StatisticsCalcUtils {
                 columnStatistic = columnStatisticList.get(i);
             }
             builder.addColumnStatistic(requiredColumnRefs.get(i), columnStatistic);
-            if (optimizerContext != null) {
+            if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
                 optimizerContext.getDumpInfo()
                         .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatisticList.get(i));
             }
@@ -137,7 +137,7 @@ public class StatisticsCalcUtils {
                     }
 
                     rowCount += partitionRowCount;
-                    if (optimizerContext != null) {
+                    if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
                         optimizerContext.getDumpInfo()
                                 .addPartitionRowCount(table, partition.getName(), partitionRowCount);
                     }
@@ -145,7 +145,7 @@ public class StatisticsCalcUtils {
             } else {
                 for (Partition partition : selectedPartitions) {
                     rowCount += partition.getRowCount();
-                    if (optimizerContext != null) {
+                    if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
                         optimizerContext.getDumpInfo()
                                 .addPartitionRowCount(table, partition.getName(), partition.getRowCount());
                     }

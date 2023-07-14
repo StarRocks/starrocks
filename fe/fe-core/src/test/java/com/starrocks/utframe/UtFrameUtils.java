@@ -326,7 +326,7 @@ public class UtFrameUtils {
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         originStmt = LogUtil.removeCommentAndLineSeparator(originStmt);
 
         List<StatementBase> statements =

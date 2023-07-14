@@ -333,6 +333,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
             "enable_materialized_view_single_table_view_delta_rewrite";
 
+    public static final String QUERY_EXCLUDING_MV_NAMES = "query_excluding_mv_names";
+    public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
+
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
@@ -907,6 +910,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //      try to rewrite by single table mvs and is determined by rule rather than by cost.
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewSingleTableViewDeltaRewrite = false;
+
+    @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
+    private String queryExcludingMVNames = "";
+
+    @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
+    private String queryincludingMVNames = "";
 
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
@@ -1733,6 +1742,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableMaterializedViewSingleTableViewDeltaRewrite(
             boolean enableMaterializedViewSingleTableViewDeltaRewrite) {
         this.enableMaterializedViewSingleTableViewDeltaRewrite = enableMaterializedViewSingleTableViewDeltaRewrite;
+    }
+
+    public String getQueryExcludingMVNames() {
+        return queryExcludingMVNames;
+    }
+
+    public void setQueryExcludingMVNames(String queryExcludingMVNames) {
+        this.queryExcludingMVNames = queryExcludingMVNames;
+    }
+
+    public String getQueryincludingMVNames() {
+        return queryincludingMVNames;
+    }
+
+    public void setQueryincludingMVNames(String queryincludingMVNames) {
+        this.queryincludingMVNames = queryincludingMVNames;
     }
 
     public boolean getEnablePruneComplexTypes() {

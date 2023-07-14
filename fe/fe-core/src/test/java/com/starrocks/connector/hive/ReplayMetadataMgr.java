@@ -130,6 +130,9 @@ public class ReplayMetadataMgr extends MetadataMgr {
 
     @Override
     public Database getDb(String catalogName, String dbName) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return super.getDb(catalogName, dbName);
+        }
         return new Database(idGen++, dbName);
     }
 

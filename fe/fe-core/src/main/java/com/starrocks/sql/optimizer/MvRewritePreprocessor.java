@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -28,6 +29,8 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -60,14 +63,9 @@ public class MvRewritePreprocessor {
 
     public void prepareMvCandidatesForPlan() {
         Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
-
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
-        if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "No Related Async MVs for plan");
-            return;
-        }
         prepareRelatedMVs(queryTables, relatedMvs);
     }
 
@@ -83,6 +81,7 @@ public class MvRewritePreprocessor {
                     .collect(Collectors.toSet());
         }
         if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related MVs for the query plan");
             return;
         }
 
@@ -118,8 +117,15 @@ public class MvRewritePreprocessor {
         if (mvRewriteContext == null) {
             // build mv query logical plan
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            mvRewriteContext = mvOptimizer.optimize(mv, connectContext);
-            mv.setPlanContext(mvRewriteContext);
+            // optimize the sql by rule and disable rule based materialized view rewrite
+            OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+            optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
+            optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
+            optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
+            optimizerConfig.setMVRewritePlan(true);
+
+            mvRewriteContextCache = mvOptimizer.optimize(mv, connectContext, optimizerConfig);
+            mv.setPlanContext(mvRewriteContextCache);
         }
         if (!mvRewriteContext.isValidMvPlan()) {
             logMVPrepare(connectContext, "MV plan is not valid: %s, plan:\n %s",
@@ -167,6 +173,12 @@ public class MvRewritePreprocessor {
             }
         }
 
+        // Add mv info into dump info
+        if (connectContext.getDumpInfo() != null) {
+            String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
+            connectContext.getDumpInfo().addTable(dbName, mv);
+        }
+
         List<Table> baseTables = MvUtils.getAllTables(mvPlan);
         List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
         MaterializationContext materializationContext =
@@ -177,8 +189,6 @@ public class MvRewritePreprocessor {
         // generate scan mv plan here to reuse it in rule applications
         LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext);
         materializationContext.setScanMvOperator(scanMvOp);
-        String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
-        connectContext.getDumpInfo().addTable(dbName, mv);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
         for (Column column : mv.getFullSchema()) {

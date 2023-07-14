@@ -14,6 +14,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.DbsProcDir;
@@ -131,7 +132,17 @@ public class CatalogMgr {
 
         readLock();
         try {
-            return catalogs.containsKey(catalogName);
+            if (catalogs.containsKey(catalogName)) {
+                return true;
+            }
+
+            // TODO: Used for replay query dump which only supports `hive` catalog for now.
+            if (FeConstants.isReplayFromQueryDump &&
+                    catalogs.containsKey(getResourceMappingCatalogName(catalogName, "hive"))) {
+                return true;
+            }
+
+            return false;
         } finally {
             readUnlock();
         }
