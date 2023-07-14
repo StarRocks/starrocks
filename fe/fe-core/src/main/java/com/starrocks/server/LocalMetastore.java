@@ -2957,12 +2957,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getTableProperty().setResourceGroup(resourceGroup);
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
-                boolean forceExternalTableQueryReWrite = PropertyAnalyzer.
-                        analyzeForceExternalTableQueryRewrite(properties);
+                int value = PropertyAnalyzer.analyzeForceExternalTableQueryRewrite(properties);
                 materializedView.getTableProperty().getProperties().
-                        put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
-                                String.valueOf(forceExternalTableQueryReWrite));
-                materializedView.getTableProperty().setForceExternalTableQueryRewrite(forceExternalTableQueryReWrite);
+                        put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, String.valueOf(value));
+                materializedView.getTableProperty().setForceExternalTableQueryRewrite(value);
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                 List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db,

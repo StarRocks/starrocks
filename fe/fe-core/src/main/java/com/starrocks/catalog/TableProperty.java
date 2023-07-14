@@ -82,10 +82,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public static final String BINLOG_PROPERTY_PREFIX = "binlog";
     public static final String BINLOG_PARTITION = "binlog_partition_";
 
+    public static final int FORCE_EXTERNAL_TABLE_REWRITE_DISABLE = 0;
+    public static final int FORCE_EXTERNAL_TABLE_REWRITE_LOOSE = 1;
+    public static final int FORCE_EXTERNAL_TABLE_REWRITE_CHECKED = 2;
+
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
-    private transient DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(Maps.newHashMap());
+    private transient DynamicPartitionProperty dynamicPartitionProperty =
+            new DynamicPartitionProperty(Maps.newHashMap());
     // table's default replication num
     private Short replicationNum = RunMode.defaultReplicationNum();
 
@@ -106,9 +111,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private List<TableName> excludedTriggerTables;
 
     // This property only applies to materialized views,
-    // The mv which base table is external table would be query rewrite even the mv data is not up to date
-    // when this property is set to true.
-    private boolean forceExternalTableQueryRewrite = false;
+    // 0: disable query rewrite
+    // 1: enable query rewrite, and skip the partition version check
+    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+    private int forceExternalTableQueryRewrite = FORCE_EXTERNAL_TABLE_REWRITE_DISABLE;
 
     private boolean isInMemory = false;
 
@@ -335,10 +341,31 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public static int analyzeForceExternalTableQueryRewrite(String value) throws AnalysisException {
+        int res = 0;
+        if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
+            // old version use the boolean value
+            boolean boolValue = Boolean.parseBoolean(value);
+            res = boolValue ? FORCE_EXTERNAL_TABLE_REWRITE_LOOSE :
+                    FORCE_EXTERNAL_TABLE_REWRITE_DISABLE;
+        } else {
+            res = Integer.parseInt(value);
+            if (res < 0 || res > 2) {
+                throw new AnalysisException("force_external_table_query_rewrite could only be 0/1/2");
+            }
+        }
+        return res;
+    }
+
     public TableProperty buildForceExternalTableQueryRewrite() {
-        forceExternalTableQueryRewrite =
-                Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
-                        "false"));
+        // NOTE: keep compatible with previous version
+        String value =
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, "0");
+        try {
+            forceExternalTableQueryRewrite = analyzeForceExternalTableQueryRewrite(value);
+        } catch (AnalysisException e) {
+            LOG.error("analyze force_external_table_query_rewrite failed", e);
+        }
         return this;
     }
 
@@ -459,12 +486,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.excludedTriggerTables = excludedTriggerTables;
     }
 
-    public boolean getForceExternalTableQueryRewrite() {
+    public int getForceExternalTableQueryRewrite() {
         return this.forceExternalTableQueryRewrite;
     }
 
-    public void setForceExternalTableQueryRewrite(boolean forceExternalTableQueryRewrite) {
-        this.forceExternalTableQueryRewrite = forceExternalTableQueryRewrite;
+    public void setForceExternalTableQueryRewrite(int externalTableQueryRewrite) {
+        this.forceExternalTableQueryRewrite = externalTableQueryRewrite;
     }
 
     public boolean isInMemory() {

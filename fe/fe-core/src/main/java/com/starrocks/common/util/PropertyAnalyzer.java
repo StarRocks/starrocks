@@ -54,6 +54,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -371,14 +372,14 @@ public class PropertyAnalyzer {
         return maxMVRewriteStaleness;
     }
 
-    public static boolean analyzeForceExternalTableQueryRewrite(Map<String, String> properties) {
-        boolean forceExternalTableQueryRewrite = false;
+    public static int analyzeForceExternalTableQueryRewrite(Map<String, String> properties) throws AnalysisException {
+        int res = 0;
         if (properties != null && properties.containsKey(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
-            forceExternalTableQueryRewrite = Boolean.parseBoolean(properties.
-                    get(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE));
+            String valueStr = properties.get(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+            res = TableProperty.analyzeForceExternalTableQueryRewrite(valueStr);
             properties.remove(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
         }
-        return forceExternalTableQueryRewrite;
+        return res;
     }
 
     public static Short analyzeReplicationNum(Map<String, String> properties, short oldReplicationNum)
