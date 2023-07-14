@@ -832,8 +832,8 @@ public class AnalyzerUtils {
                     formattedPartitionValue.add(formatValue);
                 }
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
-                if (partitionName.length() > 64) {
-                    partitionName = partitionName.substring(0, 64);
+                if (partitionName.length() > 50) {
+                    partitionName = partitionName.substring(0, 50) + "_" + System.currentTimeMillis();
                 }
                 MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
                         partitionName, Collections.singletonList(partitionValue), partitionProperties);
@@ -853,12 +853,16 @@ public class AnalyzerUtils {
     @VisibleForTesting
     public static String getFormatPartitionValue(String value) {
         StringBuilder sb = new StringBuilder();
+        // When the value is negative
+        if (value.length() > 0 && value.charAt(0) == '-') {
+            sb.append("_");
+        }
         for (int i = 0; i < value.length(); i++) {
             char ch = value.charAt(i);
             if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
                 sb.append(ch);
-            } else if (ch == '-' || ch == ':' || ch == ' ') {
-                // remove;
+            }  else if (ch == '-' || ch == ':' || ch == ' ') {
+                // Main user remove characters in time
             } else {
                 int unicodeValue = value.codePointAt(i);
                 String unicodeString = Integer.toHexString(unicodeValue);
