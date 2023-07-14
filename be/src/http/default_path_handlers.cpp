@@ -34,11 +34,6 @@
 
 #include "http/default_path_handlers.h"
 
-#ifdef USE_JEMALLOC
-#include "jemalloc/jemalloc.h"
-#else
-#include <gperftools/malloc_extension.h>
-#endif
 #include <gutil/strings/numbers.h>
 #include <gutil/strings/substitute.h>
 
@@ -47,6 +42,7 @@
 
 #include "common/configbase.h"
 #include "http/web_page_handler.h"
+#include "jemalloc/jemalloc.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
@@ -211,12 +207,10 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
     (*output) << "</tbody></table>\n";
 }
 
-#ifdef USE_JEMALLOC
 void malloc_stats_write_cb(void* opaque, const char* data) {
     auto* buf = static_cast<std::string*>(opaque);
     buf->append(data);
 }
-#endif
 
 // Registered to handle "/memz", and prints out memory allocation statistics.
 void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
@@ -234,18 +228,11 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
     (*output) << "<pre>";
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     (*output) << "Memory tracking is not available with address sanitizer builds.";
-#elif defined(USE_JEMALLOC)
+#else
     std::string buf;
     je_malloc_stats_print(malloc_stats_write_cb, &buf, "a");
     boost::replace_all(buf, "\n", "<br>");
     (*output) << buf << "</pre>";
-#else
-    char buf[2048];
-    MallocExtension::instance()->GetStats(buf, 2048);
-    // Replace new lines with <br> for html
-    std::string tmp(buf);
-    boost::replace_all(tmp, "\n", "<br>");
-    (*output) << tmp << "</pre>";
 #endif
     (*output) << "<pre>";
     string stats = StorageEngine::instance()->update_manager()->detail_memory_stats();

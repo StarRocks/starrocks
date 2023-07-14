@@ -62,11 +62,9 @@ source $STARROCKS_HOME/bin/common.sh
 export_shared_envvars
 if [ ${RUN_BE} -eq 1 ] ; then
     export_env_from_conf $STARROCKS_HOME/conf/be.conf
-    export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
 fi
 if [ ${RUN_CN} -eq 1 ]; then
     export_env_from_conf $STARROCKS_HOME/conf/cn.conf
-    export_mem_limit_from_conf $STARROCKS_HOME/conf/cn.conf
 fi
 
 if [ $? -ne 0 ]; then

@@ -33,16 +33,6 @@ class QueryCacheMetrics;
 
 class MemoryMetrics {
 public:
-#ifndef USE_JEMALLOC
-    // tcmalloc metrics.
-    METRIC_DEFINE_INT_GAUGE(allocated_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(total_thread_cache_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(central_cache_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(transfer_cache_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(thread_cache_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(pageheap_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(pageheap_unmapped_bytes, MetricUnit::BYTES);
-#else
     METRIC_DEFINE_INT_GAUGE(jemalloc_allocated_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jemalloc_active_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jemalloc_metadata_bytes, MetricUnit::BYTES);
@@ -50,7 +40,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(jemalloc_resident_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jemalloc_mapped_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jemalloc_retained_bytes, MetricUnit::BYTES);
-#endif
+
     // MemPool metrics
     METRIC_DEFINE_INT_GAUGE(process_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(query_mem_bytes, MetricUnit::BYTES);

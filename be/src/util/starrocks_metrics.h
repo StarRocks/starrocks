@@ -213,12 +213,6 @@ public:
     METRIC_DEFINE_INT_GAUGE(max_network_send_bytes_rate, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(max_network_receive_bytes_rate, MetricUnit::BYTES);
 
-#ifndef USE_JEMALLOC
-    METRIC_DEFINE_TCMALLOC_GAUGE(tcmalloc_total_bytes_reserved, "generic.heap_size");
-    METRIC_DEFINE_TCMALLOC_GAUGE(tcmalloc_pageheap_unmapped_bytes, "tcmalloc.pageheap_unmapped_bytes");
-    METRIC_DEFINE_TCMALLOC_GAUGE(tcmalloc_bytes_in_use, "generic.current_allocated_bytes");
-#endif
-
     // Metrics related with BlockManager
     METRIC_DEFINE_INT_COUNTER(readable_blocks_total, MetricUnit::BLOCKS);
     METRIC_DEFINE_INT_COUNTER(writable_blocks_total, MetricUnit::BLOCKS);
