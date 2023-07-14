@@ -40,6 +40,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.http.UnauthorizedException;
 import com.starrocks.metric.JsonMetricVisitor;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
@@ -88,23 +89,29 @@ public class MetricsAction extends RestBaseAction {
         boolean collectTableMetrics = false;
         boolean minifyTableMetrics = true;
         String withTableMetrics = request.getSingleParameter(WITH_TABLE_METRICS_PARAM);
+        UserIdentity currentUser = null;
         if (WITH_TABLE_METRICS_MINIFIED.equalsIgnoreCase(withTableMetrics) ||
                 WITH_TABLE_METRICS_ALL.equalsIgnoreCase(withTableMetrics)) {
             try {
-                // Right now the table-level metrics could only be viewed by users with `admin_priv`.
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
+<<<<<<< HEAD
                 UserIdentity currentUser = checkPassword(authInfo);
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                     checkUserOwnsAdminRole(currentUser);
                 } else {
                     checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
                 }
+=======
+                currentUser = checkPassword(authInfo);
+                checkUserOwnsAdminRole(currentUser);
+>>>>>>> 2c16b95746 ([Enhancement] Log correct message when /metrics auth failed (#27267))
                 collectTableMetrics = true;
                 if (WITH_TABLE_METRICS_ALL.equalsIgnoreCase(withTableMetrics)) {
                     minifyTableMetrics = false;
                 }
-            } catch (Exception ex) {
-                LOG.warn("`Admin_priv` is needed to view the table-level metrics.");
+            } catch (UnauthorizedException e) {
+                LOG.warn("Auth failure when getting table level metrics, current user: {}, error msg: {}",
+                        currentUser, e.getMessage(), e);
             }
         }
         response.setContentType("text/plain");
