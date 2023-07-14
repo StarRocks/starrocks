@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.operator;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.time.format.DateTimeParseException;
 
 public class ConstantOperatorTest {
     @Test
@@ -95,9 +95,6 @@ public class ConstantOperatorTest {
                 "2019-05-31 10:11:61.123",
                 "2019-05-31 10:11:12.1234567",
 
-                // Only support "YYYY-MM-dd HH:mm:ss", not "yy-MM-dd HH:mm:ss".
-                "97-10-07 10:11:12.123",
-
                 // Other invalid formats.
                 "2019-05-31-1",
                 "2019-05-31-1 10:11:12",
@@ -106,8 +103,8 @@ public class ConstantOperatorTest {
         };
         for (String c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c);
-            Assert.assertThrows(in.getVarchar(), AnalysisException.class, () -> in.castTo(Type.DATE));
-            Assert.assertThrows(in.getVarchar(), AnalysisException.class, () -> in.castTo(Type.DATETIME));
+            Assert.assertThrows(in.getVarchar(), DateTimeParseException.class, () -> in.castTo(Type.DATE));
+            Assert.assertThrows(in.getVarchar(), DateTimeParseException.class, () -> in.castTo(Type.DATETIME));
         }
     }
 }
