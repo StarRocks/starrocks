@@ -377,7 +377,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | load_error_log_reserve_hours                          | 48          | hour   | 导入数据信息保留的时长。                                     |
 | streaming_load_max_mb                                 | 10240       | MB     | 流式导入单个文件大小的上限。                                 |
 | streaming_load_max_batch_size_mb                      | 100         | MB     | 流式导入单个 JSON 文件大小的上限。                             |
-| memory_maintenance_sleep_time_s                       | 10          | second | 触发 Tcmalloc GC 任务的时间间隔。StarRocks 会周期运行 GC 任务，尝试将 Tcmalloc 的空闲内存返还给操作系统。 |
+| memory_maintenance_sleep_time_s                       | 10          | second | 触发 ColumnPool GC 任务的时间间隔。StarRocks 会周期运行 GC 任务，尝试将空闲内存返还给操作系统。 |
 | write_buffer_size                                     | 104857600   | Byte   | MemTable 在内存中的 buffer 大小，超过这个限制会触发 flush。      |
 | tablet_stat_cache_update_interval_second              | 300         | second | Tablet Stat Cache 的更新间隔。                                |
 | result_buffer_cancelled_interval_time                 | 300         | second | BufferControlBlock 释放数据的等待时间。                         |
