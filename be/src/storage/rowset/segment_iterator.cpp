@@ -523,6 +523,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
 template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
+    SCOPED_RAW_TIMER(&_opts.stats->column_iterator_init_ns);
 
     const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
     _column_iterators.resize(n);
@@ -592,6 +593,7 @@ void SegmentIterator::_init_column_predicates() {
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
     StarRocksMetrics::instance()->segment_row_total.increment(num_rows());
+    SCOPED_RAW_TIMER(&_opts.stats->rows_key_range_filter_ns);
 
     if (!_opts.short_key_ranges.empty()) {
         RETURN_IF_ERROR(_get_row_ranges_by_short_key_ranges());
@@ -680,6 +682,7 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_zone_map() {
+    SCOPED_RAW_TIMER(&_opts.stats->zone_map_filter_ns);
     SparseRange zm_range(0, num_rows());
 
     // -------------------------------------------------------------
@@ -1525,6 +1528,7 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
 
 Status SegmentIterator::_init_bitmap_index_iterators() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
+    SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
     _bitmap_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
     std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
     for (auto& field : _schema.fields()) {
@@ -1666,6 +1670,7 @@ Status SegmentIterator::_apply_del_vector() {
 
 Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
     RETURN_IF(_opts.predicates.empty(), Status::OK());
+    SCOPED_RAW_TIMER(&_opts.stats->bf_filter_ns);
     size_t prev_size = _scan_range.span_size();
     for (const auto& [cid, preds] : _opts.predicates) {
         ColumnIterator* column_iter = _column_iterators[cid].get();
