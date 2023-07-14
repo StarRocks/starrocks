@@ -261,12 +261,3 @@ mysql> select [[1,2],[3,4]][2][1];
 |                   3 |
 +---------------------+
 ~~~
-
-
-
-create table t0(
-  c0 INT,
-  c1 GEOMETRY ST_Point
-)
-duplicate key(c0)
-distributed by hash(c0);
