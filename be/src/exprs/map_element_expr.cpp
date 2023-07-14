@@ -48,7 +48,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(2, _children.size());
         // check the map's value type is the same as the expr's type
-#if !BE_TEST
+#ifndef BE_TEST
         DCHECK_EQ(_type, _children[0]->type().children[1]);
 #endif
         auto child_size = _children.size();
