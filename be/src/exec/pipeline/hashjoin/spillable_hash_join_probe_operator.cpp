@@ -56,6 +56,10 @@ void SpillableHashJoinProbeOperator::close(RuntimeState* state) {
 }
 
 bool SpillableHashJoinProbeOperator::has_output() const {
+    if (!is_ready()) {
+        return false;
+    }
+
     if (!spilled()) {
         return HashJoinProbeOperator::has_output();
     }
@@ -118,6 +122,10 @@ bool SpillableHashJoinProbeOperator::has_output() const {
 }
 
 bool SpillableHashJoinProbeOperator::need_input() const {
+    if (!is_ready()) {
+        return false;
+    }
+
     if (!spilled()) {
         return HashJoinProbeOperator::need_input();
     }
