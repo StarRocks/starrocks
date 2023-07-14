@@ -2,7 +2,7 @@
 
 ## 功能
 
-计算两个输入 bitmap 的交集，返回新的 bitmap。
+计算两个 bitmap 的交集，返回新的 bitmap。
 
 ## 语法
 

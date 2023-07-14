@@ -294,6 +294,7 @@
     + 辅助命令
       + [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md)
     + 数据类型
+      + [数据类型概述](/sql-reference/sql-statements/data-types/data-type-list.md)
       + 数值类型
         + [TINYINT](/sql-reference/sql-statements/data-types/TINYINT.md)
         + [SMALLINT](/sql-reference/sql-statements/data-types/SMALLINT.md)
@@ -305,10 +306,10 @@
         + [FLOAT](/sql-reference/sql-statements/data-types/FLOAT.md)
         + [BOOLEAN](/sql-reference/sql-statements/data-types/BOOLEAN.md)
       + 字符串类型
-        + [CHAR](/sql-reference/sql-statements/data-types/CHAR.md)
-        + [VARCHAR](/sql-reference/sql-statements/data-types/VARCHAR.md)
-        + [STRING](/sql-reference/sql-statements/data-types/STRING.md)
         + [BINARY](/sql-reference/sql-statements/data-types/BINARY.md)
+        + [CHAR](/sql-reference/sql-statements/data-types/CHAR.md)
+        + [STRING](/sql-reference/sql-statements/data-types/STRING.md)
+        + [VARCHAR](/sql-reference/sql-statements/data-types/VARCHAR.md)
       + 日期类型
         + [DATE](/sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](/sql-reference/sql-statements/data-types/DATETIME.md)
@@ -323,6 +324,7 @@
     + [AUTO_INCREMENT](/sql-reference/sql-statements/auto_increment.md)
     + [生成列](/sql-reference/sql-statements/generated_columns.md)
   + 函数参考
+    + [函数列表](/sql-reference/sql-functions/function-list.md)
     + [Java UDF](/sql-reference/sql-functions/JAVA_UDF.md)
     + [窗口函数](/sql-reference/sql-functions/Window_function.md)
     + [Lambda 表达式](/sql-reference/sql-functions/Lambda_expression.md)
@@ -436,10 +438,10 @@
       + [unhex](/sql-reference/sql-functions/string-functions/unhex.md)
       + [upper](/sql-reference/sql-functions/string-functions/upper.md)
     + 聚合函数
+      + [any_value](/sql-reference/sql-functions/aggregate-functions/any_value.md)
+      + [approx_count_distinct](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [avg](/sql-reference/sql-functions/aggregate-functions/avg.md)
-      + [approx_count_distinct](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
-      + [any_value](/sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [bitmap](/sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [bitmap_agg](/sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](/sql-reference/sql-functions/aggregate-functions/count.md)
@@ -453,6 +455,7 @@
       + [max](/sql-reference/sql-functions/aggregate-functions/max.md)
       + [max_by](/sql-reference/sql-functions/aggregate-functions/max_by.md)
       + [min](/sql-reference/sql-functions/aggregate-functions/min.md)
+      + [min_by](/sql-reference/sql-functions/aggregate-functions/min_by.md)
       + [multi_distinct_count](/sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
       + [multi_distinct_sum](/sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
       + [percentile_approx](/sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
