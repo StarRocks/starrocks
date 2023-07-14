@@ -220,14 +220,14 @@ Status TableFunctionNode::reset(RuntimeState* state) {
     return Status::OK();
 }
 
-Status TableFunctionNode::close(RuntimeState* state) {
+void TableFunctionNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     if (_table_function != nullptr && _table_function_state != nullptr) {
         _table_function->close(state, _table_function_state);
     }
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 Status TableFunctionNode::build_chunk(ChunkPtr* chunk, const std::vector<ColumnPtr>& output_columns) {

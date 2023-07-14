@@ -63,7 +63,7 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* statue) override;
+    void close(RuntimeState* statue) override;
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(

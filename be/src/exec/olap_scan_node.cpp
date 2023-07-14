@@ -210,9 +210,9 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return status.is_end_of_file() ? Status::OK() : status;
 }
 
-Status OlapScanNode::close(RuntimeState* state) {
+void OlapScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     exec_debug_action(TExecNodePhase::CLOSE);
     _update_status(Status::Cancelled("closed"));
@@ -243,7 +243,7 @@ Status OlapScanNode::close(RuntimeState* state) {
         Rowset::release_readers(rowsets_per_tablet);
     }
 
-    return ScanNode::close(state);
+    ScanNode::close(state);
 }
 
 OlapScanNode::~OlapScanNode() {

@@ -170,9 +170,9 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status FileScanNode::close(RuntimeState* state) {
+void FileScanNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     exec_debug_action(TExecNodePhase::CLOSE);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
@@ -188,7 +188,7 @@ Status FileScanNode::close(RuntimeState* state) {
     }
     _cur_mem_usage = 0;
 
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 // This function is called after plan node has been prepared.
