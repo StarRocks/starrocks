@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -146,7 +147,12 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public String createOrUpdateBuiltinStorageVolume() {
+    public String createBuiltinStorageVolume() {
         return "";
+    }
+
+    @Override
+    public void validateStorageVolumeConfig() throws InvalidConfException {
+
     }
 }
