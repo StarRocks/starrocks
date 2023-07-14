@@ -41,6 +41,12 @@ public:
     // For the current operator available memory (estimated value)
     size_t operator_avaliable_memory_bytes();
 
+    void set_releasing() { _is_releasing = true; }
+
+    bool is_releasing() const { return _is_releasing; }
+
+    QuerySpillManager* query_spill_manager() const { return _query_spill_manager; }
+
 private:
     // performance level. Determine the execution mode and whether memory can be freed early
     // A higher performance level will allow the operator to execute with less memory, which will reduce performance
@@ -49,5 +55,6 @@ private:
     bool _releaseable = false;
     OP* _op = nullptr;
     QuerySpillManager* _query_spill_manager = nullptr;
+    bool _is_releasing = false;
 };
 } // namespace starrocks::spill
