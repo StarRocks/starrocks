@@ -696,11 +696,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             return new ListPartitionDesc(columnList, partitionDescList);
         } else {
-            // For hive/iceberg/hudi partition & automatic partition
-            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(columnList, partitionDescList);
             if (context.listPartitionDesc().size() > 0) {
                 throw new ParsingException("Does not support creating partitions in advance");
             }
+            // For hive/iceberg/hudi partition & automatic partition
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(columnList, partitionDescList);
             listPartitionDesc.setAutoPartitionTable(true);
             return listPartitionDesc;
         }
