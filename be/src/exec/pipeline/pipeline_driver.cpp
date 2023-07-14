@@ -264,6 +264,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     continue;
                 }
 
+                _try_to_release_buffer(runtime_state, curr_op);
                 // try successive operator pairs
                 if (!curr_op->has_output() || !next_op->need_input()) {
                     continue;
@@ -507,6 +508,8 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 
 void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
                                           const ChunkPtr& chunk) {
+    _try_to_release_buffer(state, op);
+    // TODO: FIXME
     // a simple spill stragety
     auto& mem_resource_mgr = op->mem_resource_manager();
     if (state->enable_spill() && mem_resource_mgr.releaseable() &&
@@ -526,6 +529,30 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
     }
 }
 
+const double release_buffer_mem_ratio = 0.8;
+
+void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op) {
+    if (state->enable_spill() && op->releaseable()) {
+        auto& mem_resource_mgr = op->mem_resource_manager();
+        if (mem_resource_mgr.is_releasing()) {
+            return;
+        }
+        auto query_mem_tracker = _query_ctx->mem_tracker();
+        auto query_mem_limit = query_mem_tracker->limit();
+        auto query_consumption = query_mem_tracker->consumption();
+        auto spill_mem_threshold = query_mem_limit * state->spill_mem_limit_threshold();
+        if (query_consumption >= spill_mem_threshold * release_buffer_mem_ratio) {
+            // if the currently used memory is very close to the threshold that triggers spill,
+            // try to release buffer first
+            TRACE_SPILL_LOG << "release operator due to mem pressure, consumption: " << query_consumption
+                            << ", release buffer threshold: "
+                            << static_cast<int64_t>(spill_mem_threshold * release_buffer_mem_ratio)
+                            << ", spill mem threshold: " << static_cast<int64_t>(spill_mem_threshold);
+            mem_resource_mgr.to_low_memory_mode();
+        }
+    }
+}
+
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
                               int64_t execution_time) {
     if (schedule_count > 0) {
@@ -538,7 +565,6 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, in
     } else {
         _global_schedule_timer->set((int64_t)-1);
     }
-
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
     // the information about the driver queue and workgroup.
