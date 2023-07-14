@@ -442,13 +442,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Column partitionColumn = partitionTableAndColumn.second;
         Preconditions.checkNotNull(partitionColumn);
 
+<<<<<<< HEAD
         PartitionDiff partitionDiff = new PartitionDiff();
         Map<String, Range<PartitionKey>> basePartitionMap;
 
         int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
         mvContext.setPartitionTTLNumber(partitionTTLNumber);
         Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
+=======
+        RangePartitionDiff rangePartitionDiff = new RangePartitionDiff();
+        Map<String, Range<PartitionKey>> baseRangePartitionMap;
+        
+>>>>>>> 790985a30d ([BugFix] avoid ConcurrentModificationException when refresh mv (#27212))
         database.readLock();
+        Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
         try {
             basePartitionMap = PartitionUtil.getPartitionRange(partitionBaseTable, partitionColumn);
             if (partitionExpr instanceof SlotRef) {
