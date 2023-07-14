@@ -154,8 +154,10 @@ public class OptExternalPartitionPruner {
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
-            context.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(),
-                    hmsTable.getTableName()).setPartitionNames(new ArrayList<>());
+            if (context.getDumpInfo() != null) {
+                context.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(),
+                        hmsTable.getTableName()).setPartitionNames(new ArrayList<>());
+            }
 
             Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
             if (!hmsTable.isUnPartitioned()) {

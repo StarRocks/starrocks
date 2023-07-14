@@ -358,7 +358,7 @@ public class UtFrameUtils {
     public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
                                                                                     String sql)
             throws DdlException, CloneNotSupportedException {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
 
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
@@ -394,7 +394,7 @@ public class UtFrameUtils {
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         originStmt = LogUtil.removeCommentAndLineSeparator(originStmt);
 
         List<StatementBase> statements;

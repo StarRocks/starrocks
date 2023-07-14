@@ -76,8 +76,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
-import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -94,13 +92,13 @@ import java.util.stream.Collectors;
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
-    public static Set<MaterializedView> getRelatedMvs(int maxLevel, List<Table> tablesToCheck) {
+    public static Set<MaterializedView> getRelatedMvs(int maxLevel, Set<Table> tablesToCheck) {
         Set<MaterializedView> mvs = Sets.newHashSet();
         getRelatedMvs(maxLevel, 0, tablesToCheck, mvs);
         return mvs;
     }
 
-    public static void getRelatedMvs(int maxLevel, int currentLevel, List<Table> tablesToCheck, Set<MaterializedView> mvs) {
+    public static void getRelatedMvs(int maxLevel, int currentLevel, Set<Table> tablesToCheck, Set<MaterializedView> mvs) {
         if (currentLevel >= maxLevel) {
             return;
         }
@@ -114,7 +112,7 @@ public class MvUtils {
         if (newMvIds.isEmpty()) {
             return;
         }
-        List<Table> newMvs = Lists.newArrayList();
+        Set<Table> newMvs = Sets.newHashSet();
         for (MvId mvId : newMvIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
             if (db == null) {
@@ -315,9 +313,11 @@ public class MvUtils {
         return true;
     }
 
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(String sql,
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(MaterializedView mv,
+                                                                               String sql,
                                                                                ColumnRefFactory columnRefFactory,
-                                                                               ConnectContext connectContext) {
+                                                                               ConnectContext connectContext,
+                                                                               OptimizerConfig optimizerConfig) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -325,7 +325,7 @@ public class MvUtils {
             Preconditions.checkState(statementBases.size() == 1);
             mvStmt = statementBases.get(0);
         } catch (ParsingException parsingException) {
-            LOG.warn("parse sql:{} failed", sql, parsingException);
+            LOG.warn("parse mv{}'s sql:{} failed", mv.getName(), sql, parsingException);
             return null;
         }
         Preconditions.checkState(mvStmt instanceof QueryStatement);
@@ -333,12 +333,6 @@ public class MvUtils {
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         LogicalPlan logicalPlan =
                 new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
-        // optimize the sql by rule and disable rule based materialized view rewrite
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
-        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
-        optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
-        optimizerConfig.setMVRewritePlan(true);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,

@@ -367,6 +367,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
             "enable_materialized_view_single_table_view_delta_rewrite";
     public static final String ANALYZE_FOR_MV = "analyze_mv";
+    public static final String QUERY_EXCLUDING_MV_NAMES = "query_excluding_mv_names";
+    public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -1035,6 +1037,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //      try to rewrite by single table mvs and is determined by rule rather than by cost.
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewSingleTableViewDeltaRewrite = false;
+
+    @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
+    private String queryExcludingMVNames = "";
+
+    @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
+    private String queryincludingMVNames = "";
 
     @VarAttr(name = ANALYZE_FOR_MV)
     private String analyzeTypeForMV = "sample";
@@ -1964,6 +1972,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableMaterializedViewSingleTableViewDeltaRewrite(
             boolean enableMaterializedViewSingleTableViewDeltaRewrite) {
         this.enableMaterializedViewSingleTableViewDeltaRewrite = enableMaterializedViewSingleTableViewDeltaRewrite;
+    }
+
+    public String getQueryExcludingMVNames() {
+        return queryExcludingMVNames;
+    }
+
+    public void setQueryExcludingMVNames(String queryExcludingMVNames) {
+        this.queryExcludingMVNames = queryExcludingMVNames;
+    }
+
+    public String getQueryincludingMVNames() {
+        return queryincludingMVNames;
+    }
+
+    public void setQueryincludingMVNames(String queryincludingMVNames) {
+        this.queryincludingMVNames = queryincludingMVNames;
     }
 
     public String getAnalyzeForMV() {

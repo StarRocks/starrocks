@@ -140,6 +140,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -389,8 +390,14 @@ public class StmtExecutor {
             try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Total")) {
                 redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
-                    context.getDumpInfo().reset();
-                    context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
+                    if (context.shouldDumpQuery()) {
+                        if (context.getDumpInfo() == null) {
+                            context.setDumpInfo(new QueryDumpInfo(context));
+                        } else {
+                            context.getDumpInfo().reset();
+                        }
+                        context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
+                    }
                     if (parsedStmt instanceof ShowStmt) {
                         com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
                         PrivilegeChecker.check(parsedStmt, context);
@@ -421,7 +428,7 @@ public class StmtExecutor {
                 }
             }
 
-            if (context.isQueryDump()) {
+            if (context.shouldDumpQuery()) {
                 return;
             }
             if (isForwardToLeader()) {
@@ -666,8 +673,8 @@ public class StmtExecutor {
     }
 
     private void dumpException(Exception e) {
-        context.getDumpInfo().addException(ExceptionUtils.getStackTrace(e));
-        if (context.getSessionVariable().getEnableQueryDump() && !context.isQueryDump()) {
+        if (context.shouldDumpQuery() && !context.isHTTPQueryDump()) {
+            context.getDumpInfo().addException(ExceptionUtils.getStackTrace(e));
             QueryDumpLog.getQueryDump().log(GsonUtils.GSON.toJson(context.getDumpInfo()));
         }
     }
