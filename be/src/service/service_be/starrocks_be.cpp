@@ -82,7 +82,7 @@ void start_be() {
         sleep(10);
     }
 
-    starrocks::wait_for_fragments_finish(exec_env, starrocks::config::loop_count_wait_fragments_finish);
+    exec_env->wait_for_finish();
 
     http_service.reset();
 

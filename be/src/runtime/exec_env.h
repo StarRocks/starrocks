@@ -115,6 +115,8 @@ public:
     static void stop(ExecEnv* exec_env);
     static void destroy(ExecEnv* exec_env);
 
+    void wait_for_finish();
+
     /// Returns the first created exec env instance. In a normal starrocks, this is
     /// the only instance. In test setups with multiple ExecEnv's per process,
     /// we return the most recently created instance.
@@ -244,6 +246,7 @@ private:
     std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
 
     Status _init_storage_page_cache();
+    void _wait_for_fragments_finish();
 
 private:
     static bool _is_init;
