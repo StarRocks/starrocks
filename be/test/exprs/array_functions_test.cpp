@@ -253,7 +253,7 @@ TEST_F(ArrayFunctionsTest, array_length) {
 
     // [] only const
     {
-        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         src_column = std::make_shared<ConstColumn>(src_column, 3);
 
