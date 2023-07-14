@@ -23,7 +23,7 @@ namespace starrocks::pipeline {
 // Manage the memory usage for local exchange
 class LocalExchangeMemoryManager {
 public:
-    LocalExchangeMemoryManager(size_t max_input_dop) {
+    LocalExchangeMemoryManager(size_t max_input_dop) : _max_input_dop(max_input_dop) {
         if (config::local_exchange_buffer_mem_limit_per_driver > 0) {
             _max_memory_usage_per_driver = config::local_exchange_buffer_mem_limit_per_driver;
         } else {
@@ -31,7 +31,9 @@ public:
                          << config::local_exchange_buffer_mem_limit_per_driver;
         }
         size_t res = max_input_dop * _max_memory_usage_per_driver;
-        _max_memory_usage = (res > _max_memory_usage || res <= 0) ? _max_memory_usage : res;
+        if (res < _max_memory_usage) {
+            _max_memory_usage = res;
+        }
     }
 
     void update_memory_usage(size_t memory_usage) { _memory_usage += memory_usage; }
@@ -42,9 +44,17 @@ public:
 
     bool is_full() const { return _memory_usage >= _max_memory_usage; }
 
+    size_t get_max_input_dop() const { return _max_input_dop; }
+
+    void update_max_memory_usage(size_t max_memory_usage) {
+        DCHECK(max_memory_usage > 0);
+        _max_memory_usage = max_memory_usage;
+    }
+
 private:
-    size_t _max_memory_usage = 128 * 1024 * 1024 * 1024UL;     // 128GB
-    size_t _max_memory_usage_per_driver = 128 * 1024 * 1024UL; // 128MB
+    std::atomic<size_t> _max_memory_usage{128UL * 1024 * 1024 * 1024}; // 128GB
+    size_t _max_memory_usage_per_driver = 128 * 1024 * 1024UL;         // 128MB
     std::atomic<size_t> _memory_usage{0};
+    size_t _max_input_dop;
 };
 } // namespace starrocks::pipeline
