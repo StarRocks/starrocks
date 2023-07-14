@@ -1005,6 +1005,8 @@ struct THdfsScanNode {
     13: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
 
     14: optional bool can_use_any_column;
+
+    15: optional bool can_use_min_max_count_opt;
 }
 
 struct TProjectNode {
