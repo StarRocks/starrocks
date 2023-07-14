@@ -511,7 +511,7 @@ WHERE LABEL = "label";
 
 ## 相关配置项
 
-[FE 配置项](../administration/Configuration.md#fe-配置项) `async_load_task_pool_size` 指定了 Broker Load 任务线程池的大小，即 StarRocks 集群中可以并行执行的 Broker Load 任务的最大数量。
+[FE 配置项](../administration/Configuration.md#fe-配置项) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 任务的最大数量。
 
 StarRocks v2.4 及以前版本中，如果某一时间段内提交的 Broker Load 作业的任务总数超过最大数量，则超出作业会按照各自的提交时间放到队列中排队等待调度。
 
