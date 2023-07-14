@@ -438,8 +438,8 @@ public:
             value = _const_input[i];
             if (value == nullptr) {
                 ASSIGN_OR_RETURN(value, _children[i]->evaluate_checked(context, ptr));
-                is_const[i] = false;
-                all_const = false;
+                is_const[i] = value->is_constant();
+                all_const &= is_const[i];
             }
             if (i == 0) {
                 RETURN_IF_COLUMNS_ONLY_NULL({value});
