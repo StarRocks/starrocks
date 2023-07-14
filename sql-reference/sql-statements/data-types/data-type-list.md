@@ -31,8 +31,6 @@ StarRocks 支持以下数据类型：[数值类型](#数值类型)、[字符串�
 
 - [ARRAY](/sql-reference/sql-statements/data-types/Array.md)
 - [JSON](/sql-reference/sql-statements/data-types/JSON.md)
-- [MAP](/sql-reference/sql-statements/data-types/Map.md)
-- [STRUCT](/sql-reference/sql-statements/data-types/STRUCT.md)
 
 ## 其他类型
 

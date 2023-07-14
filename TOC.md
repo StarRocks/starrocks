@@ -449,7 +449,6 @@
       + [max](/sql-reference/sql-functions/aggregate-functions/max.md)
       + [max_by](/sql-reference/sql-functions/aggregate-functions/max_by.md)
       + [min](/sql-reference/sql-functions/aggregate-functions/min.md)
-      + [min_by](/sql-reference/sql-functions/aggregate-functions/min_by.md)
       + [multi_distinct_count](/sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
       + [multi_distinct_sum](/sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
       + [percentile_approx](/sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
