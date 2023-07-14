@@ -935,7 +935,7 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
         }
     }
     case SET: {
-        if (offset >= _set->size() || std::abs(offset) > _set->size()) {
+        if ((offset > 0 && offset >= _set->size()) || (offset < 0 && std::abs(offset) > _set->size())) {
             return 0;
         }
         int64_t abs_offset = offset;
@@ -958,7 +958,8 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
     }
     default:
         DCHECK_EQ(_type, BITMAP);
-        if (offset >= _set->size() || std::abs(offset) > _set->size()) {
+        if ((offset > 0 && offset >= _bitmap->cardinality()) ||
+            (offset < 0 && std::abs(offset) > _bitmap->cardinality())) {
             return 0;
         }
         int64_t abs_offset = offset;
@@ -1000,18 +1001,20 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
             abs_limit = -limit;
         }
 
+        std::vector values(_set->begin(), _set->end());
+        std::sort(values.begin(), values.end());
         int64_t count = 0;
         if (is_reverse) {
-            auto start = _set->begin();
-            auto end = _set->begin();
+            auto start = values.begin();
+            auto end = values.begin();
 
             int64_t offset = 0;
-            for (; end != _set->end() && offset < abs_limit && *end <= range_start;) {
+            for (; end != values.end() && offset < abs_limit && *end <= range_start;) {
                 ++end;
                 ++offset;
             }
             if (offset == abs_limit) {
-                for (; end != _set->end() && *end <= range_start;) {
+                for (; end != values.end() && *end <= range_start;) {
                     ++start;
                     ++end;
                 }
@@ -1020,11 +1023,11 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
                 ret_bitmap->add(*start);
             }
         } else {
-            auto it = _set->begin();
-            for (; it != _set->end() && *it < range_start;) {
+            auto it = values.begin();
+            for (; it != values.end() && *it < range_start;) {
                 ++it;
             }
-            for (; it != _set->end() && count < abs_limit; ++it, ++count) {
+            for (; it != values.end() && count < abs_limit; ++it, ++count) {
                 ret_bitmap->add(*it);
             }
         }
@@ -1087,12 +1090,14 @@ int64_t BitmapValue::bitmap_subset_in_range_internal(const int64_t& range_start,
         }
     }
     case SET: {
-        auto it = _set->begin();
-        for (; it != _set->end() && *it < range_start;) {
+        std::vector values(_set->begin(), _set->end());
+        std::sort(values.begin(), values.end());
+        auto it = values.begin();
+        for (; it != values.end() && *it < range_start;) {
             ++it;
         }
         int64_t count = 0;
-        for (; it != _set->end() && *it < range_end; ++it, ++count) {
+        for (; it != values.end() && *it < range_end; ++it, ++count) {
             ret_bitmap->add(*it);
         }
         return count;
