@@ -19,20 +19,11 @@
 
 #include "column/column_helper.h"
 #include "column/map_column.h"
+#include "exprs/mock_vectorized_expr.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 namespace {
-
-class FakeConstExpr : public starrocks::Expr {
-public:
-    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
-
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
-
-    Expr* clone(ObjectPool*) const override { return nullptr; }
-
-    ColumnPtr _column;
-};
 
 ColumnPtr const_int_column(int32_t value, size_t size = 1) {
     auto data = Int32Column::create();
@@ -75,6 +66,15 @@ protected:
         node.__set_type(type.to_thrift());
         FakeConstExpr* e = _objpool.add(new FakeConstExpr(node));
         e->_column = std::move(value);
+        return e;
+    }
+
+    MockColumnExpr* new_fake_col_expr(ColumnPtr value, const TypeDescriptor& type) {
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::INT_LITERAL);
+        node.__set_num_children(0);
+        node.__set_type(type.to_thrift());
+        auto* e = _objpool.add(new MockColumnExpr(node, value));
         return e;
     }
 
@@ -137,9 +137,10 @@ TEST_F(MapElementExprTest, test_map_int_int) {
     {
         std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
 
-        expr->add_child(new_fake_const_expr(column, type_map_int_int));
-        expr->add_child(new_fake_const_expr(const_int_column(2), type_int));
-
+        expr->add_child(new_fake_col_expr(column, type_map_int_int));
+        expr->add_child(new_fake_const_expr(const_int_column(2, column->size()), type_int));
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         EXPECT_EQ(5, result->size());
@@ -176,9 +177,50 @@ TEST_F(MapElementExprTest, test_map_int_int) {
     {
         std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
 
-        expr->add_child(new_fake_const_expr(column, type_map_int_int));
-        expr->add_child(new_fake_const_expr(const_int_column(3), type_int));
+        expr->add_child(new_fake_col_expr(column, type_map_int_int));
+        expr->add_child(new_fake_const_expr(const_int_column(3, column->size()), type_int));
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_EQ(5, result->size());
+        EXPECT_FALSE(result->is_null(0));
+        EXPECT_TRUE(result->is_null(1));
+        EXPECT_FALSE(result->is_null(2));
+        EXPECT_TRUE(result->is_null(3));
+        EXPECT_TRUE(result->is_null(4));
 
+        EXPECT_EQ(33, result->get(0).get_int32());
+        EXPECT_EQ(88, result->get(2).get_int32());
+    }
+
+    // Inputs:
+    //   c0
+    // --------
+    //   [1->11, 2->22, 3->33]
+    //   [1->44, 2->55, 4->66]
+    //   [2->77, 3->88]
+    //   [2->99]
+    //   [NULL]
+    //
+    // Query:
+    //   select c0[3/3/3/0,0]
+    //
+    // Outputs:
+    //   33
+    //   NULL
+    //   88
+    //   NULL
+    //   NULL
+
+    {
+        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+
+        expr->add_child(new_fake_col_expr(column, type_map_int_int));
+        auto type = TypeDescriptor(LogicalType::TYPE_INT);
+        expr->add_child(new_fake_col_expr(ColumnTestHelper::build_column<int32_t>({3, 3, 3, 0, 0}), type));
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         EXPECT_EQ(5, result->size());
@@ -256,9 +298,10 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
     {
         std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
 
-        expr->add_child(new_fake_const_expr(column, type_map_varchar_int));
-        expr->add_child(new_fake_const_expr(const_varchar_column("b"), type_varchar));
-
+        expr->add_child(new_fake_col_expr(column, type_map_varchar_int));
+        expr->add_child(new_fake_const_expr(const_varchar_column("b", column->size()), type_varchar));
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         EXPECT_EQ(6, result->size());
@@ -298,9 +341,10 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
     {
         std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
 
-        expr->add_child(new_fake_const_expr(column, type_map_varchar_int));
-        expr->add_child(new_fake_const_expr(const_varchar_column("c"), type_varchar));
-
+        expr->add_child(new_fake_col_expr(column, type_map_varchar_int));
+        expr->add_child(new_fake_const_expr(const_varchar_column("c", column->size()), type_varchar));
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         EXPECT_EQ(6, result->size());
@@ -313,6 +357,108 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
 
         EXPECT_EQ(33, result->get(0).get_int32());
         EXPECT_EQ(88, result->get(2).get_int32());
+    }
+}
+
+TEST_F(MapElementExprTest, test_map_const) {
+    TypeDescriptor type_map_int_int;
+    type_map_int_int.type = LogicalType::TYPE_MAP;
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+
+    TypeDescriptor type_int(LogicalType::TYPE_INT);
+
+    auto column = ColumnHelper::create_column(type_map_int_int, false);
+
+    DatumMap map;
+    map[(int32_t)1] = (int32_t)11;
+    map[(int32_t)2] = (int32_t)22;
+    map[(int32_t)3] = (int32_t)33;
+    column->append_datum(map);
+
+    DatumMap map1;
+    map1[(int32_t)1] = (int32_t)44;
+    map1[(int32_t)2] = (int32_t)55;
+    map1[(int32_t)4] = (int32_t)66;
+    column->append_datum(map1);
+
+    DatumMap map2;
+    map2[(int32_t)2] = (int32_t)77;
+    map2[(int32_t)3] = (int32_t)88;
+    column->append_datum(map2);
+
+    DatumMap map3;
+    map3[(int32_t)2] = (int32_t)99;
+    column->append_datum(map3);
+
+    column->append_datum(DatumMap());
+
+    // Inputs:
+    //   c0
+    // --------
+    //   [1->11, 2->22, 3->33]
+    //   [1->44, 2->55, 4->66]
+    //   [2->77, 3->88]
+    //   [2->99]
+    //   [NULL]
+    //
+    // Query:
+    //   select c0[null]
+    //
+    // Outputs:
+    //   null
+    //   null
+    //   null
+    //   null
+    //   NULL
+    {
+        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+
+        expr->add_child(new_fake_col_expr(column, type_map_int_int));
+        expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), type_int));
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_EQ(5, result->size());
+        EXPECT_TRUE(result->is_null(0));
+        EXPECT_TRUE(result->is_null(1));
+        EXPECT_TRUE(result->is_null(2));
+        EXPECT_TRUE(result->is_null(3));
+        EXPECT_TRUE(result->is_null(4));
+    }
+    {
+        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+
+        expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), type_int));
+        expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), type_int));
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_TRUE(result->only_null());
+    }
+    // Inputs:
+    //   c0
+    // --------
+    //   [1->11, 2->22, 3->33]
+    //
+    // Query:
+    //   select c0[3]
+    //
+    // Outputs:
+    //   33
+
+    {
+        auto const_map = ConstColumn::create(column->clone(), column->size());
+        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+
+        expr->add_child(new_fake_col_expr(const_map, type_map_int_int));
+        expr->add_child(new_fake_const_expr(const_int_column(3, column->size()), type_int));
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_TRUE(result->is_constant());
+        EXPECT_EQ(33, result->get(0).get_int32());
     }
 }
 

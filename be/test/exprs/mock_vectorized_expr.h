@@ -226,4 +226,15 @@ private:
     ColumnPtr _column;
 };
 
+class FakeConstExpr : public starrocks::Expr {
+public:
+    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
+
+    Expr* clone(ObjectPool*) const override { return nullptr; }
+
+    ColumnPtr _column;
+};
+
 } // namespace starrocks

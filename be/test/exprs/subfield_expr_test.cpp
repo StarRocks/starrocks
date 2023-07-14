@@ -18,20 +18,11 @@
 
 #include "column/column_helper.h"
 #include "column/struct_column.h"
+#include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
 
 namespace {
-class FakeConstExpr : public starrocks::Expr {
-public:
-    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
-
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
-
-    Expr* clone(ObjectPool*) const override { return nullptr; }
-
-    ColumnPtr _column;
-};
 
 std::unique_ptr<Expr> create_subfield_expr(const TypeDescriptor& type,
                                            const std::vector<std::string>& used_subfield_name) {
