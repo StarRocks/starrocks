@@ -34,21 +34,20 @@ public:
     Status finish_publish_task(std::vector<TFinishTaskRequest> finish_task_requests);
     bool has_pending_task() { return !_finish_task_requests.empty() || !_waitting_finish_task_requests.empty(); }
     Status submit_finish_task();
-    void update_tablet_version(TFinishTaskRequest* finish_task_request);
+    void update_tablet_version(TFinishTaskRequest& finish_task_request);
 
     size_t finish_task_requests_size() { return _finish_task_requests.size(); }
     size_t waitting_finish_task_requests_size() { return _waitting_finish_task_requests.size(); }
 
 private:
-    bool _all_task_applied(TFinishTaskRequest& finish_task_request);
-    bool _left_task_applied(TFinishTaskRequest* finish_task_request);
+    bool _all_task_applied(const TFinishTaskRequest& finish_task_request);
+    bool _left_task_applied(const TFinishTaskRequest& finish_task_request);
 
 private:
     mutable std::mutex _lock;
-    std::condition_variable _finish_task_not_empty;
 
-    std::map<int64_t, FinishTaskRequestPtr> _finish_task_requests;
-    std::map<int64_t, FinishTaskRequestPtr> _waitting_finish_task_requests;
+    std::map<int64_t, TFinishTaskRequest> _finish_task_requests;
+    std::map<int64_t, TFinishTaskRequest> _waitting_finish_task_requests;
     std::map<int64_t, std::set<std::pair<int64_t, int64_t>>> _unapplied_tablet_by_txn;
     std::unique_ptr<ThreadPool> _finish_publish_version_thread_pool;
 };

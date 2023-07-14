@@ -56,11 +56,6 @@ void finish_task(const TFinishTaskRequest& finish_task_request) {
 
         sleep(sleep_seconds);
     }
-    LOG(INFO) << "task signature: " << finish_task_request.signature << " return fe success";
-}
-
-void finish_task(const TFinishTaskRequest* finish_task_request) {
-    return finish_task(*finish_task_request);
 }
 
 } // namespace starrocks

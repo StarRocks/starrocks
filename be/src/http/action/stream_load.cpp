@@ -178,7 +178,6 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
                      << ", receive_bytes=" << ctx->receive_bytes << ", id=" << ctx->id;
         return Status::InternalError("receive body don't equal with body bytes");
     }
-    LOG(INFO) << "handle stream load action";
     if (!ctx->use_streaming) {
         // if we use non-streaming, we need to close file first,
         // then execute_plan_fragment here
@@ -324,7 +323,6 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
     int64_t begin_txn_start_time = MonotonicNanos();
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->begin_txn(ctx));
     ctx->begin_txn_cost_nanos = MonotonicNanos() - begin_txn_start_time;
-    LOG(INFO) << "begin transaction";
     // process put file
     return _process_put(http_req, ctx);
 }
@@ -570,7 +568,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         request.__set_timeout(ctx->timeout_second);
         rpc_timeout_ms = std::min(ctx->timeout_second * 1000, config::txn_commit_rpc_timeout_ms);
     }
-    LOG(INFO) << "ctx->timeout second is " << ctx->timeout_second;
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
     // plan this load
     TNetworkAddress master_addr = get_master_address();
@@ -607,7 +604,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
         ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
-    LOG(INFO) << "process put";
     return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
 }
 

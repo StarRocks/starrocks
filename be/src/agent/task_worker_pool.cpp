@@ -505,6 +505,9 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             }
             // All thread are running, set wait_timeout = 0 to avoid publish block
             wait_time = wait_time * worker_pool_this->_sleeping_count / worker_pool_this->_worker_count;
+            if (config::enable_sync_publish) {
+                wait_time = 0;
+            }
 
             while (!worker_pool_this->_tasks.empty()) {
                 // collect some publish version tasks as a group.
@@ -529,7 +532,7 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         batch_publish_latency += MonotonicMillis() - start_ts;
         priority_tasks.pop();
 
-        if (config::enable_sync_publish) {
+        if (!config::enable_sync_publish) {
             if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
                 batch_publish_latency > config::max_batch_publish_latency_ms) {
                 int64_t t0 = MonotonicMillis();

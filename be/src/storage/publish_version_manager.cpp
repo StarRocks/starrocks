@@ -45,29 +45,29 @@ PublishVersionManager::~PublishVersionManager() {
 }
 
 // should under lock
-bool PublishVersionManager::_all_task_applied(TFinishTaskRequest& finish_task_request) {
+bool PublishVersionManager::_all_task_applied(const TFinishTaskRequest& finish_task_request) {
     if (finish_task_request.task_status.status_code != TStatusCode::OK) {
         return true;
     }
     auto& tablet_versions = finish_task_request.tablet_publish_versions;
     bool all_task_applied = true;
     std::set<std::pair<int64_t, int64_t>> unapplied_tablet;
-    for (int i = 0; i < tablet_versions.size(); i++) {
-        TTabletVersionPair tablet_version = tablet_versions[i];
+    for (auto& tablet_version : tablet_versions) {
         int64_t tablet_id = tablet_version.tablet_id;
         int64_t request_version = tablet_version.version;
 
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
-        if (tablet != nullptr)
+        if (tablet != nullptr) {
             if (tablet->keys_type() != KeysType::PRIMARY_KEYS) {
                 return true;
             }
-        if (tablet->max_readable_version() < request_version) {
-            all_task_applied = false;
-            unapplied_tablet.insert(std::make_pair(tablet_id, request_version));
+            if (tablet->max_readable_version() < request_version) {
+                all_task_applied = false;
+                unapplied_tablet.insert(std::make_pair(tablet_id, request_version));
+            }
+            VLOG(1) << "tablet: " << tablet->tablet_id() << " max_readable_version is "
+                    << tablet->max_readable_version() << ", request_version is " << request_version;
         }
-        VLOG(1) << "tablet: " << tablet->tablet_id() << " max_readable_version is " << tablet->max_readable_version()
-                << ", request_version is " << request_version;
     }
 
     if (!all_task_applied) {
@@ -76,9 +76,9 @@ bool PublishVersionManager::_all_task_applied(TFinishTaskRequest& finish_task_re
     return all_task_applied;
 }
 
-bool PublishVersionManager::_left_task_applied(TFinishTaskRequest* finish_task_request) {
+bool PublishVersionManager::_left_task_applied(const TFinishTaskRequest& finish_task_request) {
     bool applied = true;
-    int64_t signature = finish_task_request->signature;
+    int64_t signature = finish_task_request.signature;
     std::set<std::pair<int64_t, int64_t>> unapplied_tablet;
     auto iter = _unapplied_tablet_by_txn.find(signature);
     if (iter == _unapplied_tablet_by_txn.end()) {
@@ -108,20 +108,19 @@ bool PublishVersionManager::_left_task_applied(TFinishTaskRequest* finish_task_r
 
 Status PublishVersionManager::finish_publish_task(std::vector<TFinishTaskRequest> finish_task_requests) {
     std::lock_guard wl(_lock);
-    for (auto& finish_task_request : finish_task_requests) {
-        if (_all_task_applied(finish_task_request)) {
-            _finish_task_requests[finish_task_request.signature] =
-                    std::move(std::make_shared<TFinishTaskRequest>(finish_task_request));
+    for (size_t i = 0; i < finish_task_requests.size(); i++) {
+        if (_all_task_applied(finish_task_requests[i])) {
+            _finish_task_requests[finish_task_requests[i].signature] = std::move(finish_task_requests[i]);
         } else {
-            _waitting_finish_task_requests[finish_task_request.signature] =
-                    std::move(std::make_shared<TFinishTaskRequest>(finish_task_request));
+            _waitting_finish_task_requests[finish_task_requests[i].signature] = std::move(finish_task_requests[i]);
         }
     }
+    CHECK(has_pending_task());
     return Status::OK();
 }
 
-void PublishVersionManager::update_tablet_version(TFinishTaskRequest* finish_task_request) {
-    auto& tablet_versions = finish_task_request->tablet_versions;
+void PublishVersionManager::update_tablet_version(TFinishTaskRequest& finish_task_request) {
+    auto& tablet_versions = finish_task_request.tablet_versions;
     for (int32_t i = 0; i < tablet_versions.size(); i++) {
         int64_t tablet_id = tablet_versions[i].tablet_id;
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
@@ -137,37 +136,32 @@ Status PublishVersionManager::submit_finish_task() {
     std::vector<int64_t> erase_waitting_finish_task_signature;
     {
         std::lock_guard wl(_lock);
-        for (auto& [signature, finish_task_request_ptr] : _finish_task_requests) {
+        Status st;
+        for (auto& [signature, finish_task_request] : _finish_task_requests) {
             // submit finish task
-            token->submit_func([this, finish_task_request_ptr]() mutable {
-                //TFinishTaskRequest request = std::move(finish_task_request);
-                update_tablet_version(finish_task_request_ptr.get());
+            st = token->submit_func([this, finish_request = std::move(finish_task_request)]() mutable {
+                update_tablet_version(finish_request);
 #ifndef BE_TEST
-                finish_task(finish_task_request_ptr.get());
+                finish_task(finish_request);
 #endif
-                remove_task_info(finish_task_request_ptr->task_type, finish_task_request_ptr->signature);
+                remove_task_info(finish_request.task_type, finish_request.signature);
             });
             erase_finish_task_signature.emplace_back(signature);
         }
 
         std::vector<int64_t> clear_txn;
-        for (auto& [signature, finish_task_request_ptr] : _waitting_finish_task_requests) {
-            if (_left_task_applied(finish_task_request_ptr.get())) {
-                token->submit_func([this, finish_task_request_ptr]() mutable {
-                    //TFinishTaskRequest request = std::move(finish_task_request);
-                    update_tablet_version(finish_task_request_ptr.get());
+        for (auto& [signature, finish_task_request] : _waitting_finish_task_requests) {
+            if (_left_task_applied(finish_task_request)) {
+                st = token->submit_func([this, finish_request = std::move(finish_task_request)]() mutable {
+                    update_tablet_version(finish_request);
 #ifndef BE_TEST
-                    finish_task(finish_task_request_ptr.get());
+                    finish_task(finish_request);
 #endif
-                    remove_task_info(finish_task_request_ptr->task_type, finish_task_request_ptr->signature);
+                    remove_task_info(finish_request.task_type, finish_request.signature);
                 });
                 erase_waitting_finish_task_signature.emplace_back(signature);
             }
         }
-        size_t finish_size_before = _finish_task_requests.size();
-        size_t waitting_finish_size_before = _waitting_finish_task_requests.size();
-        size_t erase_finish = erase_finish_task_signature.size();
-        size_t erase_waitting = erase_waitting_finish_task_signature.size();
         for (auto& signature : erase_finish_task_signature) {
             _finish_task_requests.erase(signature);
         }

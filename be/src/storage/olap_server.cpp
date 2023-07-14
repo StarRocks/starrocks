@@ -615,8 +615,6 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
 }
 
 void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
-    bool stop = _bg_worker_stopped.load(std::memory_order_consume);
-    LOG(INFO) << "bg worker is stop: " << stop;
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t interval = config::finish_publish_vesion_internal;
         {
@@ -625,7 +623,6 @@ void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
                    !_bg_worker_stopped.load(std::memory_order_consume)) {
                 _finish_publish_version_cv.wait(wl);
             }
-            LOG(INFO) << "wake finish publish version thread";
             _publish_version_manager->submit_finish_task();
             if (interval <= 0) {
                 LOG(WARNING) << "finish_publish_vesion_internal config is illegal: " << interval << ", force set to 1";
@@ -633,7 +630,6 @@ void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
             }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(interval));
-        //SLEEP_IN_BG_WORKER(interval);
     }
 
     return nullptr;

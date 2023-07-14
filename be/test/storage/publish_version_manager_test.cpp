@@ -47,9 +47,9 @@ namespace starrocks {
 class PublishVersionManagerTest : public testing::Test {
 public:
     void SetUp() override {
+        _publish_version_manager = starrocks::StorageEngine::instance()->publish_version_manager();
         _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
         Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
-        _publish_version_manager = starrocks::StorageEngine::instance()->publish_version_manager();
     }
 
     void TearDown() override {
@@ -150,15 +150,14 @@ public:
     }
 
     void* _finish_publish_version_thread_callback(void* arg) {
-        bool stop = _stopped.load(std::memory_order_consume);
         while (!_stopped.load(std::memory_order_consume)) {
             int32_t interval = config::finish_publish_vesion_internal;
             {
                 std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
+                CHECK(_publish_version_manager != nullptr);
                 while (!_publish_version_manager->has_pending_task() && !_stopped.load(std::memory_order_consume)) {
                     _finish_publish_version_cv.wait(wl);
                 }
-                LOG(INFO) << "wake finish publish version thread";
                 _publish_version_manager->submit_finish_task();
                 if (interval <= 0) {
                     LOG(WARNING) << "finish_publish_vesion_internal config is illegal: " << interval
@@ -167,7 +166,6 @@ public:
                 }
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(interval));
-            //SLEEP_IN_BG_WORKER(interval);
         }
 
         return nullptr;
@@ -250,7 +248,6 @@ TEST_F(PublishVersionManagerTest, test_publish_task) {
     _publish_version_manager->finish_publish_task(std::move(finish_task_requests));
     _finish_publish_version_cv.notify_one();
 
-    ASSERT_TRUE(_publish_version_manager->has_pending_task());
     ASSERT_EQ(0, _publish_version_manager->finish_task_requests_size());
     ASSERT_EQ(1, _publish_version_manager->waitting_finish_task_requests_size());
     _tablet->updates()->stop_apply(false);
@@ -258,7 +255,6 @@ TEST_F(PublishVersionManagerTest, test_publish_task) {
     ASSERT_EQ(N, read_tablet(_tablet, 3));
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
-    ASSERT_TRUE(!_publish_version_manager->has_pending_task());
     ASSERT_EQ(0, _publish_version_manager->finish_task_requests_size());
     ASSERT_EQ(0, _publish_version_manager->waitting_finish_task_requests_size());
 }
