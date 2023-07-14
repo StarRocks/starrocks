@@ -11,8 +11,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 - [Bitmap 函数](#bitmap-函数)
 - [JSON 函数](#json-函数)
 - [Map 函数](#map-函数)
-- [Struct 函数](#struct-函数)
-- [表函数](#表函数)
 - [Bit 函数](#bit-函数)
 - [Binary 函数](#binary-函数)
 - [加密函数](#加密函数)
@@ -133,7 +131,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [split](/sql-reference/sql-functions/string-functions/split.md) | 根据分隔符拆分字符串，将拆分后的所有字符串以 ARRAY 的格式返回。  |
 | [split_part](/sql-reference/sql-functions/string-functions/split_part.md) | 根据分割符拆分字符串，返回指定的分割部分。  |
 | [starts_with](/sql-reference/sql-functions/string-functions/starts_with.md) | 如果字符串以指定前缀开头返回 1，否则返回 0。  |
-| [str_to_bitmap](/sql-reference/sql-functions/string-functions/str_to_map.md) | 将给定的字符串分割成键值对 (Key-Value pair)，返回包含这些键值对的 Map。  |
 | [strleft](/sql-reference/sql-functions/string-functions/strleft.md) | 从字符串左边部分返回指定长度的字符。  |
 | [strright](/sql-reference/sql-functions/string-functions/strright.md) | 从字符串右边部分返回指定长度的字符。  |
 | [substr, substring](/sql-reference/sql-functions/string-functions/substr.md) | 返回字符串中从位置 pos 开始的指定长度的子字符串。  |
@@ -163,7 +160,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [max](/sql-reference/sql-functions/aggregate-functions/max.md)| 返回表达式中的最大值。 |
 |  [max_by](/sql-reference/sql-functions/aggregate-functions/max_by.md)| 返回与 y 的最大值相关联的 x 值。 |
 |  [min](/sql-reference/sql-functions/aggregate-functions/min.md)| 返回表达式中的最小值。 |
-|  [min_by](/sql-reference/sql-functions/aggregate-functions/min_by.md) | 返回与 y 的最小值关联的 x 值。 |
 |  [multi_distinct_count](/sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)| 返回表达式去除重复值后的行数，功能等同于 COUNT(DISTINCT expr)。 |
 |  [multi_distinct_sum](/sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)| 返回表达式去除重复值后的总和，功能等同于 sum(distinct expr)。 |
 |  [percentile_approx](/sql-reference/sql-functions/aggregate-functions/percentile_approx.md)| 返回第 p 个百分位点的近似值。 |
@@ -229,8 +225,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
-|  [all_match](/sql-reference/sql-functions/array-functions/all_match.md)| 判断数组中的所有元素是否都匹配谓词中指定的条件。 |
-|  [any_match](/sql-reference/sql-functions/array-functions/any_match.md)| 判断数组中是否有元素匹配谓词中指定的条件。 |
 |  [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)| 将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。 |
 |  [array_append](/sql-reference/sql-functions/array-functions/array_append.md)| 在数组末尾添加一个新的元素。 |
 |  [array_avg](/sql-reference/sql-functions/array-functions/array_avg.md)| 求取一个ARRAY中的所有数据的平均数。 |
@@ -317,30 +311,14 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
 |  [cardinality](/sql-reference/sql-functions/map-functions/cardinality.md)| 计算 Map 中元素的个数。 |
-|  [distinct_map_keys](/sql-reference/sql-functions/map-functions/distinct_map_keys.md)| 删除 Map 中重复的 Key。 |
 |  [element_at](/sql-reference/sql-functions/map-functions/element_at.md)| 获取 Map 中指定键 (Key) 对应的值 (Value)。 |
 |  [map_apply](/sql-reference/sql-functions/map-functions/map_apply.md)| 返回 Map 中所有 Key 或 Value 进行 Lambda 函数运算后的 Map 值。 |
-|  [map_concat](/sql-reference/sql-functions/map-functions/map_concat.md)| 将多个 Map 合并成一个 Map。 |
-|  [map_filter](/sql-reference/sql-functions/map-functions/map_filter.md)| 根据设定的过滤函数返回 MAP 中匹配的 Key-value 对。 |
 |  [map_from_arrays](/sql-reference/sql-functions/map-functions/map_from_arrays.md)| 将两个 ARRAY 数组作为 Key 和 Value 组合成一个 MAP 对象。 |
 |  [map_keys](/sql-reference/sql-functions/map-functions/map_keys.md)| 返回 Map 中所有 key 组成的数组。 |
 |  [map_size](/sql-reference/sql-functions/map-functions/map_size.md)| 计算 Map 中元素的个数。 |
 |  [map_values](/sql-reference/sql-functions/map-functions/map_values.md)| 返回 Map 中所有 Value 组成的数组。 |
 |  [transform_keys](/sql-reference/sql-functions/map-functions/transform_keys.md)| 对 Map 中的 key 进行 Lambda 转换。 |
 |  [transform_values](/sql-reference/sql-functions/map-functions/transform_values.md)| 对 Map 中的 value 进行 lambda 转换。 |
-
-## Struct 函数
-
-| 函数                |                 功能      |
-|  :-:                |                :-:       |
-|  [named_struct](/sql-reference/sql-functions/struct-functions/named_struct.md)| 根据给定的字段名和字段值来构建 STRUCT。 |
-|  [row](/sql-reference/sql-functions/struct-functions/row.md)| 根据给定的一个或多个值来构建 STRUCT。 |
-
-## 表函数
-
-| 函数                |                 功能      |
-|  :-:                |                :-:       |
-| [generate_series](./table-functions/generate_series.md) | 生成一系列从 start 到 end 的数值，步长为 step。 |
 
 ## Bit 函数
 

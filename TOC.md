@@ -540,7 +540,6 @@
       + [cardinality](/sql-reference/sql-functions/map-functions/cardinality.md)
       + [element_at](/sql-reference/sql-functions/map-functions/element_at.md)
       + [map_apply](/sql-reference/sql-functions/map-functions/map_apply.md)
-      + [map_filter](/sql-reference/sql-functions/map-functions/map_filter.md)
       + [map_from_arrays](/sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](/sql-reference/sql-functions/map-functions/map_keys.md)
       + [map_size](/sql-reference/sql-functions/map-functions/map_size.md)
