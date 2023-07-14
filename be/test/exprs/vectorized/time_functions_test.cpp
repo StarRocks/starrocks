@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <utility>
+#include <vector>
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -2048,10 +2050,36 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
     tc->append(DateValue::create(2020, 5, 9));
     tc->append(DateValue::create(2020, 11, 3));
 
-    //day
-    {
+    std::vector<std::pair<std::string, std::vector<DateValue>>> test_cases = {
+            {/*fmt*/ "day",
+             /*expected_date */ {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 2),
+                                 DateValue::create(2020, 3, 6), DateValue::create(2020, 4, 8),
+                                 DateValue::create(2020, 5, 9), DateValue::create(2020, 11, 3)}},
+            {"DAY",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 2), DateValue::create(2020, 3, 6),
+              DateValue::create(2020, 4, 8), DateValue::create(2020, 5, 9), DateValue::create(2020, 11, 3)}},
+            {"month",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 1), DateValue::create(2020, 3, 1),
+              DateValue::create(2020, 4, 1), DateValue::create(2020, 5, 1), DateValue::create(2020, 11, 1)}},
+            {"MONTH",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 1), DateValue::create(2020, 3, 1),
+              DateValue::create(2020, 4, 1), DateValue::create(2020, 5, 1), DateValue::create(2020, 11, 1)}},
+            {"year",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
+              DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1)}},
+            {"YEAR",
+             {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
+              DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1)}},
+            {"week",
+             {DateValue::create(2019, 12, 30), DateValue::create(2020, 1, 27), DateValue::create(2020, 3, 2),
+              DateValue::create(2020, 4, 6), DateValue::create(2020, 5, 4), DateValue::create(2020, 11, 2)}},
+            {"WEEK",
+             {DateValue::create(2019, 12, 30), DateValue::create(2020, 1, 27), DateValue::create(2020, 3, 2),
+              DateValue::create(2020, 4, 6), DateValue::create(2020, 5, 4), DateValue::create(2020, 11, 2)}}};
+
+    for (const auto& test_case : test_cases) {
         auto text = BinaryColumn::create();
-        text->append("day");
+        text->append(test_case.first);
         auto format = ConstColumn::create(text, 1);
 
         Columns columns;
@@ -2071,6 +2099,7 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
 
         auto datetimes = ColumnHelper::cast_to<TYPE_DATE>(result);
 
+<<<<<<< HEAD:be/test/exprs/vectorized/time_functions_test.cpp
         DateValue check_result[6] = {DateValue::create(2020, 1, 1), DateValue::create(2020, 2, 2),
                                      DateValue::create(2020, 3, 6), DateValue::create(2020, 4, 8),
                                      DateValue::create(2020, 5, 9), DateValue::create(2020, 11, 3)};
@@ -2202,6 +2231,9 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
         DateValue check_result[6] = {DateValue::create(2020, 1, 1), DateValue::create(2020, 1, 1),
                                      DateValue::create(2020, 1, 1), DateValue::create(2020, 4, 1),
                                      DateValue::create(2020, 4, 1), DateValue::create(2020, 10, 1)};
+=======
+        auto check_result = test_case.second;
+>>>>>>> b34c8952a1 ([BugFix] date_trunc fmt in upper case (#27024)):be/test/exprs/time_functions_test.cpp
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
