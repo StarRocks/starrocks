@@ -12,9 +12,8 @@ StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/
 
 |                              | **单表聚合** | **多表关联** | **查询改写** | **刷新策略** | **基表** |
 | ---------------------------- | ----------- | ---------- | ----------- | ---------- | -------- |
-| **StarRocks 2.5 异步物化视图** | 是 | 是 | 是 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog</li><li>已有异步物化视图</li></ul> |
-| **StarRocks 2.4 异步物化视图** | 是 | 是 | 否 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持基于 Default Catalog 的多表构建 |
-| **同步物化视图（Rollup）** | 仅部分[聚合函数](#聚合函数匹配关系) | 否 | 是 | 导入同步刷新 | 仅支持基于 Default Catalog 的单表构建 |
+| **异步物化视图** | 是 | 是 | 是 | <ul><li>异步定时刷新</li><li>手动刷新</li></ul> | 支持多表构建。基表可以来自：<ul><li>Default Catalog</li><li>External Catalog（v2.5）</li><li>已有异步物化视图（v2.5）</li><li>已有视图（v3.1）</li></ul> |
+| **同步物化视图（Rollup）** | 仅部分聚合函数 | 否 | 是 | 导入同步刷新 | 仅支持基于 Default Catalog 的单表构建 |
 
 ## 相关概念
 
