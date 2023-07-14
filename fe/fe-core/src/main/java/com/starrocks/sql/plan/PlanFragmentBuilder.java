@@ -947,6 +947,7 @@ public class PlanFragmentBuilder {
             HdfsScanNode hdfsScanNode =
                     new HdfsScanNode(context.getNextNodeId(), tupleDescriptor, "HdfsScanNode");
             hdfsScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
+            hdfsScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
             hdfsScanNode.computeStatistics(optExpression.getStatistics());
             try {
                 HDFSScanNodePredicates scanNodePredicates = hdfsScanNode.getScanNodePredicates();
