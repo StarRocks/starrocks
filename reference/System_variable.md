@@ -93,8 +93,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 > **注意**
 >
-> 1. `SET_VAR` 仅支持 MySQL 8.0 及之后的版本。
-> 2. `SET_VAR` 只能跟在 SELECT 关键字之后，必须以 `/*+` 开头，以 `*/` 结束。
+> `SET_VAR` 只能跟在 SELECT 关键字之后，必须以 `/*+` 开头，以 `*/` 结束。
 
 StarRocks 同时支持在单个语句中设置多个变量，参考如下示例：
 
