@@ -58,6 +58,7 @@ public abstract class ScanNode extends PlanNode {
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
     protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -76,8 +77,16 @@ public abstract class ScanNode extends PlanNode {
         this.canUseAnyColumn = canUseAnyColumn;
     }
 
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
     public boolean getCanUseAnyColumn() {
         return canUseAnyColumn;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
     }
 
     /**
