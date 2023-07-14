@@ -448,7 +448,7 @@ select t0.v1 from t0 where t0.v2 = (select SUM(v4) from t1) / 2;
 INNER JOIN (join-predicate [9: cast = 10: divide] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[cast(2: v2 as double) IS NOT NULL])
     EXCHANGE BROADCAST
-        PREDICATE divide(cast(7: sum as double), 2.0) IS NOT NULL
+        PREDICATE divide(cast(7: sum as double), 2) IS NOT NULL
             ASSERT LE 1
                 AGGREGATE ([GLOBAL] aggregate [{7: sum=sum(7: sum)}] group by [[]] having [null]
                     EXCHANGE GATHER
