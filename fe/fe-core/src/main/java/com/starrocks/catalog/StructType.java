@@ -130,7 +130,7 @@ public class StructType extends Type {
             if (!fields.get(i).getType().matchesType(rhsType.fields.get(i).getType())) {
                 return false;
             }
-            if (!StringUtils.equals(fields.get(i).getName(), rhsType.fields.get(i).getName())) {
+            if (!StringUtils.equalsIgnoreCase(fields.get(i).getName(), rhsType.fields.get(i).getName())) {
                 return false;
             }
         }
@@ -169,11 +169,11 @@ public class StructType extends Type {
     }
 
     public StructField getField(String fieldName) {
-        return fieldMap.get(fieldName.toLowerCase());
+        return fieldMap.get(StringUtils.lowerCase(fieldName));
     }
 
     public int getFieldPos(String fieldName) {
-        return fieldMap.get(fieldName).getPosition();
+        return fieldMap.get(StringUtils.lowerCase(fieldName)).getPosition();
     }
 
     public StructField getField(int pos) {
@@ -207,7 +207,7 @@ public class StructType extends Type {
             StructField structField = fields.get(pos);
             if (!selectedFields[pos]) {
                 fields.remove(pos);
-                fieldMap.remove(structField.getName());
+                fieldMap.remove(structField.getName().toLowerCase());
             }
         }
 

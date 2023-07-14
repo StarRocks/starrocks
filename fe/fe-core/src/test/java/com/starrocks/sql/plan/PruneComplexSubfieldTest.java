@@ -231,4 +231,19 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "[/map1/KEY, /map1/OFFSET]");
     }
+
+    @Test
+    public void testStructUpperCase() throws Exception {
+        String sql = "select map5[1].S1, map5[2].M2[4].S3 from pc0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "cast(row[(NULL, NULL, NULL); args: BOOLEAN,BOOLEAN,BOOLEAN; " +
+                "result: struct<col1 boolean, col2 boolean, col3 boolean>; args nullable: true; result nullable: true] " +
+                "as struct<a int(11), b map<int(11),int(11)>, c array<int(11)>>)");
+
+        sql = "select st1.S2, st2.SM3[1], ST3.SA3, ST5.SS3.S32 from test;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "cast(row[(NULL, NULL, NULL); args: BOOLEAN,BOOLEAN,BOOLEAN; " +
+                "result: struct<col1 boolean, col2 boolean, col3 boolean>; args nullable: true; result nullable: true] " +
+                "as struct<a int(11), b map<int(11),int(11)>, c array<int(11)>>)");
+    }
 }
