@@ -241,6 +241,11 @@ struct OlapReaderStatistics {
     int64_t get_delvec_ns = 0;
     int64_t get_delta_column_group_ns = 0;
     int64_t segment_init_ns = 0;
+    int64_t column_iterator_init_ns = 0;
+    int64_t bitmap_index_iterator_init_ns = 0;
+    int64_t zone_map_filter_ns = 0;
+    int64_t rows_key_range_filter_ns = 0;
+    int64_t bf_filter_ns = 0;
 
     int64_t segment_stats_filtered = 0;
     int64_t rows_key_range_filtered = 0;

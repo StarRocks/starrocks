@@ -122,6 +122,11 @@ private:
     RuntimeProfile::Counter* _get_delvec_timer = nullptr;
     RuntimeProfile::Counter* _get_delta_column_group_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
+    RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
+    RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
+    RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _bf_filter_timer = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
