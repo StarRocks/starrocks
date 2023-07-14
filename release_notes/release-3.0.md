@@ -55,7 +55,7 @@
 
 **函数**
 
-- 新增半结构化数据分析相关函数：[map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md)、[map_apply](../sql-reference/sql-functions/map-functions/map_apply.md)、[map_filter](../sql-reference/sql-functions/map-functions/map_filter.md)、[transform_keys](../sql-reference/sql-functions/map-functions/transform_keys.md)、[transform_values](../sql-reference/sql-functions/map-functions/transform_values.md)。
+- 新增半结构化数据分析相关函数：[map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md)、[map_apply](../sql-reference/sql-functions/map-functions/map_apply.md)、[transform_keys](../sql-reference/sql-functions/map-functions/transform_keys.md)、[transform_values](../sql-reference/sql-functions/map-functions/transform_values.md)。
 - [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) 支持 ORDER BY。
 - 新增字符串函数 [replace](../sql-reference/sql-functions/string-functions/replace.md)。
 - 新增工具函数 [current_role](../sql-reference/sql-functions/utility-functions/current_role.md)。

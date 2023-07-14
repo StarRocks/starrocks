@@ -128,7 +128,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [split](/sql-reference/sql-functions/string-functions/split.md) | 根据分隔符拆分字符串，将拆分后的所有字符串以 ARRAY 的格式返回。  |
 | [split_part](/sql-reference/sql-functions/string-functions/split_part.md) | 根据分割符拆分字符串，返回指定的分割部分。  |
 | [starts_with](/sql-reference/sql-functions/string-functions/starts_with.md) | 如果字符串以指定前缀开头返回 1，否则返回 0。  |
-| [str_to_bitmap](/sql-reference/sql-functions/string-functions/str_to_map.md) | 将给定的字符串分割成键值对 (Key-Value pair)，返回包含这些键值对的 Map。  |
 | [strleft](/sql-reference/sql-functions/string-functions/strleft.md) | 从字符串左边部分返回指定长度的字符。  |
 | [strright](/sql-reference/sql-functions/string-functions/strright.md) | 从字符串右边部分返回指定长度的字符。  |
 | [substr, substring](/sql-reference/sql-functions/string-functions/substr.md) | 返回字符串中从位置 pos 开始的指定长度的子字符串。  |
@@ -158,7 +157,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [max](/sql-reference/sql-functions/aggregate-functions/max.md)| 返回表达式中的最大值。 |
 |  [max_by](/sql-reference/sql-functions/aggregate-functions/max_by.md)| 返回与 y 的最大值相关联的 x 值。 |
 |  [min](/sql-reference/sql-functions/aggregate-functions/min.md)| 返回表达式中的最小值。 |
-|  [min_by](/sql-reference/sql-functions/aggregate-functions/min_by.md) | 返回与 y 的最小值关联的 x 值。 |
 |  [multi_distinct_count](/sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)| 返回表达式去除重复值后的行数，功能等同于 COUNT(DISTINCT expr)。 |
 |  [multi_distinct_sum](/sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)| 返回表达式去除重复值后的总和，功能等同于 sum(distinct expr)。 |
 |  [percentile_approx](/sql-reference/sql-functions/aggregate-functions/percentile_approx.md)| 返回第 p 个百分位点的近似值。 |
@@ -224,8 +222,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
-|  [all_match](/sql-reference/sql-functions/array-functions/all_match.md)| 判断数组中的所有元素是否都匹配谓词中指定的条件。 |
-|  [any_match](/sql-reference/sql-functions/array-functions/any_match.md)| 判断数组中是否有元素匹配谓词中指定的条件。 |
 |  [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)| 将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。 |
 |  [array_append](/sql-reference/sql-functions/array-functions/array_append.md)| 在数组末尾添加一个新的元素。 |
 |  [array_avg](/sql-reference/sql-functions/array-functions/array_avg.md)| 求取一个ARRAY中的所有数据的平均数。 |
@@ -236,7 +232,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [array_difference](/sql-reference/sql-functions/array-functions/array_difference.md)| 对于数值型数组，返回相邻两个元素的差(从后者中减去前者)构成的数组。 |
 |  [array_distinct](/sql-reference/sql-functions/array-functions/array_distinct.md)| 数组元素去重。 |
 |  [array_filter](/sql-reference/sql-functions/array-functions/array_filter.md)| 根据设定的过滤条件返回数组中匹配的元素。 |
-|  [array_generate](/sql-reference/sql-functions/array-functions/array_generate.md)| 生成一个包含数值元素的数组，数值范围在 start 和 end 之间，步长为 step。 |
 |  [array_intersect](/sql-reference/sql-functions/array-functions/array_intersect.md)| 对于多个同类型数组，返回交集。 |
 |  [array_join](/sql-reference/sql-functions/array-functions/array_join.md)| 将数组中的所有元素连接生成一个字符串。 |
 |  [array_length](/sql-reference/sql-functions/array-functions/array_length.md)| 计算数组中的元素个数。 |
@@ -251,8 +246,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [array_sortby](/sql-reference/sql-functions/array-functions/array_sortby.md)| 对数组中的元素根据另外一个键值数组元素或者 Lambda 函数生成的键值数组元素进行升序排列。 |
 |  [array_sum](/sql-reference/sql-functions/array-functions/array_sum.md)| 对数组中的所有元素求和。 |
 |  [array_to_bitmap](/sql-reference/sql-functions/array-functions/array_to_bitmap.md)| 将 array 类型转化为 bitmap 类型。 |
-|  [cardinality](/sql-reference/sql-functions/array-functions/cardinality.md)| 计算数组中的元素个数， |
-|  [element_at](/sql-reference/sql-functions/array-functions/element_at.md)| 获取 Array 数组中指定位置的元素。 |
 |  [reverse](/sql-reference/sql-functions/string-functions/reverse.md)| 将字符串或数组反转，返回的字符串或数组的顺序和源字符串或数组的顺序相反。 |
 |  [unnest](/sql-reference/sql-functions/array-functions/unnest.md)| 表函数，用于将一个数组展开成多行。 |
 
