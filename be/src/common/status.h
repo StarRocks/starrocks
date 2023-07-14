@@ -82,7 +82,7 @@ public:
     //   overall_status.update(new_status);
     //
     void update(const Status& new_status);
-    void update(Status&& new_status);
+    void update(Status && new_status);
 
     static Status OK() { return Status(); }
 
@@ -189,14 +189,14 @@ public:
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
     template <typename T>
-    void set_t_status(T* status_container) const {
+    void set_t_status(T * status_container) const {
         to_thrift(&status_container->status);
         status_container->__isset.status = true;
     }
 
     // Convert into TStatus.
-    void to_thrift(TStatus* status) const;
-    void to_protobuf(StatusPB* status) const;
+    void to_thrift(TStatus * status) const;
+    void to_protobuf(StatusPB * status) const;
 
     std::string get_error_msg() const {
         auto msg = message();
