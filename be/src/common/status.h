@@ -18,9 +18,9 @@ class StatusPB;
 class TStatus;
 
 template <typename T>
-class StatusOr;
+class [[nodiscard]] StatusOr;
 
-class Status {
+class [[nodiscard]] Status {
 public:
     Status() {}
     ~Status() noexcept {
