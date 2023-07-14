@@ -116,6 +116,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -1299,7 +1300,7 @@ public class GlobalStateMgr {
             throw t;
         }
 
-        createOrUpdateBuiltinStorageVolume();
+        createBuiltinStorageVolume();
     }
 
     // start all daemon threads only running on Master
@@ -4031,12 +4032,15 @@ public class GlobalStateMgr {
         return metaContext;
     }
 
-    public void createOrUpdateBuiltinStorageVolume() {
+    public void createBuiltinStorageVolume() {
         try {
-            String builtinStorageVolumeId = storageVolumeMgr.createOrUpdateBuiltinStorageVolume();
+            String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
             if (!builtinStorageVolumeId.isEmpty()) {
                 authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
             }
+        } catch (InvalidConfException e) {
+            LOG.fatal(e.getMessage());
+            System.exit(-1);
         } catch (DdlException | AlreadyExistsException e) {
             LOG.warn("Failed to create or update builtin storage volume", e);
         } catch (PrivilegeException e) {
