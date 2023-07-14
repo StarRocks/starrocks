@@ -48,7 +48,9 @@ public:
     LocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                 const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
             : SourceOperator(factory, id, "local_exchange_source", plan_node_id, driver_sequence),
-              _memory_manager(memory_manager) {}
+              _memory_manager(memory_manager) {
+        _local_memory_limit = _memory_manager->get_memory_limit_per_driver() * 0.8;
+    }
 
     Status add_chunk(ChunkPtr chunk);
 
@@ -82,20 +84,36 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+    bool releaseable() const override { return true; }
+
+    void enter_release_memory_mode() override;
+    void set_execute_mode(int performance_level) override;
+
 private:
     ChunkPtr _pull_passthrough_chunk(RuntimeState* state);
 
     ChunkPtr _pull_shuffle_chunk(RuntimeState* state);
 
+<<<<<<< HEAD
     bool _local_buffer_almost_full() const {
         return _local_memory_usage >= _memory_manager->get_memory_limit_per_driver() * 0.8;
     }
+=======
+    ChunkPtr _pull_key_partition_chunk(RuntimeState* state);
+
+    int64_t _key_partition_max_rows() const;
+
+    PendingPartitionChunks& _max_row_partition_chunks();
+
+    bool _local_buffer_almost_full() const { return _local_memory_usage >= _local_memory_limit; }
+>>>>>>> c55f076016 ([Enhancement] auto release local exchange buffer data under spill mode (#25053))
 
     bool _is_finished = false;
     std::queue<ChunkPtr> _full_chunk_queue;
     std::queue<PartitionChunk> _partition_chunk_queue;
     size_t _partition_rows_num = 0;
     size_t _local_memory_usage = 0;
+    size_t _local_memory_limit = 0;
 
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
