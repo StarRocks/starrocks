@@ -698,6 +698,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             // For hive/iceberg/hudi partition & automatic partition
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            if (context.listPartitionDesc().size() > 0) {
+                throw new ParsingException("Does not support creating partitions in advance");
+            }
             listPartitionDesc.setAutoPartitionTable(true);
             return listPartitionDesc;
         }
