@@ -35,4 +35,3 @@ SELECT is_active, inactive_reason FROM information_schema.materialized_views WHE
 -- result:
 false	base-table dropped: ss
 -- !result
-REFRESH MATERIALIZED VIEW mv1;
