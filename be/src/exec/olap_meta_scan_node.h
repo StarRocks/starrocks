@@ -27,7 +27,6 @@ class OlapMetaScanNode final : public MetaScanNode {
 public:
     OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~OlapMetaScanNode() override = default;
-    ;
 
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
