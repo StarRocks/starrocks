@@ -84,6 +84,8 @@ void start_be() {
 
     exec_env->wait_for_finish();
 
+    http_service->stop();
+    http_service->join();
     http_service.reset();
 
     brpc_server.Stop(0);
