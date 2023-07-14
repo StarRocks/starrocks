@@ -2,7 +2,7 @@
 
 ## 功能
 
-对 ARRAY 中的所有元素求和。
+对数组中的所有元素求和。
 
 从 2.5 版本开始，array_sum() 支持将 lambda 表达式作为输入参数，作为高阶函数使用。array_sum() 不直接支持 lambda，需要对 array_map() 转换后的 array 进行 array_sum() 操作。
 
