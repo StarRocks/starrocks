@@ -65,6 +65,7 @@ export_env_from_conf() {
     done < $1
 }
 
+<<<<<<< HEAD
 # Read the config [mem_limit] from configuration file of BE and set the upper limit of TCMalloc memory allocation
 # if mem_limit is not set, use 90% of machine memory
 export_mem_limit_from_conf() {
@@ -162,6 +163,8 @@ export_mem_limit_from_conf() {
     return 0
 }
 
+=======
+>>>>>>> 34e45a782b ([Refactor] Remove tcmalloc (#27130))
 export_shared_envvars() {
     # compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
     export DORIS_HOME="$STARROCKS_HOME"

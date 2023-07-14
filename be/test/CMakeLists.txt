@@ -423,28 +423,6 @@ add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 
 # =================================================
-# bytes_test requires tcmalloc which conflicts with sanitizer.
-# Thus we need a standalone binary without sanitizer to test it.
-add_executable(bytes_test
-        ./column/bytes_test.cpp
-        ../src/service/mem_hook.cpp
-        )
-
-set_target_properties(bytes_test PROPERTIES
-        COMPILE_OPTIONS
-        "-lpthread;-std=gnu++17;-g;-fno-sanitize=address")
-
-set_target_properties(bytes_test PROPERTIES
-        LINK_OPTIONS
-        "-static-libstdc++;-static-libgcc;-fno-sanitize=address")
-
-TARGET_LINK_LIBRARIES(bytes_test
-        pthread
-        gtest
-        tcmalloc
-        )
-
-# =================================================
 # test cases must be compiled as a standalone binary
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
 ADD_BE_TEST(storage/lake/compaction_task_test)
