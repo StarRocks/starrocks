@@ -1,4 +1,4 @@
--- name: test_continuous_insert
+-- name: __test_continuous_insert
 CREATE TABLE `allstring` (
   `v1` varchar(20) NOT NULL COMMENT ""
 ) ENGINE=OLAP 
