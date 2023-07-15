@@ -51,13 +51,13 @@ public:
     using A::A;
 
     // allocate more than caller required
-    constexpr T* allocate(size_t n) {
+    T* allocate(size_t n) {
         T* x = A::allocate(n + RawAllocator::_trailing);
         return x;
     }
 
     // deallocate the storage referenced by the pointer p
-    constexpr void deallocate(T* p, size_t n) { A::deallocate(p, (n + RawAllocator::_trailing)); }
+    void deallocate(T* p, size_t n) { A::deallocate(p, (n + RawAllocator::_trailing)); }
 
     // do not initialized allocated.
     template <typename U>
