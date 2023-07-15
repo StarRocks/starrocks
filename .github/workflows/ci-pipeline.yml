@@ -535,7 +535,29 @@ jobs:
           echo ">>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+      - name: Prepare coverage files
+        run: |
+          cd ${{ github.workspace }}/fe/fe-core
+          cp -rf ${{ steps.run_ut.outputs.COV_DIR }} target/
 
+      - name: Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
+          dry_run: false
+          name: fe-ut
+          fail_ci_if_error: false
+          verbose: true
+      - name: Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
+          dry_run: false
+          name: fe-total
+          fail_ci_if_error: false
+          verbose: true
       - name: Upload log
         if: always()
         uses: actions/upload-artifact@v3
