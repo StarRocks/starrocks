@@ -1512,6 +1512,11 @@ Status OlapTableSink::_send_chunk_with_colocate_index(Chunk* chunk) {
 Status OlapTableSink::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& selection_idx) {
     Status err_st = Status::OK();
     for (auto& it : channel->_node_channels) {
+        NodeChannel* node = it.second.get();
+        if (channel->is_failed_channel(node)) {
+            // skip open fail channel
+            continue;
+        }
         int64_t be_id = it.first;
         _node_select_idx.clear();
         _node_select_idx.reserve(selection_idx.size());
@@ -1530,7 +1535,7 @@ Status OlapTableSink::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel, s
                 }
             }
         }
-        NodeChannel* node = it.second.get();
+
         auto st = node->add_chunk(chunk, _tablet_ids, _node_select_idx, 0, _node_select_idx.size());
 
         if (!st.ok()) {
