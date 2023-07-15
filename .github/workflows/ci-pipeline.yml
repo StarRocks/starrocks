@@ -32,11 +32,18 @@ jobs:
           PR_NUMBER: ${{ github.event.number }}
         run: |
           echo $PR_NUMBER > pr_num.txt
+          echo ${{ github.sha }} > head_sha.txt
       - name: Upload the PR number
         uses: actions/upload-artifact@v2
         with:
           name: pr_num
           path: ./pr_num.txt
+          retention-days: 1
+      - name: Upload the PR HEAD REF
+        uses: actions/upload-artifact@v2
+        with:
+          name: head_sha
+          path: ./head_sha.txt
           retention-days: 1
 
   doc-checker:
@@ -406,9 +413,71 @@ jobs:
           fail_on_error: true
           level: error
 
+  sonarcloud-fe-checker:
+    runs-on: ubuntu-latest
+    needs: fe-checker
+    if: needs.fe-checker.outputs.output1 == 'true'
+    name: FE Sonarcloud Check
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: 11
+          distribution: 'adopt'
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven
+
+      - name: Setup thrift
+        uses: dodopizza/setup-thrift@v1
+        with:
+          version: 0.13.0
+
+      - name: Analyze FE
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169 # ${{ secrets.SONAR_TOKEN }}
+        run: |
+          thrift --version
+          whereis thrift
+          export STARROCKS_HOME=${{ github.workspace }}
+          source env.sh
+          mkdir -p thirdparty/installed/bin/
+          cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
+          cd ${{ github.workspace }}/fe
+          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+
   fe-ut:
     runs-on: [self-hosted, normal]
-    needs: fe-codestyle-check
+    needs: [fe-codestyle-check, sonarcloud-fe-checker]
     name: FE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -459,37 +528,6 @@ jobs:
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
-      - name: Prepare coverage files
-        run: |
-          cd ${{ github.workspace }}/fe/fe-core
-          cp -rf ${{ steps.run_ut.outputs.COV_DIR }} target/
-
-      - name: Coverage Report
-        uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
-          dry_run: false
-          name: fe-ut
-          fail_ci_if_error: false
-          verbose: true
-
-      - name: Upload Result
-        if: steps.run_ut.outcome == 'success'
-        run: |
-          branch=${{ steps.branch.outputs.branch }}
-          bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ -rf
-          ossutil64 --config-file ~/.ossutilconfig cp fe/fe-core/target/result/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
-
-      - name: Upload UT XML
-        if: always()
-        run: |
-          branch=${{ steps.branch.outputs.branch }}
-          bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ -rf
-          ossutil64 --config-file ~/.ossutilconfig cp ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
-
       - name: Upload log
         if: always()
         uses: actions/upload-artifact@v3
@@ -509,7 +547,7 @@ jobs:
 
   build:
     runs-on: [self-hosted, normal]
-    needs: [be-checker, fe-checker, be-ut, fe-ut, thirdparty-update]
+    needs: [be-checker, fe-checker, be-ut, clang-tidy, fe-ut, thirdparty-update]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -517,7 +555,7 @@ jobs:
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
-    if: always() && (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success')
+    if: always() && (needs.be-ut.result == 'success' && needs.clang-tidy.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success' && needs.clang-tidy.result == 'success')
     steps:
       - name: CLEAN
         run: |
@@ -539,11 +577,19 @@ jobs:
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }}
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} 
 
       - name: build result
         run: |
           echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
+          echo ${{ steps.run_build.outputs.BASE_VERSION }} > ./base_version.txt
+
+      - name: Upload the Base Version
+        uses: actions/upload-artifact@v2
+        with:
+          name: base_version
+          path: ./base_version.txt
+          retention-days: 1
 
       - name: clean ECI
         if: always()
@@ -594,7 +640,9 @@ jobs:
           cd ci-tool && source lib/init.sh
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output oss://${bucket_prefix}-ci-release/${{steps.branch.outputs.branch}}/Release/pr/${{needs.build.outputs.build_output_tar}}
+          tar_path="oss://${bucket_prefix}-ci-release/${{steps.branch.outputs.branch}}/Release/pr/${{needs.build.outputs.build_output_tar}}"
+          echo ${tar_path}
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
 
       - run: |
           echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
@@ -659,7 +707,7 @@ jobs:
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
           ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ -rf
           ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
-     
+
       - name: Upload log
         uses: actions/upload-artifact@v3
         if: always()
@@ -667,7 +715,7 @@ jobs:
           name: SQL-Tester Log
           path: test/log/
           retention-days: 1
-          
+
       - name: Clean ENV
         if: always()
         run: |
@@ -707,7 +755,7 @@ jobs:
           rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull
 
           cd ${{ github.workspace }}/ci-tool
-          ./bin/run-admit.sh
+          ./bin/run-admit.sh --pr ${PR_NUMBER} --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Upload Admit XML
         if: success() || failure()

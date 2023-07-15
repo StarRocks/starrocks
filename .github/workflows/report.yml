@@ -27,9 +27,11 @@ jobs:
       github.event.workflow_run.event == 'pull_request'
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
+      HEAD_SHA: ${{ steps.pr_details.outputs.HEAD_SHA }}
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
+      BASE_VERSION: ${{ steps.pr_details.outputs.BASE_VERSION }}
     steps:
-      - name: Download workflow artifact
+      - name: Download workflow artifact - PR
         uses: dawidd6/action-download-artifact@v2.11.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -37,23 +39,67 @@ jobs:
           workflow: test_fork.yml
           name: 'pr_num'
 
-      - name: Read the pr_num file
+      - name: Download workflow artifact - HEAD REF
+        uses: dawidd6/action-download-artifact@v2.11.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ github.event.workflow_run.id }}
+          workflow: test_fork.yml
+          name: 'head_sha'
+
+      - name: Read the pr num file
         id: pr_num_reader
         uses: juliangruber/read-file-action@v1
         with:
           path: ./pr_num.txt
+
+      - name: Read the pr head ref
+        id: head_sha_reader
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: ./head_sha.txt
+
+      - name: Download workflow artifact - BASE VERSION
+        uses: dawidd6/action-download-artifact@v2.11.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ github.event.workflow_run.id }}
+          workflow: test_fork.yml
+          name: 'base_version'
+          if_no_artifact_found: success
+
+      - name: Check Base Version File Exist
+        id: check_version_file_exist
+        run: |
+          if [[ -e ./base_version.txt ]]; then
+            echo "is_exist=true" >> $GITHUB_OUTPUT
+          fi
+      - name: Read the base version file
+        id: base_version_reader
+        if: steps.check_version_file_exist.outputs.is_exist == 'true'
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: ./base_version.txt
 
       - name: PR DETAILS
         id: pr_details
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.pr_num_reader.outputs.content }}
+          HEAD_SHA: ${{ steps.head_sha_reader.outputs.content }}
           REPO: ${{ github.repository }}
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
+          HEAD_SHA=`echo ${HEAD_SHA}`
           base_ref=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName -q .baseRefName`
-          echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT 
-          echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT 
+          echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
+          echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
+          echo "HEAD_SHA=${HEAD_SHA}" >> $GITHUB_OUTPUT
+
+          if [[ ${{ steps.check_version_file_exist.outputs.is_exist }} == 'true' ]]; then
+            base_version=`echo "${{ steps.base_version_reader.outputs.content }}"`
+            echo "BASE_VERSION=${base_version}" >> $GITHUB_OUTPUT
+          fi
 
   FE-UT-REPORT:
     runs-on: [ self-hosted, quick ]
@@ -61,6 +107,7 @@ jobs:
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       branch: ${{ needs.INFO.outputs.BASE_REF }}
+      BASE_VERSION: ${{ needs.INFO.outputs.BASE_VERSION }}
     steps:
       - name: CLEAN
         run: |
@@ -78,16 +125,18 @@ jobs:
         env:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
-          mkdir fe-ut && cd fe-ut
-          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/
-          size=$(ossutil64 --config-file ~/.ossutilconfig du ${oss_path} | grep "total du size" | awk -F':' '{print $NF}')
+          mkdir fe && cd fe
+          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Report/${PR_NUMBER}/
+          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+            tar zxf fe_ut_report.tar.gz
           fi
 
       - name: Publish UT Report
         uses: mikepenz/action-junit-report@v3
+        id: publish_report
         if: steps.download-ut-xml.outputs.size != '0'
         env:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -97,24 +146,49 @@ jobs:
           detailed_summary: true
           fail_on_failure: true
           commit: ${{ github.event.workflow_run.head_sha }}
-          report_paths: ./fe-ut/*.xml
+          report_paths: ./fe/fe-core/target/surefire-reports/*.xml
 
-      # Incremental Coverage
-      - name: Download Incremental Coverage Result
-        id: download-incremental-result
+      - name: Merge FE Coverage
+        if: steps.download-ut-xml.outputs.size != '0'
         env:
-          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
+          fe_path: ${{ github.workspace }}/fe
         run: |
-          mkdir fe-result && cd fe-result
-          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/
-          size=$(ossutil64 --config-file ~/.ossutilconfig du ${oss_path} | grep "total du size" | awk -F':' '{print $NF}')
-          echo "size=${size}" >> $GITHUB_OUTPUT
-          if [[ "$size" != "0" ]]; then
-            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+          set -ex
+          export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+          export PATH=$JAVA_HOME/bin:$PATH;
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          if [[ -e ${fe_path}/test.exec ]]; then
+            java -jar package/jacococli.jar merge ${fe_path}/fe-core/target/jacoco.exec ${fe_path}/test.exec --destfile ${fe_path}/merge.exec
+          else
+            cp ${fe_path}/fe-core/target/jacoco.exec ${fe_path}/merge.exec
           fi
 
-      - name: Publish Incremental Coverage Report
-        if: steps.download-incremental-result.outputs.size != '0'
+      - name: Generate XML Report
+        env:
+          package_path: ${{ github.workspace }}/ci-tool/package
+          fe_path: ${{ github.workspace }}/fe
+          fe_core_path: ${{ github.workspace }}/fe/fe-core
+        if: steps.publish_report.outcome == 'success'
+        run: |
+          set -x
+          rm -rf result
+          export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+          export PATH=$JAVA_HOME/bin:$PATH;
+          cd ${fe_core_path}/target/classes;
+          rm -rf com/starrocks/thrift/;
+          rm -rf com/starrocks/proto/;
+          rm -rf org;
+          rm -rf com/starrocks/sql/parser;
+          rm -rf com/starrocks/builtins;
+          rm -rf com/starrocks/common/Version.class;
+          cd ${{ github.workspace }};
+          java -jar $package_path/jacococli.jar report ${fe_path}/merge.exec --classfiles ${fe_core_path}/target/classes/ \
+            --html ./result --xml ${{ github.workspace }}/coverage.xml \
+            --sourcefiles ${fe_core_path}/src/main/java/ --encoding utf-8 --name fe-coverage
+
+      # Incremental Total Coverage
+      - name: Publish Incremental Coverage Report - Total
+        if: success()
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           time_count=0
@@ -126,11 +200,28 @@ jobs:
               exit 1
             fi
             timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover ${{ github.workspace }}/fe-result/ --github-token ${{ secrets.PAT }} \
+              --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
             pull_status=$?
             time_count=`expr $time_count + 1`
           done
+          rm -rf coverchecker
+          rm -rf ci-tools
+
+      # total coverage
+      - name: Coverage Report
+        uses: codecov/codecov-action@v3
+        if: success()
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ github.workspace }}/coverage.xml
+          dry_run: false
+          name: fe-total
+          fail_ci_if_error: false
+          verbose: true
+          override_pr: ${{ needs.INFO.outputs.PR_NUMBER }}
+          override_branch: ${{ needs.INFO.outputs.BASE_REF }}
+          override_commit: ${{ needs.INFO.outputs.HEAD_SHA }}
 
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
@@ -157,7 +248,7 @@ jobs:
         run: |
           mkdir sql-tester-result && cd sql-tester-result
           oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/
-          size=$(ossutil64 --config-file ~/.ossutilconfig du ${oss_path} | grep "total du size" | awk -F':' '{print $NF}')
+          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
@@ -207,7 +298,7 @@ jobs:
         run: |
           mkdir admit-result && cd admit-result
           oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/Admit-XML/${PR_NUMBER}/
-          size=$(ossutil64 --config-file ~/.ossutilconfig du ${oss_path} | grep "total du size" | awk -F':' '{print $NF}')
+          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
