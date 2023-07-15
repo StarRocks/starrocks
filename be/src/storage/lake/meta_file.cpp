@@ -225,7 +225,7 @@ void MetaFileBuilder::handle_failure() {
 }
 
 MetaFileReader::MetaFileReader(const std::string& filepath, bool fill_cache) {
-    RandomAccessFileOptions opts(!fill_cache);
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
     auto rf = fs::new_random_access_file(opts, filepath);
     if (rf.ok()) {
         _access_file = std::move(*rf);
@@ -294,7 +294,7 @@ Status MetaFileReader::get_del_vec(TabletManager* tablet_mgr, uint32_t segment_i
             return Status::InternalError("Can't find delvec file name");
         }
         const auto& delvec_name = iter2->second.name();
-        RandomAccessFileOptions opts(true);
+        RandomAccessFileOptions opts{.skip_fill_local_cache = true};
         ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
                                           opts, tablet_mgr->delvec_location(_tablet_meta->id(), delvec_name)));
         RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));

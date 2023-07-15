@@ -90,8 +90,6 @@ struct SequentialFileOptions {
 };
 
 struct RandomAccessFileOptions {
-    RandomAccessFileOptions(bool a) : skip_fill_local_cache(a){};
-    RandomAccessFileOptions() : skip_fill_local_cache(false){};
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
