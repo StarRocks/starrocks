@@ -10,4 +10,8 @@ coverage:
         target: 60%
         threshold: 5%
         only_pulls: true
+      fe-ut:
+        target: 60%
+        threshold: 5%
+        only_pulls: true
     patch: false
