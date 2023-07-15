@@ -58,7 +58,10 @@ url = http://${mysql-client:host}:${mysql-client:http_port}
 
 ## Running your test
 ```shell
+# run concurrent cases
 $ python3 run.py 
+# run sequential cases
+$ python3 run.py -a sequential -c 1 -v
 ```
 
 # <span id="Parameters">Run Parameters<span>

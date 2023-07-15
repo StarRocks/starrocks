@@ -45,7 +45,7 @@ record_mode = os.environ.get("record_mode", "false") == "true"
 case_list = choose_cases.choose_cases(record_mode).case_list
 
 if len(case_list) == 0:
-    print("** ERROR: No case! **")
+    print("** INFO: No case! **")
     sys.exit(0)
 
 
