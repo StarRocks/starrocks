@@ -418,10 +418,18 @@ jobs:
     needs: fe-checker
     if: needs.fe-checker.outputs.output1 == 'true'
     name: FE Sonarcloud Check
+    env:
+      PR_NUMBER: ${{ github.event.number }}
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
       - name: Checkout PR
         run: |
