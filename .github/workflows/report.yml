@@ -32,7 +32,7 @@ jobs:
       BASE_VERSION: ${{ steps.pr_details.outputs.BASE_VERSION }}
     steps:
       - name: Download workflow artifact - PR
-        uses: dawidd6/action-download-artifact@v2.11.0
+        uses: dawidd6/action-download-artifact@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ github.event.workflow_run.id }}
@@ -40,7 +40,7 @@ jobs:
           name: 'pr_num'
 
       - name: Download workflow artifact - HEAD REF
-        uses: dawidd6/action-download-artifact@v2.11.0
+        uses: dawidd6/action-download-artifact@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ github.event.workflow_run.id }}
@@ -60,7 +60,7 @@ jobs:
           path: ./head_sha.txt
 
       - name: Download workflow artifact - BASE VERSION
-        uses: dawidd6/action-download-artifact@v2.11.0
+        uses: dawidd6/action-download-artifact@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ github.event.workflow_run.id }}
