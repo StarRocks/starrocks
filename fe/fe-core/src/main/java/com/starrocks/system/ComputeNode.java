@@ -24,6 +24,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -91,6 +92,12 @@ public class ComputeNode implements IComputable, Writable {
 
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;
+
+    @SerializedName("workerGroupId")
+    private long workerGroupId = 0;
+
+    @SerializedName("warehouseId")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     private volatile int numRunningQueries = 0;
     private volatile long memLimitBytes = 0;
@@ -200,6 +207,22 @@ public class ComputeNode implements IComputable, Writable {
 
     public String getHeartbeatErrMsg() {
         return heartbeatErrMsg;
+    }
+
+    public long getWorkerGroupId() {
+        return workerGroupId;
+    }
+
+    public void setWorkerGroupId(long workerGroupId) {
+        this.workerGroupId = workerGroupId;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     // for test only

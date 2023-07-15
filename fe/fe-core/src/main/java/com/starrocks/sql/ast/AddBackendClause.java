@@ -29,4 +29,8 @@ public class AddBackendClause extends BackendClause {
         super(hostPorts, pos);
     }
 
+    public AddBackendClause(List<String> hostPorts, NodePosition pos, String warehouseName) {
+        super(hostPorts, pos, warehouseName);
+    }
+
 }

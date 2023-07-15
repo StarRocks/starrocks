@@ -97,16 +97,16 @@ public class SystemInfoService implements GsonPostProcessable {
     public static final String DEFAULT_CLUSTER = "default_cluster";
 
     @SerializedName(value = "be")
-    private volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
+    protected volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
 
     @SerializedName(value = "ce")
-    private volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
+    protected volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
 
     private long lastBackendIdForCreation = -1;
     private long lastBackendIdForOther = -1;
 
-    private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
-    private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
+    protected volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
+    protected volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
 
     public SystemInfoService() {
         idToBackendRef = new ConcurrentHashMap<>();
@@ -161,7 +161,7 @@ public class SystemInfoService implements GsonPostProcessable {
         LOG.info("finished to add {} ", newComputeNode);
     }
 
-    private void setComputeNodeOwner(ComputeNode computeNode) {
+    protected void setComputeNodeOwner(ComputeNode computeNode) {
         computeNode.setBackendState(BackendState.using);
     }
 
@@ -204,7 +204,7 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
     }
 
-    private void setBackendOwner(Backend backend) {
+    protected void setBackendOwner(Backend backend) {
         backend.setBackendState(BackendState.using);
     }
 
@@ -333,7 +333,7 @@ public class SystemInfoService implements GsonPostProcessable {
         dropBackend(backend.getHost(), backend.getHeartbeatPort(), false);
     }
 
-    private void checkUnforce(Backend droppedBackend) {
+    protected void checkUnforce(Backend droppedBackend) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
         List<Long> dbs = globalStateMgr.getDbIds();
@@ -1078,6 +1078,26 @@ public class SystemInfoService implements GsonPostProcessable {
             idToReportVersion.put(beId, new AtomicLong(0));
         }
         idToReportVersionRef = ImmutableMap.copyOf(idToReportVersion);
+    }
+
+    public void addBackends(List<Pair<String, Integer>> hostPortPairs, String warehouseName)
+            throws DdlException {
+        throw new DdlException("not implemented");
+    }
+
+    public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs, String warehouseName)
+            throws DdlException {
+        throw new DdlException("not implemented");
+    }
+
+    public void dropComputeNodes(List<Pair<String, Integer>> hostPortPairs, String warehouseName)
+            throws DdlException {
+        throw new DdlException("not implemented");
+    }
+
+    public void removeNodeById(long nodeId) {
+        idToBackendRef.remove(nodeId);
+        idToComputeNodeRef.remove(nodeId);
     }
 }
 

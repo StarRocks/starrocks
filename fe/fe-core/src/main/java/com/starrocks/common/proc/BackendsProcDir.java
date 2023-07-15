@@ -51,6 +51,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -72,7 +73,7 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
                 .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
         if (RunMode.allowCreateLakeTable()) {
-            builder.add("StarletPort").add("WorkerId");
+            builder.add("StarletPort").add("WorkerId").add("WarehouseName");
         }
         TITLE_NAMES = builder.build();
     }
@@ -198,6 +199,8 @@ public class BackendsProcDir implements ProcDirInterface {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(backendId);
                 backendInfo.add(String.valueOf(workerId));
+                Warehouse wh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(backend.getWarehouseId());
+                backendInfo.add(wh.getName());
             }
 
             comparableBackendInfos.add(backendInfo);

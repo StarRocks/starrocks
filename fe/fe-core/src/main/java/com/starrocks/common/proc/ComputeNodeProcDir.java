@@ -27,6 +27,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,7 +49,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("Version")
                 .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
         if (RunMode.allowCreateLakeTable()) {
-            builder.add("StarletPort").add("WorkerId");
+            builder.add("StarletPort").add("WorkerId").add("WarehouseName");
         }
         TITLE_NAMES = builder.build();
     }
@@ -136,6 +137,8 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));
+                Warehouse wh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(computeNode.getWarehouseId());
+                computeNodeInfo.add(wh.getName());
             }
 
             comparableComputeNodeInfos.add(computeNodeInfo);

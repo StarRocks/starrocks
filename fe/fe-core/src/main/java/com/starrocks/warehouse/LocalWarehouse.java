@@ -23,10 +23,13 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.system.ComputeNode;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 // on-premise
 public class LocalWarehouse extends Warehouse {
@@ -87,7 +90,8 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public void dropSelf() throws DdlException {
-        releaseComputeNodes();
+        deleteWorkerFromStarMgr();
+        dropNodeFromSystem();
     }
 
     @Override
@@ -100,8 +104,17 @@ public class LocalWarehouse extends Warehouse {
         this.state = WarehouseState.RUNNING;
     }
 
-    private void releaseComputeNodes() throws DdlException {
+    private void deleteWorkerFromStarMgr() throws DdlException {
         long workerGroupId = cluster.getWorkerGroupId();
         GlobalStateMgr.getCurrentStarOSAgent().deleteWorkerGroup(workerGroupId);
+    }
+
+    private void dropNodeFromSystem() {
+        List<ComputeNode> nodes = GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream().
+                filter(cn -> cn.getWarehouseId() == this.getId()).collect(Collectors.toList());
+
+        for (ComputeNode node : nodes) {
+            GlobalStateMgr.getCurrentSystemInfo().removeNodeById(node.getId());
+        }
     }
 }

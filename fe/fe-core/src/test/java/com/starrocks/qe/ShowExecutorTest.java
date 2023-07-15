@@ -77,6 +77,7 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
@@ -104,6 +105,8 @@ import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -774,6 +777,7 @@ public class ShowExecutorTest {
             StarOSAgent getStarOSAgent() {
                 return starosAgent;
             }
+
         };
 
         new MockUp<SystemInfoService>() {
@@ -799,12 +803,19 @@ public class ShowExecutorTest {
             }
         };
 
+        new MockUp<WarehouseManager>() {
+            @Mock
+            Warehouse getWarehouse(long id) {
+                return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID, null);
+            }
+        };
 
         ShowBackendsStmt stmt = new ShowBackendsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(28, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(29, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
         Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(23).getName());
         Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
@@ -871,6 +882,14 @@ public class ShowExecutorTest {
             @Mock
             long getWorkerIdByBackendId(long backendId) {
                 return 5;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            Warehouse getWarehouse(long id) {
+                return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID, null);
             }
         };
 

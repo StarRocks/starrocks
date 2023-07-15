@@ -887,11 +887,11 @@ modifyFrontendHostClause
   ;
 
 addBackendClause
-   : ADD BACKEND string (',' string)*
+   : ADD BACKEND string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString)?
    ;
 
 dropBackendClause
-   : DROP BACKEND string (',' string)* FORCE?
+   : DROP BACKEND string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString)? FORCE?
    ;
 
 decommissionBackendClause
@@ -903,11 +903,11 @@ modifyBackendHostClause
    ;
 
 addComputeNodeClause
-   : ADD COMPUTE NODE string (',' string)*
+   : ADD COMPUTE NODE string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString)?
    ;
 
 dropComputeNodeClause
-   : DROP COMPUTE NODE string (',' string)*
+   : DROP COMPUTE NODE string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString)?
    ;
 
 modifyBrokerClause

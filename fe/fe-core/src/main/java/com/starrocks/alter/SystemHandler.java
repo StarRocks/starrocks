@@ -142,7 +142,9 @@ public class SystemHandler extends AlterHandler {
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs(),
+                    addBackendClause.getWarehouseName());
+
         } else if (alterClause instanceof ModifyBackendAddressClause) {
             // update Backend Address
             ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
@@ -192,10 +194,12 @@ public class SystemHandler extends AlterHandler {
             GlobalStateMgr.getCurrentState().getLoadInstance().setLoadErrorHubInfo(clause.getProperties());
         } else if (alterClause instanceof AddComputeNodeClause) {
             AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().
+                    addComputeNodes(addComputeNodeClause.getHostPortPairs(), addComputeNodeClause.getWarehouseName());
         } else if (alterClause instanceof DropComputeNodeClause) {
             DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs(),
+                    dropComputeNodeClause.getWarehouseName());
         } else if (alterClause instanceof CreateImageClause) {
             GlobalStateMgr.getCurrentState().triggerNewImage();
         } else if (alterClause instanceof CleanTabletSchedQClause) {

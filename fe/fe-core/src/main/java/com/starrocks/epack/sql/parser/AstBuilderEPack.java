@@ -29,12 +29,17 @@ import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
@@ -554,4 +559,53 @@ public class AstBuilderEPack extends AstBuilder {
             throw new ParsingException(PARSER_ERROR_MSG.invalidTableFormat(qualifiedName.toString()));
         }
     }
+    // add/drop be or cn with warehouse
+    @Override
+    public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
+        List<String> backends =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (context.warehouseName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            whName = identifier.getValue();
+        }
+        return new AddBackendClause(backends, createPos(context), whName);
+    }
+
+    @Override
+    public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
+        List<String> backends =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (context.warehouseName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            whName = identifier.getValue();
+        }
+        return new DropBackendClause(backends, context.FORCE() != null, createPos(context), whName);
+    }
+
+    @Override
+    public ParseNode visitAddComputeNodeClause(StarRocksParser.AddComputeNodeClauseContext context) {
+        List<String> hostPorts =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (context.warehouseName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            whName = identifier.getValue();
+        }
+        return new AddComputeNodeClause(hostPorts, whName);
+    }
+
+    @Override
+    public ParseNode visitDropComputeNodeClause(StarRocksParser.DropComputeNodeClauseContext context) {
+        List<String> hostPorts =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (context.warehouseName != null) {
+            Identifier identifier = (Identifier) visit(context.identifierOrString());
+            whName = identifier.getValue();
+        }
+        return new DropComputeNodeClause(hostPorts, createPos(context), whName);
+    }
+
 }

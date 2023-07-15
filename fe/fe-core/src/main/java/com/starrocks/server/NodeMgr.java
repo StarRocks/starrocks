@@ -50,6 +50,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.epack.system.SystemInfoServiceEpack;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.LeaderInfo;
@@ -122,7 +123,7 @@ public class NodeMgr {
      * Backends and Compute Node
      */
     @SerializedName(value = "s")
-    private SystemInfoService systemInfo;
+    private SystemInfoServiceEpack systemInfo;
 
     /**
      * Broker
@@ -152,7 +153,7 @@ public class NodeMgr {
         this.leaderRpcPort = 0;
         this.leaderHttpPort = 0;
         this.leaderIp = "";
-        this.systemInfo = new SystemInfoService();
+        this.systemInfo = new SystemInfoServiceEpack();
 
         this.brokerMgr = new BrokerMgr();
     }
@@ -193,7 +194,7 @@ public class NodeMgr {
     public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
         SystemInfoService systemInfoService = systemInfoMap.get(clusterId);
         if (systemInfoService == null) {
-            systemInfoService = new SystemInfoService();
+            systemInfoService = new SystemInfoServiceEpack();
             systemInfoMap.put(clusterId, systemInfoService);
         }
         return systemInfoService;

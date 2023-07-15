@@ -29,10 +29,17 @@ public class BackendClause extends AlterClause {
 
     protected List<Pair<String, Integer>> hostPortPairs;
 
+    protected String warehouseName;
+
     protected BackendClause(List<String> hostPorts, NodePosition pos) {
         super(AlterOpType.ALTER_OTHER, pos);
         this.hostPorts = hostPorts;
         this.hostPortPairs = new LinkedList<>();
+    }
+
+    protected BackendClause(List<String> hostPorts, NodePosition pos, String warehouseName) {
+        this(hostPorts, pos);
+        this.warehouseName = warehouseName;
     }
 
     public List<Pair<String, Integer>> getHostPortPairs() {
@@ -41,6 +48,10 @@ public class BackendClause extends AlterClause {
 
     public List<String> getHostPorts() {
         return hostPorts;
+    }
+
+    public String getWarehouseName() {
+        return warehouseName;
     }
 
     @Override

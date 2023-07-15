@@ -48,6 +48,7 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.system.SystemInfoServiceEpack;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
@@ -90,7 +91,7 @@ public class RoutineLoadManagerTest {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadManagerTest.class);
 
     @Mocked
-    private SystemInfoService systemInfoService;
+    private SystemInfoServiceEpack systemInfoService;
 
     @Before
     public void setUp() {

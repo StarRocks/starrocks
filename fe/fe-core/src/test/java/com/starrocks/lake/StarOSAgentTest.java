@@ -183,7 +183,7 @@ public class StarOSAgentTest {
                 minTimes = 0;
                 result = 10;
 
-                client.removeWorker("1", 10);
+                client.removeWorker("1", 10, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 0;
                 result = null;
             }
@@ -205,7 +205,7 @@ public class StarOSAgentTest {
         final long workerId2 = 11;
         new Expectations() {
             {
-                client.addWorker("1", workerHost, 0);
+                client.addWorker("1", workerHost, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 1;
                 result = workerId1;
             }
@@ -222,10 +222,6 @@ public class StarOSAgentTest {
                 client.addWorker("1", workerHost2, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 1;
                 result = workerId2;
-
-                client.removeWorker("1", workerId1);
-                minTimes = 1;
-                result = null;
             }
         };
         starosAgent.addWorker(backendId, workerHost2, 0);
@@ -291,7 +287,7 @@ public class StarOSAgentTest {
                 minTimes = 0;
                 result = 10;
 
-                client.removeWorker("1", 10);
+                client.removeWorker("1", 10, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 0;
                 result = new StarClientException(StatusCode.GRPC, "network error");
             }

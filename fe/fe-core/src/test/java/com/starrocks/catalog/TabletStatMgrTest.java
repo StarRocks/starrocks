@@ -18,6 +18,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.system.SystemInfoServiceEpack;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
@@ -116,7 +117,7 @@ public class TabletStatMgrTest {
     }
 
     @Test
-    public void testUpdateLakeTabletStat(@Mocked SystemInfoService systemInfoService,
+    public void testUpdateLakeTabletStat(@Mocked SystemInfoServiceEpack systemInfoService,
                                          @Mocked LakeService lakeService) {
         long dbId = 1L;
         long tableId = 2L;
