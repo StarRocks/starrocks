@@ -32,7 +32,8 @@ jobs:
           PR_NUMBER: ${{ github.event.number }}
         run: |
           echo $PR_NUMBER > pr_num.txt
-          echo ${{ github.sha }} > head_sha.txt
+          GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
+          echo ${GITHUB_SHA} > head_sha.txt
       - name: Upload the PR number
         uses: actions/upload-artifact@v2
         with:
