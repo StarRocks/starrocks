@@ -176,9 +176,7 @@ public:
     int compare(const Slice& b) const;
 
     /// Check whether the slice starts with the given prefix.
-    bool starts_with(const Slice& x) const {
-        return ((size >= x.size) && (memequal(data, x.size, x.data, x.size)));
-    }
+    bool starts_with(const Slice& x) const { return ((size >= x.size) && (memequal(data, x.size, x.data, x.size))); }
 
     bool ends_with(const Slice& x) const {
         return ((size >= x.size) && memequal(data + (size - x.size), x.size, x.data, x.size));
