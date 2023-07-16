@@ -21,7 +21,7 @@
 
 namespace starrocks {
 
-struct CompactionInfos {
+struct CompactionInformation {
     int64_t candidates_num = 0;
     int64_t base_compaction_concurrency = 0;
     int64_t cumulative_compaction_concurrency = 0;
@@ -43,7 +43,7 @@ private:
     Status fill_chunk(ChunkPtr* chunk);
 
     int64_t _be_id{0};
-    std::vector<CompactionInfos> _infos;
+    std::vector<CompactionInformation> _infos;
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
 };
