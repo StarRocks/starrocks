@@ -119,11 +119,11 @@ StatusOr<uint32_t> FileReader::_get_footer_read_size() const {
 
 StatusOr<uint32_t> FileReader::_parse_metadata_length(const std::vector<char>& footer_buff) const {
     size_t size = footer_buff.size();
-    if (memequal_safe(footer_buff.data() + size - 4, 4, PARQUET_EMAIC_NUMBER, 4)) {
+    if (memequal(footer_buff.data() + size - 4, 4, PARQUET_EMAIC_NUMBER, 4)) {
         return Status::NotSupported("StarRocks parquet reader not support encrypted parquet file yet");
     }
 
-    if (!memequal_safe(footer_buff.data() + size - 4, 4, PARQUET_MAGIC_NUMBER, 4)) {
+    if (!memequal(footer_buff.data() + size - 4, 4, PARQUET_MAGIC_NUMBER, 4)) {
         return Status::Corruption("Parquet file magic not matched");
     }
 

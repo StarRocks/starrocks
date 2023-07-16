@@ -56,18 +56,17 @@ inline int compare(T lhs, T rhs) {
     }
 }
 
-// memequal_safe is used to optimize the comparison between the two strings.
+// memequal is used to optimize the comparison between the two strings.
 //  1. If the length is equal and larger than 16, use SSE4.1
 //  2. If the length is small than 16, convert the address to int16/int32/int64
 //     to comparison
-// so it is safe that strings do not need to consider extra padding bytes for SIMD, which is required by
-// memequal_unsafe().
+// so it does not need to consider extra padding bytes for SIMD, which is required by memequal_padded().
 // TODO: If know the size in advance, call the function by constant parameter
 //       like memequal(p1, 10, p2, 10) is efficient
 
 #if defined(__SSE4_1__) && !defined(ADDRESS_SANITIZER)
 
-inline bool memequal_safe(const char* p1, size_t size1, const char* p2, size_t size2) {
+inline bool memequal(const char* p1, size_t size1, const char* p2, size_t size2) {
     if (size1 != size2) {
         return false;
     }
@@ -145,7 +144,7 @@ inline bool memequal_safe(const char* p1, size_t size1, const char* p2, size_t s
 
 #else
 
-inline bool memequal_safe(const char* p1, size_t size1, const char* p2, size_t size2) {
+inline bool memequal(const char* p1, size_t size1, const char* p2, size_t size2) {
     return (size1 == size2) && (memcmp(p1, p2, size1) == 0);
 }
 

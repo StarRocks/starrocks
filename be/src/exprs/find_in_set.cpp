@@ -48,7 +48,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(findInSetImpl, str, strlist) {
             offset = strlist.size;
         }
         num++;
-        bool is_equal = memequal_safe(str.data, str.size, strlist.data + pre_offset + 1, offset - pre_offset - 1);
+        bool is_equal = memequal(str.data, str.size, strlist.data + pre_offset + 1, offset - pre_offset - 1);
         if (is_equal) {
             return num;
         }

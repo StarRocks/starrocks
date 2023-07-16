@@ -228,10 +228,10 @@ public:
 #if defined(__SSE2__) && !defined(ADDRESS_SANITIZER)
 
 // NOTE: This function will access 15 excessive bytes after p1 and p2, which should has padding bytes when allocating
-// memory. So it is unsafe, carefully to use it.
+// memory. if withoud pad, please use memequal.
 // NOTE: typename T must be uint8_t or int8_t
 template <typename T>
-typename std::enable_if<sizeof(T) == 1, bool>::type memequal_unsafe(const T* p1, size_t size1, const T* p2,
+typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1, size_t size1, const T* p2,
                                                                     size_t size2) {
     if (size1 != size2) {
         return false;
@@ -251,7 +251,7 @@ typename std::enable_if<sizeof(T) == 1, bool>::type memequal_unsafe(const T* p1,
 #else
 
 template <typename T>
-typename std::enable_if<sizeof(T) == 1, bool>::type memequal_unsafe(const T* p1, size_t size1, const T* p2,
+typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1, size_t size1, const T* p2,
                                                                     size_t size2) {
     return (size1 == size2) && (memcmp(p1, p2, size1) == 0);
 }
@@ -260,7 +260,7 @@ typename std::enable_if<sizeof(T) == 1, bool>::type memequal_unsafe(const T* p1,
 static constexpr uint16_t SLICE_MEMEQUAL_OVERFLOW_PADDING = 15;
 class SliceEqual {
 public:
-    bool operator()(const Slice& x, const Slice& y) const { return memequal_unsafe(x.data, x.size, y.data, y.size); }
+    bool operator()(const Slice& x, const Slice& y) const { return memequal_padded(x.data, x.size, y.data, y.size); }
 };
 
 class SliceNormalEqual {
