@@ -194,6 +194,7 @@ public class AgentBatchTask implements Runnable {
                 }
                 client.submit_tasks(agentTaskRequests);
                 LOG.info("submit_tasks done");
+                LOG.info("Test");
                 if (LOG.isDebugEnabled()) {
                     for (AgentTask task : tasks) {
                         LOG.debug("send task: type[{}], backend[{}], signature[{}]",
