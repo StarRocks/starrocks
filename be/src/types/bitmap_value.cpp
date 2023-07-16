@@ -935,16 +935,18 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
         }
     }
     case SET: {
-        if ((offset > 0 && offset >= _set->size()) || (offset < 0 && std::abs(offset) > _set->size())) {
+        size_t cardinality = _set->size();
+        if ((offset > 0 && offset >= cardinality) || (offset < 0 && std::abs(offset) > cardinality)) {
             return 0;
         }
         int64_t abs_offset = offset;
         if (offset < 0) {
-            abs_offset = _set->size() + offset;
+            abs_offset = cardinality + offset;
         }
 
         std::vector set_values(_set->begin(), _set->end());
         std::sort(set_values.begin(), set_values.end());
+
         int64_t count = 0;
         int64_t offset_count = 0;
         auto it = set_values.begin();
@@ -958,13 +960,13 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
     }
     default:
         DCHECK_EQ(_type, BITMAP);
-        if ((offset > 0 && offset >= _bitmap->cardinality()) ||
-            (offset < 0 && std::abs(offset) > _bitmap->cardinality())) {
+        size_t cardinality = _bitmap->cardinality();
+        if ((offset > 0 && offset >= cardinality) || (offset < 0 && std::abs(offset) > cardinality)) {
             return 0;
         }
         int64_t abs_offset = offset;
         if (offset < 0) {
-            abs_offset = _bitmap->cardinality() + offset;
+            abs_offset = cardinality + offset;
         }
 
         int64_t count = 0;
@@ -994,17 +996,12 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
         }
     }
     case SET: {
-        bool is_reverse = false;
-        int64_t abs_limit = limit;
-        if (limit < 0) {
-            is_reverse = true;
-            abs_limit = -limit;
-        }
-
         std::vector values(_set->begin(), _set->end());
         std::sort(values.begin(), values.end());
+
         int64_t count = 0;
-        if (is_reverse) {
+        if (limit < 0) {
+            int64_t abs_limit = -limit;
             auto start = values.begin();
             auto end = values.begin();
 
@@ -1027,7 +1024,7 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
             for (; it != values.end() && *it < range_start;) {
                 ++it;
             }
-            for (; it != values.end() && count < abs_limit; ++it, ++count) {
+            for (; it != values.end() && count < limit; ++it, ++count) {
                 ret_bitmap->add(*it);
             }
         }
@@ -1035,15 +1032,9 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
     }
     default:
         DCHECK_EQ(_type, BITMAP);
-        bool is_reverse = false;
-        int64_t abs_limit = limit;
-        if (limit < 0) {
-            is_reverse = true;
-            abs_limit = -limit;
-        }
-
         int64_t count = 0;
-        if (is_reverse) {
+        if (limit < 0) {
+            int64_t abs_limit = -limit;
             auto start = _bitmap->begin();
             auto end = _bitmap->begin();
 
@@ -1067,7 +1058,7 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
             for (; it != _bitmap->end() && *it < range_start;) {
                 ++it;
             }
-            for (; it != _bitmap->end() && count < abs_limit; ++it, ++count) {
+            for (; it != _bitmap->end() && count < limit; ++it, ++count) {
                 ret_bitmap->add(*it);
             }
         }
