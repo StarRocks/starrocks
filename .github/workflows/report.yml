@@ -29,7 +29,6 @@ jobs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       HEAD_SHA: ${{ steps.pr_details.outputs.HEAD_SHA }}
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
-      BASE_VERSION: ${{ steps.pr_details.outputs.BASE_VERSION }}
     steps:
       - name: Download workflow artifact - PR
         uses: dawidd6/action-download-artifact@v2
@@ -59,28 +58,6 @@ jobs:
         with:
           path: ./head_sha.txt
 
-      - name: Download workflow artifact - BASE VERSION
-        uses: dawidd6/action-download-artifact@v2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          run_id: ${{ github.event.workflow_run.id }}
-          workflow: test_fork.yml
-          name: 'base_version'
-          if_no_artifact_found: success
-
-      - name: Check Base Version File Exist
-        id: check_version_file_exist
-        run: |
-          if [[ -e ./base_version.txt ]]; then
-            echo "is_exist=true" >> $GITHUB_OUTPUT
-          fi
-      - name: Read the base version file
-        id: base_version_reader
-        if: steps.check_version_file_exist.outputs.is_exist == 'true'
-        uses: juliangruber/read-file-action@v1
-        with:
-          path: ./base_version.txt
-
       - name: PR DETAILS
         id: pr_details
         env:
@@ -96,18 +73,12 @@ jobs:
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
           echo "HEAD_SHA=${HEAD_SHA}" >> $GITHUB_OUTPUT
 
-          if [[ ${{ steps.check_version_file_exist.outputs.is_exist }} == 'true' ]]; then
-            base_version=`echo "${{ steps.base_version_reader.outputs.content }}"`
-            echo "BASE_VERSION=${base_version}" >> $GITHUB_OUTPUT
-          fi
-
   FE-UT-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       branch: ${{ needs.INFO.outputs.BASE_REF }}
-      BASE_VERSION: ${{ needs.INFO.outputs.BASE_VERSION }}
     steps:
       - name: CLEAN
         run: |
