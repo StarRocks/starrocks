@@ -508,18 +508,16 @@ void ExecEnv::stop() {
     if (_agent_server != nullptr) {
         _agent_server->stop();
     }
-    clean_s3_clients();
-}
-
-void ExecEnv::_destroy() {
     if (_automatic_partition_pool) {
         _automatic_partition_pool->shutdown();
     }
-
     if (_load_rpc_pool) {
         _load_rpc_pool->shutdown();
     }
+    clean_s3_clients();
+}
 
+void ExecEnv::destroy() {
     SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);
     SAFE_DELETE(_profile_report_worker);
@@ -603,10 +601,6 @@ std::shared_ptr<MemTracker> ExecEnv::regist_tracker(Args&&... args) {
 
 void ExecEnv::wait_for_finish() {
     _wait_for_fragments_finish();
-}
-
-void ExecEnv::destroy(ExecEnv* env) {
-    env->_destroy();
 }
 
 int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {

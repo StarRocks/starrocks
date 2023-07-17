@@ -22,6 +22,7 @@
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
+#include "common/daemon.h"
 
 namespace brpc {
 
@@ -32,7 +33,7 @@ DECLARE_int64(socket_max_unwritten_bytes);
 
 namespace starrocks {
 
-void start_be(StorageEngine* storage_engine) {
+void start_be(StorageEngine* storage_engine, Daemon* deamon) {
     auto* exec_env = ExecEnv::GetInstance();
 
     // Begin to start services
@@ -114,6 +115,7 @@ void start_be(StorageEngine* storage_engine) {
     brpc_server->Stop(0);
     thrift_server->stop();
 
+    deamon->stop();
     exec_env->stop();
     storage_engine->stop();
 

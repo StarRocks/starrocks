@@ -113,7 +113,7 @@ public:
     static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths, bool as_cn = false);
     static bool is_init();
     void stop();
-    static void destroy(ExecEnv* exec_env);
+    void destroy();
 
     void wait_for_finish();
 
