@@ -23,7 +23,7 @@ Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要
 
 ### AWS IAM
 
-如果 Paimon 使用 AWS S3 作为文件存储作为元数据服务，您需要选择一种合适的认证鉴权方案，确保 StarRocks 集群可以访问相关的 AWS 云资源。
+如果 Paimon 使用 AWS S3 作为文件存储，您需要选择一种合适的认证鉴权方案，确保 StarRocks 集群可以访问相关的 AWS 云资源。
 
 您可以选择如下认证鉴权方案：
 
