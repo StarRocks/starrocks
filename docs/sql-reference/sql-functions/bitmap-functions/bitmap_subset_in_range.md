@@ -1,4 +1,4 @@
-# bitmap_subset_in_range 
+# bitmap_subset_in_range
 
 ## Description
 

@@ -53,7 +53,7 @@ select bitmap_to_string(bitmap_subset_limit(bitmap_from_string('1,1,3,1,5,3,5,7,
 +-----------+
 ```
 
-Example 3: Obtain subset elements from the BITMAP value with elements value from 5, negtive limit -2.
+Example 3: Obtain subset elements from the BITMAP value with elements value from 5, negative limit -2.
 
 ```Plaintext
 select bitmap_to_string(bitmap_subset_limit(bitmap_from_string('1,1,3,1,5,3,5,7,7,9'), 5, -2)) value;
