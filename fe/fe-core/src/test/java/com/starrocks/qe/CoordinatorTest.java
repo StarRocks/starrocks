@@ -58,7 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.qe.CoordinatorPreprocessor.ColocatedBackendSelector.BucketSeqToScanRange;
+import static com.starrocks.qe.ColocatedBackendSelector.BucketSeqToScanRange;
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
