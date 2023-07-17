@@ -117,8 +117,8 @@ public class LakeTablet extends Tablet {
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
-        getQueryableReplicas(allQuerableReplicas, localReplicas,
-            visibleVersion, localBeId, schemaHash, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        getQueryableReplicas(allQuerableReplicas, localReplicas, visibleVersion, localBeId,
+                schemaHash, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
     }
 
     @Override

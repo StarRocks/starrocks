@@ -34,10 +34,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-<<<<<<< HEAD
-=======
-import java.util.concurrent.atomic.AtomicLong;
->>>>>>> update codes
 
 public class Cluster implements Writable {
     private static final Logger LOG = LogManager.getLogger(Cluster.class);
