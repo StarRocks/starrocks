@@ -493,7 +493,7 @@ void ExecEnv::stop() {
         _load_channel_mgr->clear();
     }
     if (_load_stream_mgr != nullptr) {
-        _load_channel_mgr->clear();
+        _load_stream_mgr->clear();
     }
     if (_fragment_mgr != nullptr) {
         _fragment_mgr->cancel_all();
