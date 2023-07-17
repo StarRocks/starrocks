@@ -277,7 +277,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     DCHECK_EQ(_running_flush_tasks, 0);
     _running_flush_tasks++;
 
-    auto task = [this, state, guard = guard, splitting_partitions = std::move(splitting_partitions),
+    auto task = [this, guard = guard, splitting_partitions = std::move(splitting_partitions),
                  spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)]() {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
