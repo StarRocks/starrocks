@@ -12,6 +12,6 @@ where
 AGGREGATE ([GLOBAL] aggregate [{107: sum=sum(107: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
         AGGREGATE ([LOCAL] aggregate [{107: sum=sum(101: revenue)}] group by [[]] having [null]
-            SCAN (mv[lineitem_agg_mv3] columns[98: l_shipdate, 99: l_discount, 100: l_quantity, 101: revenue] predicate[98: l_shipdate >= 1995-01-01 AND 98: l_shipdate < 1996-01-01 AND 99: l_discount >= 0.02 AND 99: l_discount <= 0.04 AND 100: l_quantity < 24])
+            SCAN (mv[lineitem_agg_mv3] columns[98: l_shipdate, 99: l_discount, 100: l_quantity, 101: revenue] predicate[98: l_shipdate >= 1995-01-01 AND 98: l_shipdate < 1996-01-01 AND 99: l_discount >= 0.02 AND 99: l_discount <= 0.04 AND 100: l_quantity < 24.0])
 [end]
 
