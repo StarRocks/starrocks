@@ -19,5 +19,6 @@
 namespace starrocks {
 
 std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options);
+void clean_s3_clients();
 
 } // namespace starrocks

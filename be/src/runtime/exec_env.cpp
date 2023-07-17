@@ -49,6 +49,7 @@
 #include "exec/spill/dir_manager.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/join.h"
@@ -501,6 +502,7 @@ void ExecEnv::stop() {
     if (_wg_driver_executor != nullptr) {
         _wg_driver_executor->clear();
     }
+    clean_s3_clients();
 }
 
 void ExecEnv::_destroy() {
