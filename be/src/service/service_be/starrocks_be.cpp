@@ -104,26 +104,34 @@ StorageEngine* init_storage_engine(ExecEnv* exec_env, std::vector<StorePath> pat
 }
 
 void start_be(const std::vector<StorePath>& paths, bool as_cn) {
+    int start_step = 1;
     auto daemon = std::make_unique<Daemon>();
     daemon->init(as_cn, paths);
+    LOG(INFO) << "BE start step " << start_step++ << ": daemon threads start successfully";
 
     // init jdbc driver manager
     EXIT_IF_ERROR(JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) + "/lib/jdbc_drivers"));
+    LOG(INFO) << "BE start step " << start_step++ << ": jdbc driver manager init successfully";
 
     if (!starrocks::BackendOptions::init()) {
         exit(-1);
     }
+    LOG(INFO) << "BE start step " << start_step++ << ": backend network options init successfully";
 
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     EXIT_IF_ERROR(exec_env->init(paths, as_cn));
+    LOG(INFO) << "BE start step " << start_step++ << ": exec engine init successfully";
 
     auto* storage_engine = init_storage_engine(exec_env, paths, as_cn);
+    LOG(INFO) << "BE start step " << start_step++ << ": storage engine init successfully";
 
 #ifdef USE_STAROS
     init_staros_worker();
+    LOG(INFO) << "BE start step" << start_step++ << ": staros worker init successfully";
 #endif
 
     init_block_cache();
+    LOG(INFO) << "BE start step " << start_step++ << ": block cache init successfully";
 
     // Begin to start services
     // 1. Start thrift server
@@ -133,7 +141,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         shutdown_logging();
         exit(1);
     }
-    LOG(INFO) << "BE start thrift server success";
+    LOG(INFO) << "BE start step " << start_step++ << ": start thrift server successfully";
 
     // 2. Start brpc server
     brpc::FLAGS_max_body_size = config::brpc_max_body_size;
@@ -157,7 +165,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         shutdown_logging();
         exit(1);
     }
-    LOG(INFO) << "BE start brpc server success";
+    LOG(INFO) << "BE start step " << start_step++ << ": start brpc server successfully";
 
     // 3. Start HTTP server
     auto http_server = std::make_unique<HttpServiceBE>(exec_env, config::be_http_port, config::be_http_num_workers);
@@ -166,7 +174,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         shutdown_logging();
         exit(1);
     }
-    LOG(INFO) << "BE start http server success";
+    LOG(INFO) << "BE start step " << start_step++ << ": start http server successfully";
 
     // 4. Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
@@ -185,20 +193,22 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         shutdown_logging();
         exit(1);
     }
-    LOG(INFO) << "BE start heartbeat server success";
+    LOG(INFO) << "BE start step " << start_step++ << ": start heartbeat server successfully";
 
-    LOG(INFO) << "BE started successfully";
+    LOG(INFO) << "BE start successfully";
 
     while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
         sleep(10);
     }
 
+    int exit_step = 1;
     exec_env->wait_for_finish();
+    LOG(INFO) << "BE exit step " << exit_step++ << ": wait exec engine tasks finish successfully";
 
     heartbeat_server->stop();
     heartbeat_server->join();
     heartbeat_server.reset();
-    LOG(INFO) << "BE heartbeat server exit success";
+    LOG(INFO) << "BE exit step " << exit_step++ << ": heartbeat server exit successfully";
 
     http_server->stop();
     brpc_server->Stop(0);
@@ -209,11 +219,13 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     storage_engine->stop();
 
     http_server->join();
-    LOG(INFO) << "BE http server exit success";
+    LOG(INFO) << "BE exit step " << exit_step++ << ": http server exit successfully";
+
     brpc_server->Join();
-    LOG(INFO) << "BE brpc server exit success";
+    LOG(INFO) << "BE exit step " << exit_step++ << ": brpc server exit successfully";
+
     thrift_server->join();
-    LOG(INFO) << "BE thrift server exit success";
+    LOG(INFO) << "BE exit step " << exit_step++ << ": thrift server exit successfully";
 
     http_server.reset();
     brpc_server.reset();
@@ -221,22 +233,26 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
 #ifdef USE_STAROS
     starrocks::shutdown_staros_worker();
+    LOG(INFO) << "BE exit step " << exit_step++ << ": staros worker exit successfully";
 #endif
 
 #if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
     if (starrocks::config::block_cache_enable) {
         starrocks::BlockCache::instance()->shutdown();
+        LOG(INFO) << "BE exit step " << exit_step++ << ": block cache shutdown successfully";
     }
 #endif
 
     daemon.reset();
-    LOG(INFO) << "BE daemon thread exit success";
+    LOG(INFO) << "BE exit step " << exit_step++ << ": daemon threads exit successfully";
 
     exec_env->destroy();
-    LOG(INFO) << "BE exec env destroy success";
+    LOG(INFO) << "BE exit step " << exit_step++ << ": exec engine destroy successfully";
 
     delete storage_engine;
-    LOG(INFO) << "BE storage engine destroy success";
+    LOG(INFO) << "BE exit step " << exit_step++ << ": storage engine exit successfully";
+
+    LOG(INFO) << "BE exit success";
 }
 
 } // namespace starrocks
