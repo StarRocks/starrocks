@@ -1579,4 +1579,11 @@ public class ExpressionTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "2020-05-01 13:45:57");
     }
+
+    @Test
+    public void testDecimalCastString() throws  Exception {
+        String sql = "select cast(cast('1.10000' as decimal(27,9)) as string)";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "1.100000000");
+    }
 }
