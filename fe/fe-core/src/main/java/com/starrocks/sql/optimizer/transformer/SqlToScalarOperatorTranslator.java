@@ -717,6 +717,11 @@ public final class SqlToScalarOperatorTranslator {
                         ConstantOperator.createBigint(node.getIntValue())));
             }
 
+            if (node.getFuncType().equalsIgnoreCase("DATABASE") ||
+                node.getFuncType().equalsIgnoreCase("SCHEMA")) {
+                return ConstantOperator.createVarchar(node.getStrValue());
+            }
+
             return new CallOperator(node.getFuncType(), node.getType(), Lists.newArrayList(
                     ConstantOperator.createVarchar(node.getStrValue()),
                     ConstantOperator.createBigint(node.getIntValue())));
