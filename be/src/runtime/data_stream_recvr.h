@@ -150,12 +150,12 @@ private:
     // sender queue. Called from DataStreamMgr.
     void remove_sender(int sender_id, int be_number);
 
-    // Empties the sender queues and notifies all waiting consumers of cancellation.
-    void cancel_stream();
-
     // Return true if the addition of a new batch of size 'chunk_size' would exceed the
     // total buffer limit.
     bool exceeds_limit(int chunk_size) { return _num_buffered_bytes + chunk_size > _total_buffer_limit; }
+
+    // Empties the sender queues and notifies all waiting consumers of cancellation.
+    void cancel_stream();
 
     // DataStreamMgr instance used to create this recvr. (Not owned)
     DataStreamMgr* _mgr;

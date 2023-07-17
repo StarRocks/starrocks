@@ -63,7 +63,6 @@ namespace starrocks {
 class DescriptorTbl;
 class DataStreamRecvr;
 class RuntimeState;
-class PRowBatch;
 class PUniqueId;
 class PTransmitChunkParams;
 
@@ -102,6 +101,7 @@ public:
     Status transmit_chunk(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
     // Closes all receivers registered for fragment_instance_id immediately.
     void cancel(const TUniqueId& fragment_instance_id);
+    void clear();
 
     void prepare_pass_through_chunk_buffer(const TUniqueId& query_id);
     void destroy_pass_through_chunk_buffer(const TUniqueId& query_id);

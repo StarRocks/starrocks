@@ -483,10 +483,15 @@ Status ExecEnv::_init_storage_page_cache() {
 }
 
 void ExecEnv::_stop() {
-    // Clear load channel should be executed before stopping the storage engine,
-    // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
-    // so when the ThreadPool is destroyed, it will crash.
-    _load_channel_mgr->clear();
+    if (_stream_mgr != nullptr) {
+        _stream_mgr->clear();
+    }
+    if (_load_channel_mgr != nullptr) {
+        // Clear load channel should be executed before stopping the storage engine,
+        // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
+        // so when the ThreadPool is destroyed, it will crash.
+        _load_channel_mgr->clear();
+    }
 }
 
 void ExecEnv::_destroy() {

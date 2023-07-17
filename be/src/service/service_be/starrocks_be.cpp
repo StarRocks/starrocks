@@ -106,12 +106,15 @@ void start_be() {
     exec_env->wait_for_finish();
 
     heartbeat_server->stop();
+    heartbeat_server->join();
+    LOG(INFO) << "BE heartbeat server exit success";
+
     http_server->stop();
     brpc_server->Stop(0);
     thrift_server->stop();
 
-    heartbeat_server->join();
-    LOG(INFO) << "BE heartbeat server exit success";
+    ExecEnv::stop(exec_env);
+
     http_server->join();
     LOG(INFO) << "BE http server exit success";
     brpc_server->Join();
