@@ -19,17 +19,16 @@ insert into struct_upper_case values (1, named_struct('c2_sub1', 1, 'c2_sub2', 1
 -- !result
 select C2.c2_sub1, C2.C2_SUB2 from struct_upper_case order by c1;
 -- result:
-1   1
-2   2
+1	1
+2	2
 -- !result
 select c2.C2_SUB1, c2.c2_sub2 from struct_upper_case order by c1;
 -- result:
-1   1
-2   2
+1	1
+2	2
 -- !result
-select test.struct_upper_case.C2.C2_SUB1, test.struct_upper_case.C2.c2_sub2 from struct_upper_case order by c0;
+select test_struct.struct_upper_case.C2.C2_SUB1, test_struct.struct_upper_case.C2.c2_sub2 from struct_upper_case order by c1;
 -- result:
-1   1
-2   2
+1	1
+2	2
 -- !result
-
