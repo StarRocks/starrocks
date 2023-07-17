@@ -2043,6 +2043,34 @@ public class CreateMaterializedViewTest {
         }
     }
 
+    private void assertParseFailWithException(String sql, String msg) {
+        CreateMaterializedViewStatement stmt = null;
+        try {
+            stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                    connectContext);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains(msg));
+        }
+    }
+
+    private void assertCreateFailWithException(String sql, String msg) {
+        CreateMaterializedViewStatement stmt = null;
+        try {
+            stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                    connectContext);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+        try {
+            currentState.createMaterializedView(stmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains(msg));
+        }
+    }
+
     @Test
     public void testUnSupportedProperties() {
         String sql = "create materialized view mv1 " +
@@ -2053,15 +2081,8 @@ public class CreateMaterializedViewTest {
                 "\"short_key\" = \"20\"\n" +
                 ") " +
                 "as select tbl1.k1 ss, k2 from tbl1;";
-        try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
-            currentState.createMaterializedView(stmt);
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid parameter Analyze materialized properties failed because unknown " +
-                    "properties"));
-        }
+        assertCreateFailWithException(sql, "Invalid parameter Analyze materialized properties failed because unknown " +
+                "properties");
     }
 
     @Test
@@ -2097,15 +2118,8 @@ public class CreateMaterializedViewTest {
                 "\"query_timeout\" = \"10000\"" +
                 ") " +
                 "as select tbl1.k1 ss, k2 from tbl1;";
-        try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
-            currentState.createMaterializedView(stmt);
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid parameter Analyze materialized properties failed because unknown " +
-                    "properties"));
-        }
+        assertCreateFailWithException(sql, "Invalid parameter Analyze materialized properties failed because unknown " +
+                "properties");
     }
 
     @Test
@@ -2118,14 +2132,7 @@ public class CreateMaterializedViewTest {
                 "\"session.query_timeout1\" = \"10000\"" +
                 ") " +
                 "as select tbl1.k1 ss, k2 from tbl1;";
-        try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
-            currentState.createMaterializedView(stmt);
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Unknown system variable 'query_timeout1'"));
-        }
+        assertCreateFailWithException(sql, "Unknown system variable 'query_timeout1'");
     }
 
     @Test
@@ -2242,14 +2249,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
-        try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
-            currentState.createMaterializedView(stmt);
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not find database:unexisted_db1."));
-        }
+        assertParseFailWithException(sql, "Can not find database:unexisted_db1.");
     }
 
     @Test
@@ -2319,15 +2319,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, K1 from tbl1;";
-        try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
-            currentState.createMaterializedView(stmt);
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Duplicate column name 'K1'.",
-                    e.getMessage());
-        }
+        assertParseFailWithException(sql, "Getting analyzing error. Detail message: Duplicate column name 'K1'.");
     }
 
     @Test
@@ -2340,15 +2332,8 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select 1 as k1, 2 as k2";
-        try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
-            currentState.createMaterializedView(stmt);
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Can not find base table in query statement.",
-                    e.getMessage());
-        }
+        assertParseFailWithException(sql, "Getting analyzing error. Detail message: Can not find base " +
+                "table in query statement.");
     }
 
     @Test
