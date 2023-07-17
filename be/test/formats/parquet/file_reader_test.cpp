@@ -2507,7 +2507,8 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
     //  }
     //  required int32 int = 3;
     // }
-    const std::string filepath = "./be/test/formats/parquet/test_data/iceberg_schema_evolution/iceberg_string_map_string.parquet";
+    const std::string filepath =
+            "./be/test/formats/parquet/test_data/iceberg_schema_evolution/iceberg_string_map_string.parquet";
     auto file = _create_file(filepath);
     auto file_reader =
             std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
@@ -2554,7 +2555,6 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
 
     TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
 
-
     Utils::SlotDesc slot_descs[] = {
             {"data", type_data},
             {"struct", type_struct},
@@ -2565,7 +2565,6 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
-
 
     Utils::SlotDesc min_max_slots[] = {
             {"int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
