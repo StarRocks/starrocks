@@ -463,7 +463,7 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         if (col_type != PrimitiveType::TYPE_FLOAT) {
             need_convert = true;
         }
-        if (col_type == LogicalType::TYPE_DOUBLE) {
+        if (col_type == PrimitiveType::TYPE_DOUBLE) {
             auto _converter = std::make_unique<NumericToNumericConverter<float, double>>();
             *converter = std::move(_converter);
             break;
