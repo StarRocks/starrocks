@@ -189,16 +189,16 @@ void bind_exec_env(ForeignModule& m) {
         // uncomment this to enable executing shell commands
         // cls.funcStaticExt<&exec_whitelist>("exec");
         cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
-        REG_METHOD(ExecEnv, process_mem_tracker);
-        REG_METHOD(ExecEnv, query_pool_mem_tracker);
-        REG_METHOD(ExecEnv, load_mem_tracker);
-        REG_METHOD(ExecEnv, metadata_mem_tracker);
-        REG_METHOD(ExecEnv, tablet_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, rowset_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, segment_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, compaction_mem_tracker);
-        REG_METHOD(ExecEnv, update_mem_tracker);
-        REG_METHOD(ExecEnv, clone_mem_tracker);
+        REG_METHOD(GlobalEnv, process_mem_tracker);
+        REG_METHOD(GlobalEnv, query_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, load_mem_tracker);
+        REG_METHOD(GlobalEnv, metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, rowset_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, segment_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, compaction_mem_tracker);
+        REG_METHOD(GlobalEnv, update_mem_tracker);
+        REG_METHOD(GlobalEnv, clone_mem_tracker);
     }
 }
 
