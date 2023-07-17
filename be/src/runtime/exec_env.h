@@ -110,7 +110,7 @@ class DirManager;
 class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
-    static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths, bool as_cn = false);
+    Status init(const std::vector<StorePath>& store_paths, bool as_cn = false);
     static bool is_init();
     void stop();
     void destroy();
@@ -239,8 +239,6 @@ public:
 
 private:
     Status _init(const std::vector<StorePath>& store_paths, bool as_cn);
-    void _stop();
-    void _destroy();
     void _reset_tracker();
     template <class... Args>
     std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
