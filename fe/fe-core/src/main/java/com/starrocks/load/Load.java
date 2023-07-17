@@ -77,11 +77,13 @@ import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.UserIdentity;
@@ -777,7 +779,11 @@ public class Load {
             }
             Expr expr = entry.getValue().clone(smap);
 
-            expr = Expr.analyzeAndCastFold(expr);
+            try {
+                expr = Expr.analyzeAndCastFold(expr);
+            } catch (SemanticException e) {
+                throw new UserException("expression is not supported: " + AstToSQLBuilder.toSQL(expr));
+            }
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
