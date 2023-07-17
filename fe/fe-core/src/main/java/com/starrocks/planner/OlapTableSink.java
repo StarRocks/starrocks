@@ -137,6 +137,13 @@ public class OlapTableSink extends DataSink {
     }
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
+                         TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
+                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition, String warehouseName) {
+        this(dstTable, tupleDescriptor, partitionIds, writeQuorum, enableReplicatedStorage, nullExprInAutoIncrement, enableAutomaticPartition);
+        this.warehouseName = warehouseName;
+    }
+
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
                          boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
         this.dstTable = dstTable;
