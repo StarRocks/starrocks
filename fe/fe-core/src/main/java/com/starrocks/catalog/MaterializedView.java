@@ -835,7 +835,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
     }
 
-    public int getForceExternalTableQueryRewrite() {
+    public TableProperty.QueryRewriteConsistencyMode getForceExternalTableQueryRewrite() {
         return tableProperty.getForceExternalTableQueryRewrite();
     }
 
@@ -1110,7 +1110,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
 
         PartitionInfo partitionInfo = getPartitionInfo();
-        int forceExternalTableQueryRewrite = getForceExternalTableQueryRewrite();
+        TableProperty.QueryRewriteConsistencyMode externalTableRewriteMode = getForceExternalTableQueryRewrite();
+        TableProperty.QueryRewriteConsistencyMode olapTableRewriteMode = tableProperty.getOlapTableQueryRewrite();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             for (BaseTableInfo tableInfo : baseTableInfos) {
@@ -1123,19 +1124,30 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // we can not judge whether mv based on external table is update-to-date,
                 // because we do not know that any changes in external table.
                 if (!table.isNativeTableOrMaterializedView()) {
-                    switch (forceExternalTableQueryRewrite) {
-                        case TableProperty.FORCE_EXTERNAL_TABLE_REWRITE_DISABLE:
+                    switch (externalTableRewriteMode) {
+                        case DISABLE:
                             return getPartitionNames();
-                        case TableProperty.FORCE_EXTERNAL_TABLE_REWRITE_LOOSE: {
+                        case LOOSE: {
                             return Sets.newHashSet();
                         }
-                        case TableProperty.FORCE_EXTERNAL_TABLE_REWRITE_CHECKED:
+                        case CHECKED:
                             if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
                                 continue;
                             }
                             break;
                         default:
                             Preconditions.checkState(false, "unknown force_external_table_rewrite");
+                    }
+                }
+                if (table.isNativeTableOrMaterializedView()) {
+                    switch (olapTableRewriteMode) {
+                        case DISABLE:
+                            return getPartitionNames();
+                        case LOOSE:
+                            return Sets.newHashSet();
+                        case CHECKED:
+                        default:
+                            break;
                     }
                 }
 
@@ -1168,19 +1180,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             throw new RuntimeException(String.format("getting partition info failed for mv: %s", name));
         }
         Table partitionTable = partitionInfo.first;
-        int forceExternalTableQueryRewrite = getForceExternalTableQueryRewrite();
+        TableProperty.QueryRewriteConsistencyMode externalTableRewriteMode = getForceExternalTableQueryRewrite();
+        TableProperty.QueryRewriteConsistencyMode olapTableRewriteMode = tableProperty.getOlapTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
             Table table = tableInfo.getTable();
             if (table.isView()) {
                 continue;
             }
             if (!table.isNativeTableOrMaterializedView()) {
-                switch (forceExternalTableQueryRewrite) {
-                    case TableProperty.FORCE_EXTERNAL_TABLE_REWRITE_DISABLE:
+                switch (externalTableRewriteMode) {
+                    case DISABLE:
                         return getPartitionNames();
-                    case TableProperty.FORCE_EXTERNAL_TABLE_REWRITE_LOOSE:
+                    case LOOSE:
                         return Sets.newHashSet();
-                    case TableProperty.FORCE_EXTERNAL_TABLE_REWRITE_CHECKED: {
+                    case CHECKED: {
                         if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
                             continue;
                         }
@@ -1190,6 +1203,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                         Preconditions.checkState(false, "unknown force_external_table_query_rewrite");
                 }
             }
+            if (table.isNativeTableOrMaterializedView()) {
+                switch (olapTableRewriteMode) {
+                    case DISABLE:
+                        return getPartitionNames();
+                    case LOOSE:
+                        return Sets.newHashSet();
+                    case CHECKED:
+                    default:
+                        break;
+                }
+            }
+
             if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
                 continue;
             }

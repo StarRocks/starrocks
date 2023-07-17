@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
@@ -56,6 +57,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -67,6 +69,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * TableProperty contains additional information about OlapTable
@@ -82,9 +85,27 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public static final String BINLOG_PROPERTY_PREFIX = "binlog";
     public static final String BINLOG_PARTITION = "binlog_partition_";
 
-    public static final int FORCE_EXTERNAL_TABLE_REWRITE_DISABLE = 0;
-    public static final int FORCE_EXTERNAL_TABLE_REWRITE_LOOSE = 1;
-    public static final int FORCE_EXTERNAL_TABLE_REWRITE_CHECKED = 2;
+    public enum QueryRewriteConsistencyMode {
+        DISABLE,    // 0: disable query rewrite
+        LOOSE,      // 1: enable query rewrite, and skip the partition version check
+        CHECKED;    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+
+        public static QueryRewriteConsistencyMode defaultForOlapTable() {
+            return CHECKED;
+        }
+
+        public static QueryRewriteConsistencyMode defaultForExternalTable() {
+            return DISABLE;
+        }
+
+        public static QueryRewriteConsistencyMode parse(String str) {
+            return EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on("/").join(QueryRewriteConsistencyMode.values());
+        }
+    }
 
     @SerializedName(value = "properties")
     private Map<String, String> properties;
@@ -111,10 +132,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private List<TableName> excludedTriggerTables;
 
     // This property only applies to materialized views,
-    // 0: disable query rewrite
-    // 1: enable query rewrite, and skip the partition version check
-    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
-    private int forceExternalTableQueryRewrite = FORCE_EXTERNAL_TABLE_REWRITE_DISABLE;
+    // Specify the query rewrite behaviour for external table
+    private QueryRewriteConsistencyMode forceExternalTableQueryRewrite =
+            QueryRewriteConsistencyMode.defaultForExternalTable();
+
+    // This property only applies to materialized views,
+    // Specify the query rewrite behaviour for external table
+    private QueryRewriteConsistencyMode olapTableQueryRewrite = QueryRewriteConsistencyMode.defaultForOlapTable();
 
     private boolean isInMemory = false;
 
@@ -272,7 +296,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-
     public TableProperty buildBinlogAvailableVersion() {
         binlogAvailabeVersions = new HashMap<>();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -308,13 +331,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildAutoRefreshPartitionsLimit() {
         autoRefreshPartitionsLimit =
                 Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
-                String.valueOf(INVALID)));
+                        String.valueOf(INVALID)));
         return this;
     }
 
     public TableProperty buildPartitionRefreshNumber() {
-        partitionRefreshNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
-                String.valueOf(INVALID)));
+        partitionRefreshNumber =
+                Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
+                        String.valueOf(INVALID)));
         return this;
     }
 
@@ -341,19 +365,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public static int analyzeForceExternalTableQueryRewrite(String value) throws AnalysisException {
-        int res = 0;
+    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
         if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
             // old version use the boolean value
             boolean boolValue = Boolean.parseBoolean(value);
-            res = boolValue ? FORCE_EXTERNAL_TABLE_REWRITE_CHECKED : FORCE_EXTERNAL_TABLE_REWRITE_DISABLE;
+            return boolValue ? QueryRewriteConsistencyMode.CHECKED : QueryRewriteConsistencyMode.DISABLE;
         } else {
-            res = Integer.parseInt(value);
-            if (res < 0 || res > 2) {
-                throw new AnalysisException("force_external_table_query_rewrite could only be 0/1/2");
+            QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
+            if (res == null) {
+                String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
+                        .stream().map(Enum::name).collect(Collectors.joining(","));
+                throw new AnalysisException("force_external_table_query_rewrite could only be " + allValues);
             }
+            return res;
         }
-        return res;
     }
 
     public TableProperty buildForceExternalTableQueryRewrite() {
@@ -361,7 +386,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         String value =
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, "0");
         try {
-            forceExternalTableQueryRewrite = analyzeForceExternalTableQueryRewrite(value);
+            forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
         } catch (AnalysisException e) {
             LOG.error("analyze force_external_table_query_rewrite failed", e);
         }
@@ -375,7 +400,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
-            RunMode.allowCreateLakeTable() ? "default" : "local");
+                RunMode.allowCreateLakeTable() ? "default" : "local");
         return this;
     }
 
@@ -407,7 +432,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildConstraint() {
         try {
             uniqueConstraints = UniqueConstraint.parse(
-                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
         } catch (AnalysisException e) {
             LOG.warn("Failed to parse unique constraint, ignore this unique constraint", e);
         }
@@ -485,12 +510,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.excludedTriggerTables = excludedTriggerTables;
     }
 
-    public int getForceExternalTableQueryRewrite() {
+    public QueryRewriteConsistencyMode getForceExternalTableQueryRewrite() {
         return this.forceExternalTableQueryRewrite;
     }
 
-    public void setForceExternalTableQueryRewrite(int externalTableQueryRewrite) {
+    public void setForceExternalTableQueryRewrite(QueryRewriteConsistencyMode externalTableQueryRewrite) {
         this.forceExternalTableQueryRewrite = externalTableQueryRewrite;
+    }
+
+    public void setOlapTableQueryRewrite(QueryRewriteConsistencyMode mode) {
+        this.olapTableQueryRewrite = mode;
+    }
+
+    public QueryRewriteConsistencyMode getOlapTableQueryRewrite() {
+        return this.olapTableQueryRewrite;
     }
 
     public boolean isInMemory() {
@@ -571,7 +604,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void clearBinlogAvailableVersion() {
         binlogAvailabeVersions.clear();
-        for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext();) {
+        for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<String, String> entry = it.next();
             if (entry.getKey().startsWith(BINLOG_PARTITION)) {
                 it.remove();
