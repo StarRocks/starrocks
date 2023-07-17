@@ -7,7 +7,10 @@
 
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
+#include "block_cache/block_cache.h"
+#include "block_cache/kv_cache.h"
 #include "common/config.h"
+#include "common/daemon.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
@@ -18,11 +21,11 @@
 #include "service/service_be/http_service.h"
 #include "service/service_be/internal_service.h"
 #include "service/service_be/lake_service.h"
+#include "service/staros_worker.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
-#include "common/daemon.h"
 
 namespace brpc {
 
@@ -33,8 +36,54 @@ DECLARE_int64(socket_max_unwritten_bytes);
 
 namespace starrocks {
 
-void start_be(StorageEngine* storage_engine, Daemon* deamon) {
-    auto* exec_env = ExecEnv::GetInstance();
+void init_block_cache() {
+#if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
+    if (config::block_cache_enable) {
+        config::block_cache_enable = false;
+    }
+#endif
+
+    if (config::block_cache_enable) {
+        BlockCache* cache = BlockCache::instance();
+        starrocks::CacheOptions cache_options;
+        cache_options.mem_space_size = config::block_cache_mem_size;
+
+        std::vector<std::string> paths;
+        auto parse_res = parse_conf_block_cache_paths(config::block_cache_disk_path, &paths);
+        if (!parse_res.ok()) {
+            LOG(FATAL) << "parse config block cache disk path failed, path=" << config::block_cache_disk_path;
+            exit(-1);
+        }
+        for (auto& p : paths) {
+            cache_options.disk_spaces.push_back(
+                    {.path = p, .size = static_cast<size_t>(config::block_cache_disk_size)});
+        }
+
+        // Adjust the default engine based on build switches.
+        if (config::block_cache_engine == "") {
+#if defined(WITH_STARCACHE)
+            config::block_cache_engine = "starcache";
+#else
+            config::block_cache_engine = "cachelib";
+#endif
+        }
+        cache_options.meta_path = config::block_cache_meta_path;
+        cache_options.block_size = config::block_cache_block_size;
+        cache_options.checksum = config::block_cache_checksum_enable;
+        cache_options.max_parcel_memory_mb = config::block_cache_max_parcel_memory_mb;
+        cache_options.max_concurrent_inserts = config::block_cache_max_concurrent_inserts;
+        cache_options.lru_insertion_point = config::block_cache_lru_insertion_point;
+        cache_options.engine = config::block_cache_engine;
+        EXIT_IF_ERROR(cache->init(cache_options));
+    }
+}
+
+void start_be(ExecEnv* exec_env, StorageEngine* storage_engine, Daemon* deamon) {
+#ifdef USE_STAROS
+    init_staros_worker();
+#endif
+
+    init_block_cache();
 
     // Begin to start services
     // 1. Start thrift server
@@ -129,6 +178,18 @@ void start_be(StorageEngine* storage_engine, Daemon* deamon) {
     http_server.reset();
     brpc_server.reset();
     thrift_server.reset();
+
+#ifdef USE_STAROS
+    starrocks::shutdown_staros_worker();
+#endif
+
+#if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
+    if (starrocks::config::block_cache_enable) {
+        starrocks::BlockCache::instance()->shutdown();
+    }
+#endif
+    exec_env->destroy();
+    LOG(INFO) << "BE exec env destroy success";
 }
 
 } // namespace starrocks

@@ -17,11 +17,12 @@
 #include <atomic>
 
 namespace starrocks {
+class ExecEnv;
 class StorageEngine;
 class Daemon;
 
 extern std::atomic<bool> k_starrocks_exit;
 extern std::atomic<bool> k_starrocks_exit_quick;
 
-void start_be(StorageEngine* storage_engine, Daemon* daemon);
+void start_be(ExecEnv* exec_env, StorageEngine* storage_engine, Daemon* daemon);
 } // namespace starrocks
