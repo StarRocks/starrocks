@@ -62,6 +62,7 @@ public:
     PInternalServiceImplBase(ExecEnv* exec_env);
     ~PInternalServiceImplBase() override;
 
+    // used for non-pipeline engine
     void transmit_data(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitDataParams* request,
                        ::starrocks::PTransmitDataResult* response, ::google::protobuf::Closure* done) override;
 
