@@ -24,9 +24,7 @@ jobs:
   INFO:
     runs-on: [ self-hosted, quick ]
     if: >
-      github.event.workflow_run.event == 'pull_request' &&
-      !contains(github.event.workflow_run.display_title, '(sync #') &&
-      !contains(github.event.workflow_run.head_branch, '-sync-')
+      github.event.workflow_run.event == 'pull_request'
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       HEAD_SHA: ${{ steps.pr_details.outputs.HEAD_SHA }}
@@ -51,7 +49,6 @@ jobs:
       - name: Read the pr num file
         id: pr_num_reader
         uses: juliangruber/read-file-action@v1
-        if: steps.check.outpus.is_exist == 'true'
         with:
           path: ./pr_num.txt
 
