@@ -193,6 +193,7 @@ public class ConnectContext {
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
     protected PlannerProfile plannerProfile;
+    protected StatementBase.ExplainLevel explainLevel;
 
     protected TWorkGroup resourceGroup;
 
@@ -582,6 +583,14 @@ public class ConnectContext {
 
     public PlannerProfile getPlannerProfile() {
         return plannerProfile;
+    }
+
+    public StatementBase.ExplainLevel getExplainLevel() {
+        return explainLevel;
+    }
+
+    public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
+        this.explainLevel = explainLevel;
     }
 
     public TWorkGroup getResourceGroup() {
