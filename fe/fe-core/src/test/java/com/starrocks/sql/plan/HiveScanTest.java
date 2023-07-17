@@ -31,6 +31,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
 
     @Test
     public void testPruneColumnTest() throws Exception {
+        connectContext.getSessionVariable().setEnableCountStarOptimization(true);
         String[] sqlString = {
                 "select count(*) from lineitem_par",
                 "select count(*) from lineitem_par where l_shipdate = '1998-01-01'"
@@ -43,6 +44,15 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             List<ScanNode> scanNodeList = plan.getScanNodes();
             Assert.assertEquals(scanNodeList.get(0).getCanUseAnyColumn(), expexted[i]);
         }
+
+        connectContext.getSessionVariable().setEnableCountStarOptimization(false);
+        for (int i = 0; i < sqlString.length; i++) {
+            String sql = sqlString[i];
+            ExecPlan plan = getExecPlan(sql);
+            List<ScanNode> scanNodeList = plan.getScanNodes();
+            Assert.assertEquals(scanNodeList.get(0).getCanUseAnyColumn(), false);
+        }
+        connectContext.getSessionVariable().setEnableCountStarOptimization(true);
     }
 
     @Test

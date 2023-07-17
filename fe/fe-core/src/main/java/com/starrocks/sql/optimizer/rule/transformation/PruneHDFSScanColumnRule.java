@@ -109,6 +109,10 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             canUseAnyColumn = true;
         }
 
+        if (!context.getSessionVariable().isEnableCountStarOptimization()) {
+            canUseAnyColumn = false;
+        }
+
         if (scanOperator.getOutputColumns().equals(new ArrayList<>(scanColumns))) {
             scanOperator.setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();

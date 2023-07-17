@@ -457,6 +457,7 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testPruneColumnTest() throws Exception {
+        connectContext.getSessionVariable().setEnableCountStarOptimization(true);
         String[] sqlString = {
                 "select count(*) from lineitem_partition",
                 // for olap, partition key is not partition column.
@@ -470,6 +471,15 @@ public class ScanTest extends PlanTestBase {
             List<ScanNode> scanNodeList = plan.getScanNodes();
             Assert.assertEquals(scanNodeList.get(0).getCanUseAnyColumn(), expexted[i]);
         }
+
+        connectContext.getSessionVariable().setEnableCountStarOptimization(false);
+        for (int i = 0; i < sqlString.length; i++) {
+            String sql = sqlString[i];
+            ExecPlan plan = getExecPlan(sql);
+            List<ScanNode> scanNodeList = plan.getScanNodes();
+            Assert.assertEquals(scanNodeList.get(0).getCanUseAnyColumn(), false);
+        }
+        connectContext.getSessionVariable().setEnableCountStarOptimization(true);
     }
 
     @Test

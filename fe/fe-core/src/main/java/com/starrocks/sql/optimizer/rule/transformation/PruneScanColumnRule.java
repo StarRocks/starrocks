@@ -68,6 +68,10 @@ public class PruneScanColumnRule extends TransformationRule {
             canUseAnyColumn = true;
         }
 
+        if (!context.getSessionVariable().isEnableCountStarOptimization()) {
+            canUseAnyColumn = false;
+        }
+
         if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {
             scanOperator.setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
