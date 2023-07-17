@@ -112,7 +112,7 @@ public:
     // Initial exec environment. must call this to init all
     static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths, bool as_cn = false);
     static bool is_init();
-    static void stop(ExecEnv* exec_env);
+    void stop();
     static void destroy(ExecEnv* exec_env);
 
     void wait_for_finish();

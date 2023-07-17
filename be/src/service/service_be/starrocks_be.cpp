@@ -107,13 +107,14 @@ void start_be() {
 
     heartbeat_server->stop();
     heartbeat_server->join();
+    heartbeat_server.reset();
     LOG(INFO) << "BE heartbeat server exit success";
 
     http_server->stop();
     brpc_server->Stop(0);
     thrift_server->stop();
 
-    ExecEnv::stop(exec_env);
+    exec_env->stop();
 
     http_server->join();
     LOG(INFO) << "BE http server exit success";
@@ -122,7 +123,6 @@ void start_be() {
     thrift_server->join();
     LOG(INFO) << "BE thrift server exit success";
 
-    heartbeat_server.reset();
     http_server.reset();
     brpc_server.reset();
     thrift_server.reset();

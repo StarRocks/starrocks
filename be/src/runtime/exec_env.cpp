@@ -482,7 +482,7 @@ Status ExecEnv::_init_storage_page_cache() {
     return Status::OK();
 }
 
-void ExecEnv::_stop() {
+void ExecEnv::stop() {
     if (_stream_mgr != nullptr) {
         _stream_mgr->clear();
     }
@@ -590,10 +590,6 @@ void ExecEnv::wait_for_finish() {
 
 void ExecEnv::destroy(ExecEnv* env) {
     env->_destroy();
-}
-
-void ExecEnv::stop(ExecEnv* exec_env) {
-    exec_env->_stop();
 }
 
 int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
