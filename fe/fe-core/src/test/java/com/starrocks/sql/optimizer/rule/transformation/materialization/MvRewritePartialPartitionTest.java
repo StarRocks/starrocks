@@ -579,7 +579,8 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "\"replication_num\" = \"1\",\n" +
                         "\"force_external_table_query_rewrite\" = \"checked\"\n" +
                         ")\n" +
-                        "AS SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` GROUP BY l_shipdate");
+                        "AS SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                        "GROUP BY l_shipdate");
 
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "where l_shipdate >= '1998-01-04'";
