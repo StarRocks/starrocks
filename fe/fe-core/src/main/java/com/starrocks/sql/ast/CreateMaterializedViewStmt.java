@@ -445,6 +445,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         selectListItem);
             }
             columnName = MVUtils.getMVColumnName(selectListItem.getAlias());
+            type = AnalyzerUtils.transformTableColumnType(type, false);
         }
         Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName().toLowerCase()).
                 collect(Collectors.toSet());
