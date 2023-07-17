@@ -208,7 +208,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_query_ctx(_query_ctx);
 
-    auto* parent_mem_tracker = wg->mem_tracker();
+    auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
     auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
     auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
     int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
