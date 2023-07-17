@@ -1234,12 +1234,12 @@ public class ExpressionAnalyzer {
                         }
 
                         String name = ((StringLiteral) node.getChild(i)).getValue();
-                        if (check.contains(name)) {
+                        if (check.contains(name.toLowerCase())) {
                             throw new SemanticException("named_struct contains duplicate subfield name: " +
                                     name + " at " + (i + 1) + "-th input", node.getPos());
                         }
 
-                        check.add(name);
+                        check.add(name.toLowerCase());
                     }
                     break;
                 }
