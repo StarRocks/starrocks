@@ -1644,6 +1644,9 @@ public class LocalMetastore implements ConnectorMetadata {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             numAliveNodes = 0;
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWarehouseName);
+            if (warehouse == null) {
+                throw new DdlException("Warehouse " + warehouse + " not exist！");
+            }
             for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                 if (GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId).isAlive()) {
                     ++numAliveNodes;
@@ -1801,7 +1804,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 try {
                     Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
                     if (warehouse == null) {
-                        throw new UserException("warehouse " + warehouse + "not exist!");
+                        throw new UserException("Warehouse " + warehouse + "not exist!");
                     }
                     primaryComputeNodeId = ((LakeTablet) tablet).
                             getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
