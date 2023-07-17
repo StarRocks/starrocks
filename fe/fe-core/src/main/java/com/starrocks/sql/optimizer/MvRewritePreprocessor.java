@@ -126,7 +126,7 @@ public class MvRewritePreprocessor {
                         HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) baseTableDistributionInfo;
                         Set<String> distributedColumns =
                                 hashDistributionInfo.getDistributionColumns().stream().map(Column::getName)
-                                .collect(Collectors.toSet());
+                                        .collect(Collectors.toSet());
                         // NOTE: SyncMV's column may not be equal to base table's exactly.
                         List<Column> newDistributionColumns = Lists.newArrayList();
                         for (Column mvColumn : indexMeta.getSchema()) {
@@ -181,7 +181,7 @@ public class MvRewritePreprocessor {
                     .collect(Collectors.toSet());
         }
         if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "No Related MVs for the query plan");
+            logMVPrepare(connectContext,  "No Related MVs for the query plan");
             return;
         }
 
@@ -195,7 +195,7 @@ public class MvRewritePreprocessor {
             }
         }
         if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "No Related MVs after process");
+            logMVPrepare(connectContext,  "No Related MVs after process");
             return;
         }
         // all base table related mvs
@@ -209,7 +209,7 @@ public class MvRewritePreprocessor {
 
     private void preprocessMv(MaterializedView mv, Set<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
         if (!mv.isActive()) {
-            logMVPrepare(connectContext, "MV is not active: %s", mv.getName());
+            logMVPrepare(connectContext, mv, "MV is not active: %s", mv.getName());
             return;
         }
 
@@ -232,7 +232,7 @@ public class MvRewritePreprocessor {
             mv.setPlanContext(mvRewriteContextCache);
         }
         if (!mvRewriteContextCache.isValidMvPlan()) {
-            logMVPrepare(connectContext, "MV plan is not valid: %s, plan:\n %s",
+            logMVPrepare(connectContext, mv, "MV plan is not valid: %s, plan:\n %s",
                     mv.getName(), mvRewriteContextCache.getLogicalPlan().explain());
             return;
         }
@@ -241,7 +241,7 @@ public class MvRewritePreprocessor {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             if (!partitionNamesToRefresh.isEmpty()) {
-                logMVPrepare(connectContext, "MV %s is outdated, partitionNamesToRefresh:%s",
+                logMVPrepare(connectContext, mv, "MV %s is outdated, partitionNamesToRefresh:%s",
                         mv.getName(), partitionNamesToRefresh);
                 return;
             }
@@ -249,8 +249,8 @@ public class MvRewritePreprocessor {
                 partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
             // if the mv is partitioned, and all partitions need refresh,
             // then it can not be a candidate
-            logMVPrepare(connectContext, "Partitioned MV %s is outdated and all its partitions need to be " +
-                            "refreshed: %s", mv.getName(), partitionNamesToRefresh);
+            logMVPrepare(connectContext, mv, "Partitioned MV %s is outdated and all its partitions need to be " +
+                    "refreshed: %s", mv.getName(), partitionNamesToRefresh);
             return;
         }
 
@@ -261,7 +261,7 @@ public class MvRewritePreprocessor {
             // when should calculate the latest partition range predicates for partition-by base table
             mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
             if (mvPartialPartitionPredicates == null) {
-                logMVPrepare(connectContext, "Partitioned MV %s is outdated which contains some partitions " +
+                logMVPrepare(connectContext, mv, "Partitioned MV %s is outdated which contains some partitions " +
                         "to be refreshed:%s", mv.getName(), partitionNamesToRefresh);
                 return;
             }
@@ -302,7 +302,7 @@ public class MvRewritePreprocessor {
         }
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
-        logMVPrepare(connectContext, "Add MV %s as a candidate", mv.getName());
+        logMVPrepare(connectContext, mv, "Prepare MV %s success", mv.getName());
     }
 
     /**
