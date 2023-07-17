@@ -650,7 +650,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     });
 
     SCOPED_RAW_TIMER(&profiler.prepare_time);
-    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+    RETURN_IF_ERROR(
+            GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
     {
         SCOPED_RAW_TIMER(&profiler.prepare_query_ctx_time);
         RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
