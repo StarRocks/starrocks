@@ -122,60 +122,7 @@ public class StarMgrServer {
         com.staros.util.Config.STARMGR_RPC_PORT = Config.cloud_native_meta_port;
 
         // Storage fs type
-        com.staros.util.Config.DEFAULT_FS_TYPE = Config.cloud_native_storage_type;
-        if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("HDFS")) {
-            // HDFS related configuration
-            com.staros.util.Config.HDFS_URL = Config.cloud_native_hdfs_url;
-            if (com.staros.util.Config.HDFS_URL.isEmpty()) {
-                LOG.error("The configuration item \"cloud_native_hdfs_url\" is empty.");
-                System.exit(-1);
-            }
-        } else if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("S3")) {
-            // AWS related configuration
-            String[] bucketAndPrefix = getBucketAndPrefix();
-            com.staros.util.Config.S3_BUCKET = bucketAndPrefix[0];
-            com.staros.util.Config.S3_PATH_PREFIX = bucketAndPrefix[1];
-            com.staros.util.Config.S3_REGION = Config.aws_s3_region;
-            com.staros.util.Config.S3_ENDPOINT = Config.aws_s3_endpoint;
-            if (com.staros.util.Config.S3_BUCKET.isEmpty()) {
-                LOG.error("The configuration item \"aws_s3_path = {}\" is invalid, s3 bucket is empty.", Config.aws_s3_path);
-                System.exit(-1);
-            }
-            // aws credential related configuration
-            String credentialType = getAwsCredentialType();
-            if (credentialType == null) {
-                LOG.error("Invalid aws credential configuration.");
-                System.exit(-1);
-            }
-            com.staros.util.Config.AWS_CREDENTIAL_TYPE = credentialType;
-            com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_ID = Config.aws_s3_access_key;
-            com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_SECRET = Config.aws_s3_secret_key;
-            com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_ARN = Config.aws_s3_iam_role_arn;
-            com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.aws_s3_external_id;
-        } else if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("AZBLOB")) {
-            com.staros.util.Config.AZURE_BLOB_ENDPOINT = Config.azure_blob_endpoint;
-            com.staros.util.Config.AZURE_BLOB_PATH = Config.azure_blob_path;
-            com.staros.util.Config.AZURE_BLOB_SHARED_KEY = Config.azure_blob_shared_key;
-            com.staros.util.Config.AZURE_BLOB_SAS_TOKEN = Config.azure_blob_sas_token;
-            com.staros.util.Config.AZURE_BLOB_TENANT_ID = Config.azure_blob_tenant_id;
-            com.staros.util.Config.AZURE_BLOB_CLIENT_ID = Config.azure_blob_client_id;
-            com.staros.util.Config.AZURE_BLOB_CLIENT_SECRET = Config.azure_blob_client_secret;
-            com.staros.util.Config.AZURE_BLOB_CLIENT_CERTIFICATE_PATH = Config.azure_blob_client_certificate_path;
-            com.staros.util.Config.AZURE_BLOB_AUTHORITY_HOST = Config.azure_blob_authority_host;
-            if (com.staros.util.Config.AZURE_BLOB_ENDPOINT.isEmpty()) {
-                LOG.error("The configuration item \"azure_blob_endpoint\" is empty.");
-                System.exit(-1);
-            }
-            if (com.staros.util.Config.AZURE_BLOB_PATH.isEmpty()) {
-                LOG.error("The configuration item \"azure_blob_path\" is empty.");
-                System.exit(-1);
-            }
-        } else {
-            LOG.error(
-                    "The configuration item \"cloud_native_storage_type = {}\" is invalid, must be HDFS or S3 or AZBLOB.",
-                    Config.cloud_native_storage_type);
-            System.exit(-1);
-        }
+        com.staros.util.Config.DEFAULT_FS_TYPE = "";
 
         // use tablet_sched_disable_balance
         com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
@@ -301,41 +248,5 @@ public class StarMgrServer {
 
     public long getReplayId() {
         return getJournalSystem().getReplayId();
-    }
-
-    public static String[] getBucketAndPrefix() {
-        int index = Config.aws_s3_path.indexOf('/');
-        if (index < 0) {
-            return new String[] {Config.aws_s3_path, ""};
-        }
-
-        return new String[] {Config.aws_s3_path.substring(0, index), 
-                Config.aws_s3_path.substring(index + 1)};
-    }
-
-    public static String getAwsCredentialType() {
-        if (Config.aws_s3_use_aws_sdk_default_behavior) {
-            return "default";
-        }
-
-        if (Config.aws_s3_use_instance_profile) {
-            if (Config.aws_s3_iam_role_arn.isEmpty()) {
-                return "instance_profile";
-            }
-
-            return "assume_role";
-        }
-
-        if (Config.aws_s3_access_key.isEmpty() || Config.aws_s3_secret_key.isEmpty()) {
-            // invalid credential configuration
-            return null;
-        }
-
-        if (Config.aws_s3_iam_role_arn.isEmpty()) {
-            return "simple";
-        }
-
-        //assume_role with ak sk, not supported now, just return null
-        return null;
     }
 }

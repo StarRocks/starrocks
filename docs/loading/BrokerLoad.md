@@ -426,7 +426,7 @@ In most cases, only one `data_desc` is declared for each load job, each load job
 
 ## Related configuration items
 
-The [FE configuration item](../administration/Configuration.md#fe-configuration-items) `max_broker_load_job_concurrency` specifies the maximum number of tasks that can be concurrently run for Broker Load within a specific time period in your StarRocks cluster.
+The [FE configuration item](../administration/Configuration.md#fe-configuration-items) `max_broker_load_job_concurrency` specifies the maximum number of tasks that can be concurrently run for Broker Load within your StarRocks cluster.
 
 In StarRocks v2.4 and earlier, if the total number of tasks generated for Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their submission time.
 

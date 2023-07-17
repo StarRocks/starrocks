@@ -58,6 +58,7 @@ public class AnalyzerUtilsTest {
 
     @Test
     public void testGetFormatPartitionValue() {
+        Assert.assertEquals("_11", AnalyzerUtils.getFormatPartitionValue("-11"));
         Assert.assertEquals("20200101", AnalyzerUtils.getFormatPartitionValue("2020-01-01"));
         Assert.assertEquals("676d5dde", AnalyzerUtils.getFormatPartitionValue("杭州"));
     }
