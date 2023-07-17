@@ -32,11 +32,19 @@ jobs:
           PR_NUMBER: ${{ github.event.number }}
         run: |
           echo $PR_NUMBER > pr_num.txt
+          GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
+          echo ${GITHUB_SHA} > head_sha.txt
       - name: Upload the PR number
         uses: actions/upload-artifact@v2
         with:
           name: pr_num
           path: ./pr_num.txt
+          retention-days: 1
+      - name: Upload the PR HEAD REF
+        uses: actions/upload-artifact@v2
+        with:
+          name: head_sha
+          path: ./head_sha.txt
           retention-days: 1
 
   doc-checker:
@@ -79,7 +87,6 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
-
       - name: BRANCH INFO
         id: branch
         run: |
@@ -405,37 +412,6 @@ jobs:
           echo ">>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
-
-      - name: Prepare coverage files
-        run: |
-          cd ${{ github.workspace }}/fe/fe-core
-          cp -rf ${{ steps.run_ut.outputs.COV_DIR }} target/
-
-      - name: Coverage Report
-        uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
-          dry_run: false
-          name: fe-ut
-          fail_ci_if_error: false
-          verbose: true
-
-      - name: Upload Result
-        if: steps.run_ut.outcome == 'success'
-        run: |
-          branch=${{ steps.branch.outputs.branch }}
-          bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ -rf
-          ossutil64 --config-file ~/.ossutilconfig cp fe/fe-core/target/result/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Result/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
-
-      - name: Upload UT XML
-        if: always()
-        run: |
-          branch=${{ steps.branch.outputs.branch }}
-          bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
-          ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ -rf
-          ossutil64 --config-file ~/.ossutilconfig cp ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-XML/${PR_NUMBER}/ --recursive --force --tagging="type=ci"
 
       - name: Upload log
         if: always()
