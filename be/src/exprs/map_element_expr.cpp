@@ -28,19 +28,23 @@ class MapElementExpr final : public Expr {
 public:
     explicit MapElementExpr(const TExprNode& node) : Expr(node) {}
 
-    MapElementExpr(const MapElementExpr&) = default;
-    MapElementExpr(MapElementExpr&&) = default;
+    MapElementExpr(const MapElementExpr& m) : Expr(m) { _const_input = m._const_input; }
+    MapElementExpr(MapElementExpr&& m) : Expr(m) { _const_input = m._const_input; }
 
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
-        _const_input.resize(_children.size());
-        for (auto i = 0; i < _children.size(); ++i) {
-            if (_children[i]->is_constant()) {
-                // _const_input[i] maybe not be of ConstColumn
-                ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
-            } else {
-                _const_input[i] = nullptr;
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            _const_input.resize(_children.size());
+            for (auto i = 0; i < _children.size(); ++i) {
+                if (_children[i]->is_constant()) {
+                    // _const_input[i] maybe not be of ConstColumn
+                    ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
+                } else {
+                    _const_input[i] = nullptr;
+                }
             }
+        } else {
+            DCHECK_EQ(_const_input.size(), _children.size());
         }
         return Status::OK();
     }
@@ -136,7 +140,6 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MapElementExpr(*this)); }
 
 private:
-    Column* get_data_column(Column* column) { return ColumnHelper::get_data_column(column); }
     Columns _const_input;
 };
 
