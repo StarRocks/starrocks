@@ -1933,7 +1933,7 @@ TEST_F(AggregateTest, test_array_agg) {
 
         auto res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
-        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "['bcd','Datum()','esfg','cdrdfe',NULL,NULL,'']"), 0);
+        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['bcd','Datum()','esfg','cdrdfe',NULL,NULL,'']]"), 0);
     }
 
     // only column + const column
@@ -2049,7 +2049,7 @@ TEST_F(AggregateTest, test_array_agg) {
 
         auto res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
-        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "['cdrdfe',NULL,'bcd',NULL,'esfg',NULL,NULL]"), 0);
+        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['cdrdfe',NULL,'bcd',NULL,'esfg',NULL,NULL]]"), 0);
     }
 }
 
