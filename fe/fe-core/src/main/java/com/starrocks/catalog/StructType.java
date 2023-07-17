@@ -207,7 +207,7 @@ public class StructType extends Type {
             StructField structField = fields.get(pos);
             if (!selectedFields[pos]) {
                 fields.remove(pos);
-                fieldMap.remove(structField.getName().toLowerCase());
+                fieldMap.remove(StringUtils.lowerCase(structField.getName()));
             }
         }
 
