@@ -98,7 +98,11 @@ public:
     int64_t compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit, size_t pipeline_dop,
                                     int64_t option_query_mem_limit);
     size_t total_fragments() { return _total_fragments; }
-    void init_mem_tracker(int64_t bytes_limit, MemTracker* parent);
+    /// Initialize the mem_tracker of this query.
+    /// Positive `big_query_mem_limit` and non-null `wg` indicate
+    /// that there is a big query memory limit of this resource group.
+    void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
+                          workgroup::WorkGroup* wg = nullptr);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
     Status init_query_once(workgroup::WorkGroup* wg);
