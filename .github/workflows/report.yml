@@ -120,11 +120,11 @@ jobs:
           report_paths: ./fe/fe-core/target/surefire-reports/*.xml
 
       - name: Merge FE Coverage
-        if: steps.download-ut-xml.outputs.size != '0'
+        id: merge_report
+        if: steps.publish_report.outcome == 'success'
         env:
           fe_path: ${{ github.workspace }}/fe
         run: |
-          set -ex
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
@@ -135,13 +135,13 @@ jobs:
           fi
 
       - name: Generate XML Report
+        id: generate-xml-report
         env:
           package_path: ${{ github.workspace }}/ci-tool/package
           fe_path: ${{ github.workspace }}/fe
           fe_core_path: ${{ github.workspace }}/fe/fe-core
-        if: steps.publish_report.outcome == 'success'
+        if: steps.merge_report.outcome == 'success'
         run: |
-          set -x
           rm -rf result
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
@@ -159,7 +159,7 @@ jobs:
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
-        if: success()
+        if: steps.generate-xml-report.outcome == 'success'
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           time_count=0
@@ -182,7 +182,7 @@ jobs:
       # total coverage
       - name: Coverage Report
         uses: codecov/codecov-action@v3
-        if: success()
+        if: steps.generate-xml-report.outcome == 'success'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ github.workspace }}/coverage.xml
