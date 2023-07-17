@@ -283,6 +283,7 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
                                           const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                           const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
                                           ColumnPtr* max_column, bool* decode_ok) {
+    DCHECK_EQ(field.physical_type, column_meta.type);
     *decode_ok = true;
     if (!_can_use_min_max_stats(column_meta, column_order)) {
         *decode_ok = false;
@@ -360,19 +361,20 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
         std::unique_ptr<ColumnConverter> converter;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(field, type, timezone, &converter));
 
-        [[maybe_unused]] bool ret = false;
+        [[maybe_unused]] bool ret = true;
         if (!converter->need_convert) {
-            ret = (*min_column)->append_strings(std::vector<Slice>{min_slice});
-            ret = (*max_column)->append_strings(std::vector<Slice>{max_slice});
+            ret |= (*min_column)->append_strings(std::vector<Slice>{min_slice});
+            ret |= (*max_column)->append_strings(std::vector<Slice>{max_slice});
         } else {
             ColumnPtr min_scr_column = converter->create_src_column();
-            ret = min_scr_column->append_strings(std::vector<Slice>{min_slice});
+            ret |= min_scr_column->append_strings(std::vector<Slice>{min_slice});
             converter->convert(min_scr_column, min_column->get());
 
             ColumnPtr max_scr_column = converter->create_src_column();
-            ret = max_scr_column->append_strings(std::vector<Slice>{max_slice});
+            ret |= max_scr_column->append_strings(std::vector<Slice>{max_slice});
             converter->convert(max_scr_column, max_column->get());
         }
+        DCHECK(ret);
         break;
     }
     default:

@@ -99,7 +99,7 @@ void IcebergMetaHelper::build_column_name_2_pos_in_meta(
         }
         // Put SlotDescriptor's origin column name here!
         column_name_2_pos_in_meta.emplace(slot->col_name(),
-                                          _file_metadata->schema().get_field_idx_by_field_id(it->second->field_id));
+                                          _file_metadata->schema().get_stored_column_by_field_id(it->second->field_id)->physical_column_index);
     }
 }
 
