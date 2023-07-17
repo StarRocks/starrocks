@@ -2,7 +2,7 @@
 
 本文介绍什么是 Catalog， 以及如何使用 Catalog 管理和查询内外部数据。
 
-StarRocks 自 2.3 版本起支持 Catalog（数据目录）功能，
+StarRocks 自 2.3 版本起支持 Catalog（数据目录）功能，实现在一套系统内同时维护内、外部数据，方便您轻松访问并查询存储在各类外部源的数据。
 
 ## 基本概念
 
@@ -11,7 +11,7 @@ StarRocks 自 2.3 版本起支持 Catalog（数据目录）功能，
 
 ## Catalog
 
-方便您轻松访问并查询存储在各类外部源的数据。当前 StarRocks 提供两种类型 Catalog：internal catalog 和 external catalog。
+当前 StarRocks 提供两种类型 Catalog：internal catalog 和 external catalog。
 
 ![figure1](/assets/3.12-1.png)
 
