@@ -39,9 +39,16 @@ TOP-N (order by [[13: o_totalprice DESC NULLS LAST, 10: o_orderdate ASC NULLS FI
                 EXCHANGE SHUFFLE[9]
                     SCAN (mv[lineitem_mv] columns[103: c_name, 109: l_orderkey, 111: l_quantity, 118: o_custkey, 119: o_orderdate, 123: o_totalprice] predicate[null])
                 EXCHANGE SHUFFLE[35]
+<<<<<<< HEAD
                     AGGREGATE ([GLOBAL] aggregate [{159: sum=sum(159: sum)}] group by [[53: l_orderkey]] having [159: sum > 315]
                         EXCHANGE SHUFFLE[53]
                             AGGREGATE ([LOCAL] aggregate [{159: sum=sum(57: sum_qty)}] group by [[53: l_orderkey]] having [null]
                                 SCAN (mv[lineitem_agg_mv1] columns[53: l_orderkey, 57: sum_qty] predicate[null])
+=======
+                    AGGREGATE ([GLOBAL] aggregate [{163: sum=sum(163: sum)}] group by [[137: l_orderkey]] having [163: sum > 315.0]
+                        EXCHANGE SHUFFLE[137]
+                            AGGREGATE ([LOCAL] aggregate [{163: sum=sum(141: sum_qty)}] group by [[137: l_orderkey]] having [null]
+                                SCAN (mv[lineitem_agg_mv1] columns[137: l_orderkey, 141: sum_qty] predicate[null])
+>>>>>>> 9408b7a6e9 ([BugFix] Decimal cast to string on FE (#27235))
 [end]
 
