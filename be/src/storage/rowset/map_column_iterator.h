@@ -24,7 +24,7 @@ class MapColumnIterator final : public ColumnIterator {
 public:
     MapColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> nulls,
                       std::unique_ptr<ColumnIterator> offsets, std::unique_ptr<ColumnIterator> keys,
-                      std::unique_ptr<ColumnIterator> values, ColumnAccessPath* path);
+                      std::unique_ptr<ColumnIterator> values, const ColumnAccessPath* path);
 
     ~MapColumnIterator() override = default;
 
