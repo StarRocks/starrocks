@@ -237,29 +237,14 @@ int main(int argc, char** argv) {
     // Add logger for thrift internal.
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
-    std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
-    daemon->init(argc, argv, paths);
-
-    // init jdbc driver manager
-    EXIT_IF_ERROR(starrocks::JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) +
-                                                                    "/lib/jdbc_drivers"));
-
-    if (!starrocks::BackendOptions::init()) {
-        exit(-1);
-    }
-
-    auto* exec_env = starrocks::ExecEnv::GetInstance();
-    EXIT_IF_ERROR(exec_env->init(paths, as_cn));
-
     // cn need to support all ops for cloudnative table, so just start_be
-    starrocks::start_be(exec_env, paths, as_cn, daemon.get());
+    starrocks::start_be(paths, as_cn);
 
     if (starrocks::k_starrocks_exit_quick.load()) {
         LOG(INFO) << "BE is shutting down，will exit quickly";
         exit(0);
     }
 
-    daemon.reset();
     Aws::ShutdownAPI(aws_sdk_options);
 
     return 0;

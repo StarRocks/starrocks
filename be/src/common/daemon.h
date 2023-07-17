@@ -47,7 +47,7 @@ public:
     Daemon() = default;
     ~Daemon() = default;
 
-    void init(int argc, char** argv, const std::vector<StorePath>& paths);
+    void init(bool as_cn, const std::vector<StorePath>& paths);
     void stop();
     bool stopped();
 

@@ -18,6 +18,7 @@
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/jdbc_driver_manager.h"
 #include "service/brpc.h"
 #include "service/service.h"
 #include "service/service_be/http_service.h"
@@ -102,7 +103,20 @@ StorageEngine* init_storage_engine(ExecEnv* exec_env, std::vector<StorePath> pat
     return engine;
 }
 
-void start_be(ExecEnv* exec_env, const std::vector<StorePath>& paths, bool as_cn, Daemon* deamon) {
+void start_be(const std::vector<StorePath>& paths, bool as_cn) {
+    auto daemon = std::make_unique<Daemon>();
+    daemon->init(as_cn, paths);
+
+    // init jdbc driver manager
+    EXIT_IF_ERROR(JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) + "/lib/jdbc_drivers"));
+
+    if (!starrocks::BackendOptions::init()) {
+        exit(-1);
+    }
+
+    auto* exec_env = starrocks::ExecEnv::GetInstance();
+    EXIT_IF_ERROR(exec_env->init(paths, as_cn));
+
     auto* storage_engine = init_storage_engine(exec_env, paths, as_cn);
 
 #ifdef USE_STAROS
@@ -190,7 +204,7 @@ void start_be(ExecEnv* exec_env, const std::vector<StorePath>& paths, bool as_cn
     brpc_server->Stop(0);
     thrift_server->stop();
 
-    deamon->stop();
+    daemon->stop();
     exec_env->stop();
     storage_engine->stop();
 
@@ -214,10 +228,15 @@ void start_be(ExecEnv* exec_env, const std::vector<StorePath>& paths, bool as_cn
         starrocks::BlockCache::instance()->shutdown();
     }
 #endif
+
+    daemon.reset();
+    LOG(INFO) << "BE daemon thread exit success";
+
     exec_env->destroy();
     LOG(INFO) << "BE exec env destroy success";
 
     delete storage_engine;
+    LOG(INFO) << "BE storage engine destroy success";
 }
 
 } // namespace starrocks
