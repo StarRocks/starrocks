@@ -93,7 +93,7 @@ public class HudiMetadataTest {
     @Test
     public void testListDbNames() {
         List<String> databaseNames = hudiMetadata.listDbNames();
-        Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
+        Assert.assertEquals(Lists.newArrayList("db1", "db2", "information_schema"), databaseNames);
         CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
     }
