@@ -179,8 +179,6 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
 }
 
 Status StorageEngine::_open(const EngineOptions& options) {
-    _heartbeat_flags = options.heartbeat_flags;
-
     // init store_map
     RETURN_IF_ERROR_WITH_WARN(_init_store_map(), "_init_store_map failed");
 

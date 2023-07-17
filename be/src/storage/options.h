@@ -69,6 +69,5 @@ struct EngineOptions {
     MemTracker* update_mem_tracker = nullptr;
     // if start as cn, no need to write cluster id
     bool need_write_cluster_id = true;
-    HeartbeatFlags* heartbeat_flags = nullptr;
 };
 } // namespace starrocks

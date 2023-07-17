@@ -203,8 +203,6 @@ public:
 
     void release_rowset_id(const RowsetId& rowset_id) { return _rowset_id_generator->release_id(rowset_id); }
 
-    void set_heartbeat_flags(HeartbeatFlags* heartbeat_flags) { _heartbeat_flags = heartbeat_flags; }
-
     // start all backgroud threads. This should be call after env is ready.
     virtual Status start_bg_threads();
 
@@ -386,8 +384,6 @@ private:
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
-
-    HeartbeatFlags* _heartbeat_flags = nullptr;
 
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
