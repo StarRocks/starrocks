@@ -80,7 +80,7 @@ INTO TABLE <table_name>
 
   >**注意**
   >
-  > 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
+  > Broker Load 支持通过 S3 或 S3A 协议访问 AWS S3，因此从 AWS S3 导入数据时，您在文件路径中传入的目标文件的 S3 URI 可以使用 `s3://` 或 `s3a://` 作为前缀。
   
 - `INTO TABLE`
 
