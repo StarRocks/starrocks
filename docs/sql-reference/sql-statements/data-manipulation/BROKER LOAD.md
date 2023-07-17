@@ -80,7 +80,8 @@ INTO TABLE <table_name>
   - `hdfs_host`: the FS port of the NameNode host in the HDFS cluster. The default port number is `9000`.
 
   > **NOTICE**
-  > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
+  >
+  > Broker Load supports accessing AWS S3 according to the S3 or S3A protocol. Therefore, when you load data from AWS S3, you can include `s3://` or `s3a://` as the prefix in the S3 URI that you pass as the file path.
 
 - `INTO TABLE`
 
