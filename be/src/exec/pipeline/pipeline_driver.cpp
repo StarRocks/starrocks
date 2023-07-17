@@ -430,10 +430,6 @@ void PipelineDriver::check_short_circuit() {
     }
 }
 
-bool PipelineDriver::need_report_exec_state() {
-    return _fragment_ctx->need_report_exec_state();
-}
-
 void PipelineDriver::report_exec_state_if_necessary() {
     if (_state == DriverState::NOT_READY || _state == DriverState::FINISH || _state == DriverState::CANCELED ||
         _state == DriverState::INTERNAL_ERROR) {
