@@ -55,6 +55,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -97,6 +98,8 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.BackendCoreStat;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -233,6 +236,14 @@ public class StarRocksAssert {
 
     public StarRocksAssert withTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List getWorkersByWorkerGroup(long workerGroupId) {
+                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+            }
+        };
+
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         return this;
     }

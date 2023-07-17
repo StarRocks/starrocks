@@ -19,6 +19,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.UserIdentity;
@@ -60,6 +61,14 @@ public class SetWarehouseStmtTest {
 
     @Test
     public void testSetWarehouse(@Mocked WarehouseManager warehouseMgr) throws Exception {
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
         new Expectations() {
             {
                 warehouseMgr.warehouseExists("aaa");
