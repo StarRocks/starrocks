@@ -1,6 +1,8 @@
 #include <gperftools/malloc_extension.h>
 #include <unistd.h>
 
+#include <utility>
+
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif
@@ -78,7 +80,31 @@ void init_block_cache() {
     }
 }
 
-void start_be(ExecEnv* exec_env, StorageEngine* storage_engine, Daemon* deamon) {
+StorageEngine* init_storage_engine(ExecEnv* exec_env, std::vector<StorePath> paths, bool as_cn) {
+    // Init and open storage engine.
+    starrocks::EngineOptions options;
+    options.store_paths = std::move(paths);
+    options.backend_uid = starrocks::UniqueId::gen_uid();
+    options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
+    options.update_mem_tracker = exec_env->update_mem_tracker();
+    options.need_write_cluster_id = !as_cn;
+    starrocks::StorageEngine* engine = nullptr;
+
+    auto st = starrocks::StorageEngine::open(options, &engine);
+    if (!st.ok()) {
+        LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
+        exit(-1);
+    }
+
+    // Start all background threads of storage engine.
+    // SHOULD be called after exec env is initialized.
+    EXIT_IF_ERROR(engine->start_bg_threads());
+    return engine;
+}
+
+void start_be(ExecEnv* exec_env, const std::vector<StorePath>& paths, bool as_cn, Daemon* deamon) {
+    auto* storage_engine = init_storage_engine(exec_env, paths, as_cn);
+
 #ifdef USE_STAROS
     init_staros_worker();
 #endif
@@ -190,6 +216,8 @@ void start_be(ExecEnv* exec_env, StorageEngine* storage_engine, Daemon* deamon) 
 #endif
     exec_env->destroy();
     LOG(INFO) << "BE exec env destroy success";
+
+    delete storage_engine;
 }
 
 } // namespace starrocks

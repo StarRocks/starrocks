@@ -251,27 +251,8 @@ int main(int argc, char** argv) {
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     EXIT_IF_ERROR(exec_env->init(paths, as_cn));
 
-    // Init and open storage engine.
-    starrocks::EngineOptions options;
-    options.store_paths = paths;
-    options.backend_uid = starrocks::UniqueId::gen_uid();
-    options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
-    options.update_mem_tracker = exec_env->update_mem_tracker();
-    options.need_write_cluster_id = !as_cn;
-    starrocks::StorageEngine* engine = nullptr;
-
-    auto st = starrocks::StorageEngine::open(options, &engine);
-    if (!st.ok()) {
-        LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
-        exit(-1);
-    }
-
-    // Start all background threads of storage engine.
-    // SHOULD be called after exec env is initialized.
-    EXIT_IF_ERROR(engine->start_bg_threads());
-
     // cn need to support all ops for cloudnative table, so just start_be
-    starrocks::start_be(exec_env, engine, daemon.get());
+    starrocks::start_be(exec_env, paths, as_cn, daemon.get());
 
     if (starrocks::k_starrocks_exit_quick.load()) {
         LOG(INFO) << "BE is shutting down，will exit quickly";
@@ -279,7 +260,6 @@ int main(int argc, char** argv) {
     }
 
     daemon.reset();
-    delete engine;
     Aws::ShutdownAPI(aws_sdk_options);
 
     return 0;
