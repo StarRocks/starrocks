@@ -3263,7 +3263,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             db.dropTable(oldTableName);
             db.registerTableUnlocked(olapTable);
-            disableMaterializedViewForRenameTable(db, olapTable);
+            inactiveRelatedMaterializedView(db, olapTable, String.format("based table %s renamed ", oldTableName));
         } finally {
             db.writeUnlock();
         }
@@ -3282,15 +3282,17 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setComment(clause.getNewComment());
     }
 
-    private void disableMaterializedViewForRenameTable(Database db, OlapTable olapTable) {
+    public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                        "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
-                mv.setInactiveAndReason("base table renamed: " + olapTable.getName());
+                LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
+                mv.setInactiveAndReason(reason);
+
+                // recursive inactive
+                inactiveRelatedMaterializedView(db, mv, String.format("base table %s inactive", mv.getName()));
             } else {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
+                LOG.info("Ignore materialized view {} does not exists", mvId);
             }
         }
     }
@@ -3308,7 +3310,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.dropTable(tableName);
             table.setName(newTableName);
             db.registerTableUnlocked(table);
-            disableMaterializedViewForRenameTable(db, table);
+            inactiveRelatedMaterializedView(db, table, String.format("base table {} renamed", tableName));
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
