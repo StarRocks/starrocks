@@ -2058,7 +2058,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
-        if (table.isCloudNativeTable()) {
+        if (table.isCloudNativeTableOrMaterializedView()) {
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                     .replayBindTableToStorageVolume(info.getStorageVolumeId(), table.getId());
         }
@@ -2828,27 +2828,39 @@ public class LocalMetastore implements ConnectorMetadata {
         boolean isNonPartitioned = partitionInfo.getType() == PartitionType.UNPARTITIONED;
         DataProperty dataProperty = analyzeMVDataProperties(db, materializedView, properties, isNonPartitioned);
 
-        Set<Long> tabletIdSet = new HashSet<>();
-        // process single partition info
-        if (isNonPartitioned) {
-            long partitionId = GlobalStateMgr.getCurrentState().getNextId();
-            Preconditions.checkNotNull(dataProperty);
-            partitionInfo.setDataProperty(partitionId, dataProperty);
-            partitionInfo.setReplicationNum(partitionId, materializedView.getDefaultReplicationNum());
-            partitionInfo.setIsInMemory(partitionId, false);
-            partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
-            StorageInfo storageInfo = materializedView.getTableProperty().getStorageInfo();
-            partitionInfo.setDataCacheInfo(partitionId,
-                    storageInfo == null ? null : storageInfo.getDataCacheInfo());
-            Long version = Partition.PARTITION_INIT_VERSION;
-            Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
-            buildPartitions(db, materializedView, Collections.singletonList(partition));
-            materializedView.addPartition(partition);
+        try {
+            Set<Long> tabletIdSet = new HashSet<>();
+            // process single partition info
+            if (isNonPartitioned) {
+                long partitionId = GlobalStateMgr.getCurrentState().getNextId();
+                Preconditions.checkNotNull(dataProperty);
+                partitionInfo.setDataProperty(partitionId, dataProperty);
+                partitionInfo.setReplicationNum(partitionId, materializedView.getDefaultReplicationNum());
+                partitionInfo.setIsInMemory(partitionId, false);
+                partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+                StorageInfo storageInfo = materializedView.getTableProperty().getStorageInfo();
+                partitionInfo.setDataCacheInfo(partitionId,
+                        storageInfo == null ? null : storageInfo.getDataCacheInfo());
+                Long version = Partition.PARTITION_INIT_VERSION;
+                Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
+                buildPartitions(db, materializedView, Collections.singletonList(partition));
+                materializedView.addPartition(partition);
+            }
+
+            MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
+
+            String storageVolumeId = "";
+            if (materializedView.isCloudNativeMaterializedView()) {
+                storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                        .getStorageVolumeIdOfTable(materializedView.getId());
+            }
+            onCreate(db, materializedView, storageVolumeId, stmt.isIfNotExists());
+        } catch (DdlException e) {
+            if (materializedView.isCloudNativeMaterializedView()) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(materializedView.getId());
+            }
+            throw e;
         }
-
-        MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
-
-        onCreate(db, materializedView, "", stmt.isIfNotExists());
         LOG.info("Successfully create materialized view [{}:{}]", mvName, materializedView.getMvId());
 
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
@@ -2979,7 +2991,14 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             if (materializedView.isCloudNativeMaterializedView()) {
-                setLakeStorageInfo(materializedView, "", properties);
+                String volume = "";
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                    volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+                }
+                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                svm.bindTableToStorageVolume(volume, db.getId(), materializedView.getId());
+                String storageVolumeId = svm.getStorageVolumeIdOfTable(materializedView.getId());
+                setLakeStorageInfo(materializedView, storageVolumeId, properties);
             }
 
             if (!properties.isEmpty()) {
@@ -3003,6 +3022,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getTableProperty().getProperties().putAll(properties);
             }
         } catch (AnalysisException e) {
+            if (materializedView.isCloudNativeMaterializedView()) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                        .unbindTableToStorageVolume(materializedView.getId());
+            }
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
         }
         return dataProperty;
