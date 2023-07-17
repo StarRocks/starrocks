@@ -431,6 +431,7 @@ public:
     }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        DCHECK_EQ(_const_input.size(), _children.size());
         auto child_size = _children.size();
         Columns input_data(child_size);
         std::vector<NullColumnPtr> input_null(child_size);

@@ -29,10 +29,11 @@ public:
     explicit MapElementExpr(const TExprNode& node) : Expr(node) {}
 
     MapElementExpr(const MapElementExpr& m) : Expr(m) { _const_input = m._const_input; }
-    MapElementExpr(MapElementExpr&& m) : Expr(m) { _const_input = m._const_input; }
+    MapElementExpr(MapElementExpr&& m) noexcept : Expr(m) { _const_input = m._const_input; }
 
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
+        DCHECK_EQ(2, _children.size());
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             _const_input.resize(_children.size());
             for (auto i = 0; i < _children.size(); ++i) {
@@ -50,7 +51,7 @@ public:
     }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
-        DCHECK_EQ(2, _children.size());
+        DCHECK_EQ(_const_input.size(), _children.size());
         // check the map's value type is the same as the expr's type
 #ifndef BE_TEST
         DCHECK_EQ(_type, _children[0]->type().children[1]);
