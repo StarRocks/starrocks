@@ -547,4 +547,29 @@ public class SelectStmtTest {
                     "  |  cardinality: 1"));
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+<<<<<<< HEAD
+    public void testSubstringConstantFolding() {
+        try {
+            String sql = "select * from db1.t where dt = \"2022-01-02\" or dt = cast(substring(\"2022-01-03\", 1, 10) as date);";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("dt IN ('2022-01-02', '2022-01-03')"));
+=======
+    void testArraySubfieldsPrune() {
+        try {
+            String sql = "select str_to_map('age=18&sex=1&gender=1','&','=')['age'] AS age, " +
+                    "str_to_map('age=18&sex=1&gender=1','&','=')['sex'] AS sex;";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("str_to_map[([4: split, ARRAY<VARCHAR>, true], '='); " +
+                    "args: INVALID_TYPE,VARCHAR; result: MAP<VARCHAR,VARCHAR>; " +
+                    "args nullable: true; result nullable: true]"));
+>>>>>>> 2b4dfc1816 ([BugFix] Fix wrong subfields prune for Array type (#27364))
+        } catch (Exception e) {
+            Assert.fail("Should not throw an exception");
+        }
+    }
+>>>>>>> b4047733e6 ([BugFix] Fix wrong subfields prune for Array type (#27364))
 }
