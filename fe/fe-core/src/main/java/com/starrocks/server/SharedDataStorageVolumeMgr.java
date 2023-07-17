@@ -50,10 +50,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public StorageVolume getStorageVolume(String storageVolumeId) {
+    public StorageVolume getStorageVolume(String svId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             try {
-                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStore(storageVolumeId);
+                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStore(svId);
                 if (fileStoreInfo == null) {
                     return null;
                 }
@@ -101,20 +101,20 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         }
     }
 
-    private String getStorageVolumeIdOfDb(String svKey) throws DdlException {
+    private StorageVolume getStorageVolumeOfDb(String svName) throws DdlException {
         StorageVolume sv = null;
-        if (svKey.equals(StorageVolumeMgr.DEFAULT)) {
+        if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
                 throw new DdlException("Default storage volume not exists, it should be created first");
             }
         } else {
-            sv = getStorageVolumeByName(svKey);
+            sv = getStorageVolumeByName(svName);
             if (sv == null) {
-                throw new DdlException("Unknown storage volume \"" + svKey + "\"");
+                throw new DdlException("Unknown storage volume \"" + svName + "\"");
             }
         }
-        return sv.getId();
+        return sv;
     }
 
     // In replay phase, the check of storage volume existence can be skipped.
@@ -133,10 +133,13 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public boolean bindDbToStorageVolume(String svKey, long dbId) throws DdlException {
+    public boolean bindDbToStorageVolume(String svName, long dbId) throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            String svId = getStorageVolumeIdOfDb(svKey);
-            return bindDbToStorageVolume(svId, dbId, false);
+            StorageVolume sv = getStorageVolumeOfDb(svName);
+            if (!sv.getEnabled()) {
+                throw new DdlException(String.format("Storage volume %s is disabled", svName));
+            }
+            return bindDbToStorageVolume(sv.getId(), dbId, false);
         }
     }
 
@@ -160,37 +163,40 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         }
     }
 
-    private String getStorageVolumeIdOfTable(String svKey, long dbId) throws DdlException {
+    private StorageVolume getStorageVolumeOfTable(String svName, long dbId) throws DdlException {
         StorageVolume sv = null;
-        if (svKey.isEmpty()) {
+        if (svName.isEmpty()) {
             String dbStorageVolumeId = getStorageVolumeIdOfDb(dbId);
             if (dbStorageVolumeId != null) {
-                return dbStorageVolumeId;
+                return getStorageVolume(dbStorageVolumeId);
             } else {
                 sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
                 if (sv == null) {
                     throw new DdlException("Builtin storage volume not exists, please check the params in config");
                 }
             }
-        } else if (svKey.equals(StorageVolumeMgr.DEFAULT)) {
+        } else if (svName.equals(StorageVolumeMgr.DEFAULT)) {
             sv = getDefaultStorageVolume();
             if (sv == null) {
                 throw new DdlException("Default storage volume not exists, it should be created first");
             }
         } else {
-            sv = getStorageVolumeByName(svKey);
+            sv = getStorageVolumeByName(svName);
             if (sv == null) {
-                throw new DdlException("Unknown storage volume \"" + svKey + "\"");
+                throw new DdlException("Unknown storage volume \"" + svName + "\"");
             }
         }
-        return sv.getId();
+        return sv;
     }
 
     @Override
-    public boolean bindTableToStorageVolume(String svKey, long dbId, long tableId) throws DdlException {
+    public boolean bindTableToStorageVolume(String svName, long dbId, long tableId) throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            String svId = getStorageVolumeIdOfTable(svKey, dbId);
-            return bindTableToStorageVolume(svId, tableId, false);
+            StorageVolume sv = getStorageVolumeOfTable(svName, dbId);
+            if (!sv.getEnabled()) {
+                throw new DdlException(String.format("Storage volume %s is disabled", sv.getName()));
+            }
+            return bindTableToStorageVolume(sv.getId(), tableId, false);
         }
     }
 

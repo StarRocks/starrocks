@@ -168,11 +168,11 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         setDefaultStorageVolume(stmt.getName());
     }
 
-    public void setDefaultStorageVolume(String svKey) {
+    public void setDefaultStorageVolume(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            StorageVolume sv = getStorageVolumeByName(svKey);
-            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svKey);
-            Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svKey);
+            StorageVolume sv = getStorageVolumeByName(svName);
+            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svName);
+            Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svName);
             SetDefaultStorageVolumeLog log = new SetDefaultStorageVolumeLog(sv.getId());
             GlobalStateMgr.getCurrentState().getEditLog().logSetDefaultStorageVolume(log);
             this.defaultStorageVolumeId = sv.getId();
@@ -183,9 +183,9 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         return defaultStorageVolumeId;
     }
 
-    public boolean exists(String svKey) throws DdlException {
+    public boolean exists(String svName) throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            StorageVolume sv = getStorageVolumeByName(svKey);
+            StorageVolume sv = getStorageVolumeByName(svName);
             return sv != null;
         }
     }
@@ -280,9 +280,9 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public abstract StorageVolume getStorageVolumeByName(String svKey);
+    public abstract StorageVolume getStorageVolumeByName(String svName);
 
-    public abstract StorageVolume getStorageVolume(String storageVolumeId);
+    public abstract StorageVolume getStorageVolume(String svId);
 
     public abstract List<String> listStorageVolumeNames() throws DdlException;
 
@@ -294,13 +294,13 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
 
     protected abstract void removeInternalNoLock(StorageVolume sv) throws DdlException;
 
-    public abstract boolean bindDbToStorageVolume(String svKey, long dbId) throws DdlException;
+    public abstract boolean bindDbToStorageVolume(String svName, long dbId) throws DdlException;
 
     public abstract void replayBindDbToStorageVolume(String svId, long dbId);
 
     public abstract void unbindDbToStorageVolume(long dbId);
 
-    public abstract boolean bindTableToStorageVolume(String svKey, long dbId, long tableId) throws DdlException;
+    public abstract boolean bindTableToStorageVolume(String svName, long dbId, long tableId) throws DdlException;
 
     public abstract void replayBindTableToStorageVolume(String svId, long tableId);
 
