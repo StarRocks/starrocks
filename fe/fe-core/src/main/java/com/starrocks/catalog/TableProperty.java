@@ -346,8 +346,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
             // old version use the boolean value
             boolean boolValue = Boolean.parseBoolean(value);
-            res = boolValue ? FORCE_EXTERNAL_TABLE_REWRITE_LOOSE :
-                    FORCE_EXTERNAL_TABLE_REWRITE_DISABLE;
+            res = boolValue ? FORCE_EXTERNAL_TABLE_REWRITE_CHECKED : FORCE_EXTERNAL_TABLE_REWRITE_DISABLE;
         } else {
             res = Integer.parseInt(value);
             if (res < 0 || res > 2) {
