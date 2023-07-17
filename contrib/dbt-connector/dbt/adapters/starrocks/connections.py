@@ -38,6 +38,7 @@ class StarRocksCredentials(Credentials):
     username: Optional[str] = None
     password: Optional[str] = None
     charset: Optional[str] = None
+    version: Optional[str] = None
 
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
@@ -49,7 +50,7 @@ class StarRocksCredentials(Credentials):
             self.database is not None and
             self.database != self.schema
         ):
-            raise dbt.exceptions.RuntimeException(
+            raise dbt.exceptions.DbtRuntimeError(
                 f"    schema: {self.schema} \n"
                 f"    database: {self.database} \n"
                 f"On StarRocks, database must be omitted or have the same value as"
@@ -76,6 +77,21 @@ class StarRocksCredentials(Credentials):
             "username",
         )
 
+
+def _parse_version(result):
+    default_version = (999, 999, 999)
+    first_part = None
+
+    if '-' in result:
+        first_part = result.split('-')[0]
+    if ' ' in result:
+        first_part = result.split('-')[0]
+
+    if first_part and len(first_part.split('.')) == 3:
+        return first_part[0], first_part[1], first_part[2]
+
+    return default_version
+
 class StarRocksConnectionManager(SQLConnectionManager):
     TYPE = 'starrocks'
 
@@ -86,12 +102,8 @@ class StarRocksConnectionManager(SQLConnectionManager):
             return connection
 
         credentials = cls.get_credentials(connection.credentials)
-        kwargs = {}
-
-        kwargs["host"] = credentials.host
-        kwargs["username"] = credentials.username
-        kwargs["password"] = credentials.password
-        kwargs["database"] = credentials.schema
+        kwargs = {"host": credentials.host, "username": credentials.username, "password": credentials.password,
+                  "database": credentials.schema}
 
         if credentials.port:
             kwargs["port"] = credentials.port
@@ -113,13 +125,26 @@ class StarRocksConnectionManager(SQLConnectionManager):
             except mysql.connector.Error as e:
 
                 logger.debug("Got an error when attempting to open a StarRocks "
-                             "connection: '{}'"
-                             .format(e))
+                             "connection: '{}'".format(e))
 
                 connection.handle = None
                 connection.state = 'fail'
 
-                raise dbt.exceptions.FailedToConnectException(str(e))
+                raise dbt.exceptions.FailedToConnectError(str(e))
+
+        if credentials.version is None:
+            cursor = connection.handle.cursor()
+            try:
+                cursor.execute("select current_version()")
+                connection.handle.server_version = _parse_version(cursor.fetchone()[0])
+            except Exception as e:
+                logger.debug("Got an error when obtain StarRocks version exception: '{}'".format(e))
+        else:
+            version = credentials.version.strip().split('.')
+            if len(version) == 3:
+                connection.handle.server_version = (int(version[0]), int(version[1]), int(version[2]))
+            else:
+                logger.debug("Config version '{}' is invalid".format(version))
 
         return connection
 
@@ -144,19 +169,19 @@ class StarRocksConnectionManager(SQLConnectionManager):
                 logger.debug("Failed to release connection!")
                 pass
 
-            raise dbt.exceptions.DatabaseException(str(e).strip()) from e
+            raise dbt.exceptions.DbtDatabaseError(str(e).strip()) from e
 
         except Exception as e:
             logger.debug("Error running SQL: {}", sql)
             logger.debug("Rolling back transaction.")
             self.rollback_if_open()
-            if isinstance(e, dbt.exceptions.RuntimeException):
+            if isinstance(e, dbt.exceptions.DbtRuntimeError):
                 # during a sql query, an internal to dbt exception was raised.
                 # this sounds a lot like a signal handler and probably has
                 # useful information, so raise it without modification.
                 raise
 
-            raise dbt.exceptions.RuntimeException(e) from e
+            raise dbt.exceptions.DbtRuntimeError(str(e)) from e
 
     @classmethod
     def get_response(cls, cursor) -> AdapterResponse:
