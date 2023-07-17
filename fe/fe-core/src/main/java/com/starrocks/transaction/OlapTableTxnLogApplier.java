@@ -1,8 +1,23 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> bc8333125 ([BugFix] Fix replay TransactionState log error (#27383))
 
 package com.starrocks.transaction;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -12,6 +27,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.TabletScheduler;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -144,11 +160,13 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
         }
 
         table.lastVersionUpdateEndTime.set(System.currentTimeMillis());
-        Preconditions.checkState(dictCollectedVersions.size() == validDictCacheColumns.size());
-        for (int i = 0; i < validDictCacheColumns.size(); i++) {
-            String columnName = validDictCacheColumns.get(i);
-            long collectedVersion = dictCollectedVersions.get(i);
-            IDictManager.getInstance().updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+        if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
+            for (int i = 0; i < validDictCacheColumns.size(); i++) {
+                String columnName = validDictCacheColumns.get(i);
+                long collectedVersion = dictCollectedVersions.get(i);
+                IDictManager.getInstance()
+                        .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+            }
         }
     }
 
