@@ -2,7 +2,7 @@
 
 This topic describes what a catalog is, and how to manage and query internal data and external data by using a catalog.
 
-StarRocks supports the catalog feature from v2.3 onwards.
+StarRocks supports the catalog feature from v2.3 onwards. Catalogs enable you to manage internal and external data in one system, and offer a flexible way for you to easily query and analyze data that is stored in various external systems.
 
 ## Basic concepts
 
@@ -11,7 +11,7 @@ StarRocks supports the catalog feature from v2.3 onwards.
 
 ## Catalog
 
-Catalogs enable you to manage internal and external data in one system. They offer a flexible way for you to easily query and analyze data that is stored in various external systems. Currently, StarRocks provides two types of catalogs: internal catalog and external catalog.
+Currently, StarRocks provides two types of catalogs: internal catalog and external catalog.
 
 ![figure1](../../assets/3.8.1.png)
 
