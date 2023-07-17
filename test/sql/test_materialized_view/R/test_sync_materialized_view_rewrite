@@ -103,3 +103,31 @@ drop materialized view mv_3;
 drop materialized view mv_4;
 -- result:
 -- !result
+-- name: test_case_when
+drop table if exists case_when_tbl1;
+-- result:
+-- !result
+CREATE TABLE case_when_tbl1 (
+    k1 INT,
+    k2 char(20))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1);
+-- result:
+-- !result
+insert into case_when_tbl1 values (1,'xian');
+-- result:
+-- !result
+create materialized view case_when_mv1 AS SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1;
+-- result:
+1	smallcity
+-- !result
+drop table if exists case_when_tbl1;
+-- result:
+-- !result
