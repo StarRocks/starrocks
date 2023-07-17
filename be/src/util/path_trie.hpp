@@ -33,8 +33,8 @@ public:
 
     ~PathTrie() {
         if (_root_value != nullptr) {
-            _allocator.destroy(_root_value);
-            _allocator.deallocate(_root_value, 1);
+            traits_alloc::destroy(_allocator, _root_value);
+            traits_alloc::deallocate(_allocator, _root_value, 1);
         }
     }
 
@@ -48,8 +48,8 @@ public:
 
         TrieNode(const std::string& key, const T& value, std::string wildcard)
                 : _value(nullptr), _wildcard(std::move(wildcard)) {
-            _value = _allocator.allocate(1);
-            _allocator.construct(_value, value);
+            _value = traits_alloc::allocate(_allocator, 1);
+            traits_alloc::construct(_allocator, _value, value);
             if (is_named_wildcard(key)) {
                 _named_wildcard = extract_template(key);
             }
@@ -61,8 +61,8 @@ public:
                 iter.second = nullptr;
             }
             if (_value != nullptr) {
-                _allocator.destroy(_value);
-                _allocator.deallocate(_value, 1);
+                traits_alloc::destroy(_allocator, _value);
+                traits_alloc::deallocate(_allocator, _value, 1);
             }
         }
 
@@ -103,8 +103,8 @@ public:
                 }
                 if (index == path.size() - 1) {
                     if (node->_value == nullptr) {
-                        node->_value = _allocator.allocate(1);
-                        _allocator.construct(node->_value, value);
+                        node->_value = traits_alloc::allocate(_allocator, 1);
+                        traits_alloc::construct(_allocator, node->_value, value);
                         return true;
                     }
                     // Already register by other path
@@ -145,7 +145,7 @@ public:
                 if (node->_value == nullptr) {
                     return false;
                 }
-                _allocator.construct(value, *node->_value);
+                traits_alloc::construct(_allocator, value, *node->_value);
                 return true;
             }
 
@@ -198,6 +198,7 @@ public:
         std::string _named_wildcard;
         std::map<std::string, TrieNode*> _children;
         std::allocator<T> _allocator;
+        using traits_alloc = std::allocator_traits<decltype(_allocator)>;
     };
 
     bool insert(const std::string& path, const T& value) {
@@ -205,8 +206,8 @@ public:
         split(path, &path_array);
         if (path_array.empty()) {
             if (_root_value == nullptr) {
-                _root_value = _allocator.allocate(1);
-                _allocator.construct(_root_value, value);
+                _root_value = traits_alloc::allocate(_allocator, 1);
+                traits_alloc::construct(_allocator, _root_value, value);
                 return true;
             } else {
                 return false;
@@ -226,7 +227,7 @@ public:
             if (_root_value == nullptr) {
                 return false;
             } else {
-                _allocator.construct(value, *_root_value);
+                traits_alloc::construct(_allocator, value, *_root_value);
                 return true;
             }
         }
@@ -236,7 +237,7 @@ public:
             if (_root_value == nullptr) {
                 return false;
             } else {
-                _allocator.construct(value, *_root_value);
+                traits_alloc::construct(_allocator, value, *_root_value);
                 return true;
             }
         }
@@ -269,6 +270,7 @@ private:
     T* _root_value;
     char _separator{'/'};
     std::allocator<T> _allocator;
+    using traits_alloc = std::allocator_traits<decltype(_allocator)>;
 };
 
 } // namespace starrocks

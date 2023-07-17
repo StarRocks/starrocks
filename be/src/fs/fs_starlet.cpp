@@ -250,8 +250,9 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-
-        auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
+        auto opt = ReadOptions();
+        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        auto file_st = (*fs_st)->open(pair.first, std::move(opt));
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -274,7 +275,9 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
+        auto opt = ReadOptions();
+        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        auto file_st = (*fs_st)->open(pair.first, std::move(opt));
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
