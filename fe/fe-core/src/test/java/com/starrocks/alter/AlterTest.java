@@ -1041,7 +1041,7 @@ public class AlterTest {
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
 
                 agent.getWorkersByWorkerGroup(anyLong);
-                result = Lists.newArrayList(10002L, 10003L);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
             }
         };
 
@@ -1154,7 +1154,7 @@ public class AlterTest {
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
 
                 agent.getWorkersByWorkerGroup(anyLong);
-                result = Lists.newArrayList(10002L, 10003L);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
             }
         };
 
@@ -2123,7 +2123,7 @@ public class AlterTest {
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
 
                 agent.getWorkersByWorkerGroup(anyLong);
-                result = Lists.newArrayList(10002L, 10003L);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
             }
         };
 

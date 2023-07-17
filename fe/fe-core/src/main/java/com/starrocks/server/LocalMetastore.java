@@ -1644,8 +1644,6 @@ public class LocalMetastore implements ConnectorMetadata {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             numAliveNodes = 0;
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWarehouseName);
-            // for debug
-            System.out.println("warehouse name is " + currentWarehouseName);
             if (warehouse == null) {
                 throw new DdlException("Warehouse " + currentWarehouseName + " not exist！");
             }
