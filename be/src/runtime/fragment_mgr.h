@@ -80,6 +80,8 @@ public:
     Status exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
                               const FinishCallback& cb);
 
+    void cancel_all();
+
     Status cancel(const TUniqueId& fragment_id) {
         return cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);
     }

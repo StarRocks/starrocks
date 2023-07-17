@@ -212,7 +212,7 @@ public:
         auto entry = *v;
         if (entry->_ref != 1) {
             LOG(ERROR) << "remove_by_key() failed: cache entry ref != 1 " << entry->_value;
-            DCHECK(false);
+            return false;
         } else {
             _map.erase(itr);
             _list.erase(v);
