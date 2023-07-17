@@ -92,7 +92,18 @@ public:
         int64_t peak_consumption = 0;
     };
 
-    enum Type { NO_SET, PROCESS, QUERY_POOL, QUERY, LOAD, CONSISTENCY, COMPACTION, SCHEMA_CHANGE_TASK, RESOURCE_GROUP };
+    enum Type {
+        NO_SET,
+        PROCESS,
+        QUERY_POOL,
+        QUERY,
+        LOAD,
+        CONSISTENCY,
+        COMPACTION,
+        SCHEMA_CHANGE_TASK,
+        RESOURCE_GROUP,
+        RESOURCE_GROUP_BIG_QUERY
+    };
 
     /// 'byte_limit' < 0 means no limit
     /// 'label' is the label used in the usage string (LogUsage())
