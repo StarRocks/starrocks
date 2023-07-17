@@ -91,9 +91,15 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
                                     workgroup::WorkGroup* wg) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
+<<<<<<< HEAD
         auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
         mem_tracker_counter->set(query_mem_limit);
         _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
+=======
+        auto* mem_tracker_counter =
+                ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
+        mem_tracker_counter->set(query_mem_limit);
+>>>>>>> 4d4a401a4 ([BugFix] Fix error message when exceeding big query mem limit (#27097) (#27334))
         if (wg != nullptr && big_query_mem_limit > 0 && big_query_mem_limit < query_mem_limit) {
             std::string label = "Group=" + wg->name() + ", " + _profile->name();
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
