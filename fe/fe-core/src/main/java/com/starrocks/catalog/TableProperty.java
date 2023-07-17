@@ -375,7 +375,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
             if (res == null) {
                 String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
                         .stream().map(Enum::name).collect(Collectors.joining(","));
-                throw new AnalysisException("force_external_table_query_rewrite could only be " + allValues);
+                throw new AnalysisException(
+                        "force_external_table_query_rewrite could only be " + allValues + " but got " + value);
             }
             return res;
         }

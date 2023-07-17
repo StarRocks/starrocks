@@ -71,6 +71,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -120,6 +121,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.id = id;
             this.version = version;
             this.lastRefreshTime = lastRefreshTime;
+        }
+
+        public static BasePartitionInfo fromExternalTable(com.starrocks.connector.PartitionInfo info) {
+            // TODO: id and version
+            return new BasePartitionInfo(-1, -1, info.getModifiedTime());
+        }
+
+        public static BasePartitionInfo fromOlapTable(Partition partition) {
+            return new BasePartitionInfo(partition.getId(), partition.getVisibleVersion(), -1);
         }
 
         public long getId() {
@@ -608,6 +618,23 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return true;
     }
 
+    public Map<String, BasePartitionInfo> getBaseTableRefreshInfo(BaseTableInfo baseTable) {
+        return getRefreshScheme()
+                .getAsyncRefreshContext()
+                .getBaseTableInfoVisibleVersionMap()
+                .computeIfAbsent(baseTable, k -> Maps.newHashMap());
+    }
+
+    public List<BasePartitionInfo> getBaseTableLatestPartitionInfo(Table baseTable) {
+        if (baseTable.isNativeTableOrMaterializedView()) {
+            return baseTable.getPartitions().stream()
+                    .map(BasePartitionInfo::fromOlapTable).collect(Collectors.toList());
+        }
+
+        return MapUtils.emptyIfNull(PartitionUtil.getPartitionNameWithPartitionInfo(baseTable)).values()
+                .stream().map(BasePartitionInfo::fromExternalTable).collect(Collectors.toList());
+    }
+
     public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable) {
         if (!baseTable.isHiveTable()) {
             // Only support hive table now
@@ -620,7 +647,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return result;
         }
 
-        Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+        Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
                 PartitionUtil.getPartitionNameWithPartitionInfo(baseTable);
 
         // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
@@ -633,13 +660,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
                 continue;
             }
-            Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getRefreshScheme()
-                    .getAsyncRefreshContext()
-                    .getBaseTableInfoVisibleVersionMap()
-                    .computeIfAbsent(baseTableInfo, k -> Maps.newHashMap());
+            Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getBaseTableRefreshInfo(baseTableInfo);
 
             // check whether there are partitions added
-            for (Map.Entry<String, com.starrocks.connector.PartitionInfo> entry : partitionNameWithPartition.entrySet()) {
+            for (Map.Entry<String, com.starrocks.connector.PartitionInfo> entry : latestPartitionInfo.entrySet()) {
                 if (!baseTableInfoVisibleVersionMap.containsKey(entry.getKey())) {
                     result.add(entry.getKey());
                 }
@@ -647,20 +671,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
             for (Map.Entry<String, BasePartitionInfo> versionEntry : baseTableInfoVisibleVersionMap.entrySet()) {
                 String basePartitionName = versionEntry.getKey();
-                if (!partitionNameWithPartition.containsKey(basePartitionName)) {
+                if (!latestPartitionInfo.containsKey(basePartitionName)) {
                     // partitions deleted
-                    return partitionNameWithPartition.keySet();
+                    return latestPartitionInfo.keySet();
                 }
-                long basePartitionVersion = partitionNameWithPartition.get(basePartitionName).getModifiedTime();
+                long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
 
                 BasePartitionInfo basePartitionInfo = versionEntry.getValue();
-                if (basePartitionInfo == null) {
-                    result.add(basePartitionName);
-                } else {
-                    // Ignore partitions if mv's partition is the same with the basic table.
-                    if (basePartitionVersion == basePartitionInfo.getVersion()) {
-                        continue;
-                    }
+                if (basePartitionInfo == null || basePartitionVersion != basePartitionInfo.getVersion()) {
                     result.add(basePartitionName);
                 }
             }
