@@ -380,6 +380,7 @@ private:
 Status GlobalEnv::init() {
     RETURN_IF_ERROR(_init_mem_tracker());
     _is_init = true;
+    return Status::OK();
 }
 
 Status GlobalEnv::_init_mem_tracker() {
