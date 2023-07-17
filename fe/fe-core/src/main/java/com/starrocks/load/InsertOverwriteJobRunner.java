@@ -24,6 +24,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
@@ -284,7 +287,7 @@ public class InsertOverwriteJobRunner {
     private void createTempPartitions() throws DdlException {
         long createPartitionStartTimestamp = System.currentTimeMillis();
         Database db = getAndReadLockDatabase(dbId);
-        OlapTable targetTable = null;
+        OlapTable targetTable;
         try {
             targetTable = checkAndGetTable(db, tableId);
         } finally {
@@ -356,10 +359,13 @@ public class InsertOverwriteJobRunner {
                 }
             });
 
-            if (targetTable.getPartitionInfo().isRangePartition()) {
+            PartitionInfo partitionInfo = targetTable.getPartitionInfo();
+            if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
-            } else {
+            } else if (partitionInfo instanceof SinglePartitionInfo) {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+            } else {
+                throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,
