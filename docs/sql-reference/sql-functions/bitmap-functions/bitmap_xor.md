@@ -2,7 +2,7 @@
 
 ## Description
 
-Calculates the set consisting elements unique to lhs or rhs. It is logically equivalent to`bitmap_andnot(bitmap_or(lhs, rhs), bitmap_and(lhs, rhs))`(complementary set).
+Calculates the set consisting elements unique to `lhs` amd `rhs`. It is logically equivalent to `bitmap_andnot(bitmap_or(lhs, rhs), bitmap_and(lhs, rhs))` (complementary set).
 
 ## Syntax
 
