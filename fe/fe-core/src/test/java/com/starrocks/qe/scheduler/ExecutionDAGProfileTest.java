@@ -12,11 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.qe.scheduler.assignment;
+package com.starrocks.qe.scheduler;
 
-import com.starrocks.common.UserException;
-import com.starrocks.qe.scheduler.dag.ExecutionFragment;
-
-public interface FragmentAssignmentStrategy {
-    void assignWorkerToFragment(ExecutionFragment executionFragment) throws UserException;
+public class ExecutionDAGProfileTest {
 }

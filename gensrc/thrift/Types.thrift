@@ -218,7 +218,8 @@ enum TStmtType {
 enum TExplainLevel {
   NORMAL,
   VERBOSE,
-  COSTS
+  COSTS,
+  SCHEDULER
 }
 
 struct TColumnType {

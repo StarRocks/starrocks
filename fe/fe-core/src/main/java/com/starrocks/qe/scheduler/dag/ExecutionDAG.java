@@ -108,6 +108,13 @@ public class ExecutionDAG {
         }
     }
 
+    /**
+     * Initialize the execution fragment.
+     * The mainly work is to compute destinations and # senders per exchange node
+     * (the root fragment doesn't have a destination).
+     * @param execFragment The fragment to be initialized.
+     * @throws SchedulerException when there is something wrong for the plan or execution informatino.
+     */
     public void initFragment(ExecutionFragment execFragment) throws SchedulerException {
         for (FragmentInstance instance : execFragment.getInstances()) {
             setInstanceId(instance);

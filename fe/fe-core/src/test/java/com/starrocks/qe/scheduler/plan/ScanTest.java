@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.qe.scheduler.assignment;
+package com.starrocks.qe.scheduler.plan;
 
-import com.starrocks.common.UserException;
-import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.SchedulerTestBase;
+import org.junit.Test;
 
-public interface FragmentAssignmentStrategy {
-    void assignWorkerToFragment(ExecutionFragment executionFragment) throws UserException;
+public class ScanTest extends SchedulerTestBase {
+    @Test
+    public void testSchemaScanNode() {
+        runFileUnitTest("scheduler/schema_scan");
+    }
 }

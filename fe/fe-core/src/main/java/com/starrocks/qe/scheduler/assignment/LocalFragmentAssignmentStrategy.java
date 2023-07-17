@@ -80,7 +80,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
     }
 
     @Override
-    public void assignToFragment(ExecutionFragment execFragment) throws UserException {
+    public void assignWorkerToFragment(ExecutionFragment execFragment) throws UserException {
         for (ScanNode scanNode : execFragment.getScanNodes()) {
             assignScanRangesToWorkers(execFragment, scanNode);
         }

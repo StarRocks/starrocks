@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.io.CharStreams;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -55,11 +56,14 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class PlanTestNoneDBBase {
     // use a unique dir so that it won't be conflict with other unit test which
@@ -193,6 +197,7 @@ public class PlanTestNoneDBBase {
         StringBuilder dumpInfoString = new StringBuilder();
         StringBuilder planEnumerate = new StringBuilder();
         StringBuilder exceptString = new StringBuilder();
+        StringBuilder schedulerString = new StringBuilder();
 
         boolean isDebug = debug;
         boolean isComment = false;
@@ -201,6 +206,7 @@ public class PlanTestNoneDBBase {
         boolean hasFragmentStatistics = false;
         boolean isDump = false;
         boolean isEnumerate = false;
+        boolean hasScheduler = false;
         int planCount = -1;
 
         File debugFile = new File(file.getPath() + ".debug");
@@ -286,6 +292,11 @@ public class PlanTestNoneDBBase {
                         exceptString = new StringBuilder();
                         mode = "except";
                         continue;
+                    case "[scheduler]":
+                        schedulerString = new StringBuilder();
+                        hasScheduler = true;
+                        mode = "scheduler";
+                        continue;
                     case "[end]":
                         Pair<String, ExecPlan> pair = null;
                         try {
@@ -302,13 +313,15 @@ public class PlanTestNoneDBBase {
                             String fra = null;
                             String statistic = null;
                             String dumpStr = null;
+                            String actualSchedulerPlan = null;
 
                             if (hasResult && !debug) {
                                 checkWithIgnoreTabletList(result.toString().trim(), pair.first.trim());
                             }
                             if (hasFragment) {
-                                fra = format(pair.second.getExplainString(TExplainLevel.NORMAL));
+                                fra = pair.second.getExplainString(TExplainLevel.NORMAL);
                                 if (!debug) {
+                                    fra = format(fra);
                                     checkWithIgnoreTabletList(fragment.toString().trim(), fra.trim());
                                 }
                             }
@@ -326,9 +339,26 @@ public class PlanTestNoneDBBase {
                                     Assert.assertEquals(dumpInfoString.toString().trim(), dumpStr.trim());
                                 }
                             }
+                            if (hasScheduler) {
+                                try {
+                                    actualSchedulerPlan =
+                                            UtFrameUtils.getPlanAndStartScheduling(connectContext, sql.toString()).first;
+                                } catch (Exception ex) {
+                                    if (!exceptString.toString().isEmpty()) {
+                                        Assert.assertEquals(exceptString.toString(), ex.getMessage());
+                                        continue;
+                                    }
+                                    Assert.fail("Scheduling failed, message: " + ex.getMessage() + ", sql: " + sql);
+                                }
+
+                                if (!debug) {
+                                    checkSchedulerPlan(schedulerString.toString(), actualSchedulerPlan);
+                                }
+                            }
                             if (isDebug) {
-                                debugSQL(writer, hasResult, hasFragment, isDump, hasFragmentStatistics, nth,
-                                        sql.toString(), pair.first, fra, dumpStr, statistic, comment.toString());
+                                debugSQL(writer, hasResult, hasFragment, isDump, hasFragmentStatistics, hasScheduler, nth,
+                                        sql.toString(), pair.first, fra, dumpStr, statistic, comment.toString(),
+                                        actualSchedulerPlan);
                             }
                             if (isEnumerate) {
                                 Assert.assertEquals("plan count mismatch", planCount, pair.second.getPlanCount());
@@ -344,6 +374,7 @@ public class PlanTestNoneDBBase {
                         hasFragmentStatistics = false;
                         isDump = false;
                         comment = new StringBuilder();
+                        hasScheduler = false;
                         continue;
                 }
 
@@ -372,6 +403,9 @@ public class PlanTestNoneDBBase {
                     case "except":
                         exceptString.append(tempStr);
                         break;
+                    case "scheduler":
+                        schedulerString.append(tempStr).append("\n");
+                        break;
                 }
             }
         } catch (Exception e) {
@@ -392,9 +426,10 @@ public class PlanTestNoneDBBase {
     }
 
     private void debugSQL(BufferedWriter writer, boolean hasResult, boolean hasFragment, boolean hasDump,
-                          boolean hasStatistics, int nthPlan, String sql, String plan, String fragment, String dump,
+                          boolean hasStatistics, boolean hasScheduler, int nthPlan, String sql, String plan, String fragment,
+                          String dump,
                           String statistic,
-                          String comment) {
+                          String comment, String actualSchedulerPlan) {
         try {
             if (!comment.trim().isEmpty()) {
                 writer.append(comment).append("\n");
@@ -411,6 +446,11 @@ public class PlanTestNoneDBBase {
             if (nthPlan > 0) {
                 writer.append("\n[plan-").append(String.valueOf(nthPlan)).append("]\n");
                 writer.append(plan);
+            }
+
+            if (hasScheduler) {
+                writer.append("\n[scheduler]\n");
+                writer.append(actualSchedulerPlan);
             }
 
             if (hasFragment) {
@@ -446,6 +486,66 @@ public class PlanTestNoneDBBase {
      */
     protected boolean isIgnoreExplicitColRefIds() {
         return false;
+    }
+
+    private void checkSchedulerPlan(String expect, String actual) {
+        String[] expectedLines = expect.trim().split("\n");
+        String[] actualLines = actual.trim().split("\n");
+
+        int ei = 0;
+        int ai = 0;
+
+        while (ei < expectedLines.length && ai < actualLines.length) {
+            String eline = expectedLines[ei];
+            String aline = actualLines[ai];
+            ei++;
+            ai++;
+            Assert.assertEquals(actual, eline, aline);
+            if ("INSTANCES".equals(eline.trim())) {
+                // The instances of the fragment may be in random order,
+                // so we need to extract each instance and check if they have exactly the same elements in any order.
+                Map<Long, String> eInstances = Maps.newHashMap();
+                Map<Long, String> aInstances = Maps.newHashMap();
+                ei = extractInstancesFromSchedulerPlan(expectedLines, ei, eInstances);
+                ai = extractInstancesFromSchedulerPlan(actualLines, ai, aInstances);
+                assertThat(aInstances).withFailMessage(actual).containsExactlyInAnyOrderEntriesOf(eInstances);
+            }
+        }
+        Assert.assertEquals(ei, ai);
+    }
+
+    private static int extractInstancesFromSchedulerPlan(String[] lines, int startIndex, Map<Long, String> instances) {
+        int i = startIndex;
+        StringBuilder builder = new StringBuilder();
+        long beId = -1;
+        for (; i < lines.length; i++) {
+            String line = lines[i];
+            String trimLine = line.trim();
+            if (trimLine.isEmpty()) { // The profile Fragment is coming to the end.
+                break;
+            } else if (trimLine.startsWith("INSTANCE(")) { // Start a new instance.
+                if (beId != -1) {
+                    instances.put(beId, builder.toString());
+                    beId = -1;
+                    builder = new StringBuilder();
+                }
+            } else { // Still in this instance.
+                builder.append(line).append("\n");
+
+                Pattern beIdPattern = Pattern.compile("^\\s*BE: (\\d+)$");
+                Matcher matcher = beIdPattern.matcher(line);
+
+                if (matcher.find()) {
+                    beId = Long.parseLong(matcher.group(1));
+                }
+            }
+        }
+
+        if (beId != -1) {
+            instances.put(beId, builder.toString());
+        }
+
+        return i;
     }
 
     private void checkWithIgnoreTabletList(String expect, String actual) {

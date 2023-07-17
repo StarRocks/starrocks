@@ -50,7 +50,7 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
     }
 
     @Override
-    public void assignToFragment(ExecutionFragment execFragment) throws UserException {
+    public void assignWorkerToFragment(ExecutionFragment execFragment) throws UserException {
         final PlanFragment fragment = execFragment.getPlanFragment();
 
         // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.

@@ -65,6 +65,8 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.DefaultScheduler;
+import com.starrocks.qe.scheduler.DefaultSchedulerFactory;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
@@ -75,6 +77,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -103,6 +106,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
@@ -258,11 +262,21 @@ public class UtFrameUtils {
         createMinStarRocksCluster(false);
     }
 
+    public static Backend addMockBackend(int backendId, String host, int beThriftPort) throws Exception {
+        // start be
+        MockedBackend backend = new MockedBackend(host, beThriftPort);
+        // add be
+        return addMockBackend(backend, backendId);
+    }
+
     public static Backend addMockBackend(int backendId) throws Exception {
         // start be
         MockedBackend backend = new MockedBackend("127.0.0.1");
-
         // add be
+        return addMockBackend(backend, backendId);
+    }
+
+    private static Backend addMockBackend(MockedBackend backend, int backendId) {
         Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo(backendId + "/path1");
@@ -390,8 +404,12 @@ public class UtFrameUtils {
         }
     }
 
-    public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
-            throws Exception {
+    private interface GetPlanHook<R> {
+        R apply(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) throws Exception;
+    }
+
+    private static <R> R buildPlan(ConnectContext connectContext, String originStmt,
+                                   GetPlanHook<R> returnedSupplier) throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         originStmt = LogUtil.removeCommentAndLineSeparator(originStmt);
 
@@ -427,11 +445,61 @@ public class UtFrameUtils {
             testView(connectContext, originStmt, statementBase);
 
             validatePlanConnectedness(execPlan);
-            return new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()), execPlan);
+            return returnedSupplier.apply(connectContext, statementBase, execPlan);
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
         }
+    }
+
+    public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
+            throws Exception {
+        return buildPlan(connectContext, originStmt,
+                (context, statementBase, execPlan) -> new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()),
+                        execPlan));
+    }
+
+    public static Pair<String, DefaultScheduler> startScheduling(ConnectContext connectContext, String originStmt,
+                                                                 boolean needDeploy) throws Exception {
+        return buildPlan(connectContext, originStmt,
+                (context, statementBase, execPlan) -> {
+                    DefaultScheduler scheduler = createScheduler(context, statementBase, execPlan);
+
+                    scheduler.startScheduling(needDeploy);
+                    String plan = execPlan.getExplainString(TExplainLevel.SCHEDULER);
+
+                    return new Pair<>(plan, scheduler);
+                });
+    }
+
+    public static Pair<String, DefaultScheduler> getPlanAndStartScheduling(ConnectContext connectContext,
+                                                                           String originStmt)
+            throws Exception {
+        return startScheduling(connectContext, originStmt, false);
+    }
+
+    public static DefaultScheduler getScheduler(ConnectContext connectContext, String originStmt) throws Exception {
+        return buildPlan(connectContext, originStmt, UtFrameUtils::createScheduler);
+    }
+
+    private static DefaultScheduler createScheduler(ConnectContext context, StatementBase statementBase,
+                                                    ExecPlan execPlan) {
+        context.setExecutionId(new TUniqueId(1, 2));
+        DefaultScheduler scheduler;
+        if (statementBase instanceof DmlStmt) {
+            if (statementBase instanceof InsertStmt) {
+                scheduler = new DefaultSchedulerFactory().createInsertScheduler(context,
+                        execPlan.getFragments(), execPlan.getScanNodes(),
+                        execPlan.getDescTbl().toThrift());
+            } else {
+                throw new RuntimeException("can only handle insert DML");
+            }
+        } else {
+            scheduler = new DefaultSchedulerFactory().createQueryScheduler(context,
+                    execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+        }
+
+        return scheduler;
     }
 
     public static String printPhysicalPlan(OptExpression execPlan) {

@@ -522,7 +522,7 @@ public class DefaultScheduler implements ICoordinator, StateContext {
     @Override
     public void initializeExecutionDAG() throws UserException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
-            fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignToFragment(execFragment);
+            fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignWorkerToFragment(execFragment);
         }
 
         if (LOG.isDebugEnabled()) {
