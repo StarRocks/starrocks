@@ -874,7 +874,7 @@ struct StringHasher2 {
 class EqualOnStringWithHash {
 public:
     bool operator()(const std::string& lhs, const std::string& rhs) const {
-        return memequal(lhs.data(), lhs.size() - kIndexValueSize, rhs.data(), rhs.size() - kIndexValueSize);
+        return memequal_padded(lhs.data(), lhs.size() - kIndexValueSize, rhs.data(), rhs.size() - kIndexValueSize);
     }
 };
 

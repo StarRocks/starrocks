@@ -55,13 +55,9 @@ public:
         T* x = A::allocate(n + RawAllocator::_trailing);
         return x;
     }
-    T* allocate(size_t n, const void* hint) {
-        T* x = A::allocate(n + RawAllocator::_trailing, hint);
-        return x;
-    }
 
     // deallocate the storage referenced by the pointer p
-    void deallocate(T* p, size_t n) { A::deallocate(p, n + RawAllocator::_trailing); }
+    void deallocate(T* p, size_t n) { A::deallocate(p, (n + RawAllocator::_trailing)); }
 
     // do not initialized allocated.
     template <typename U>
@@ -166,7 +162,7 @@ inline void make_room(std::vector<T>* v, size_t n) {
 }
 
 inline void make_room(std::string* s, size_t n) {
-    RawStringPad16 rs;
+    RawString rs;
     rs.resize(n);
     s->swap(reinterpret_cast<std::string&>(rs));
 }

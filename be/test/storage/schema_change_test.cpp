@@ -263,7 +263,7 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     ASSERT_TRUE(st.ok());
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
-    EXPECT_EQ(dst_value, dst_datum.get_uint24());
+    EXPECT_EQ(dst_value, (int)dst_datum.get_uint24());
 }
 
 TEST_F(SchemaChangeTest, convert_date_to_datetime) {
@@ -332,7 +332,7 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     ASSERT_TRUE(st.ok());
 
     int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
-    EXPECT_EQ(dst_value, dst_datum.get_uint24());
+    EXPECT_EQ(dst_value, (int)dst_datum.get_uint24());
 }
 
 TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
