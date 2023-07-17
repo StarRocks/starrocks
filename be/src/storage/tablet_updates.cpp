@@ -2823,7 +2823,8 @@ struct RowsetLoadInfo {
     vector<DeltaColumnGroupList> dcgs;
 };
 
-Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, const std::string& err_msg_header) {
+Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
+                                const std::string& err_msg_header) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << err_msg_header << "tablet state is not TABLET_NOTREADY, link_from is not allowed"
@@ -2905,6 +2906,44 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, co
                 return st;
             }
         }
+
+        // new added dcgs info for every segment in rowset.
+        DeltaColumnGroupList dcgs;
+        std::vector<int> last_dcg_counts;
+        for (uint32_t j = 0; j < new_rowset_info.num_segments; j++) {
+            // check the lastest historical_dcgs version if it is equal to schema change version
+            // of the rowset. If it is, we should merge the dcg info.
+            last_dcg_counts.emplace_back((new_rowset_info.dcgs[j].size() != 0 &&
+                                          new_rowset_info.dcgs[j].front()->version() == version.major())
+                                                 ? new_rowset_info.dcgs[j].front()->relative_column_files().size()
+                                                 : 0);
+        }
+        RETURN_IF_ERROR(LinkedSchemaChange::generate_delta_column_group_and_cols(
+                &_tablet, base_tablet, rowsets[i], rid, version.major(), chunk_changer, dcgs, last_dcg_counts));
+
+        // merge dcg info if necessary
+        if (dcgs.size() != 0) {
+            if (dcgs.size() != new_rowset_info.num_segments) {
+                std::stringstream ss;
+                ss << "The size of dcgs and segment file in src rowset is different, "
+                   << "base tablet id: " << base_tablet->tablet_id() << " "
+                   << "new tablet id: " << _tablet.tablet_id();
+                LOG(WARNING) << ss.str();
+                return Status::InternalError(ss.str());
+            }
+            for (uint32_t j = 0; j < dcgs.size(); j++) {
+                if (dcgs[j]->merge_into_by_version(new_rowset_info.dcgs[j], _tablet.schema_hash_path(), rid, j) == 0) {
+                    // In this case, new_rowset_info.dcgs[j] contain no suitable dcg:
+                    // 1. no version of dcg in new_rowset_info.dcgs[j] satisfy the request_version.
+                    // 2. new_rowset_info.dcgs[j] is empty
+                    // So nothing can be merged, and we should just insert the dcgs[j] into new_rowset_info.dcgs[j]
+                    new_rowset_info.dcgs[j].insert(new_rowset_info.dcgs[j].begin(),
+                                                   dcgs[j]); /* reverse order by version */
+                }
+            }
+            rowset_meta_pb.set_partial_schema_change(true);
+        }
+
         next_rowset_id += std::max(1U, (uint32_t)new_rowset_info.num_segments);
         total_bytes += rowset_meta_pb.total_disk_size();
         total_rows += rowset_meta_pb.num_rows();
@@ -3802,13 +3841,17 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             auto id = rssid + _next_rowset_id;
             CHECK_FAIL(TabletMetaManager::put_del_vector(data_store, &wb, tablet_id, id, delvec));
         }
+        // clear dcg before recover from snapshot meta. Otherwise it will fail in some case.
+        RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(data_store, &wb, tablet_id));
         for (const auto& [rssid, dcglist] : snapshot_meta.delta_column_groups()) {
             for (const auto& dcg : dcglist) {
-                const std::string dcg_file = dcg->column_file(_tablet.schema_hash_path());
-                auto st = FileSystem::Default()->path_exists(dcg_file);
-                if (!st.ok()) {
-                    return Status::InternalError("delta column file: " + dcg_file +
-                                                 " does not exist: " + st.get_error_msg());
+                const std::vector<std::string> dcg_files = dcg->column_files(_tablet.schema_hash_path());
+                for (const auto& dcg_file : dcg_files) {
+                    auto st = FileSystem::Default()->path_exists(dcg_file);
+                    if (!st.ok()) {
+                        return Status::InternalError("delta column file: " + dcg_file +
+                                                     " does not exist: " + st.get_error_msg());
+                    }
                 }
             }
             auto id = rssid + _next_rowset_id;
@@ -3971,15 +4014,15 @@ static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext&
                                                           int32_t* col_index) {
     // iterate dcg from new ver to old ver
     for (const auto& dcg : ctx.dcgs) {
-        int32_t idx = dcg->get_column_idx(ucid);
-        if (idx >= 0) {
-            std::string column_file = dcg->column_file(parent_name(ctx.segment->file_name()));
+        std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
+        if (idx.first >= 0) {
+            std::string column_file = dcg->column_files(parent_name(ctx.segment->file_name()))[idx.first];
             if (ctx.dcg_segments.count(column_file) == 0) {
-                ASSIGN_OR_RETURN(auto dcg_segment, ctx.segment->new_dcg_segment(*dcg));
+                ASSIGN_OR_RETURN(auto dcg_segment, ctx.segment->new_dcg_segment(*dcg, idx.first));
                 ctx.dcg_segments[column_file] = dcg_segment;
             }
             if (col_index != nullptr) {
-                *col_index = idx;
+                *col_index = idx.second;
             }
             return ctx.dcg_segments[column_file];
         }

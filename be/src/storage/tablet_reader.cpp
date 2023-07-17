@@ -260,8 +260,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
-        rs_opts.meta = _tablet->data_dir()->get_meta();
     }
+    rs_opts.meta = _tablet->data_dir()->get_meta();
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges = params.short_key_ranges;
 

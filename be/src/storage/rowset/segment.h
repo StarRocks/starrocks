@@ -114,7 +114,7 @@ public:
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg);
+    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx);
 
     uint64_t id() const { return _segment_id; }
 

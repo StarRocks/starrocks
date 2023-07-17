@@ -524,6 +524,45 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
+    TabletSharedPtr create_tablet_to_add_generated_column(int64_t tablet_id, int32_t schema_hash) {
+        TCreateTabletReq request;
+        request.tablet_id = tablet_id;
+        request.__set_version(1);
+        request.__set_version_hash(0);
+        request.tablet_schema.schema_hash = schema_hash;
+        request.tablet_schema.short_key_column_count = 1;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+
+        TColumn k1;
+        k1.column_name = "pk";
+        k1.__set_is_key(true);
+        k1.column_type.type = TPrimitiveType::BIGINT;
+        request.tablet_schema.columns.push_back(k1);
+
+        TColumn k2;
+        k2.column_name = "v1";
+        k2.__set_is_key(false);
+        k2.column_type.type = TPrimitiveType::SMALLINT;
+        request.tablet_schema.columns.push_back(k2);
+
+        TColumn k3;
+        k3.column_name = "v2";
+        k3.__set_is_key(false);
+        k3.column_type.type = TPrimitiveType::INT;
+        request.tablet_schema.columns.push_back(k3);
+
+        TColumn k4;
+        k4.column_name = "newcol";
+        k4.__set_is_key(false);
+        k4.__set_is_allow_null(true);
+        k4.column_type.type = TPrimitiveType::BIGINT;
+        request.tablet_schema.columns.push_back(k4);
+        auto st = StorageEngine::instance()->create_tablet(request);
+        CHECK(st.ok()) << st.to_string();
+        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    }
+
     void SetUp() override { _compaction_mem_tracker = std::make_unique<MemTracker>(-1); }
 
     void TearDown() override {
@@ -680,6 +719,7 @@ public:
                           std::vector<RowsetMetaSharedPtr>* snapshot_rowset_metas,
                           const TabletMetaSharedPtr& snapshot_tablet_meta);
     void load_snapshot(const std::string& meta_dir, const TabletSharedPtr& tablet, SegmentFooterPB* footer);
+    void test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index);
 
 protected:
     TabletSharedPtr _tablet;
@@ -2024,7 +2064,8 @@ void TabletUpdatesTest::test_link_from(bool enable_persistent_index) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     _tablet2->set_tablet_state(TABLET_NOTREADY);
-    ASSERT_TRUE(_tablet2->updates()->link_from(_tablet.get(), 4).ok());
+    auto chunk_changer = std::make_unique<ChunkChanger>(_tablet2->tablet_schema());
+    ASSERT_TRUE(_tablet2->updates()->link_from(_tablet.get(), 4, chunk_changer.get()).ok());
 
     ASSERT_EQ(N, read_tablet(_tablet2, 4));
 }
@@ -2035,6 +2076,74 @@ TEST_F(TabletUpdatesTest, link_from) {
 
 TEST_F(TabletUpdatesTest, link_from_with_persistent_index) {
     test_link_from(true);
+}
+
+void TabletUpdatesTest::test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index) {
+    sleep(30);
+    srand(GetCurrentTimeMicros());
+    auto base_tablet = create_tablet(rand(), rand());
+    base_tablet->set_enable_persistent_index(enable_persistent_index);
+    const auto& new_tablet = create_tablet_to_add_generated_column(rand(), rand());
+    std::vector<int64_t> keys;
+    int N = 100;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(base_tablet->rowset_commit(2, create_rowset(base_tablet, keys)).ok());
+    ASSERT_TRUE(base_tablet->rowset_commit(3, create_rowset(base_tablet, keys)).ok());
+    ASSERT_TRUE(base_tablet->rowset_commit(4, create_rowset(base_tablet, keys)).ok());
+
+    new_tablet->set_tablet_state(TABLET_NOTREADY);
+
+    TAlterTabletReqV2 request;
+    TAlterTabletMaterializedColumnReq mc_request;
+
+    std::vector<TExprNode> nodes;
+
+    TExprNode node;
+    node.node_type = TExprNodeType::SLOT_REF;
+    node.type = gen_type_desc(TPrimitiveType::BIGINT);
+    node.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = 0;
+    t_slot_ref.tuple_id = 0;
+    node.__set_slot_ref(t_slot_ref);
+    node.is_nullable = true;
+    nodes.emplace_back(node);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::map<int32_t, starrocks::TExpr> m_expr;
+    m_expr.insert({3, t_expr});
+
+    mc_request.__set_query_globals(TQueryGlobals());
+    mc_request.__set_query_options(TQueryOptions());
+    mc_request.__set_mc_exprs(m_expr);
+
+    request.__set_base_schema_hash(base_tablet->schema_hash());
+    request.__set_new_schema_hash(new_tablet->schema_hash());
+    request.__set_base_tablet_id(base_tablet->tablet_id());
+    request.__set_new_tablet_id(new_tablet->tablet_id());
+    request.__set_alter_version(base_tablet->max_version().second);
+    request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    request.__set_materialized_column_req(mc_request);
+    request.__set_txn_id(99);
+    request.__set_job_id(999);
+
+    std::string alter_msg_header = strings::Substitute("[Alter Job:$0, tablet:$1]: ", 999, base_tablet->tablet_id());
+    SchemaChangeHandler handler;
+    handler.set_alter_msg_header(alter_msg_header);
+    auto res = handler.process_alter_tablet_v2(request);
+    ASSERT_TRUE(res.ok()) << res.to_string();
+}
+
+TEST_F(TabletUpdatesTest, test_schema_change_optimiazation_adding_generated_column) {
+    test_schema_change_optimiazation_adding_generated_column(false);
+}
+
+TEST_F(TabletUpdatesTest, test_schema_change_optimiazation_adding_generated_column_with_persistent_index) {
+    test_schema_change_optimiazation_adding_generated_column(true);
 }
 
 void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {

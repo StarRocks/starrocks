@@ -28,6 +28,7 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset_column_update_state.h"
+#include "storage/schema_change_utils.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -643,7 +644,8 @@ TEST_F(RowsetColumnPartialUpdateTest, test_schema_change) {
         // create table with add column, test link_from
         auto new_tablet = create_tablet(6000, 6000, true);
         new_tablet->set_tablet_state(TABLET_NOTREADY);
-        ASSERT_TRUE(new_tablet->updates()->link_from(tablet.get(), version).ok());
+        auto chunk_changer = std::make_unique<ChunkChanger>(new_tablet->tablet_schema());
+        ASSERT_TRUE(new_tablet->updates()->link_from(tablet.get(), version, chunk_changer.get()).ok());
         // check data
         ASSERT_TRUE(check_tablet(new_tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
             return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
