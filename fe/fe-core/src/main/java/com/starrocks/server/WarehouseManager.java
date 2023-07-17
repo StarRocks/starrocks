@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -99,6 +100,12 @@ public class WarehouseManager implements Writable {
     public List<Long> getWarehouseIds() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             return new ArrayList<>(idToWh.keySet());
+        }
+    }
+
+    public Set<String> getAllWarehouseNames() {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return nameToWh.keySet();
         }
     }
 

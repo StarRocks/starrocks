@@ -44,6 +44,8 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
@@ -67,6 +69,8 @@ import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -2854,6 +2858,59 @@ public class PrivilegeCheckerTest {
         starRocksAssert.dropMaterializedView("db1.mv5");
         starRocksAssert.dropView("db1.view5");
         ctxToTestUser();
+    }
+
+    @Test
+    public void testWarehouse() throws Exception {
+        Config.run_mode = "shared_data";
+        RunMode.detectRunMode();
+
+        verifyGrantRevoke(
+                "create warehouse wbb",
+                "grant create warehouse on system to test",
+                "revoke create warehouse on system from test",
+                "Access denied; you need (at least one of) the CREATE WAREHOUSE privilege(s) for this operation");
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new LocalWarehouse(12343L, "waa", 11L, "no comments");
+            }
+        };
+
+        verifyGrantRevoke(
+                "suspend warehouse waa",
+                "grant alter on warehouse waa to test",
+                "revoke alter on warehouse waa from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "resume warehouse waa",
+                "grant alter on warehouse waa to test",
+                "revoke alter on warehouse waa from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "drop warehouse waa",
+                "grant drop on warehouse waa to test",
+                "revoke drop on warehouse waa from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "set warehouse waa",
+                "grant USAGE on warehouse waa to test",
+                "revoke USAGE on warehouse waa from test",
+                "Access denied; you need (at least one of) the USAGE privilege(s) for this operation");
+
+        // test all warehouses
+        verifyGrantRevoke(
+                "drop warehouse waa",
+                "grant drop on all warehouses to test",
+                "revoke drop on all warehouses from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+
+        Config.run_mode = "shared_nothing";
+        RunMode.detectRunMode();
     }
 
     @Test

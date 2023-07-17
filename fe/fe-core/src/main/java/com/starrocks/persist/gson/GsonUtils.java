@@ -115,6 +115,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.privilege.PolicyPEntryObject;
+import com.starrocks.epack.privilege.WarehousePEntryObject;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -307,7 +308,8 @@ public class GsonUtils {
                     .registerSubtype(CatalogPEntryObject.class, "CatalogPEntryObject")
                     .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
                     .registerSubtype(StorageVolumePEntryObject.class, "StorageVolumePEntryObject")
-                    .registerSubtype(PolicyPEntryObject.class, "PolicyPEntryObject");
+                    .registerSubtype(PolicyPEntryObject.class, "PolicyPEntryObject")
+                    .registerSubtype(WarehousePEntryObject.class, "WarehousePEntryObject");
 
     private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")

@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
 public class PrivilegeActions {
     private static final Logger LOG = LogManager.getLogger(PrivilegeActions.class);
 
-    private static boolean checkObjectTypeAction(UserIdentity userIdentity, Set<Long> roleIds,
+    protected static boolean checkObjectTypeAction(UserIdentity userIdentity, Set<Long> roleIds,
                                                  PrivilegeType privilegeType,
                                                  ObjectType objectType, List<String> objectTokens) {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
@@ -185,7 +185,7 @@ public class PrivilegeActions {
                 .collect(Collectors.joining("."));
     }
 
-    private static boolean checkAnyActionOnObject(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType,
+    protected static boolean checkAnyActionOnObject(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType,
                                                   List<String> objectTokens) {
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {

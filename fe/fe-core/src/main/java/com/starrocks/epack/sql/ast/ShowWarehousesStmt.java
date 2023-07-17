@@ -13,12 +13,14 @@
 // limitations under the License.
 
 
-package com.starrocks.sql.ast;
+package com.starrocks.epack.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
 // Show warehouse statement.

@@ -21,13 +21,22 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 
 public class SetWarehouseStmtTest {
     private static ConnectContext ctx;
@@ -39,6 +48,8 @@ public class SetWarehouseStmtTest {
         starRocksAssert.withDatabase("db1").useDatabase("tbl1");
         ctx = new ConnectContext(null);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(new HashSet<>(Collections.singletonList(-1L)));
     }
 
     @Test
@@ -54,6 +65,13 @@ public class SetWarehouseStmtTest {
                 warehouseMgr.warehouseExists("aaa");
                 result = true;
                 minTimes = 0;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new LocalWarehouse(12343L, "aaa", 11L, "no comments");
             }
         };
 

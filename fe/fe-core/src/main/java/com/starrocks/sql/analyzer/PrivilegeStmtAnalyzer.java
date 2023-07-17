@@ -318,7 +318,8 @@ public class PrivilegeStmtAnalyzer {
                         objectList.add(authorizationManager.generateUserObject(objectType, null));
                     } else if (ObjectType.RESOURCE.equals(objectType)
                             || ObjectType.CATALOG.equals(objectType)
-                            || ObjectType.RESOURCE_GROUP.equals(objectType) ||
+                            || ObjectType.RESOURCE_GROUP.equals(objectType)
+                            || ObjectTypeEPack.WAREHOUSE.equals(objectType) ||
                             ObjectType.STORAGE_VOLUME.equals(objectType)) {
                         if (tokens.size() != 1) {
                             throw new SemanticException(
@@ -432,7 +433,8 @@ public class PrivilegeStmtAnalyzer {
                         }
                     } else if (ObjectType.RESOURCE.equals(objectType)
                             || ObjectType.CATALOG.equals(objectType)
-                            || ObjectType.RESOURCE_GROUP.equals(objectType) ||
+                            || ObjectType.RESOURCE_GROUP.equals(objectType)
+                            || ObjectTypeEPack.WAREHOUSE.equals(objectType) ||
                             ObjectType.STORAGE_VOLUME.equals(objectType)) {
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
                             if (tokens.size() != 1) {

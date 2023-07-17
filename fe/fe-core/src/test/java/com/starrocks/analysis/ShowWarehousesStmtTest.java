@@ -17,20 +17,24 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
+
+import java.util.Collections;
+import java.util.HashSet;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class ShowWarehousesStmtTest {
@@ -45,6 +49,8 @@ public class ShowWarehousesStmtTest {
         starRocksAssert = new StarRocksAssert();
 
         ctx = new ConnectContext(null);
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(new HashSet<>(Collections.singletonList(-1L)));
     }
 
     @Test

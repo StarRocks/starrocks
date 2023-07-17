@@ -22,10 +22,21 @@ public class AuthorizationProviderEPack extends DefaultAuthorizationProvider {
     private static final Map<ObjectType, List<PrivilegeType>> TYPE_TO_ACTION_LIST_EPACK =
             ImmutableMap.<ObjectType, List<PrivilegeType>>builder()
                     .putAll(TYPE_TO_ACTION_LIST)
+
                     .put(ObjectTypeEPack.MASKING_POLICY, ImmutableList.of(
-                            PrivilegeTypeEPack.APPLY, PrivilegeType.DROP, PrivilegeType.ALTER))
+                            PrivilegeTypeEPack.APPLY,
+                            PrivilegeType.DROP,
+                            PrivilegeType.ALTER))
+
                     .put(ObjectTypeEPack.ROW_ACCESS_POLICY, ImmutableList.of(
-                            PrivilegeTypeEPack.APPLY, PrivilegeType.DROP, PrivilegeType.ALTER))
+                            PrivilegeTypeEPack.APPLY,
+                            PrivilegeType.DROP,
+                            PrivilegeType.ALTER))
+
+                    .put(ObjectTypeEPack.WAREHOUSE, ImmutableList.of(
+                            PrivilegeType.USAGE,
+                            PrivilegeType.ALTER,
+                            PrivilegeType.DROP))
                     .build();
 
     @Override
@@ -53,6 +64,8 @@ public class AuthorizationProviderEPack extends DefaultAuthorizationProvider {
             return PolicyPEntryObject.generate(mgr, PolicyType.ROW_ACCESS, objectTokens);
         } else if (ObjectTypeEPack.MASKING_POLICY.equals(objectType)) {
             return PolicyPEntryObject.generate(mgr, PolicyType.MASKING, objectTokens);
+        } else if (ObjectTypeEPack.WAREHOUSE.equals(objectType)) {
+            return WarehousePEntryObject.generate(mgr, objectTokens);
         } else {
             return super.generateObject(objectType, objectTokens, mgr);
         }

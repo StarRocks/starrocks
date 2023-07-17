@@ -33,6 +33,7 @@ import com.starrocks.epack.privilege.ObjectTypeEPack;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.privilege.PolicyPEntryObject;
 import com.starrocks.epack.privilege.PrivilegeBuiltinConstantsEPack;
+import com.starrocks.epack.privilege.WarehousePEntryObject;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -58,6 +59,7 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.HashSet;
 import java.util.List;
@@ -293,6 +295,24 @@ public class GrantsTo {
                             continue;
                         }
                         objects.add(Lists.newArrayList(null, null, resourceGroup.getName()));
+                    }
+                }  else if (ObjectTypeEPack.WAREHOUSE.equals(privEntry.getKey())) {
+                    WarehousePEntryObject warehousePEntryObject =
+                            (WarehousePEntryObject) privilegeEntry.getObject();
+                    long warehouseId = warehousePEntryObject.getId();
+                    if (warehouseId == PrivilegeBuiltinConstantsEPack.ALL_WAREHOUSES_ID) {
+                        Set<String> allWarehouseNames = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getAllWarehouseNames();
+                        for (String warehouseName : allWarehouseNames) {
+                            objects.add(Lists.newArrayList(null, null, warehouseName));
+                        }
+                    } else {
+                        Warehouse warehouse =
+                                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                        if (warehouse == null) {
+                            continue;
+                        }
+                        objects.add(Lists.newArrayList(null, null, warehouse.getName()));
                     }
                 } else if (ObjectType.FUNCTION.equals(privEntry.getKey())) {
                     FunctionPEntryObject functionPEntryObject = (FunctionPEntryObject) privilegeEntry.getObject();

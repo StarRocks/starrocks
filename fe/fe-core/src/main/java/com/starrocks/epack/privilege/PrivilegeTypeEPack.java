@@ -17,6 +17,9 @@ public class PrivilegeTypeEPack extends PrivilegeType {
     public static final PrivilegeTypeEPack CREATE_ROW_ACCESS_POLICY = new PrivilegeTypeEPack(20002,
             "CREATE ROW ACCESS POLICY");
     public static final PrivilegeTypeEPack APPLY = new PrivilegeTypeEPack(20003, "APPLY");
+    public static final PrivilegeTypeEPack CREATE_WAREHOUSE =
+            new PrivilegeTypeEPack(20004, "CREATE WAREHOUSE");
+
 
     public static final Map<String, PrivilegeType> NAME_TO_PRIVILEGE =
             new ImmutableMap.Builder<String, PrivilegeType>()
@@ -24,6 +27,7 @@ public class PrivilegeTypeEPack extends PrivilegeType {
                     .put(CREATE_MASKING_POLICY.name(), CREATE_MASKING_POLICY)
                     .put(CREATE_ROW_ACCESS_POLICY.name(), CREATE_ROW_ACCESS_POLICY)
                     .put(APPLY.name(), APPLY)
+                    .put(CREATE_WAREHOUSE.name(), CREATE_WAREHOUSE)
                     .build();
 
     @Override
@@ -36,6 +40,8 @@ public class PrivilegeTypeEPack extends PrivilegeType {
             return CREATE_ROW_ACCESS_POLICY.name;
         } else if (id == APPLY.id) {
             return APPLY.name;
+        } else if (id == CREATE_WAREHOUSE.id) {
+            return CREATE_WAREHOUSE.name;
         } else {
             return "UNKNOWN";
         }

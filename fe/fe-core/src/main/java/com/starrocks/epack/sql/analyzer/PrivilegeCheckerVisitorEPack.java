@@ -12,11 +12,18 @@ import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
+import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.epack.sql.ast.SetWarehouseStmt;
+import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
+import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
+import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.privilege.PrivilegeActions;
@@ -179,6 +186,63 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
         if (!PrivilegeActionsEPack.checkAnyActionOnPolicy(context, statement.getPolicyType(),
                 statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
                 statement.getPolicyName().getName())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ANY");
+        }
+        return null;
+    }
+
+    // --------------------------------- Warehouse Statement ---------------------------------
+    @Override
+    public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
+        if (!PrivilegeActionsEPack.checkSystemAction(context, PrivilegeTypeEPack.CREATE_WAREHOUSE)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                    "CREATE WAREHOUSE");
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
+        if (!PrivilegeActionsEPack.checkWarehouseAction(
+                context, statement.getWarehouseName(), PrivilegeType.ALTER)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
+        if (!PrivilegeActionsEPack.checkWarehouseAction(
+                context, statement.getWarehouseName(), PrivilegeType.ALTER)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+        }
+        return null;
+    }
+
+    public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
+        if (!PrivilegeActionsEPack.checkWarehouseAction(
+                context, statement.getWarehouseName(), PrivilegeType.DROP)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+        }
+        return null;
+    }
+
+    public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
+        if (!PrivilegeActionsEPack.checkWarehouseAction(
+                context, statement.getWarehouseName(), PrivilegeType.USAGE)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USAGE");
+        }
+        return null;
+    }
+
+    public Void visitShowWarehousesStatement(ShowWarehousesStmt statement, ConnectContext context) {
+        // `show warehouses` only show warehouses that user has any privilege on, we will check it in
+        // the execution logic, not here, see `handleShowWarehouses()` for details.
+        return null;
+    }
+
+    public Void visitShowClusterStatement(ShowClustersStmt statement, ConnectContext context) {
+        if (!PrivilegeActionsEPack.checkAnyActionOnWarehouse(context, statement.getWarehouseName())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ANY");
         }
         return null;

@@ -170,6 +170,7 @@ public class AuthorizationMgr {
                     ObjectType.MATERIALIZED_VIEW,
                     ObjectType.RESOURCE,
                     ObjectType.RESOURCE_GROUP,
+                    ObjectTypeEPack.WAREHOUSE,
                     ObjectType.FUNCTION,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME)) {
@@ -258,6 +259,7 @@ public class AuthorizationMgr {
         } else if (ObjectType.RESOURCE.equals(objectType)
                 || ObjectType.CATALOG.equals(objectType)
                 || ObjectType.RESOURCE_GROUP.equals(objectType)
+                || ObjectTypeEPack.WAREHOUSE.equals(objectType)
                 || ObjectType.STORAGE_VOLUME.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*"), globalStateMgr));
@@ -1713,7 +1715,7 @@ public class AuthorizationMgr {
                 ret = reader.readJson(AuthorizationMgr.class);
                 ret.globalStateMgr = globalStateMgr;
                 if (provider == null) {
-                    ret.provider = new DefaultAuthorizationProvider();
+                    ret.provider = new AuthorizationProviderEPack();
                 } else {
                     ret.provider = provider;
                 }
@@ -1863,7 +1865,7 @@ public class AuthorizationMgr {
             ret = reader.readJson(AuthorizationMgr.class);
             ret.globalStateMgr = globalStateMgr;
             if (provider == null) {
-                ret.provider = new DefaultAuthorizationProvider();
+                ret.provider = new AuthorizationProviderEPack();
             } else {
                 ret.provider = provider;
             }
