@@ -124,6 +124,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
         std::lock_guard lock(_gc_mutex);
         return _unused_rowsets.size();
     });
+    _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
 }
 
 StorageEngine::~StorageEngine() {
@@ -1169,6 +1170,10 @@ double StorageEngine::delete_unused_rowset() {
                 << rowset->version().second;
         Status status = rowset->remove();
         LOG_IF(WARNING, !status.ok()) << "remove rowset:" << rowset->rowset_id() << " finished. status:" << status;
+        clear_rowset_delta_column_group_cache(*rowset.get());
+        status = rowset->remove_delta_column_group();
+        LOG_IF(WARNING, !status.ok()) << "remove delta column group error rowset:" << rowset->rowset_id()
+                                      << " finished. status:" << status;
     }
     LOG(INFO) << "remove " << delete_rowsets.size() << " rowsets collect cost " << collect_time << "ms total "
               << timer.elapsed_time() / (1000 * 1000) << "ms";
@@ -1378,6 +1383,88 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
     cur_avaliable_min_id += num_row;
 
     return Status::OK();
+}
+
+// calc the total memory usage of delta column group list, can be optimazed later if need.
+size_t StorageEngine::delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs) {
+    size_t res = 0;
+    for (const auto& dcg : dcgs) {
+        res += dcg->memory_usage();
+    }
+    return res;
+}
+
+// Search delta column group from `all_dcgs` which version isn't larger than `version`.
+// Using it because we record all version dcgs in cache
+void StorageEngine::search_delta_column_groups_by_version(const DeltaColumnGroupList& all_dcgs, int64_t version,
+                                                          DeltaColumnGroupList* dcgs) {
+    for (const auto& dcg : all_dcgs) {
+        if (dcg->version() <= version) {
+            dcgs->push_back(dcg);
+        }
+    }
+}
+
+Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                             int64_t version, DeltaColumnGroupList* dcgs) {
+    StarRocksMetrics::instance()->delta_column_group_get_non_pk_total.increment(1);
+    // Currently non-Primary Key tablet can generate cols file only through
+    // schema change which will change tablet_id. Every time we do schema change
+    // we will get cache miss and guarantee that we always can get the newest
+    // cols file.
+    DeltaColumnGroupKey dcg_key;
+    dcg_key.tablet_id = tablet_id;
+    dcg_key.rowsetid = rowsetid;
+    dcg_key.segment_id = segment_id;
+    {
+        // find in delta column group cache
+        std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+        auto itr = _delta_column_group_cache.find(dcg_key);
+        if (itr != _delta_column_group_cache.end()) {
+            search_delta_column_groups_by_version(itr->second, version, dcgs);
+            StarRocksMetrics::instance()->delta_column_group_get_non_pk_hit_cache.increment(1);
+            return Status::OK();
+        }
+    }
+    // find from rocksdb
+    DeltaColumnGroupList new_dcgs;
+    RETURN_IF_ERROR(
+            TabletMetaManager::get_delta_column_group(meta, tablet_id, rowsetid, segment_id, INT64_MAX, &new_dcgs));
+    search_delta_column_groups_by_version(new_dcgs, version, dcgs);
+    {
+        // fill delta column group cache
+        std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+        bool ok = _delta_column_group_cache.insert({dcg_key, new_dcgs}).second;
+        if (ok) {
+            // insert success
+            _delta_column_group_cache_mem_tracker->consume(delta_column_group_list_memory_usage(new_dcgs));
+        }
+    }
+    return Status::OK();
+}
+
+void StorageEngine::clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys) {
+    std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+    for (const auto& dcg_key : dcg_keys) {
+        auto itr = _delta_column_group_cache.find(dcg_key);
+        if (itr != _delta_column_group_cache.end()) {
+            _delta_column_group_cache_mem_tracker->release(
+                    StorageEngine::instance()->delta_column_group_list_memory_usage(itr->second));
+            _delta_column_group_cache.erase(itr);
+        }
+    }
+}
+
+void StorageEngine::clear_rowset_delta_column_group_cache(const Rowset& rowset) {
+    StorageEngine::instance()->clear_cached_delta_column_group([&]() {
+        std::vector<DeltaColumnGroupKey> dcg_keys;
+        dcg_keys.reserve(rowset.num_segments());
+        for (auto i = 0; i < rowset.num_segments(); i++) {
+            dcg_keys.emplace_back(
+                    DeltaColumnGroupKey(rowset.rowset_meta()->tablet_id(), rowset.rowset_meta()->rowset_id(), i));
+        }
+        return dcg_keys;
+    }());
 }
 
 } // namespace starrocks

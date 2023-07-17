@@ -681,3 +681,119 @@ SELECT * FROM t;
 DROP DATABASE test_update;
 -- result:
 -- !result
+-- name: test_schema_change_for_add_optimization
+CREATE DATABASE test_schema_change_for_add_optimization;
+-- result:
+-- !result
+USE test_schema_change_for_add_optimization;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1, 2);
+-- result:
+-- !result
+ALTER TABLE t ADD COLUMN newcol1 BIGINT AS id + name;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	3
+-- !result
+ALTER TABLE t ADD COLUMN newcol2 BIGINT AS id * 100 + name;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	3	102
+-- !result
+ALTER TABLE t DROP COLUMN newcol1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	102
+-- !result
+ALTER TABLE t DROP COLUMN newcol2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t;
+-- result:
+1	2
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1, 2);
+-- result:
+-- !result
+ALTER TABLE t ADD COLUMN newcol1 BIGINT AS id + name;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	3
+-- !result
+ALTER TABLE t ADD COLUMN newcol2 BIGINT AS id * 100 + name;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	3	102
+-- !result
+ALTER TABLE t DROP COLUMN newcol1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	102
+-- !result
+ALTER TABLE t DROP COLUMN newcol2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t;
+-- result:
+1	2
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP DATABASE test_schema_change_for_add_optimization;
+-- result:
+-- !result

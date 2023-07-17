@@ -398,7 +398,7 @@ TEST_F(TabletMetaManagerTest, delta_column_group_operations) {
         DeltaColumnGroupList dcgs;
         for (int v = 1; v <= 20; v++) {
             auto dcg = std::make_shared<DeltaColumnGroup>();
-            dcg->init(v, {1, 10, 100}, "111.cols");
+            dcg->init(v, {{1, 10, 100}}, {"1110.cols"});
             dcgs.push_back(std::move(dcg));
         }
         WriteBatch wb;
@@ -411,9 +411,11 @@ TEST_F(TabletMetaManagerTest, delta_column_group_operations) {
         int segid = (rand() % 20) + 1;
         CHECK(TabletMetaManager::get_delta_column_group(meta, tablet_id, segid, i, &dcgs).ok());
         ASSERT_EQ(dcgs.size(), i);
-        ASSERT_EQ(dcgs[0]->column_file("111"), "111/111.cols");
-        ASSERT_EQ(dcgs[0]->get_column_idx(10), 1);
-        ASSERT_EQ(dcgs[0]->get_column_idx(11), -1);
+        ASSERT_EQ(dcgs[0]->column_files("111").front(), "111/1110.cols");
+        ASSERT_EQ(dcgs[0]->get_column_idx(10).first, 0);
+        ASSERT_EQ(dcgs[0]->get_column_idx(10).second, 1);
+        ASSERT_EQ(dcgs[0]->get_column_idx(11).first, -1);
+        ASSERT_EQ(dcgs[0]->get_column_idx(11).second, -1);
         ASSERT_EQ(dcgs[0]->version(), i);
     }
     // scan delta column group
@@ -423,9 +425,11 @@ TEST_F(TabletMetaManagerTest, delta_column_group_operations) {
         int segid = (rand() % 20) + 1;
         CHECK(TabletMetaManager::scan_delta_column_group(meta, tablet_id, segid, i, i + len, &dcgs).ok());
         ASSERT_EQ(dcgs.size(), len);
-        ASSERT_EQ(dcgs[0]->column_file("111"), "111/111.cols");
-        ASSERT_EQ(dcgs[0]->get_column_idx(10), 1);
-        ASSERT_EQ(dcgs[0]->get_column_idx(11), -1);
+        ASSERT_EQ(dcgs[0]->column_files("111").front(), "111/1110.cols");
+        ASSERT_EQ(dcgs[0]->get_column_idx(10).first, 0);
+        ASSERT_EQ(dcgs[0]->get_column_idx(10).second, 1);
+        ASSERT_EQ(dcgs[0]->get_column_idx(11).first, -1);
+        ASSERT_EQ(dcgs[0]->get_column_idx(11).second, -1);
         ASSERT_EQ(dcgs[0]->version(), i + len);
     }
     // delete delta column group
