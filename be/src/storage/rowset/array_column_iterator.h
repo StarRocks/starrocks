@@ -27,7 +27,7 @@ class ArrayColumnIterator final : public ColumnIterator {
 public:
     ArrayColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iterator,
                         std::unique_ptr<ColumnIterator> array_size_iterator,
-                        std::unique_ptr<ColumnIterator> element_iterator, ColumnAccessPath* paths);
+                        std::unique_ptr<ColumnIterator> element_iterator, const ColumnAccessPath* paths);
 
     ~ArrayColumnIterator() override = default;
 
@@ -55,7 +55,7 @@ private:
     std::unique_ptr<ColumnIterator> _null_iterator;
     std::unique_ptr<ColumnIterator> _array_size_iterator;
     std::unique_ptr<ColumnIterator> _element_iterator;
-    ColumnAccessPath* _path;
+    const ColumnAccessPath* _path;
 
     bool _access_values = true;
 };

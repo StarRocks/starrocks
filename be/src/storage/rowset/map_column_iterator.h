@@ -53,7 +53,7 @@ private:
     std::unique_ptr<ColumnIterator> _offsets;
     std::unique_ptr<ColumnIterator> _keys;
     std::unique_ptr<ColumnIterator> _values;
-    ColumnAccessPath* _path;
+    const ColumnAccessPath* _path;
 
     bool _access_keys;
     bool _access_values;

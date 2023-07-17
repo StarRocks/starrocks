@@ -25,7 +25,7 @@ namespace starrocks {
 class StructColumnIterator final : public ColumnIterator {
 public:
     StructColumnIterator(ColumnReader* _reader, std::unique_ptr<ColumnIterator> null_iter,
-                         std::vector<std::unique_ptr<ColumnIterator>> field_iters, ColumnAccessPath* path);
+                         std::vector<std::unique_ptr<ColumnIterator>> field_iters, const ColumnAccessPath* path);
 
     ~StructColumnIterator() override = default;
 
@@ -52,7 +52,7 @@ private:
 
     std::unique_ptr<ColumnIterator> _null_iter;
     std::vector<std::unique_ptr<ColumnIterator>> _field_iters;
-    ColumnAccessPath* _path;
+    const ColumnAccessPath* _path;
 
     std::vector<uint8_t> _access_flags;
 };
@@ -60,14 +60,14 @@ private:
 StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(ColumnReader* _reader,
                                                              std::unique_ptr<ColumnIterator> null_iter,
                                                              std::vector<std::unique_ptr<ColumnIterator>> field_iters,
-                                                             ColumnAccessPath* path) {
+                                                             const ColumnAccessPath* path) {
     return std::make_unique<StructColumnIterator>(_reader, std::move(null_iter), std::move(field_iters),
                                                   std::move(path));
 }
 
 StructColumnIterator::StructColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
                                            std::vector<std::unique_ptr<ColumnIterator>> field_iters,
-                                           ColumnAccessPath* path)
+                                           const ColumnAccessPath* path)
         : _reader(reader), _null_iter(std::move(null_iter)), _field_iters(std::move(field_iters)), _path(path) {}
 
 Status StructColumnIterator::init(const ColumnIteratorOptions& opts) {
