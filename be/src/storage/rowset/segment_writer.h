@@ -54,6 +54,7 @@ struct SegmentWriterOptions {
     uint32_t num_rows_per_block = 100;
 #else
     uint32_t num_rows_per_block = 1024;
+#endif
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
 };
