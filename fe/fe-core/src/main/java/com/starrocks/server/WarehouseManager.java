@@ -51,6 +51,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
@@ -99,6 +100,10 @@ public class WarehouseManager implements Writable {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return idToWh.get(warehouseId);
         }
+    }
+
+    public List<Warehouse> getAllWarehouses() {
+        return nameToWh.values().stream().collect(Collectors.toList());
     }
 
     public List<Long> getWarehouseIds() {

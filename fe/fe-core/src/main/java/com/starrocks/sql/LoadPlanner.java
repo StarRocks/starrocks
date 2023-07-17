@@ -42,6 +42,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
+import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -372,6 +373,7 @@ public class LoadPlanner {
                     "FileScanNode", fileStatusesList, filesAdded);
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
+            fileScanNode.setWarehouse(sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE));
             fileScanNode.setUseVectorizedLoad(true);
             fileScanNode.init(analyzer);
             fileScanNode.finalizeStats(analyzer);
@@ -381,6 +383,7 @@ public class LoadPlanner {
                     destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId);
             streamScanNode.setNeedAssignBE(true);
             streamScanNode.setUseVectorizedLoad(true);
+            streamScanNode.setWarehouse(sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE));
             streamScanNode.init(analyzer);
             streamScanNode.finalizeStats(analyzer);
             scanNode = streamScanNode;
@@ -425,7 +428,8 @@ public class LoadPlanner {
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine,
                     olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
-                    checkNullExprInAutoIncrement(), enableAutomaticPartition);
+                    checkNullExprInAutoIncrement(), enableAutomaticPartition,
+                    sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE));
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }

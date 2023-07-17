@@ -275,6 +275,7 @@ public class Coordinator {
         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setPipelineDop(0);
+        connectContext.getSessionVariable().setWarehouse(sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE));
         this.connectContext = connectContext;
         this.descTable = descTable.toThrift();
         this.fragments = fragments;
