@@ -13,9 +13,15 @@ where
   and l_shipdate >= date '1997-02-01'
   and l_shipdate < date '1997-03-01';
 [result]
-AGGREGATE ([GLOBAL] aggregate [{28: sum=sum(28: sum), 29: sum=sum(29: sum)}] group by [[]] having [null]
+AGGREGATE ([GLOBAL] aggregate [{: sum=sum(: sum), : sum=sum(: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
+<<<<<<< HEAD
         AGGREGATE ([LOCAL] aggregate [{28: sum=sum(26: case), 29: sum=sum(27: expr)}] group by [[]] having [null]
             SCAN (mv[lineitem_mv] columns[55: l_shipdate, 69: p_type, 73: l_saleprice] predicate[55: l_shipdate >= 1997-02-01 AND 55: l_shipdate < 1997-03-01])
 [end]
+=======
+        AGGREGATE ([LOCAL] aggregate [{: sum=sum(if(: p_type LIKE PROMO%, : l_saleprice, .)), : sum=sum(: expr)}] group by [[]] having [null]
+            SCAN (mv[lineitem_mv] columns[: l_shipdate, : p_type, : l_saleprice] predicate[: l_shipdate >= -- AND : l_shipdate < --])
+-- [end]
+>>>>>>> 9408b7a6e9 ([BugFix] Decimal cast to string on FE (#27235))
 

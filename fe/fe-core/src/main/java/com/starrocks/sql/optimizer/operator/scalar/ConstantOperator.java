@@ -18,6 +18,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.text.DecimalFormat;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -302,6 +303,12 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             double val = (double) Optional.ofNullable(value).orElse((double) 0);
             BigDecimal decimal = BigDecimal.valueOf(val);
             return decimal.stripTrailingZeros().toPlainString();
+        } else if (type.isDecimalOfAnyVersion()) {
+            // align zero, keep same with BE
+            int scale = ((ScalarType) type).getScalarScale();
+            BigDecimal val = (BigDecimal) value;
+            DecimalFormat df = new DecimalFormat((scale == 0 ? "0" : "0.") + StringUtils.repeat("0", scale));
+            return df.format(val);
         }
 
         return String.valueOf(value);

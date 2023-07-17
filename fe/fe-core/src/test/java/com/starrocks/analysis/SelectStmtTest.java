@@ -438,8 +438,13 @@ public class SelectStmtTest {
                     "  RESULT SINK\n" +
                     "\n" +
                     "  1:AGGREGATE (update finalize)\n" +
+<<<<<<< HEAD
                     "  |  aggregate: sum[(1 / 2.12); " +
                     "args: DECIMAL128; result: DECIMAL128(38,6); args nullable: true; result nullable: true]\n" +
+=======
+                    "  |  aggregate: sum[(1 / 2.1200); args: DECIMAL128; result: DECIMAL128(38,6);" +
+                    " args nullable: true; result nullable: true]\n" +
+>>>>>>> 9408b7a6e9 ([BugFix] Decimal cast to string on FE (#27235))
                     "  |  group by: [1: c0, VARCHAR, false]\n" +
                     "  |  cardinality: 1"));
         }

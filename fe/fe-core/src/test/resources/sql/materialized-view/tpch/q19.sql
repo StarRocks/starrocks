@@ -38,6 +38,10 @@ where
 AGGREGATE ([GLOBAL] aggregate [{27: sum=sum(27: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
         AGGREGATE ([LOCAL] aggregate [{27: sum=sum(26: expr)}] group by [[]] having [null]
+<<<<<<< HEAD
             SCAN (mv[lineitem_mv] columns[69: l_quantity, 73: l_shipinstruct, 74: l_shipmode, 82: p_brand, 83: p_container, 85: p_size, 90: l_saleprice] predicate[73: l_shipinstruct = DELIVER IN PERSON AND 85: p_size >= 1 AND 82: p_brand = Brand#45 AND 83: p_container IN (SM CASE, SM BOX, SM PACK, SM PKG) AND 69: l_quantity >= 5 AND 69: l_quantity <= 15 AND 85: p_size <= 5 OR 82: p_brand = Brand#11 AND 83: p_container IN (MED BAG, MED BOX, MED PKG, MED PACK) AND 69: l_quantity >= 15 AND 69: l_quantity <= 25 AND 85: p_size <= 10 OR 82: p_brand = Brand#21 AND 83: p_container IN (LG CASE, LG BOX, LG PACK, LG PKG) AND 69: l_quantity >= 25 AND 69: l_quantity <= 35 AND 85: p_size <= 15 AND 74: l_shipmode IN (AIR, AIR REG)])
+=======
+            SCAN (mv[lineitem_mv] columns[40: l_quantity, 44: l_shipinstruct, 45: l_shipmode, 53: p_brand, 54: p_container, 56: p_size, 61: l_saleprice] predicate[44: l_shipinstruct = DELIVER IN PERSON AND 56: p_size >= 1 AND 53: p_brand = Brand#45 AND 54: p_container IN (SM CASE, SM BOX, SM PACK, SM PKG) AND 40: l_quantity >= 5.0 AND 40: l_quantity <= 15.0 AND 56: p_size <= 5 OR 53: p_brand = Brand#11 AND 54: p_container IN (MED BAG, MED BOX, MED PKG, MED PACK) AND 40: l_quantity >= 15.0 AND 40: l_quantity <= 25.0 AND 56: p_size <= 10 OR 53: p_brand = Brand#21 AND 54: p_container IN (LG CASE, LG BOX, LG PACK, LG PKG) AND 40: l_quantity >= 25.0 AND 40: l_quantity <= 35.0 AND 56: p_size <= 15 AND 45: l_shipmode IN (AIR, AIR REG)])
+>>>>>>> 9408b7a6e9 ([BugFix] Decimal cast to string on FE (#27235))
 [end]
 

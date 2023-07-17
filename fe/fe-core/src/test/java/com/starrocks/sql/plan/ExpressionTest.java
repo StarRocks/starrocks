@@ -1373,4 +1373,167 @@ public class ExpressionTest extends PlanTestBase {
             assertContains(plan, "<slot 2> : 8190");
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testArithmeticExpressions() throws Exception {
+        String sql = "select multiply(400, 500);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 200000");
+
+        sql = "select subtract(-30000, 40000);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : -70000");
+
+        sql = "select int_divide(128, 100);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 1");
+
+        sql = "select multiply(200, 50);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 10000");
+
+        sql = "select multiply(429496, 429496);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 184466814016");
+    }
+
+    @Test
+    public void testInPredicate() throws Exception {
+        String sql = "select * from t0 where v1 in (v2, v3, 3, 4, 5) ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: ((1: v1 IN (3, 4, 5)) OR (1: v1 = 2: v2)) OR (1: v1 = 3: v3)");
+    }
+
+    @Test
+    public void testBitNotLargeInt() throws Exception {
+        String sql = "select bitnot(cast(power(-2,127) as largeint)+1);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "~ CAST(power(-2.0, 127.0) AS LARGEINT) + 1");
+    }
+
+    @Test
+    public void testConstantFoldInLikeFunction() throws Exception {
+        String sql1 = "select like('AA', concat('a', 'A'))";
+        String plan1 = getFragmentPlan(sql1);
+        assertContains(plan1, "<slot 2> : like('AA', 'aA')");
+
+        String sql2 = "select ilike('AA', concat('a', 'A'))";
+        String plan2 = getFragmentPlan(sql2);
+        assertContains(plan2, "<slot 2> : like(lower('AA'), lower('aA'))");
+    }
+
+    @Test
+    public void testStructExpression() throws Exception {
+        String sql = "select struct('a', 1, 2, 10000)";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6)>");
+
+        sql = "select row('a', 1, 2, 10000, [1, 2, 3], NULL, map{'a': 1, 'b': 2})";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6), " +
+                "col5 array<tinyint(4)>, col6 boolean, col7 map<varchar,tinyint(4)>>");
+
+        sql = "select named_struct('a', 1, 'b', 2)";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "struct<a tinyint(4), b tinyint(4)>");
+
+        try {
+            sql = "select named_struct('a', 1, 'b', 2, 3, 6)";
+            plan = getVerboseExplain(sql);
+        } catch (Exception e) {
+            assertCContains(e.getMessage(), "The 5-th input of named_struct must be string literal");
+        }
+
+        try {
+            sql = "select named_struct('a', 1, 'b', 2, 3, 'x', 6)";
+            plan = getVerboseExplain(sql);
+        } catch (Exception e) {
+            assertCContains(e.getMessage(), "named_struct arguments must be in name/value pairs");
+        }
+
+        try {
+            sql = "select named_struct('a', 1, 'a', 2)";
+            plan = getVerboseExplain(sql);
+        } catch (Exception e) {
+            assertCContains(e.getMessage(), "named_struct contains duplicate subfield name: a at 3-th input");
+        }
+    }
+
+    @Test
+    public void testStructRow() throws Exception {
+        String sql = "select row('a', 1, 'a', 2).col1";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col1");
+    }
+
+    @Test
+    public void testStructCollection() throws Exception {
+        String sql = "select row('a', 1, 'a', 2)[1]";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col1");
+
+        sql = "select row('a', 1, 'a', 2)[4]";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col4");
+
+        sql = "select row('a', 1, 'a', 2)[4]";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col4");
+
+        sql = "select row('a', 1, 'a', 2)[-1]";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col4");
+
+        sql = "select row('a', 1, 'a', 2)[-4]";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col1");
+    }
+
+    @Test
+    public void testJsonArray() throws Exception {
+        String sql = "select array_distinct([PARSE_JSON('{1: 2}')])";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "array_distinct[([parse_json('{1: 2}')]); args: INVALID_TYPE; result: ARRAY<JSON>;");
+
+        sql = "select array_distinct([NULL])";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "array_distinct[([NULL]); args: INVALID_TYPE; result: ARRAY<BOOLEAN>;");
+    }
+
+    @Test
+    public void testDoubleCastToString() throws Exception {
+        String sql = "select concat(substr(DATE_SUB(CURDATE(), INTERVAL 1 DAY), 1, 4) -1, '-');";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "2022-");
+
+        sql = "select cast(cast(20.00 as double) as string);";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "'20'");
+    }
+
+    @Test
+    public void testCastTDatetime() throws Exception {
+        String sql = "select cast('2020-05-01T13:45:57' as date);";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "'2020-05-01'");
+
+        sql = "select cast('2020-05-01T13:45:57' as datetime);";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "2020-05-01 13:45:57");
+    }
+
+    @Test
+    public void testDecimalCastString() throws  Exception {
+        String sql = "select cast(cast('1.10000' as decimal(27,9)) as string)";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "1.100000000");
+    }
+>>>>>>> 9408b7a6e9 ([BugFix] Decimal cast to string on FE (#27235))
 }
