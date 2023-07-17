@@ -191,7 +191,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     } else {
         heartbeat_server = std::move(ret.value());
     }
-    if (auto status = heartbeat_server->start(); status.ok()) {
+    if (auto status = heartbeat_server->start(); !status.ok()) {
         LOG(ERROR) << "BE heartbeat server dint not start correctlr, exiting: " << status.message();
         shutdown_logging();
         exit(1);
