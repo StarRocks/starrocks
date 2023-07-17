@@ -162,6 +162,9 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
         }
 
         table.lastVersionUpdateEndTime.set(System.currentTimeMillis());
+        if (dictCollectedVersions.size() != validDictCacheColumns.size()) {
+            return;
+        }
         Preconditions.checkState(dictCollectedVersions.size() == validDictCacheColumns.size());
         for (int i = 0; i < validDictCacheColumns.size(); i++) {
             String columnName = validDictCacheColumns.get(i);
