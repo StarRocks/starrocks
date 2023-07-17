@@ -363,6 +363,7 @@ public class ExpressionAnalyzer {
             }
 
             List<String> fieldNames = node.getFieldNames();
+            List<String> analyzedFieldName = new ArrayList<>();
             Type tmpType = child.getType();
             for (String fieldName : fieldNames) {
                 StructType structType = (StructType) tmpType;
@@ -372,9 +373,11 @@ public class ExpressionAnalyzer {
                             node.getPos());
                 }
                 tmpType = structField.getType();
+                analyzedFieldName.add(structField.getName());
             }
 
             node.setType(tmpType);
+            node.setFieldNames(analyzedFieldName);
             return null;
         }
 

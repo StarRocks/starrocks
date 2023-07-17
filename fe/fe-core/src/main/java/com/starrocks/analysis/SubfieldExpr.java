@@ -31,7 +31,7 @@ public class SubfieldExpr extends Expr {
 
     // We use fieldNames to extract subfield column from children[0],
     // children[0] must be an StructType.
-    private final List<String> fieldNames;
+    private List<String> fieldNames;
 
     // Only used in parser, in parser, we can't determine column's type
     public SubfieldExpr(Expr child, List<String> fieldNames) {
@@ -55,7 +55,7 @@ public class SubfieldExpr extends Expr {
         }
         children.add(child);
         this.type = type;
-        this.fieldNames = fieldNames.stream().map(String::toLowerCase).collect(ImmutableList.toImmutableList());
+        this.fieldNames = fieldNames.stream().collect(ImmutableList.toImmutableList());
     }
 
     public SubfieldExpr(SubfieldExpr other) {
@@ -65,6 +65,10 @@ public class SubfieldExpr extends Expr {
 
     public List<String> getFieldNames() {
         return fieldNames;
+    }
+
+    public void setFieldNames(List<String> analyzedFieldNames) {
+        fieldNames = analyzedFieldNames;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
