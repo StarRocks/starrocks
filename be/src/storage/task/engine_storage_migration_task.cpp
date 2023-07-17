@@ -283,6 +283,46 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
             break;
         }
 
+        // recover dcg meta
+        const std::string dcgs_snapshot_path = schema_hash_path + "/" + std::to_string(_tablet_id) + ".dcgs_snapshot";
+        bool has_dcgs_snapshot_file = fs::path_exist(dcgs_snapshot_path);
+        if (has_dcgs_snapshot_file) {
+            DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+            auto st = DeltaColumnGroupListHelper::parse_snapshot(dcgs_snapshot_path, dcg_snapshot_pb);
+            if (!st.ok()) {
+                return Status::InternalError("failed to parse dcgs meta");
+            }
+
+            if (dcg_snapshot_pb.dcg_lists().size() != 0) {
+                int idx = 0;
+                auto data_dir = tablet->data_dir();
+                rocksdb::WriteBatch wb;
+
+                for (const auto& dcg_list_pb : dcg_snapshot_pb.dcg_lists()) {
+                    // dcgs for each segment
+                    DeltaColumnGroupList dcgs;
+                    RETURN_IF_ERROR(
+                            DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
+
+                    if (dcgs.size() == 0) {
+                        continue;
+                    }
+
+                    RETURN_IF_ERROR(TabletMetaManager::put_delta_column_group(
+                            data_dir, &wb, dcg_snapshot_pb.tablet_id(idx), dcg_snapshot_pb.rowset_id(idx),
+                            dcg_snapshot_pb.segment_id(idx), dcgs));
+                    ++idx;
+                }
+                st = data_dir->get_meta()->write_batch(&wb);
+                if (!st.ok()) {
+                    std::stringstream ss;
+                    ss << "save dcgs meta failed, tablet id: " << tablet->tablet_id();
+                    LOG(WARNING) << ss.str();
+                    return Status::InternalError(ss.str());
+                }
+            }
+        }
+
         st = StorageEngine::instance()->tablet_manager()->load_tablet_from_dir(_dest_store, _tablet_id, _schema_hash,
                                                                                schema_hash_path, false);
         if (!st.ok()) {
@@ -356,7 +396,7 @@ Status EngineStorageMigrationTask::_copy_index_and_data_files(
             status = Status::InternalError("Process is going to quit.");
             break;
         }
-        status = rs->copy_files_to(schema_hash_path);
+        status = rs->copy_files_to(ref_tablet->data_dir()->get_meta(), schema_hash_path);
         if (!status.ok()) {
             break;
         }
