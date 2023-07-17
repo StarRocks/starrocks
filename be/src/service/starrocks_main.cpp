@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
     }
 
     // cn need to support all ops for cloudnative table, so just start_be
-    starrocks::start_be();
+    starrocks::start_be(engine);
 
     if (starrocks::k_starrocks_exit_quick.load()) {
         LOG(INFO) << "BE is shutting down，will exit quickly";
@@ -342,11 +342,8 @@ int main(int argc, char** argv) {
 
     Aws::ShutdownAPI(aws_sdk_options);
 
-    exec_env->agent_server()->stop();
-
-    engine->stop();
-    delete engine;
     starrocks::ExecEnv::destroy(exec_env);
+    delete engine;
 
     return 0;
 }

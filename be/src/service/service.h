@@ -17,8 +17,10 @@
 #include <atomic>
 
 namespace starrocks {
+class StorageEngine;
+
 extern std::atomic<bool> k_starrocks_exit;
 extern std::atomic<bool> k_starrocks_exit_quick;
 
-void start_be();
+void start_be(StorageEngine* storage_engine);
 } // namespace starrocks

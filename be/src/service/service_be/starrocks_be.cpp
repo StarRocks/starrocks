@@ -32,7 +32,7 @@ DECLARE_int64(socket_max_unwritten_bytes);
 
 namespace starrocks {
 
-void start_be() {
+void start_be(StorageEngine* storage_engine) {
     auto* exec_env = ExecEnv::GetInstance();
 
     // Begin to start services
@@ -115,6 +115,7 @@ void start_be() {
     thrift_server->stop();
 
     exec_env->stop();
+    storage_engine->stop();
 
     http_server->join();
     LOG(INFO) << "BE http server exit success";

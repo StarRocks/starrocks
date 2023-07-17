@@ -505,6 +505,9 @@ void ExecEnv::stop() {
     if (_wg_driver_executor != nullptr) {
         _wg_driver_executor->clear();
     }
+    if (_agent_server != nullptr) {
+        _agent_server->stop();
+    }
     clean_s3_clients();
 }
 
