@@ -118,6 +118,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.ICoordinator;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -1491,7 +1492,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                 streamLoadTask.setTUniqueId(request.getLoadId());
 
-                Coordinator coord = new Coordinator(planner, getClientAddr());
+                ICoordinator.Factory coordFactory = new Coordinator.Factory();
+                ICoordinator coord = coordFactory.createSyncStreamLoadScheduler(planner, getClientAddr());
                 streamLoadTask.setCoordinator(coord);
 
                 QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);

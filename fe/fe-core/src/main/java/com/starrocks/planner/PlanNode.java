@@ -49,6 +49,7 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.scheduler.SchedulerException;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -202,6 +203,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     protected void setPlanNodeName(String s) {
         this.planNodeName = s;
+    }
+
+    public String getPlanNodeName() {
+        return planNodeName;
     }
 
     public PlanNodeId getId() {
@@ -951,5 +956,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // 2. SetOperation: input slotId and its corresponding input slotIds of the child PlanNode;
     // 3. HashJoinNode: slotIds of both sides of Join equal conditions in semi join and inner join.
     public void collectEquivRelation(FragmentNormalizer normalizer) {
+    }
+
+    public <R, C> R accept(PlanNodeVisitor<R, C> visitor, C ctx) throws SchedulerException {
+        return visitor.visit(this, ctx);
     }
 }

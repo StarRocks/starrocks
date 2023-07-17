@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
@@ -22,11 +21,10 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudType;
+import com.starrocks.qe.scheduler.SchedulerException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -218,5 +216,10 @@ public class HdfsScanNode extends ScanNode {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
+    }
+
+    @Override
+    public <R, C> R accept(PlanNodeVisitor<R, C> visitor, C ctx) throws SchedulerException {
+        return visitor.visitHdfsScanNode(this, ctx);
     }
 }

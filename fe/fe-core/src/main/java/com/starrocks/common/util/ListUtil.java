@@ -39,15 +39,14 @@ public class ListUtil {
     public static <T> List<List<T>> splitBySize(List<T> list, int expectedSize)
             throws NullPointerException, IllegalArgumentException {
         Preconditions.checkNotNull(list, "list must not be null");
-        Preconditions.checkArgument(expectedSize > 0, "expectedSize must larger than 0");
 
-        if (1 == expectedSize) {
+        if (expectedSize <= 1) {
             return Collections.singletonList(list);
         }
 
         int splitSize = Math.min(expectedSize, list.size());
 
-        List<List<T>> result = new ArrayList<List<T>>(splitSize);
+        List<List<T>> result = new ArrayList<>(splitSize);
         for (int i = 0; i < splitSize; i++) {
             result.add(new ArrayList<>());
         }

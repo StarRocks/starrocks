@@ -151,6 +151,9 @@ public class ExecPlan {
                 } else if (level.equals(TExplainLevel.COSTS)) {
                     str.append("PLAN FRAGMENT ").append(i).append("(").append(fragment.getFragmentId()).append(")\n");
                     str.append(fragment.getCostExplain());
+                } else if (level.equals(TExplainLevel.SCHEDULER)) {
+                    str.append("PLAN FRAGMENT ").append(i).append("(").append(fragment.getFragmentId()).append(")\n");
+                    str.append(fragment.getSchedulerExplain());
                 } else {
                     str.append("PLAN FRAGMENT ").append(i).append("(").append(fragment.getFragmentId()).append(")\n");
                     str.append(fragment.getVerboseExplain());
@@ -171,6 +174,9 @@ public class ExecPlan {
                 break;
             case COST:
                 tlevel = TExplainLevel.COSTS;
+                break;
+            case SCHEDULER:
+                tlevel = TExplainLevel.SCHEDULER;
                 break;
         }
         return getExplainString(tlevel);

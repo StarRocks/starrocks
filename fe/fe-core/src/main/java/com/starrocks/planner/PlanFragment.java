@@ -43,6 +43,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TCacheParam;
@@ -160,6 +161,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private boolean useRuntimeAdaptiveDop = false;
 
+    ExecutionFragment executionFragment = null;
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -173,6 +176,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         setPlanRoot(root);
         setParallelExecNumIfExists();
         setFragmentInPlanTree(planRoot);
+    }
+
+    public void setExecutionFragment(ExecutionFragment executionFragment) {
+        this.executionFragment = executionFragment;
     }
 
     /**
@@ -254,6 +261,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setPipelineDop(int dop) {
         this.pipelineDop = dop;
+    }
+
+    public boolean hasTableSink() {
+        return hasIcebergTableSink() || hasOlapTableSink();
     }
 
     public boolean hasOlapTableSink() {
@@ -419,6 +430,16 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             result.add(globalDict);
         }
         return result;
+    }
+
+    public String getSchedulerExplain() {
+        StringBuilder str = new StringBuilder();
+
+        if (executionFragment != null) {
+            str.append(executionFragment.getExplainString(1));
+        }
+
+        return str.toString();
     }
 
     public String getExplainString(TExplainLevel explainLevel) {
@@ -656,8 +677,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.cacheParam = cacheParam;
     }
 
-    public List<OlapScanNode> collectOlapScanNodes() {
-        List<OlapScanNode> olapScanNodes = Lists.newArrayList();
+    public Map<PlanNodeId, ScanNode> collectScanNodes() {
+        Map<PlanNodeId, ScanNode> scanNodes = Maps.newHashMap();
         Queue<PlanNode> queue = Lists.newLinkedList();
         queue.add(planRoot);
         while (!queue.isEmpty()) {
@@ -666,14 +687,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             if (node instanceof ExchangeNode) {
                 continue;
             }
-            if (node instanceof OlapScanNode) {
-                olapScanNodes.add((OlapScanNode) node);
+            if (node instanceof ScanNode) {
+                scanNodes.put(node.getId(), (ScanNode)node);
             }
 
             queue.addAll(node.getChildren());
         }
 
-        return olapScanNodes;
+        return scanNodes;
     }
 
     public boolean isUnionFragment() {

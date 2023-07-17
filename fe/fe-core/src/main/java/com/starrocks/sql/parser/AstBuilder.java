@@ -6104,6 +6104,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             explainLevel = StatementBase.ExplainLevel.VERBOSE;
         } else if (context.COSTS() != null) {
             explainLevel = StatementBase.ExplainLevel.COST;
+        } else if (context.SCHEDULER() != null) {
+            explainLevel = StatementBase.ExplainLevel.SCHEDULER;
         }
         return explainLevel;
     }

@@ -19,7 +19,6 @@ package com.starrocks.rpc;
 import java.io.IOException;
 
 public class RpcException extends IOException {
-
     public RpcException(String host, String message) {
         super(message + ", host: " + host);
     }

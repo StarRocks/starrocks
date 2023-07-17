@@ -66,8 +66,8 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.ICoordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
@@ -637,7 +637,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
         // cancel all running coordinators, so that the scheduler's worker thread will be released
         for (TUniqueId loadId : loadIds) {
-            Coordinator coordinator = QeProcessorImpl.INSTANCE.getCoordinator(loadId);
+            ICoordinator coordinator = QeProcessorImpl.INSTANCE.getCoordinator(loadId);
             if (coordinator != null) {
                 coordinator.cancel();
             }

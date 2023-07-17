@@ -101,7 +101,7 @@ import java.util.stream.Collectors;
 public class CoordinatorPreprocessor {
     private static final Logger LOG = LogManager.getLogger(CoordinatorPreprocessor.class);
     private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
-    private static final int BUCKET_ABSENT = 2147483647;
+    public static final int BUCKET_ABSENT = 2147483647;
     static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final Random random = new Random();
@@ -127,6 +127,7 @@ public class CoordinatorPreprocessor {
 
     // populated in computeFragmentExecParams()
     private final Map<PlanFragmentId, FragmentExecParams> fragmentExecParamsMap = Maps.newHashMap();
+
     private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
 
     // used only by channel stream load, records the mapping from channel id to target BE's address
@@ -135,7 +136,6 @@ public class CoordinatorPreprocessor {
 
     private final WorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
     private WorkerProvider workerProvider;
-
     // Resource group
     private TWorkGroup resourceGroup = null;
 
@@ -176,11 +176,9 @@ public class CoordinatorPreprocessor {
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, x -> x));
         for (ScanNode scan : scanNodes) {
             PlanFragmentId id = scan.getFragmentId();
-            PlanFragment fragment = fragmentMap.get(id);
-            if (fragment == null) {
-                // Fake a fragment for this node
-                fragment = new PlanFragment(id, scan, DataPartition.RANDOM);
-            }
+            PlanFragment fragment = fragmentMap.computeIfAbsent(id,
+                    // Fake a fragment for this node
+                    k -> new PlanFragment(id, scan, DataPartition.RANDOM));
             fragmentExecParamsMap.put(scan.getFragmentId(), new FragmentExecParams(fragment));
         }
     }

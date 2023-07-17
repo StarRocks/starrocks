@@ -26,6 +26,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonConnector;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.scheduler.SchedulerException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -266,5 +267,10 @@ public class PaimonScanNode extends ScanNode {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public <R, C> R accept(PlanNodeVisitor<R, C> visitor, C ctx) throws SchedulerException {
+        return visitor.visitPaimonScanNode(this, ctx);
     }
 }

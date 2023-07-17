@@ -40,6 +40,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.scheduler.SchedulerException;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.commons.collections4.CollectionUtils;
@@ -115,5 +116,10 @@ public abstract class ScanNode extends PlanNode {
         }
 
         return columnAccessPaths.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList());
+    }
+
+    @Override
+    public <R, C> R accept(PlanNodeVisitor<R, C> visitor, C ctx) throws SchedulerException {
+        return visitor.visitScanNode(this, ctx);
     }
 }

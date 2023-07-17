@@ -41,6 +41,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.SchedulerException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
@@ -328,4 +329,8 @@ public class SchemaScanNode extends ScanNode {
         return true;
     }
 
+    @Override
+    public <R, C> R accept(PlanNodeVisitor<R, C> visitor, C ctx) throws SchedulerException {
+        return visitor.visitSchemaScanNode(this, ctx);
+    }
 }

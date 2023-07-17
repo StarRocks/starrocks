@@ -55,11 +55,11 @@ import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.ICoordinator;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
-import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -103,12 +103,12 @@ public class LoadLoadingTask extends LoadTask {
     private final OriginStatement originStmt;
 
     public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
-            long jobDeadlineMs, long execMemLimit, boolean strictMode,
-            long txnId, LoadTaskCallback callback, String timezone,
-            long timeoutS, long createTimestamp, boolean partialUpdate, String mergeConditionStr,
-            Map<String, String> sessionVariables,
-            ConnectContext context, TLoadJobType loadJobType, int priority, OriginStatement originStmt, 
-            TPartialUpdateMode partialUpdateMode) {
+                           long jobDeadlineMs, long execMemLimit, boolean strictMode,
+                           long txnId, LoadTaskCallback callback, String timezone,
+                           long timeoutS, long createTimestamp, boolean partialUpdate, String mergeConditionStr,
+                           Map<String, String> sessionVariables,
+                           ConnectContext context, TLoadJobType loadJobType, int priority, OriginStatement originStmt,
+                           TPartialUpdateMode partialUpdateMode) {
         super(callback, TaskType.LOADING, priority);
         this.db = db;
         this.table = table;
@@ -142,8 +142,8 @@ public class LoadLoadingTask extends LoadTask {
             planner.plan(loadId, fileStatusList, fileNum);
         } else {
             loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
-                timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit, 
-                brokerDesc, fileGroups, fileStatusList, fileNum);
+                    timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusList, fileNum);
             loadPlanner.plan();
         }
     }
@@ -166,24 +166,17 @@ public class LoadLoadingTask extends LoadTask {
 
     private void executeOnce() throws Exception {
         // New one query id,
-        Coordinator curCoordinator;
+        ICoordinator curCoordinator;
+        ICoordinator.Factory coordFactory = new Coordinator.Factory();
         if (!Config.enable_pipeline_load) {
-            curCoordinator = new Coordinator(callback.getCallbackId(), loadId, planner.getDescTable(),
-                    planner.getFragments(), planner.getScanNodes(),
-                    planner.getTimezone(), planner.getStartTime(), sessionVariables, context);
-            /*
-            * For broker load job, user only need to set mem limit by 'exec_mem_limit' property.
-            * And the variable 'load_mem_limit' does not make any effect.
-            * However, in order to ensure the consistency of semantics when executing on the BE side,
-            * and to prevent subsequent modification from incorrectly setting the load_mem_limit,
-            * here we use exec_mem_limit to directly override the load_mem_limit property.
-            */
-            curCoordinator.setQueryType(TQueryType.LOAD);
-            curCoordinator.setExecMemoryLimit(execMemLimit);
-            curCoordinator.setLoadMemLimit(execMemLimit);
+            curCoordinator =
+                    coordFactory.createNonPipelineBrokerLoadScheduler(callback.getCallbackId(), loadId, planner.getDescTable(),
+                            planner.getFragments(), planner.getScanNodes(),
+                            planner.getTimezone(), planner.getStartTime(), sessionVariables, context, execMemLimit);
+
             curCoordinator.setTimeout((int) (getLeftTimeMs() / 1000));
         } else {
-            curCoordinator = new Coordinator(loadPlanner);
+            curCoordinator = coordFactory.createBrokerLoadScheduler(loadPlanner);
         }
         curCoordinator.setLoadJobType(loadJobType);
 
@@ -252,7 +245,7 @@ public class LoadLoadingTask extends LoadTask {
         }
     }
 
-    private void actualExecute(Coordinator curCoordinator) throws Exception {
+    private void actualExecute(ICoordinator curCoordinator) throws Exception {
         int waitSecond = (int) (getLeftTimeMs() / 1000);
         if (waitSecond <= 0) {
             throw new LoadException("Load timeout. Increase the timeout and retry");
