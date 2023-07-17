@@ -274,20 +274,6 @@ int main(int argc, char** argv) {
     // SHOULD be called after exec env is initialized.
     EXIT_IF_ERROR(engine->start_bg_threads());
 
-    // Begin to start Heartbeat services
-    starrocks::ThriftRpcHelper::setup(exec_env);
-    auto res = starrocks::create_heartbeat_server(exec_env, starrocks::config::heartbeat_service_port,
-                                                  starrocks::config::heartbeat_service_thread_count);
-    CHECK(res.ok()) << res.status();
-    auto heartbeat_thrift_server = std::move(res).value();
-
-    starrocks::Status status = heartbeat_thrift_server->start();
-    if (!status.ok()) {
-        LOG(ERROR) << "StarRocks BE HeartBeat Service did not start correctly. Error=" << status.to_string();
-        starrocks::shutdown_logging();
-        exit(1);
-    }
-
 #ifdef USE_STAROS
     starrocks::init_staros_worker();
 #endif
@@ -355,9 +341,6 @@ int main(int argc, char** argv) {
 #endif
 
     Aws::ShutdownAPI(aws_sdk_options);
-
-    heartbeat_thrift_server->stop();
-    heartbeat_thrift_server->join();
 
     exec_env->agent_server()->stop();
 
