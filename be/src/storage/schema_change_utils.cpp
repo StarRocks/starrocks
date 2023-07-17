@@ -236,8 +236,23 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     return false;
                 }
                 auto new_col = new_col_status.value();
+<<<<<<< HEAD
                 // TODO: no need to unpack const column later.
                 new_chunk->columns()[i] = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
+=======
+                auto new_schema = new_chunk->schema();
+                if (!new_schema->field(i)->is_nullable() && new_col->is_nullable()) {
+                    LOG(WARNING) << "schema of column(" << new_schema->field(i)->name()
+                                 << ") is not null but data contains null";
+                    return false;
+                }
+                // NOTE: Unpack const column first to avoid generating NullColumn<ConstColumn> result.
+                new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
+                if (new_schema->field(i)->is_nullable()) {
+                    new_col = ColumnHelper::cast_to_nullable_column(new_col);
+                }
+                new_chunk->columns()[i] = std::move(new_col);
+>>>>>>> 1d74080f5 ([BugFix] Unpack const column first to avoid generating NullColumn<ConstColumn> column in schema change (#27128))
             } else {
                 LogicalType ref_type = base_tablet_meta->tablet_schema().column(ref_column).type();
                 LogicalType new_type = new_tablet_meta->tablet_schema().column(i).type();
@@ -381,7 +396,21 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     return false;
                 }
                 auto new_col = new_col_status.value();
+<<<<<<< HEAD
                 new_chunk->columns()[i] = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
+=======
+                if (!new_schema.field(i)->is_nullable() && new_col->is_nullable()) {
+                    LOG(WARNING) << "schema of column(" << new_schema.field(i)->name()
+                                 << ") is not null but data contains null";
+                    return false;
+                }
+                // NOTE: Unpack const column first to avoid generating NullColumn<ConstColumn> result.
+                new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
+                if (new_schema.field(i)->is_nullable()) {
+                    new_col = ColumnHelper::cast_to_nullable_column(new_col);
+                }
+                new_chunk->columns()[i] = std::move(new_col);
+>>>>>>> 1d74080f5 ([BugFix] Unpack const column first to avoid generating NullColumn<ConstColumn> column in schema change (#27128))
             } else {
                 DCHECK(_slot_id_to_index_map.find(ref_column) != _slot_id_to_index_map.end());
                 int base_index = _slot_id_to_index_map[ref_column];
