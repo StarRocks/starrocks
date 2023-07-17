@@ -551,4 +551,16 @@ public class SelectStmtTest {
                     "  |  cardinality: 1"));
         }
     }
+
+    @Test
+    void testArraySubfieldsPrune() {
+        try {
+            String sql = "select str_to_map('age=18&sex=1&gender=1','&','=')['age'] AS age, " +
+                    "str_to_map('age=18&sex=1&gender=1','&','=')['gender'] AS sex;";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("str_to_map(4: split, '=')"));
+        } catch (Exception e) {
+            Assert.fail("Should not throw an exception");
+        }
+    }
 }
