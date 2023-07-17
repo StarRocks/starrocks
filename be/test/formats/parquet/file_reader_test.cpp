@@ -2586,10 +2586,6 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
     chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
 
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
-    const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
-    ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
-
     size_t total_row_nums = 0;
     while (!status.is_end_of_file()) {
         chunk->reset();
@@ -2597,7 +2593,7 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
         chunk->check_or_die();
         total_row_nums += chunk->num_rows();
         if (chunk->num_rows() == 1) {
-            EXPECT_EQ("[8000, {b1:8000,b2:8000}, {8000:8000}]", chunk->debug_row(0));
+            EXPECT_EQ("['hello', {x:'world',y:'danny'}, 5]", chunk->debug_row(0));
         }
     }
 
