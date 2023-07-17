@@ -907,6 +907,8 @@ public class PlanFragmentBuilder {
             HudiScanNode hudiScanNode =
                     new HudiScanNode(context.getNextNodeId(), tupleDescriptor, "HudiScanNode");
             hudiScanNode.computeStatistics(optExpression.getStatistics());
+            hudiScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
+            hudiScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
             try {
                 HDFSScanNodePredicates scanNodePredicates = hudiScanNode.getScanNodePredicates();
                 scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
@@ -1038,6 +1040,8 @@ public class PlanFragmentBuilder {
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
             deltaLakeScanNode.computeStatistics(optExpression.getStatistics());
+            deltaLakeScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
+            deltaLakeScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1080,6 +1084,8 @@ public class PlanFragmentBuilder {
             PaimonScanNode paimonScanNode =
                     new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
             paimonScanNode.computeStatistics(optExpression.getStatistics());
+            paimonScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
+            paimonScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1124,6 +1130,8 @@ public class PlanFragmentBuilder {
             IcebergScanNode icebergScanNode =
                     new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
             icebergScanNode.computeStatistics(optExpression.getStatistics());
+            icebergScanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
+            icebergScanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1183,6 +1191,8 @@ public class PlanFragmentBuilder {
             scanNode.setUser(context.getConnectContext().getQualifiedUser());
             scanNode.setUserIp(context.getConnectContext().getRemoteIP());
             scanNode.setLimit(node.getLimit());
+            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
+            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -1340,6 +1350,8 @@ public class PlanFragmentBuilder {
             scanNode.setLimit(node.getLimit());
             scanNode.computeColumnsAndFilters();
             scanNode.computeStatistics(optExpression.getStatistics());
+            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
+            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
@@ -1377,6 +1389,8 @@ public class PlanFragmentBuilder {
             }
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpression.getStatistics());
+            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
+            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
             try {
                 scanNode.assignBackends();
             } catch (UserException e) {
@@ -1423,7 +1437,8 @@ public class PlanFragmentBuilder {
             scanNode.setLimit(node.getLimit());
             scanNode.computeColumnsAndFilters();
             scanNode.computeStatistics(optExpression.getStatistics());
-
+            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
+            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
