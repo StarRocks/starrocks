@@ -189,6 +189,10 @@ void bind_exec_env(ForeignModule& m) {
         // uncomment this to enable executing shell commands
         // cls.funcStaticExt<&exec_whitelist>("exec");
         cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
+    }
+    {
+        auto& cls = m.klass<GlobalEnv>("GlobalEnv");
+        REG_STATIC_METHOD(ExecEnv, GetInstance);
         REG_METHOD(GlobalEnv, process_mem_tracker);
         REG_METHOD(GlobalEnv, query_pool_mem_tracker);
         REG_METHOD(GlobalEnv, load_mem_tracker);
