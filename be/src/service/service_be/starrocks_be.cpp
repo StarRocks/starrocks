@@ -41,39 +41,40 @@ void start_be() {
         shutdown_logging();
         exit(1);
     }
+    LOG(INFO) << "BE start thrift server success";
 
     // 2. Start brpc services.
     brpc::FLAGS_max_body_size = config::brpc_max_body_size;
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
-    brpc::Server brpc_server;
+    auto brpc_server = std::make_unique<brpc::Server>();
 
     BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
     BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
     LakeServiceImpl lake_service(exec_env);
 
-    brpc_server.AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
-    brpc_server.AddService(&backend_service, brpc::SERVER_DOESNT_OWN_SERVICE);
-    brpc_server.AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+    brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+    brpc_server->AddService(&backend_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+    brpc_server->AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
 
     brpc::ServerOptions options;
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
-    if (brpc_server.Start(config::brpc_port, &options) != 0) {
-        LOG(ERROR) << "BRPC service did not start correctly, exiting";
+    if (auto ret = brpc_server->Start(config::brpc_port, &options); ret != 0) {
+        LOG(ERROR) << "BRPC service did not start correctly, exiting errcode: " << ret;
         shutdown_logging();
         exit(1);
     }
+    LOG(INFO) << "BE start brpc server success";
 
     // 3. Start HTTP service.
-    std::unique_ptr<HttpServiceBE> http_service =
-            std::make_unique<HttpServiceBE>(exec_env, config::be_http_port, config::be_http_num_workers);
-    if (auto status = http_service->start(); !status.ok()) {
-        LOG(ERROR) << "Internal Error:" << status.message();
-        LOG(ERROR) << "StarRocks Be http service did not start correctly, exiting";
+    auto http_server = std::make_unique<HttpServiceBE>(exec_env, config::be_http_port, config::be_http_num_workers);
+    if (auto status = http_server->start(); !status.ok()) {
+        LOG(ERROR) << "StarRocks Be http service did not start correctly, exiting: " << status.message();
         shutdown_logging();
         exit(1);
     }
+    LOG(INFO) << "BE start http server success";
 
     LOG(INFO) << "BE started successfully";
 
@@ -83,15 +84,20 @@ void start_be() {
 
     exec_env->wait_for_finish();
 
-    http_service->stop();
-    http_service->join();
-    http_service.reset();
-
-    brpc_server.Stop(0);
-    brpc_server.Join();
-
+    http_server->stop();
+    brpc_server->Stop(0);
     thrift_server->stop();
+
+    http_server->join();
+    LOG(INFO) << "BE http server exit success";
+    brpc_server->Join();
+    LOG(INFO) << "BE brpc server exit success";
     thrift_server->join();
+    LOG(INFO) << "BE thrift server exit success";
+
+    http_server.reset();
+    brpc_server.reset();
+    thrift_server.reset();
 }
 
 } // namespace starrocks
