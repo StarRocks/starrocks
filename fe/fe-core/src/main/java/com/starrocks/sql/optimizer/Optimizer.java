@@ -74,6 +74,7 @@ import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import com.starrocks.sql.optimizer.validate.PlanValidator;
 import org.apache.logging.log4j.LogManager;
@@ -209,7 +210,10 @@ public class Optimizer {
         }
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.PlanValidate")) {
+            // valid the final plan
             PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
+            // validate mv and log tracer if needed
+            MVRewriteValidator.getInstance().validateMV(finalPlan);
             return finalPlan;
         }
     }
@@ -238,9 +242,8 @@ public class Optimizer {
                         new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
                 preprocessor.prepareMvCandidatesForPlan();
-            }
-            if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
-                try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessSyncMvs")) {
+
+                if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
                     preprocessor.prepareSyncMvCandidatesForPlan();
                 }
             }
