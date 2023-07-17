@@ -85,7 +85,7 @@ INTO TABLE <table_name>
 
   > **注意**
   >
-  > - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，文件路径里传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
+  > - Broker Load 支持通过 S3 或 S3A 协议访问 AWS S3，因此从 AWS S3 导入数据时，您在文件路径中传入的目标文件的 S3 URI 可以使用 `s3://` 或 `s3a://` 作为前缀。
   > - 由于 Broker Load 只支持通过 gs 协议访问 Google GCS，因此当从 Google GCS 导入数据时，必须确保文件路径传入的目标文件的 GCS URI 使用 `gs://` 为前缀。
   > - 从 Blob Storage 导入数据时，需要使用 wasb 或 wasbs 作为文件协议访问目标数据：
   >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 wasb 文件协议，文件路径格式为 `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
