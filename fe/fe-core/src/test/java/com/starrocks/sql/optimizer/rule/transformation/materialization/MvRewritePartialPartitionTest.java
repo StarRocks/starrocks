@@ -69,7 +69,6 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", "partial_mv_2");
     }
 
-
     @Test
     public void testPartialPartition3_1() throws Exception {
         createAndRefreshMv("test", "partial_mv_3_1",
@@ -343,8 +342,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv");
 
-        MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
-                getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+        MockedHiveMetadata mockedHiveMetadata =
+                (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
 
@@ -360,8 +360,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv", "UNION", "PARTITION PREDICATES: ((22: l_shipdate < '1998-01-01')" +
-                " OR (22: l_shipdate >= '1998-01-06')) OR (22: l_shipdate IS NULL)");
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv", "UNION",
+                "PARTITION PREDICATES: ((22: l_shipdate < '1998-01-01')" +
+                        " OR (22: l_shipdate >= '1998-01-06')) OR (22: l_shipdate IS NULL)");
         dropMv("test", "hive_parttbl_mv");
 
         createAndRefreshMv("test", "hive_parttbl_mv_2",

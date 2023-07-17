@@ -384,13 +384,24 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildForceExternalTableQueryRewrite() {
         // NOTE: keep compatible with previous version
-        String value =
-                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, "0");
-        try {
-            forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
-        } catch (AnalysisException e) {
-            LOG.error("analyze force_external_table_query_rewrite failed", e);
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+        if (value != null) {
+            try {
+                forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
+            } catch (AnalysisException e) {
+                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, e);
+            }
         }
+
+        value = properties.get(PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE);
+        if (value != null) {
+            try {
+                olapTableQueryRewrite = analyzeQueryRewriteMode(value);
+            } catch (AnalysisException e) {
+                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE, e);
+            }
+        }
+
         return this;
     }
 
