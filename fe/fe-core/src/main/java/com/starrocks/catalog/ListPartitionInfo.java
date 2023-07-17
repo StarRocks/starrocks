@@ -137,6 +137,10 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToMultiValues.put(partitionId, multiValues);
     }
 
+    public void setDirectLiteralExprValues(long partitionId, List<LiteralExpr> values) {
+        this.idToLiteralExprValues.put(partitionId, values);
+    }
+
     @Override
     public boolean isAutomaticPartition() {
         return automaticPartition;
@@ -159,6 +163,10 @@ public class ListPartitionInfo extends PartitionInfo {
             multiPartitionValues.add(partitionValues);
         }
         this.idToMultiLiteralExprValues.put(partitionId, multiPartitionValues);
+    }
+
+    public void setDirectMultiLiteralExprValues(long partitionId, List<List<LiteralExpr>> multiValues) {
+        this.idToMultiLiteralExprValues.put(partitionId, multiValues);
     }
 
     public void setBatchMultiLiteralExprValues(Map<Long, List<List<String>>> batchMultiValues)
