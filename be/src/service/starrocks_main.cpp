@@ -258,6 +258,7 @@ int main(int argc, char** argv) {
     options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
     options.update_mem_tracker = exec_env->update_mem_tracker();
     options.need_write_cluster_id = !as_cn;
+    options.heartbeat_flags = exec_env->heartbeat_flags();
     starrocks::StorageEngine* engine = nullptr;
 
     auto st = starrocks::StorageEngine::open(options, &engine);
@@ -265,8 +266,6 @@ int main(int argc, char** argv) {
         LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
         exit(-1);
     }
-
-    engine->set_heartbeat_flags(exec_env->heartbeat_flags());
 
     // Start all background threads of storage engine.
     // SHOULD be called after exec env is initialized.
