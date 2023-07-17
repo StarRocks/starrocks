@@ -43,6 +43,10 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
 }
 
 GlobalDriverExecutor::~GlobalDriverExecutor() {
+    clear();
+}
+
+void GlobalDriverExecutor::clear() {
     _driver_queue->close();
 }
 

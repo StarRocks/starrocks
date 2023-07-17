@@ -498,6 +498,9 @@ void ExecEnv::stop() {
     if (_fragment_mgr != nullptr) {
         _fragment_mgr->cancel_all();
     }
+    if (_wg_driver_executor != nullptr) {
+        _wg_driver_executor->clear();
+    }
 }
 
 void ExecEnv::_destroy() {
