@@ -21,3 +21,13 @@ PROPERTIES
 
 select count(*) from dict_two_page;
 
+select min(seq), max(seq), min(f00), max(f00), min(f01), max(f01), min(id), max(id), min(f03), max(f03), min(f04), max(f04) from dict_two_page;
+
+select min(seq), max(seq), min(f00), max(f00), min(f01), max(f01), min(id), max(id), min(f03), max(f03), min(f04), max(f04) from dict_two_page where seq = 99;
+
+select min(seq), max(seq) from dict_two_page where f00 >= 'a';
+
+select count(distinct seq) from dict_two_page;
+
+select count(*), min(f00), max(f00) from dict_two_page group by seq having seq = 99;
+
