@@ -718,7 +718,7 @@ public final class SqlToScalarOperatorTranslator {
             }
 
             if (node.getFuncType().equalsIgnoreCase("DATABASE") ||
-                node.getFuncType().equalsIgnoreCase("SCHEMA")) {
+                    node.getFuncType().equalsIgnoreCase("SCHEMA")) {
                 return ConstantOperator.createVarchar(node.getStrValue());
             }
 

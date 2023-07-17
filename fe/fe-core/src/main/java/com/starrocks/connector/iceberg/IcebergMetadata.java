@@ -79,6 +79,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.system.information.InfoSchemaDb.isInfoSchemaDb;
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
@@ -97,23 +98,18 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergFilter, List<FileScanTask>> tasks = new ConcurrentHashMap<>();
-
     private final InfoSchemaDb infoSchemaDb;
 
     public IcebergMetadata(String catalogName, IcebergCatalog icebergCatalog) {
+        this.infoSchemaDb = new InfoSchemaDb(catalogName);
         this.catalogName = catalogName;
         this.icebergCatalog = icebergCatalog;
         new IcebergMetricsReporter().setThreadLocalReporter();
-
-        // register information_schema database
-        this.infoSchemaDb = new InfoSchemaDb(catalogName);
-        this.databases.put(InfoSchemaDb.DATABASE_NAME, this.infoSchemaDb);
     }
 
     @Override
     public List<String> listDbNames() {
         List<String> dbs = icebergCatalog.listAllDatabases();
-        // can we move this to super class?
         dbs.add(InfoSchemaDb.DATABASE_NAME);
         return dbs;
     }
@@ -139,7 +135,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public Database getDb(String dbName) {
-        if (InfoSchemaDb.isInfoSchemaDb(dbName)) {
+        if (isInfoSchemaDb(dbName)) {
             return this.infoSchemaDb;
         }
 
@@ -160,7 +156,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(String dbName) {
-        if (InfoSchemaDb.isInfoSchemaDb(dbName)) {
+        if (isInfoSchemaDb(dbName)) {
             return infoSchemaDb.getTables().stream().map(Table::getName).collect(Collectors.toList());
         }
 
@@ -171,6 +167,9 @@ public class IcebergMetadata implements ConnectorMetadata {
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
+        if (isInfoSchemaDb(dbName)) {
+            throw new UnsupportedOperationException("Unable to create table in information schema");
+        }
 
         Schema schema = toIcebergApiSchema(stmt.getColumns());
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
@@ -186,17 +185,21 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void dropTable(DropTableStmt stmt) {
-        icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+        boolean isForce = stmt.isForceDrop();
+        if (isInfoSchemaDb(dbName)) {
+            throw new UnsupportedOperationException("Unable to drop table in information schema");
+        }
+
+        icebergCatalog.dropTable(dbName, tableName, isForce);
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
     }
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        if (InfoSchemaDb.isInfoSchemaDb(dbName)) {
-            Table table = this.infoSchemaDb.getTable(tblName);
-            if (table != null) {
-                return table;
-            }
+        if (isInfoSchemaDb(dbName)) {
+            return this.infoSchemaDb.getTable(tblName);
         }
 
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
@@ -219,6 +222,10 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String dbName, String tblName) {
+        if (isInfoSchemaDb(dbName)) {
+            return Lists.newArrayList();
+        }
+
         org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
         IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
 
