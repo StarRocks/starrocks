@@ -96,6 +96,8 @@ public class MaterializedViewRewriter {
     protected final MvRewriteContext mvRewriteContext;
     protected final MaterializationContext materializationContext;
     protected final OptimizerContext optimizerContext;
+    // Mark whether query's plan is rewritten by materialized view.
+    public static final String REWRITE_SUCCESS = "Rewrite Succeed";
 
     private static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
             ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
@@ -424,8 +426,6 @@ public class MaterializedViewRewriter {
 
         // Check whether mv can be applicable for the query.
         if (!isMVApplicable(mvExpression, queryTables, mvTables, matchMode, queryExpression)) {
-            logMVRewrite(mvRewriteContext, "MV is not applicable for this query: %s",
-                    materializationContext.getMv().getName());
             return null;
         }
 
@@ -532,9 +532,7 @@ public class MaterializedViewRewriter {
                     MatchMode.VIEW_DELTA, mvPredicateSplit, mvColumnRefRewriter,
                     compensationJoinColumns, compensationRelations, expectedExtraQueryToMVRelationIds);
             if (rewritten != null) {
-                logMVRewrite(mvRewriteContext, "Rewrite ViewDelta Succeed:\n Original Expression:\n %s,\nNew Expression:\n %s",
-                        queryExpression.explain(),
-                        rewritten.explain());
+                logMVRewrite(mvRewriteContext, "ViewDelta " + REWRITE_SUCCESS);
                 return rewritten;
             }
         }
@@ -589,7 +587,7 @@ public class MaterializedViewRewriter {
         // used to prune partition and buckets after mv rewrite
         ScalarOperator mvPrunePredicate = collectMvPrunePredicate(materializationContext);
 
-        logMVRewrite(mvRewriteContext, "There are %d relation id mappings to rewrite query", relationIdMappings.size());
+        logMVRewrite(mvRewriteContext, "Construct %d relation id mappings from query to mv", relationIdMappings.size());
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
             mvRewriteContext.setMvPruneConjunct(mvPrunePredicate);
             rewriteContext.setQueryToMvRelationIdMapping(relationIdMapping);
@@ -624,9 +622,7 @@ public class MaterializedViewRewriter {
                 if (rewriteContext.getQueryExpression().getOp().hasLimit()) {
                     rewrittenExpression.getOp().setLimit(rewriteContext.getQueryExpression().getOp().getLimit());
                 }
-                logMVRewrite(mvRewriteContext, "Rewrite Succeed:\n Original Expression:\n %s,\nNew Expression:\n %s",
-                        queryExpression.explain(),
-                        rewrittenExpression.explain());
+                logMVRewrite(mvRewriteContext, REWRITE_SUCCESS);
                 return rewrittenExpression;
             }
         }
