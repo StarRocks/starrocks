@@ -28,57 +28,56 @@ DECLARE_int64(socket_max_unwritten_bytes);
 
 } // namespace brpc
 
-void start_be() {
-    using starrocks::BackendService;
+namespace starrocks {
 
-    auto* exec_env = starrocks::ExecEnv::GetInstance();
+void start_be() {
+    auto* exec_env = ExecEnv::GetInstance();
 
     // Begin to start services
     // 1. Start thrift server with 'be_port'.
-    auto thrift_server = BackendService::create<BackendService>(exec_env, starrocks::config::be_port);
+    auto thrift_server = BackendService::create<BackendService>(exec_env, config::be_port);
     if (auto status = thrift_server->start(); !status.ok()) {
-        LOG(ERROR) << "Fail to start BackendService thrift server on port " << starrocks::config::be_port << ": "
-                   << status;
-        starrocks::shutdown_logging();
+        LOG(ERROR) << "Fail to start BackendService thrift server on port " << config::be_port << ": " << status;
+        shutdown_logging();
         exit(1);
     }
 
     // 2. Start brpc services.
-    brpc::FLAGS_max_body_size = starrocks::config::brpc_max_body_size;
-    brpc::FLAGS_socket_max_unwritten_bytes = starrocks::config::brpc_socket_max_unwritten_bytes;
+    brpc::FLAGS_max_body_size = config::brpc_max_body_size;
+    brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
     brpc::Server brpc_server;
 
-    starrocks::BackendInternalServiceImpl<starrocks::PInternalService> internal_service(exec_env);
-    starrocks::BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
-    starrocks::LakeServiceImpl lake_service(exec_env);
+    BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
+    BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
+    LakeServiceImpl lake_service(exec_env);
 
     brpc_server.AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server.AddService(&backend_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server.AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
 
     brpc::ServerOptions options;
-    if (starrocks::config::brpc_num_threads != -1) {
-        options.num_threads = starrocks::config::brpc_num_threads;
+    if (config::brpc_num_threads != -1) {
+        options.num_threads = config::brpc_num_threads;
     }
-    if (brpc_server.Start(starrocks::config::brpc_port, &options) != 0) {
+    if (brpc_server.Start(config::brpc_port, &options) != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting";
-        starrocks::shutdown_logging();
+        shutdown_logging();
         exit(1);
     }
 
     // 3. Start HTTP service.
-    std::unique_ptr<starrocks::HttpServiceBE> http_service = std::make_unique<starrocks::HttpServiceBE>(
-            exec_env, starrocks::config::be_http_port, starrocks::config::be_http_num_workers);
+    std::unique_ptr<HttpServiceBE> http_service =
+            std::make_unique<HttpServiceBE>(exec_env, config::be_http_port, config::be_http_num_workers);
     if (auto status = http_service->start(); !status.ok()) {
         LOG(ERROR) << "Internal Error:" << status.message();
         LOG(ERROR) << "StarRocks Be http service did not start correctly, exiting";
-        starrocks::shutdown_logging();
+        shutdown_logging();
         exit(1);
     }
 
     LOG(INFO) << "BE started successfully";
 
-    while (!(starrocks::k_starrocks_exit.load()) && !(starrocks::k_starrocks_exit_quick.load())) {
+    while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
         sleep(10);
     }
 
@@ -94,3 +93,5 @@ void start_be() {
     thrift_server->stop();
     thrift_server->join();
 }
+
+} // namespace starrocks

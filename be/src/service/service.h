@@ -19,6 +19,6 @@
 namespace starrocks {
 extern std::atomic<bool> k_starrocks_exit;
 extern std::atomic<bool> k_starrocks_exit_quick;
-} // namespace starrocks
 
 void start_be();
+} // namespace starrocks
