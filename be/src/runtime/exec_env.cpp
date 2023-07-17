@@ -492,6 +492,9 @@ void ExecEnv::stop() {
         // so when the ThreadPool is destroyed, it will crash.
         _load_channel_mgr->clear();
     }
+    if (_load_stream_mgr != nullptr) {
+        _load_channel_mgr->clear();
+    }
 }
 
 void ExecEnv::_destroy() {
