@@ -398,7 +398,6 @@ void ThriftServer::stop() {
 
 void ThriftServer::join() {
     DCHECK(_server_thread != nullptr);
-    DCHECK(_started);
     _server_thread->join();
 }
 
