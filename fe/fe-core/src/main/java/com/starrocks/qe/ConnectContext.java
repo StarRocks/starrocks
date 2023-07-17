@@ -41,6 +41,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -169,6 +170,7 @@ public class ConnectContext {
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
     protected PlannerProfile plannerProfile;
+    protected StatementBase.ExplainLevel explainLevel;
 
     protected TWorkGroup resourceGroup;
 
@@ -549,6 +551,14 @@ public class ConnectContext {
 
     public PlannerProfile getPlannerProfile() {
         return plannerProfile;
+    }
+
+    public StatementBase.ExplainLevel getExplainLevel() {
+        return explainLevel;
+    }
+
+    public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
+        this.explainLevel = explainLevel;
     }
 
     public TWorkGroup getResourceGroup() {

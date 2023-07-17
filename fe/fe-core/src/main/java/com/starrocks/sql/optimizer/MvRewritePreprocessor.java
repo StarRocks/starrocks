@@ -66,6 +66,10 @@ public class MvRewritePreprocessor {
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
+        if (relatedMvs.isEmpty()) {
+            logMVPrepare(connectContext, "No Related Async MVs for plan");
+            return;
+        }
         prepareRelatedMVs(queryTables, relatedMvs);
     }
 
@@ -148,7 +152,6 @@ public class MvRewritePreprocessor {
         } else if (!mv.getPartitionNames().isEmpty() && partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
             // if the mv is partitioned, and all partitions need refresh,
             // then it can not be a candidate
-
             StringBuilder sb = new StringBuilder();
             for (BaseTableInfo base : mv.getBaseTableInfos()) {
                 String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
@@ -166,7 +169,7 @@ public class MvRewritePreprocessor {
             // when should calculate the latest partition range predicates for partition-by base table
             mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
             if (mvPartialPartitionPredicates == null) {
-                logMVPrepare(connectContext, "Partitioned MV %s is outdated which contains some partitions " +
+                logMVPrepare(connectContext, mv, "Partitioned MV %s is outdated which contains some partitions " +
                         "to be refreshed:%s", mv.getName(), partitionNamesToRefresh);
                 return;
             }
@@ -207,7 +210,7 @@ public class MvRewritePreprocessor {
         }
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
-        logMVPrepare(connectContext, "Add MV %s as a candidate", mv.getName());
+        logMVPrepare(connectContext, mv, "Prepare MV %s success", mv.getName());
     }
 
     /**
