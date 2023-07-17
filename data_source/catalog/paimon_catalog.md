@@ -659,13 +659,13 @@ DROP Catalog paimon_catalog_fs;
 - 查看表结构
 
   ```SQL
-  DESC[RIBE] <catalog_name>.<database_name>.<table_name>
+  DESC[RIBE] <catalog_name>.<database_name>.<table_name>;
   ```
 
 - 从 CREATE 命令查看表结构和表文件存放位置
 
   ```SQL
-  SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>
+  SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>;
   ```
 
 ## 查询 Paimon 表数据
@@ -673,7 +673,7 @@ DROP Catalog paimon_catalog_fs;
 1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) 查看指定 Catalog 所属的 Paimon Catalog 中的数据库：
 
    ```SQL
-   SHOW DATABASES FROM <catalog_name>
+   SHOW DATABASES FROM <catalog_name>;
    ```
 
 2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 切换当前会话生效的 Catalog：
@@ -697,7 +697,7 @@ DROP Catalog paimon_catalog_fs;
 3. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
-   SELECT count(*) FROM <table_name> LIMIT 10
+   SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
 ## 导入 Paimon 数据
@@ -705,5 +705,5 @@ DROP Catalog paimon_catalog_fs;
 假设有一个 OLAP 表，表名为 `olap_tbl`。您可以这样来转换该表中的数据，并把数据导入到 StarRocks 中：
 
 ```SQL
-INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM paimon_table
+INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM paimon_table;
 ```
