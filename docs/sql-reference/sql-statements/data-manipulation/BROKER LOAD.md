@@ -86,7 +86,7 @@ INTO TABLE <table_name>
 
   > **NOTICE**
   >
-  > - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as the file path with `s3a://`.
+  > - Broker Load supports accessing AWS S3 according to the S3 or S3A protocol. Therefore, when you load data from AWS S3, you can include `s3://` or `s3a://` as the prefix in the S3 URI that you pass as the file path.
   > - Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path.
   > - When you load data from Blob Storage, you must use the wasb or wasbs protocol to access your data:
   >   - If your storage account allows access over HTTP, use the wasb protocol and write the file path as `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`.
