@@ -19,8 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.UserException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
