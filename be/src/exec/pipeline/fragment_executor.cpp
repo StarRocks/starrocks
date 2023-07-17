@@ -212,16 +212,13 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_query_ctx(_query_ctx);
 
-    if (wg != nullptr && wg->use_big_query_mem_limit()) {
-        _query_ctx->init_mem_tracker(wg->big_query_mem_limit(), wg->mem_tracker());
-    } else {
-        auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
-        auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
-        auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
-        int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(
-                parent_mem_tracker->limit(), per_instance_mem_limit, degree_of_parallelism, option_query_mem_limit);
-        _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker);
-    }
+    auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
+    auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
+    auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
+    int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
+                                                                  degree_of_parallelism, option_query_mem_limit);
+    int64_t big_query_mem_limit = wg != nullptr && wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
+    _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker, big_query_mem_limit, wg.get());
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
