@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
@@ -82,11 +81,13 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }
 
-        Preconditions.checkState(dictCollectedVersions.size() == validDictCacheColumns.size());
-        for (int i = 0; i < validDictCacheColumns.size(); i++) {
-            String columnName = validDictCacheColumns.get(i);
-            long collectedVersion = dictCollectedVersions.get(i);
-            IDictManager.getInstance().updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+        if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
+            for (int i = 0; i < validDictCacheColumns.size(); i++) {
+                String columnName = validDictCacheColumns.get(i);
+                long collectedVersion = dictCollectedVersions.get(i);
+                IDictManager.getInstance()
+                        .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+            }
         }
     }
 }
