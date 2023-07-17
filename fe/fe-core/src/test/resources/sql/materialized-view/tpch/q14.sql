@@ -19,3 +19,4 @@ AGGREGATE ([GLOBAL] aggregate [{28: sum=sum(28: sum), 29: sum=sum(29: sum)}] gro
             SCAN (mv[lineitem_mv] columns[75: l_shipdate, 89: p_type, 93: l_saleprice] predicate[75: l_shipdate >= 1997-02-01 AND 75: l_shipdate < 1997-03-01])
 [end]
 
+

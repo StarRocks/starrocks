@@ -518,7 +518,7 @@ public class SelectStmtTest {
                     "  RESULT SINK\n" +
                     "\n" +
                     "  1:AGGREGATE (update finalize)\n" +
-                    "  |  aggregate: sum[(1 / 2.12); args: DECIMAL128; result: DECIMAL128(38,6);" +
+                    "  |  aggregate: sum[(1 / 2.1200); args: DECIMAL128; result: DECIMAL128(38,6);" +
                     " args nullable: true; result nullable: true]\n" +
                     "  |  group by: [1: c0, VARCHAR, false]\n" +
                     "  |  cardinality: 1"));
