@@ -20,7 +20,9 @@
 #include <runtime/descriptors.h>
 #include <runtime/runtime_state.h>
 
+#include <coroutine>
 #include <cstdint>
+#include <set>
 
 #include "column/chunk.h"
 #include "column/column_hash.h"
@@ -172,6 +174,23 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
+
+    struct ProbeCoroutine {
+        struct ProbePromise {
+            ProbeCoroutine get_return_object() { return std::coroutine_handle<ProbePromise>::from_promise(*this); }
+            std::suspend_never initial_suspend() { return {}; }
+            // 在 final_suspend() 挂起了协程，所以要手动 destroy
+            std::suspend_always final_suspend() noexcept { return {}; }
+            void unhandled_exception() {}
+        };
+
+        using promise_type = ProbePromise;
+        ProbeCoroutine(std::coroutine_handle<ProbePromise> h) : handle(h) {}
+
+        std::coroutine_handle<ProbePromise> handle;
+    };
+    uint32_t match_count = 0;
+    std::set<std::coroutine_handle<ProbeCoroutine::ProbePromise>> handles;
 
     HashTableProbeState() = default;
     ~HashTableProbeState() = default;
@@ -584,6 +603,13 @@ private:
     template <bool first_probe>
     void _probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
 
+    void _probe_from_ht_no_opt(RuntimeState* state, const Buffer<CppType>& build_data,
+                               const Buffer<CppType>& probe_data);
+
+    void _probe_from_ht_coro(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
+
+    HashTableProbeState::ProbeCoroutine _probe_coroutine(RuntimeState* state, const Buffer<CppType>& build_data,
+                                                         const Buffer<CppType>& probe_data);
     // for one key left outer join
     template <bool first_probe>
     void _probe_from_ht_for_left_outer_join(RuntimeState* state, const Buffer<CppType>& build_data,
