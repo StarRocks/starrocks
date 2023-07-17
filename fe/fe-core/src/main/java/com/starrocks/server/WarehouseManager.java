@@ -77,7 +77,6 @@ public class WarehouseManager implements Writable {
                     "An internal warehouse contains all compute nodes in this system");
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
-            wh.setExist(true);
         }
     }
 
@@ -152,7 +151,6 @@ public class WarehouseManager implements Writable {
 
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
-            wh.setExist(true);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateWarehouse(wh);
             LOG.info("createWarehouse whName = " + warehouseName + ", id = " + id + ", " +
                     "comment = " + comment);
@@ -165,7 +163,6 @@ public class WarehouseManager implements Writable {
             Preconditions.checkState(!nameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
             nameToWh.put(whName, warehouse);
             idToWh.put(warehouse.getId(), warehouse);
-            warehouse.setExist(true);
         }
     }
 

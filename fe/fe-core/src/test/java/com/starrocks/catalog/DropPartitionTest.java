@@ -120,6 +120,9 @@ public class DropPartitionTest {
                         Lists.newArrayList(10007L, 10008L, 10009L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+
+                agent.getWorkersByWorkerGroup(anyLong);
+                result = Lists.newArrayList(10001L);
             }
         };
 

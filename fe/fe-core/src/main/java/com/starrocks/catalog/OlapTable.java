@@ -1193,12 +1193,18 @@ public class OlapTable extends Table {
 
     public Collection<Partition> getRecentPartitions(int recentPartitionNum) {
         List<Partition> partitions = Lists.newArrayList(idToPartition.values());
+        // for debug
+        System.out.println("partitions size in getRecentPartitions is " + partitions.size());
         Collections.sort(partitions, new Comparator<Partition>() {
             @Override
             public int compare(Partition h1, Partition h2) {
                 return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
             }
         });
+
+        // for debug
+        System.out.println("partitions size after sort is " + partitions.size());
+        System.out.println("recentPartitionNum is " + recentPartitionNum);
         return partitions.subList(0, recentPartitionNum);
     }
 

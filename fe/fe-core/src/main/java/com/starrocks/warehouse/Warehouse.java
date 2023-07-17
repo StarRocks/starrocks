@@ -36,19 +36,15 @@ public abstract class Warehouse implements Writable {
     private long id;
 
     public enum WarehouseState {
-        INITIALIZING,
-        RUNNING,
+        AVAILABLE,
         SUSPENDED,
-        SCALING
     }
 
     @SerializedName(value = "state")
-    protected WarehouseState state = WarehouseState.INITIALIZING;
+    protected WarehouseState state = WarehouseState.AVAILABLE;
 
     @SerializedName(value = "comment")
     private String comment;
-
-    private volatile boolean exist = true;
 
     public Warehouse(long id, String name, String comment) {
         this.id = id;
@@ -76,10 +72,6 @@ public abstract class Warehouse implements Writable {
 
     public WarehouseState getState() {
         return state;
-    }
-
-    public void setExist(boolean exist) {
-        this.exist = exist;
     }
 
     public abstract void getProcNodeData(BaseProcResult result);
