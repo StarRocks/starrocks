@@ -73,7 +73,7 @@ SnapshotManager* SnapshotManager::instance() {
     if (_s_instance == nullptr) {
         std::lock_guard<std::mutex> lock(_mlock);
         if (_s_instance == nullptr) {
-            _s_instance = new SnapshotManager(ExecEnv::GetInstance()->clone_mem_tracker());
+            _s_instance = new SnapshotManager(GlobalEnv::GetInstance()->clone_mem_tracker());
         }
     }
     return _s_instance;

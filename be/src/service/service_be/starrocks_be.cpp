@@ -81,7 +81,7 @@ void init_block_cache() {
     }
 }
 
-StorageEngine* init_storage_engine(ExecEnv* exec_env, std::vector<StorePath> paths, bool as_cn) {
+StorageEngine* init_storage_engine(GlobalEnv* exec_env, std::vector<StorePath> paths, bool as_cn) {
     // Init and open storage engine.
     starrocks::EngineOptions options;
     options.store_paths = std::move(paths);
@@ -118,12 +118,15 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
     LOG(INFO) << "BE start step " << start_step++ << ": backend network options init successfully";
 
-    auto* exec_env = starrocks::ExecEnv::GetInstance();
+    auto* global_env = GlobalEnv::GetInstance();
+    EXIT_IF_ERROR(global_env->init());
+
+    auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
+    LOG(INFO) << "BE start step " << start_step++ << ": storage engine init successfully";
+
+    auto* exec_env = ExecEnv::GetInstance();
     EXIT_IF_ERROR(exec_env->init(paths, as_cn));
     LOG(INFO) << "BE start step " << start_step++ << ": exec engine init successfully";
-
-    auto* storage_engine = init_storage_engine(exec_env, paths, as_cn);
-    LOG(INFO) << "BE start step " << start_step++ << ": storage engine init successfully";
 
 #ifdef USE_STAROS
     init_staros_worker();
@@ -251,6 +254,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     delete storage_engine;
     LOG(INFO) << "BE exit step " << exit_step++ << ": storage engine exit successfully";
+
+    global_env->stop();
 
     LOG(INFO) << "BE exit success";
 }

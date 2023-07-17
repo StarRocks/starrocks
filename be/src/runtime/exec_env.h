@@ -103,6 +103,109 @@ namespace spill {
 class DirManager;
 }
 
+class GlobalEnv {
+public:
+    Status init();
+
+    static GlobalEnv* GetInstance() {
+        static GlobalEnv s_global_env;
+        return &s_global_env;
+    }
+
+    ~GlobalEnv() { _is_init = false; }
+
+    void stop() {
+        _is_init = false;
+        _reset_tracker();
+    }
+
+    MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
+    MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
+    MemTracker* load_mem_tracker() { return _load_mem_tracker.get(); }
+    MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker.get(); }
+    MemTracker* tablet_metadata_mem_tracker() { return _tablet_metadata_mem_tracker.get(); }
+    MemTracker* rowset_metadata_mem_tracker() { return _rowset_metadata_mem_tracker.get(); }
+    MemTracker* segment_metadata_mem_tracker() { return _segment_metadata_mem_tracker.get(); }
+    MemTracker* column_metadata_mem_tracker() { return _column_metadata_mem_tracker.get(); }
+    MemTracker* tablet_schema_mem_tracker() { return _tablet_schema_mem_tracker.get(); }
+    MemTracker* column_zonemap_index_mem_tracker() { return _column_zonemap_index_mem_tracker.get(); }
+    MemTracker* ordinal_index_mem_tracker() { return _ordinal_index_mem_tracker.get(); }
+    MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker.get(); }
+    MemTracker* bloom_filter_index_mem_tracker() { return _bloom_filter_index_mem_tracker.get(); }
+    MemTracker* segment_zonemap_mem_tracker() { return _segment_zonemap_mem_tracker.get(); }
+    MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
+    MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
+    MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
+    MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
+    MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
+    MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
+    MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
+    MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
+    MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
+    std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
+
+    static bool is_init();
+    static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
+
+private:
+    Status _init_mem_tracker();
+    void _reset_tracker();
+    template <class... Args>
+    std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
+
+    static bool _is_init;
+
+    // root process memory tracker
+    std::shared_ptr<MemTracker> _process_mem_tracker;
+
+    // Limit the memory used by the query. At present, it can use 90% of the be memory limit
+    std::shared_ptr<MemTracker> _query_pool_mem_tracker;
+
+    // Limit the memory used by load
+    std::shared_ptr<MemTracker> _load_mem_tracker;
+
+    // metadata l0
+    std::shared_ptr<MemTracker> _metadata_mem_tracker;
+
+    // metadata l1
+    std::shared_ptr<MemTracker> _tablet_metadata_mem_tracker;
+    std::shared_ptr<MemTracker> _rowset_metadata_mem_tracker;
+    std::shared_ptr<MemTracker> _segment_metadata_mem_tracker;
+    std::shared_ptr<MemTracker> _column_metadata_mem_tracker;
+
+    // metadata l2
+    std::shared_ptr<MemTracker> _tablet_schema_mem_tracker;
+    std::shared_ptr<MemTracker> _segment_zonemap_mem_tracker;
+    std::shared_ptr<MemTracker> _short_key_index_mem_tracker;
+    std::shared_ptr<MemTracker> _column_zonemap_index_mem_tracker;
+    std::shared_ptr<MemTracker> _ordinal_index_mem_tracker;
+    std::shared_ptr<MemTracker> _bitmap_index_mem_tracker;
+    std::shared_ptr<MemTracker> _bloom_filter_index_mem_tracker;
+
+    // The memory used for compaction
+    std::shared_ptr<MemTracker> _compaction_mem_tracker;
+
+    // The memory used for schema change
+    std::shared_ptr<MemTracker> _schema_change_mem_tracker;
+
+    // The memory used for column pool
+    std::shared_ptr<MemTracker> _column_pool_mem_tracker;
+
+    // The memory used for page cache
+    std::shared_ptr<MemTracker> _page_cache_mem_tracker;
+
+    // The memory tracker for update manager
+    std::shared_ptr<MemTracker> _update_mem_tracker;
+
+    std::shared_ptr<MemTracker> _chunk_allocator_mem_tracker;
+
+    std::shared_ptr<MemTracker> _clone_mem_tracker;
+
+    std::shared_ptr<MemTracker> _consistency_mem_tracker;
+
+    std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
+};
+
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
 // singleton services. Clients must call StartServices exactly
@@ -149,31 +252,6 @@ public:
     ClientCache<T>* get_client_cache() {
         return nullptr;
     }
-
-    MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
-    MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
-    MemTracker* load_mem_tracker() { return _load_mem_tracker.get(); }
-    MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker.get(); }
-    MemTracker* tablet_metadata_mem_tracker() { return _tablet_metadata_mem_tracker.get(); }
-    MemTracker* rowset_metadata_mem_tracker() { return _rowset_metadata_mem_tracker.get(); }
-    MemTracker* segment_metadata_mem_tracker() { return _segment_metadata_mem_tracker.get(); }
-    MemTracker* column_metadata_mem_tracker() { return _column_metadata_mem_tracker.get(); }
-    MemTracker* tablet_schema_mem_tracker() { return _tablet_schema_mem_tracker.get(); }
-    MemTracker* column_zonemap_index_mem_tracker() { return _column_zonemap_index_mem_tracker.get(); }
-    MemTracker* ordinal_index_mem_tracker() { return _ordinal_index_mem_tracker.get(); }
-    MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker.get(); }
-    MemTracker* bloom_filter_index_mem_tracker() { return _bloom_filter_index_mem_tracker.get(); }
-    MemTracker* segment_zonemap_mem_tracker() { return _segment_zonemap_mem_tracker.get(); }
-    MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
-    MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
-    MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
-    MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
-    MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
-    MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
-    MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
-    MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
-    MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
-    std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
@@ -239,15 +317,11 @@ public:
 
 private:
     Status _init(const std::vector<StorePath>& store_paths, bool as_cn);
-    void _reset_tracker();
-    template <class... Args>
-    std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
 
     Status _init_storage_page_cache();
     void _wait_for_fragments_finish();
 
 private:
-    static bool _is_init;
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
@@ -258,55 +332,6 @@ private:
     ClientCache<BackendServiceClient>* _backend_client_cache = nullptr;
     ClientCache<FrontendServiceClient>* _frontend_client_cache = nullptr;
     ClientCache<TFileBrokerServiceClient>* _broker_client_cache = nullptr;
-    // root process memory tracker
-    std::shared_ptr<MemTracker> _process_mem_tracker;
-
-    // Limit the memory used by the query. At present, it can use 90% of the be memory limit
-    std::shared_ptr<MemTracker> _query_pool_mem_tracker;
-
-    // Limit the memory used by load
-    std::shared_ptr<MemTracker> _load_mem_tracker;
-
-    // metadata l0
-    std::shared_ptr<MemTracker> _metadata_mem_tracker;
-
-    // metadata l1
-    std::shared_ptr<MemTracker> _tablet_metadata_mem_tracker;
-    std::shared_ptr<MemTracker> _rowset_metadata_mem_tracker;
-    std::shared_ptr<MemTracker> _segment_metadata_mem_tracker;
-    std::shared_ptr<MemTracker> _column_metadata_mem_tracker;
-
-    // metadata l2
-    std::shared_ptr<MemTracker> _tablet_schema_mem_tracker;
-    std::shared_ptr<MemTracker> _segment_zonemap_mem_tracker;
-    std::shared_ptr<MemTracker> _short_key_index_mem_tracker;
-    std::shared_ptr<MemTracker> _column_zonemap_index_mem_tracker;
-    std::shared_ptr<MemTracker> _ordinal_index_mem_tracker;
-    std::shared_ptr<MemTracker> _bitmap_index_mem_tracker;
-    std::shared_ptr<MemTracker> _bloom_filter_index_mem_tracker;
-
-    // The memory used for compaction
-    std::shared_ptr<MemTracker> _compaction_mem_tracker;
-
-    // The memory used for schema change
-    std::shared_ptr<MemTracker> _schema_change_mem_tracker;
-
-    // The memory used for column pool
-    std::shared_ptr<MemTracker> _column_pool_mem_tracker;
-
-    // The memory used for page cache
-    std::shared_ptr<MemTracker> _page_cache_mem_tracker;
-
-    // The memory tracker for update manager
-    std::shared_ptr<MemTracker> _update_mem_tracker;
-
-    std::shared_ptr<MemTracker> _chunk_allocator_mem_tracker;
-
-    std::shared_ptr<MemTracker> _clone_mem_tracker;
-
-    std::shared_ptr<MemTracker> _consistency_mem_tracker;
-
-    std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
 
     PriorityThreadPool* _thread_pool = nullptr;
 
