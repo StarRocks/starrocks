@@ -719,6 +719,12 @@ public class Config extends ConfigBase {
     public static int tablet_create_timeout_second = 10;
 
     /**
+     * If true then we will always perform concurrent tablet creation.
+     */
+    @ConfField(mutable = true)
+    public static boolean tablet_create_always_concurrent = false;
+
+    /**
      * minimal intervals between two publish version action
      */
     @ConfField
