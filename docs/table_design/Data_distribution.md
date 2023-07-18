@@ -93,7 +93,8 @@ CREATE TABLE site_access(
     user_name VARCHAR(32) DEFAULT ''
 )
 DUPLICATE KEY(event_day,site_id,pv)
-PARTITION BY RANGE(event_day) ( -- Set the partitioning method as Range partitioning.
+PARTITION BY RANGE(event_day) (
+    -- Set the partitioning method as Range partitioning.
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
@@ -111,12 +112,14 @@ CREATE TABLE site_access(
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY RANGE(event_day) ( -- Set the partitioning method as Range partitioning.
+-- Set the partitioning method as Range partitioning.
+PARTITION BY RANGE(event_day) (
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
 )
-DISTRIBUTED BY HASH(event_day, site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
+-- Set the bucketing method as Hash bucketing and specify the bucketing key.
+DISTRIBUTED BY HASH(event_day, site_id);
 ```
 
 ## Design partitioning and bucketing rules
