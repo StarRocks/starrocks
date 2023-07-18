@@ -430,9 +430,9 @@ private:
 template <class STLContainer>
 class TemplatedElementDeleter : public BaseDeleter {
 public:
-    explicit TemplatedElementDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
+    explicit TemplatedElementDeleter(STLContainer* ptr) : container_ptr_(ptr) {}
 
-    ~TemplatedElementDeleter<STLContainer>() override { STLDeleteElements(container_ptr_); }
+    ~TemplatedElementDeleter() override { STLDeleteElements(container_ptr_); }
 
 private:
     STLContainer* container_ptr_;
@@ -464,9 +464,9 @@ private:
 template <class STLContainer>
 class TemplatedValueDeleter : public BaseDeleter {
 public:
-    explicit TemplatedValueDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
+    explicit TemplatedValueDeleter(STLContainer* ptr) : container_ptr_(ptr) {}
 
-    ~TemplatedValueDeleter<STLContainer>() override { STLDeleteValues(container_ptr_); }
+    ~TemplatedValueDeleter() override { STLDeleteValues(container_ptr_); }
 
 private:
     STLContainer* container_ptr_;
@@ -501,8 +501,8 @@ private:
 template <class STLContainer>
 class STLElementDeleter {
 public:
-    STLElementDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
-    ~STLElementDeleter<STLContainer>() { STLDeleteElements(container_ptr_); }
+    STLElementDeleter(STLContainer* ptr) : container_ptr_(ptr) {}
+    ~STLElementDeleter() { STLDeleteElements(container_ptr_); }
 
 private:
     STLContainer* container_ptr_;
@@ -511,8 +511,8 @@ private:
 template <class STLContainer>
 class STLValueDeleter {
 public:
-    STLValueDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
-    ~STLValueDeleter<STLContainer>() { STLDeleteValues(container_ptr_); }
+    STLValueDeleter(STLContainer* ptr) : container_ptr_(ptr) {}
+    ~STLValueDeleter() { STLDeleteValues(container_ptr_); }
 
 private:
     STLContainer* container_ptr_;
