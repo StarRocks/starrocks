@@ -243,6 +243,8 @@ private:
 
     bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
 
+    void _init_column_access_paths();
+
     // search delta column group by column uniqueid, if this column exist in delta column group,
     // then return column iterator and delta column's fillname.
     // Or just return null
@@ -314,6 +316,9 @@ private:
 
     bool _inited = false;
     bool _has_bitmap_index = false;
+
+    std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
+    std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
 };
 
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, SegmentReadOptions options)
@@ -384,6 +389,7 @@ Status SegmentIterator::_init() {
     // init stage
     // The main task is to do some initialization,
     // initialize the iterator and check if certain optimizations can be applied
+    _init_column_access_paths();
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
     // filter by index stage
@@ -460,6 +466,22 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
     return nullptr;
 }
 
+void SegmentIterator::_init_column_access_paths() {
+    if (_opts.column_access_paths == nullptr || _opts.column_access_paths->empty()) {
+        return;
+    }
+
+    for (auto& column_access_path : *_opts.column_access_paths) {
+        auto* path = column_access_path.get();
+
+        if (path->is_from_predicate()) {
+            _predicate_column_access_paths[path->index()] = path;
+        } else {
+            _column_access_paths[path->index()] = path;
+        }
+    }
+}
+
 Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc) {
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
@@ -469,10 +491,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.reader_type = _opts.reader_type;
 
     ColumnAccessPath* access_path = nullptr;
-    if (_opts.column_access_paths != nullptr && !_opts.column_access_paths->empty()) {
-        if (_opts.column_access_paths->find(cid) != _opts.column_access_paths->end()) {
-            access_path = (*_opts.column_access_paths)[cid].get();
-        }
+    if (_column_access_paths.find(cid) != _column_access_paths.end()) {
+        access_path = _column_access_paths[cid];
     }
 
     std::string dcg_filename;
