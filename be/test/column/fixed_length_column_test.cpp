@@ -524,7 +524,7 @@ TEST(FixedLengthColumnTest, test_update_rows) {
     }
 
     std::vector<uint32_t> replace_idxes = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-    ASSERT_TRUE(column->update_rows(*replace_column.get(), replace_idxes.data()).ok());
+    column->update_rows(*replace_column.get(), replace_idxes.data());
 
     for (int i = 0; i < 10; i++) {
         ASSERT_EQ(column->get_data()[i], i + 100);
