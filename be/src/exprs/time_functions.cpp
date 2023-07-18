@@ -302,9 +302,11 @@ StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Col
 StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->state();
     DateTimeValue dtv;
-    if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone_obj())) {
+    auto timestamp_ms = state->timestamp_ms();
+    if (dtv.from_unixtime(timestamp_ms / 1000, state->timezone_obj())) {
         TimestampValue ts;
-        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(), 0);
+        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(),
+                          timestamp_ms % 1000);
         return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
     } else {
         return ColumnHelper::create_const_null_column(1);
