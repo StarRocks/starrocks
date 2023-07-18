@@ -4,7 +4,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 - [Aggregate functions](#aggregate-functions)
 - [Array functions](#array-functions)
-- [Binary functions](#binary-functions)
 - [Bit functions](#bit-functions)
 - [Bitmap functions](#bitmap-functions)
 - [CAST](cast.md)
@@ -85,15 +84,8 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [array_sum](../sql-functions/array-functions/array_sum.md)
 - [arrays_overlap](../sql-functions/array-functions/arrays_overlap.md)
 - [array_to_bitmap](../sql-functions/array-functions/array_to_bitmap.md)
-- [cardinality](../sql-functions/array-functions/cardinality.md)
-- [element_at](../sql-functions/array-functions/element_at.md)
 - [reverse](../sql-functions/array-functions/reverse.md)
 - [unnest](../sql-functions/array-functions/unnest.md)
-
-## Binary functions
-
-- [to_binary](../sql-functions/binary-functions/to_binary.md)
-- [from_binary](../sql-functions/binary-functions/from_binary.md)
 
 ## Bit functions
 
@@ -145,8 +137,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 - [aes_encrypt](../sql-functions/crytographic-functions/aes_encrypt.md)
 - [aes_decrypt](../sql-functions/crytographic-functions/aes_decrypt.md)
-- [base64_decode_binary](../sql-functions/crytographic-functions/base64_decode_binary.md)
-- [base64_decode_string](../sql-functions/crytographic-functions/base64_decode_string.md)
 - [from_base64](../sql-functions/crytographic-functions/from_base64.md)
 - [md5](../sql-functions/crytographic-functions/md5.md)
 - [md5sum](../sql-functions/crytographic-functions/md5sum.md)
@@ -249,8 +239,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 ## JSON functions
 
-- [Overview of JSON functions and operators](../sql-functions/json-functions/overview-of-json-functions-and-operators.md)
-- [JSON operators](../sql-functions/json-functions/json-operators.md)
 - [json_array](../sql-functions/json-functions/json-constructor-functions/json_array.md)
 - [json_object](../sql-functions/json-functions/json-constructor-functions/json_object.md)
 - [parse_json](../sql-functions/json-functions/json-constructor-functions/parse_json.md)
@@ -279,8 +267,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [find_in_set](../sql-functions/string-functions/find_in_set.md)
 - [group_concat](../sql-functions/string-functions/group_concat.md)
 - [hex](../sql-functions/string-functions/hex.md)
-- [hex_decode_binary](../sql-functions/string-functions/hex_decode_binary.md)
-- [hex_decode_string](../sql-functions/string-functions/hex_decode_string.md)
 - [instr](../sql-functions/string-functions/instr.md)
 - [lcase](../sql-functions/string-functions/lcase.md)
 - [left](../sql-functions/string-functions/left.md)
@@ -293,7 +279,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [null_or_empty](../sql-functions/string-functions/null_or_empty.md)
 - [parse_url](../sql-functions/string-functions/parse_url.md)
 - [repeat](../sql-functions/string-functions/repeat.md)
-- [replace](../sql-functions/string-functions/replace.md)
 - [reverse](../sql-functions/string-functions/reverse.md)
 - [right](../sql-functions/string-functions/right.md)
 - [rpad](../sql-functions/string-functions/rpad.md)
@@ -314,16 +299,10 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 ## Map functions
 
-- [cardinality](../sql-functions/map-functions/cardinality.md)
-- [element_at](../sql-functions/map-functions/element_at.md)
-- [map_apply](../sql-functions/map-functions/map_apply.md)
-- [map_from_arrays](../sql-functions/map-functions/map_from_arrays.md)
 - [map_keys](../sql-functions/map-functions/map_keys.md)
 - [map_size](../sql-functions/map-functions/map_size.md)
 - [map_values](../sql-functions/map-functions/map_values.md)
-- [transform_keys](../sql-functions/map-functions/transform_keys.md)
-- [transform_values](../sql-functions/map-functions/transform_values.md)
-
+  
 ## Math functions
 
 - [abs](../sql-functions/math-functions/abs.md)
@@ -336,7 +315,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [ceiling](../sql-functions/math-functions/ceiling.md)
 - [conv](../sql-functions/math-functions/conv.md)
 - [cos](../sql-functions/math-functions/cos.md)
-- [cosh](../sql-functions/math-functions/cosh.md)
 - [cot](../sql-functions/math-functions/cot.md)
 - [degrees](../sql-functions/math-functions/degrees.md)
 - [divide](../sql-functions/math-functions/divide.md)
@@ -362,11 +340,9 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [round, dround](../sql-functions/math-functions/round.md)
 - [sign](../sql-functions/math-functions/sign.md)
 - [sin](../sql-functions/math-functions/sin.md)
-- [sinh](../sql-functions/math-functions/sinh.md)
 - [sqrt, dsqrt](../sql-functions/math-functions/sqrt.md)
 - [square](../sql-functions/math-functions/square.md)
 - [tan](../sql-functions/math-functions/tan.md)
-- [tanh](../sql-functions/math-functions/tanh.md)
 - [truncate](../sql-functions/math-functions/truncate.md)
 
 ## Pattern matching functions
