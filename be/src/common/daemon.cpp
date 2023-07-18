@@ -253,11 +253,8 @@ void init_minidump() {
 #endif
 }
 
-void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
-    // google::SetVersionString(get_build_version(false));
-    // google::ParseCommandLineFlags(&argc, &argv, true);
-    google::ParseCommandLineFlags(&argc, &argv, true);
-    if (FLAGS_cn) {
+void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
+    if (as_cn) {
         init_glog("cn", true);
     } else {
         init_glog("be", true);
