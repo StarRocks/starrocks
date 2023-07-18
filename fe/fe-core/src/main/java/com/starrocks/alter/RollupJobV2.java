@@ -471,10 +471,10 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                         outputExprs, new ConnectContext());
                         Expr definedExpr = column.getDefineExpr().clone();
                         definedExpr = definedExpr.accept(visitor, null);
+                        definedExpr = Expr.analyzeAndCastFold(definedExpr);
                         if (!definedExpr.getType().equals(column.getType())) {
                             definedExpr = new CastExpr(column.getType(), definedExpr);
                         }
-                        definedExpr = Expr.analyzeAndCastFold(definedExpr);
                         defineExprs.put(column.getName(), definedExpr);
                     }
 
