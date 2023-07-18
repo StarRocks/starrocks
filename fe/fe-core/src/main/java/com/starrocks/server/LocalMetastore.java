@@ -96,7 +96,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.catalog.system.starrocks.StarRocksDb;
+import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AlreadyExistsException;
@@ -3148,7 +3148,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // and finally get information_schema db from the name map.
             String dbName = ClusterNamespace.getNameFromFullName(name);
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
-                    dbName.equalsIgnoreCase(StarRocksDb.DATABASE_NAME)) {
+                    dbName.equalsIgnoreCase(SysDb.DATABASE_NAME)) {
                 return fullNameToDb.get(dbName.toLowerCase());
             }
         }
@@ -4583,8 +4583,8 @@ public class LocalMetastore implements ConnectorMetadata {
         // create info schema db
         final InfoSchemaDb infoDb = new InfoSchemaDb();
         unprotectCreateDb(infoDb);
-        final StarRocksDb mysqlSchemaDb = new StarRocksDb();
-        unprotectCreateDb(mysqlSchemaDb);
+        final SysDb sysDb = new SysDb();
+        unprotectCreateDb(sysDb);
 
         // only need to create default cluster once.
         stateMgr.setIsDefaultClusterCreated(true);
@@ -4628,15 +4628,15 @@ public class LocalMetastore implements ConnectorMetadata {
             fullNameToDb.put(db.getFullName(), db);
             cluster.addDb(dbName, db.getId());
 
-            if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
-                LOG.warn("Since the the database of starrocsks already exists, " +
+            if (getFullNameToDb().containsKey(SysDb.DATABASE_NAME)) {
+                LOG.warn("Since the the database of sys already exists, " +
                         "the system will not automatically create the database of starrocks for system.");
             } else {
-                StarRocksDb starRocksDb = new StarRocksDb();
+                SysDb starRocksDb = new SysDb();
                 Preconditions.checkState(starRocksDb.getId() < NEXT_ID_INIT_VALUE, errMsg);
                 idToDb.put(starRocksDb.getId(), starRocksDb);
                 fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
-                cluster.addDb(StarRocksDb.DATABASE_NAME, starRocksDb.getId());
+                cluster.addDb(SysDb.DATABASE_NAME, starRocksDb.getId());
             }
             defaultCluster = cluster;
         }
@@ -5407,11 +5407,11 @@ public class LocalMetastore implements ConnectorMetadata {
         idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
         fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
 
-        if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
+        if (getFullNameToDb().containsKey(SysDb.DATABASE_NAME)) {
             LOG.warn("Since the the database of starrocks already exists, " +
                     "the system will not automatically create the database of starrocks for system.");
         } else {
-            StarRocksDb starRocksDb = new StarRocksDb();
+            SysDb starRocksDb = new SysDb();
             Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
                     "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
             idToDb.put(starRocksDb.getId(), starRocksDb);
