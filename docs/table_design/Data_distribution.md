@@ -72,13 +72,14 @@ Specify Hash distribution as the data distribution method at table creation.
 
 ```SQL
 CREATE TABLE site_access(
+    event_day DATE,
     site_id INT DEFAULT '10',
     city_code SMALLINT,
     user_name VARCHAR(32) DEFAULT '',
     pv BIGINT SUM DEFAULT '0'
 )
-AGGREGATE KEY(site_id, city_code, user_name)
-DISTRIBUTED BY HASH(site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+DISTRIBUTED BY HASH(event_day,site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
 ```
 
 Specify Range + Random distribution as the data distribution method at table creation.
@@ -105,7 +106,7 @@ Specify Range + Hash distribution as the data distribution method at table creat
 CREATE TABLE site_access(
     event_day DATE,
     site_id INT DEFAULT '10',
-    city_code VARCHAR(100),
+    city_code SMALLINT,
     user_name VARCHAR(32) DEFAULT '',
     pv BIGINT SUM DEFAULT '0'
 )
@@ -115,7 +116,7 @@ PARTITION BY RANGE(event_day) ( -- Set the partitioning method as Range partitio
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
 )
-DISTRIBUTED BY HASH(site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
+DISTRIBUTED BY HASH(event_day, site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
 ```
 
 ## Design partitioning and bucketing rules
