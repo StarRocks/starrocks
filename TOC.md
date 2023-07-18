@@ -311,10 +311,11 @@
       + 日期类型
         + [DATE](/sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](/sql-reference/sql-statements/data-types/DATETIME.md)
-      + 其他类型
+      + 半结构化类型
         + [ARRAY](/sql-reference/sql-statements/data-types/Array.md)
-        + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
         + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
+      + 其他类型
+        + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
     + [关键字](/sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](/sql-reference/sql-statements/auto_increment.md)
