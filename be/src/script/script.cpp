@@ -192,7 +192,7 @@ void bind_exec_env(ForeignModule& m) {
     }
     {
         auto& cls = m.klass<GlobalEnv>("GlobalEnv");
-        REG_STATIC_METHOD(ExecEnv, GetInstance);
+        REG_STATIC_METHOD(GlobalEnv, GetInstance);
         REG_METHOD(GlobalEnv, process_mem_tracker);
         REG_METHOD(GlobalEnv, query_pool_mem_tracker);
         REG_METHOD(GlobalEnv, load_mem_tracker);
