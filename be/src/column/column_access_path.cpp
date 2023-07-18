@@ -22,6 +22,7 @@
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -70,6 +71,7 @@ Status ColumnAccessPath::init(const TAccessPathType::type& type, const std::stri
 }
 
 StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* field, uint32_t index) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
     ColumnAccessPathPtr path = std::make_unique<ColumnAccessPath>();
     path->_type = this->_type;
     path->_path = this->_path;

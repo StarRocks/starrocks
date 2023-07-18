@@ -36,6 +36,8 @@ import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.PTriggerProfileReportResult;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
@@ -418,6 +420,11 @@ public class MockedBackend {
         @Override
         public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
             throw new NotImplementedException("TODO");
+        }
+
+        @Override
+        public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request) {
+            return null;
         }
     }
 }

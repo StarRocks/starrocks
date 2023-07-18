@@ -63,6 +63,8 @@ import com.starrocks.proto.PTabletWriterOpenRequest;
 import com.starrocks.proto.PTabletWriterOpenResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -1028,6 +1030,11 @@ public class PseudoBackend {
                 throw new org.apache.commons.lang3.NotImplementedException("TODO");
             }
             return CompletableFuture.completedFuture(result);
+        }
+
+        @Override
+        public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request) {
+            return null;
         }
     }
 

@@ -53,6 +53,8 @@ import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -288,6 +290,18 @@ public class BackendServiceClient {
         } catch (Throwable e) {
             LOG.warn("execute command exception, address={}:{} command:{}",
                     address.getHostname(), address.getPort(), request.command, e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(
+            TNetworkAddress address, PUpdateFailPointStatusRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.updateFailPointStatusAsync(request);
+        } catch (Throwable e) {
+            LOG.warn("update failpoint status exception, address={}:{}",
+                    address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
     }

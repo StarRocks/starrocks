@@ -49,6 +49,7 @@
 #include "runtime/memory/mem_chunk.h"
 #include "storage/olap_define.h"
 #include "util/bit_util.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 

@@ -30,6 +30,8 @@ import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
 
 import java.util.concurrent.Future;
 
@@ -75,5 +77,8 @@ public interface PBackendService {
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 60000)
     Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "update_fail_point_status", onceTalkTimeout = 60000)
+    Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request);
 }
 

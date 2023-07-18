@@ -46,6 +46,7 @@
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 

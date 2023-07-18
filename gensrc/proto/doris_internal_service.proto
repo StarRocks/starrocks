@@ -77,4 +77,5 @@ service PBackendService {
     rpc local_tablet_reader_scan_get_next(starrocks.PTabletReaderScanGetNextRequest) returns (starrocks.PTabletReaderScanGetNextResult);
 
     rpc execute_command(starrocks.ExecuteCommandRequestPB) returns (starrocks.ExecuteCommandResultPB);
+    rpc update_fail_point_status(starrocks.PUpdateFailPointStatusRequest) returns (starrocks.PUpdateFailPointStatusResponse);
 };

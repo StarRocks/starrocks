@@ -37,6 +37,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -90,6 +91,7 @@ Status TabletReader::prepare() {
     _stats.rowsets_read_count += _rowsets.size();
     Rowset::acquire_readers(_rowsets);
     // ensure all input rowsets are loaded into memory
+    // @TODO what if load fails
     for (const auto& rowset : _rowsets) {
         rowset->load();
     }
@@ -97,6 +99,7 @@ Status TabletReader::prepare() {
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
         return Status::NotSupported("reader type not supported now");

@@ -27,7 +27,7 @@
 
 namespace starrocks::pipeline {
 Status ResultSinkOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    RETURN_IF_ERROR(Operator::prepare(state));
 
     // Create profile
     _profile = std::make_unique<RuntimeProfile>("result sink");

@@ -24,6 +24,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -83,6 +84,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     }
 
     if (_fn_desc->prepare_function != nullptr) {
+        FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL));
         }

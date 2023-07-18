@@ -222,6 +222,9 @@ set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/m
 add_library(hdfs STATIC IMPORTED GLOBAL)
 set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
 
+add_library(fiu STATIC IMPORTED)
+set_target_properties(fiu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libfiu.a)
+
 # Allow FindOpenSSL() to find correct static libraries
 set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
 message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
@@ -594,6 +597,11 @@ if (ENABLE_QUERY_DEBUG_TRACE)
     message(STATUS "enable query debug trace")
 endif()
 
+if (ENABLE_FAULT_INJECTION)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DFIU_ENABLE")
+    message(STATUS "enable fault injection")
+endif()
+
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
 # Debug information is stored as dwarf2 to be as compatible as possible
@@ -779,6 +787,7 @@ set(STARROCKS_DEPENDENCIES
     jansson
     avro
     serdes
+    fiu
     ${WL_END_GROUP}
 )
 

@@ -30,6 +30,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "types/logical_type.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 
@@ -139,6 +140,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 }
 
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
     ASSIGN_OR_RETURN(_tablet, OlapScanNode::get_tablet(scan_range));
@@ -230,6 +232,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
         int32_t index = _tablet->field_index(slot->col_name());
+        FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
@@ -254,6 +257,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
 Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
     for (const auto& col_name : unused_output_columns) {
         int32_t index = _tablet->field_index(col_name);
+        FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << col_name;
@@ -295,9 +299,13 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
     RETURN_IF_ERROR(_init_global_dicts(&_params));
+
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
+
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
+
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
+
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     starrocks::Schema child_schema = ChunkHelper::convert_schema(tablet_schema, reader_columns);
     RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
@@ -316,6 +324,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     }
 
     DCHECK(_params.global_dictmaps != nullptr);
+
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
     RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
 
@@ -379,6 +388,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
+            // @TODO
             _not_push_down_predicates.evaluate(chunk, _selection.data(), 0, nrows);
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);

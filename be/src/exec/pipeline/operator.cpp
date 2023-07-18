@@ -23,6 +23,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
@@ -63,6 +64,7 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 }
 
 Status Operator::prepare(RuntimeState* state) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
     _mem_tracker = std::make_shared<MemTracker>(_common_metrics.get(), std::make_tuple(true, true, true), "Operator",
                                                 -1, _name, nullptr);
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
@@ -243,6 +245,7 @@ OperatorFactory::OperatorFactory(int32_t id, std::string name, int32_t plan_node
 }
 
 Status OperatorFactory::prepare(RuntimeState* state) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
     _state = state;
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to

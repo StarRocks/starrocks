@@ -22,6 +22,7 @@
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 
@@ -69,6 +70,8 @@ void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* r
     driver->finalize(runtime_state, state, _schedule_count, _driver_execution_ns);
 }
 
+DEFINE_FAIL_POINT(force_cancel_operator);
+
 void GlobalDriverExecutor::_worker_thread() {
     auto current_thread = Thread::current_thread();
     const int worker_id = _next_id++;
@@ -114,7 +117,13 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* runtime_state = runtime_state_ptr.get();
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
-            if (fragment_ctx->is_canceled()) {
+#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
+            FAIL_POINT_SCOPE(mem_alloc_error);
+#endif
+            // @TODO random cancel
+            bool force_cancel = false;
+            FAIL_POINT_TRIGGER_EXECUTE(force_cancel_operator, { force_cancel = true; });
+            if (fragment_ctx->is_canceled() || force_cancel) {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
