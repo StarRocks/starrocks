@@ -22,7 +22,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 - [CAST 函数](cast.md)
 - [Hash 函数](#hash-函数)
 - [Java UDF](/sql-reference/sql-functions/JAVA_UDF.md)
-- [Lamda 表达式](/sql-reference/sql-functions/Lambda_expression.md)
+- [Lambda 表达式](/sql-reference/sql-functions/Lambda_expression.md)
 
 ## 日期函数
 
