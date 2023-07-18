@@ -174,6 +174,6 @@ FailPointRegisterer::FailPointRegisterer(FailPoint* fp) {
     FailPointRegistry::GetInstance()->add(fp);
 }
 
-DEFINE_FAIL_POINT(rand_error_during_prepare);
+DEFINE_FAIL_POINT(random_error);
 
 } // namespace starrocks::failpoint

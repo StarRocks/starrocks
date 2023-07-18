@@ -147,7 +147,7 @@ MemChunkAllocator::MemChunkAllocator(MemTracker* mem_tracker, size_t reserve_lim
 }
 
 bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
-    FAIL_POINT_TRIGGER_RETURN(rand_error_during_prepare, false);
+    FAIL_POINT_TRIGGER_RETURN(random_error, false);
     bool ret = true;
 #ifndef BE_TEST
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);

@@ -84,7 +84,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     }
 
     if (_fn_desc->prepare_function != nullptr) {
-        FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
+        FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL));
         }
