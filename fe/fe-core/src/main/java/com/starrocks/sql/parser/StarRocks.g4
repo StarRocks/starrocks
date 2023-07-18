@@ -1928,7 +1928,7 @@ relationPrimary
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | TABLE '(' qualifiedName '(' expressionList ')' ')'
         (AS? alias=identifier columnAliases?)?                                          #normalizedTableFunction
-    | TABLE propertyList
+    | FILES propertyList
         (AS? alias=identifier columnAliases?)?                                          #fileTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
     ;
