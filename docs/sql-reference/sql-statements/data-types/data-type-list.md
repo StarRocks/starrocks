@@ -1,6 +1,6 @@
 # Data type overview
 
-StarRocks supports the following data types: [Numeric](#numeric), [String](#string), [Date](#date), [Semi-structured](#semi-structured), and [Others](#others). You can defines columns of these types when you create a table, load data into these columns, and query the data.
+StarRocks supports the following data types: [Numeric](#numeric), [String](#string), [Date](#date), [Semi-structured](#semi-structured), and [Others](#others). You can define columns of these types when you create a table, load data into these columns, and query the data.
 
 ## Numeric
 
@@ -20,7 +20,6 @@ StarRocks supports the following data types: [Numeric](#numeric), [String](#stri
 - [CHAR](../data-types/CHAR.md)
 - [STRING](../data-types/STRING.md)
 - [VARCHAR](../data-types/VARCHAR.md)
-- [BINARY](../data-types/BINARY.md)
 
 ## Date
 
