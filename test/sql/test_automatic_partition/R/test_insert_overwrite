@@ -158,7 +158,7 @@ insert into duplicate_table_with_null2 values('2021-01-01', '2020-01-01 12:30:30
 insert overwrite duplicate_table_with_null1 select * from duplicate_table_with_null2;
 -- result:
 -- !result
-select count(1) from duplicate_table_with_null1
+select count(1) from duplicate_table_with_null1;
 -- result:
 3
 -- !result
