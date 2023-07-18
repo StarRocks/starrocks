@@ -23,7 +23,6 @@
 #include "storage/column_predicate.h"
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -43,7 +42,6 @@ bool PredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
 }
 
 ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition) const {
-    FAIL_POINT_TRIGGER_RETURN(rand_error_during_prepare, nullptr);
     const size_t index = _schema.field_index(condition.column_name);
     RETURN_IF(index >= _schema.num_columns(), nullptr);
     const TabletColumn& col = _schema.column(index);

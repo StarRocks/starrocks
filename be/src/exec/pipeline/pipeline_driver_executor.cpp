@@ -70,8 +70,6 @@ void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* r
     driver->finalize(runtime_state, state, _schedule_count, _driver_execution_ns);
 }
 
-DEFINE_FAIL_POINT(force_cancel_operator);
-
 void GlobalDriverExecutor::_worker_thread() {
     auto current_thread = Thread::current_thread();
     const int worker_id = _next_id++;

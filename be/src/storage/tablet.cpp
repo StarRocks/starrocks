@@ -778,7 +778,7 @@ void Tablet::list_versions(vector<Version>* versions) const {
 }
 
 Status Tablet::capture_consistent_rowsets(const Version& spec_version, std::vector<RowsetSharedPtr>* rowsets) const {
-    FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     if (_updates != nullptr && spec_version.first == 0 && spec_version.second >= spec_version.first) {
         return _updates->get_applied_rowsets(spec_version.second, rowsets);
     } else if (_updates != nullptr) {

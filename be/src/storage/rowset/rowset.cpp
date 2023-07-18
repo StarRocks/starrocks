@@ -60,7 +60,6 @@
 #include "storage/update_manager.h"
 #include "storage/utils.h"
 #include "util/defer_op.h"
-#include "util/failpoint/fail_point.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -153,15 +152,9 @@ Status Rowset::init() {
     return Status::OK();
 }
 
-DEFINE_FAIL_POINT(load_rowset_error);
 // use partial_rowset_footer to indicate the segment footer position and size
 // if partial_rowset_footer is nullptr, the segment_footer is at the end of the segment_file
 Status Rowset::do_load() {
-    // FAIL_POINT_TRIGGER_RETURN(load_rowset_error, Status::InternalError("mock load rowset error"));
-    FAIL_POINT_TRIGGER_EXECUTE(load_rowset_error, {
-        LOG(INFO) << "mock load rowset error";
-        return Status::InternalError("mock load rowset error");
-    });
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
