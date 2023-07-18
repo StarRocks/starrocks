@@ -120,10 +120,7 @@ void GlobalDriverExecutor::_worker_thread() {
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
             FAIL_POINT_SCOPE(mem_alloc_error);
 #endif
-            // @TODO random cancel
-            bool force_cancel = false;
-            FAIL_POINT_TRIGGER_EXECUTE(force_cancel_operator, { force_cancel = true; });
-            if (fragment_ctx->is_canceled() || force_cancel) {
+            if (fragment_ctx->is_canceled()) {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);

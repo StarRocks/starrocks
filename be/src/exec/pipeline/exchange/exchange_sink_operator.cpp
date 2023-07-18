@@ -35,7 +35,6 @@
 #include "service/brpc.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 
@@ -158,7 +157,6 @@ void ExchangeSinkOperator::Channel::_prepare_pass_through() {
 }
 
 Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
-    FAIL_POINT_TRIGGER_RETURN_ERROR(rand_error_during_prepare);
     if (_is_inited) {
         return Status::OK();
     }

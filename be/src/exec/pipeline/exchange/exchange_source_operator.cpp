@@ -22,7 +22,7 @@
 
 namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    SourceOperator::prepare(state);
     _stream_recvr = static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state, _unique_metrics);
     return Status::OK();
 }

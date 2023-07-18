@@ -25,7 +25,6 @@
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "udf/java/java_function_fwd.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -107,7 +106,6 @@ AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {
 static const AggregateFunction* get_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
                                              bool is_window_function, bool is_null,
                                              TFunctionBinaryType::type binary_type, int func_version) {
-    FAIL_POINT_TRIGGER_RETURN(rand_error_during_prepare, nullptr);
     std::string func_name = name;
     if (func_version > 1) {
         if (name == "multi_distinct_sum") {
