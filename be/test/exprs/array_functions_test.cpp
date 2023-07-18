@@ -253,7 +253,7 @@ TEST_F(ArrayFunctionsTest, array_length) {
 
     // [] only const
     {
-        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         src_column = std::make_shared<ConstColumn>(src_column, 3);
 
@@ -4691,7 +4691,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
     }
     // test const
     {
-        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         src_column = std::make_shared<ConstColumn>(src_column, 3);
         auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
@@ -5038,7 +5038,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
     // test const
     {
-        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         src_column = std::make_shared<ConstColumn>(src_column, 3);
         auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
@@ -5047,7 +5047,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
     // test array[null]
     {
-        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", Datum(), Datum(), "5", "33", "666", Datum()});
         src_column = std::make_shared<ConstColumn>(src_column, 1);
         auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
@@ -5385,7 +5385,7 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
     }
     // test const
     {
-        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         src_column->append_datum(DatumArray{(uint8) false, (uint8) true});
         src_column = std::make_shared<ConstColumn>(src_column, 3);
         auto dest_column = ArrayMatch<false>::process(nullptr, {src_column});
@@ -5398,7 +5398,7 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
     }
     // test const
     {
-        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         src_column->append_datum(DatumArray{});
         src_column = std::make_shared<ConstColumn>(src_column, 3);
         auto dest_column = ArrayMatch<true>::process(nullptr, {src_column});

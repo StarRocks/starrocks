@@ -619,7 +619,9 @@ PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
 
     auto only_null_column = ColumnHelper::create_const_null_column(5);
 
-    auto const_column = ConstColumn::create(map_column_nullable->clone_shared(), 5);
+    auto mapn = down_cast<NullableColumn*>(map_column_nullable->clone_shared().get())->data_column();
+
+    auto const_column = ConstColumn::create(mapn, 5);
 
     {
         auto result = MapFunctions::map_concat(nullptr, {map_column_nullable, map_column_not_nullable}).value();

@@ -587,12 +587,14 @@ std::string ArrayColumn::debug_item(size_t idx) const {
 
 std::string ArrayColumn::debug_string() const {
     std::stringstream ss;
+    ss << "[";
     for (size_t i = 0; i < size(); ++i) {
         if (i > 0) {
             ss << ", ";
         }
         ss << debug_item(i);
     }
+    ss << "]";
     return ss.str();
 }
 

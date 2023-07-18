@@ -553,7 +553,7 @@ PARALLEL_TEST(VecStringFunctionsTest, split) {
     columns.emplace_back(delim);
     ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
     auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
-    ASSERT_EQ("['1','2','3'], ['aa','bb','cc'], ['a','b','c'], ['','']", col_array->debug_string());
+    ASSERT_EQ("[['1','2','3'], ['aa','bb','cc'], ['a','b','c'], ['','']]", col_array->debug_string());
 
     columns.clear();
     str->append("");
@@ -577,8 +577,8 @@ PARALLEL_TEST(VecStringFunctionsTest, split) {
     ctx->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     result = StringFunctions::split(ctx.get(), columns).value();
-    ASSERT_EQ("['a','bc','d','eeee','f']", result->debug_string());
     ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_EQ("[['a','bc','d','eeee','f']]", result->debug_string());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, splitConst1) {
@@ -595,8 +595,8 @@ PARALLEL_TEST(VecStringFunctionsTest, splitConst1) {
     ctx->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
-    ASSERT_EQ("['a,bc','eeee,f']", result->debug_string());
     ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_EQ("[['a,bc','eeee,f']]", result->debug_string());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, splitConst2) {
@@ -618,7 +618,7 @@ PARALLEL_TEST(VecStringFunctionsTest, splitConst2) {
     ctx->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
-    ASSERT_EQ("['a','b','c'], ['aa','bb','cc'], ['eeeeeeeeee'], ['','']", result->debug_string());
+    ASSERT_EQ("[['a','b','c'], ['aa','bb','cc'], ['eeeeeeeeee'], ['','']]", result->debug_string());
     ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 }
 
@@ -653,8 +653,8 @@ PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
         ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
         auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
         ASSERT_EQ(
-                "['1上海','北','京'], ['北','京','.','南','京','.','东','京'], ['北 ','南','*东……',''], "
-                "['','市','区','街道']",
+                "[['1上海','北','京'], ['北','京','.','南','京','.','东','京'], ['北 ','南','*东……',''], "
+                "['','市','区','街道']]",
                 col_array->debug_string());
     }
     /// const
@@ -678,9 +678,9 @@ PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
         ASSERT_TRUE(
                 StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
         ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
-        ASSERT_EQ("['a','地',' ','区','b'], [], ['地','s','h','北','j',' ','京',' ','g'], [',']",
-                  result->debug_string());
         ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_EQ("[['a','地',' ','区','b'], [], ['地','s','h','北','j',' ','京',' ','g'], [',']]",
+                  result->debug_string());
     }
 }
 
