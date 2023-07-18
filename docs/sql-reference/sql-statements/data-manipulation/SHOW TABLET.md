@@ -6,7 +6,11 @@ Displays tablet related information.
 
 > **NOTE**
 >
+<<<<<<< HEAD
 > This operation requires the SELECT_PRIV privilege.
+=======
+> For v3.0 and later, this operation requires the SYSTEM-level OPERATE privilege and TABLE-level SELECT privilege. For v2.5 and earlier, this operation requires the ADMIN_PRIV privilege.
+>>>>>>> 73797fe93e ([Doc] add func/datatype overview (#27428))
 
 ## Syntax
 
