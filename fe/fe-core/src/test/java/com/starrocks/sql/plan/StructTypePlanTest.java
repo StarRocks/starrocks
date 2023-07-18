@@ -88,7 +88,7 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testSelectArrayStruct() throws Exception {
         String sql = "select c1.b[10].a from test";
-        assertVerbosePlanContains(sql, "[/c1/b]");
+        assertVerbosePlanContains(sql, "ColumnAccessPath: [/c1/b/INDEX/a]");
     }
 
     @Test
@@ -106,7 +106,7 @@ public class StructTypePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
 
         sql = "select count(c1.b[10].a) from test";
-        assertVerbosePlanContains(sql, "[/c1/b]");
+        assertVerbosePlanContains(sql, "[/c1/b/INDEX/a]");
 
         sql = "select count(c3.c.b) from test group by c1.a, c2.b";
         assertVerbosePlanContains(sql, "[/c1/a, /c2/b, /c3/c/b]");

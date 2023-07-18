@@ -21,14 +21,13 @@
 namespace starrocks {
 
 class Column;
+class ColumnAccessPath;
 
 class ArrayColumnIterator final : public ColumnIterator {
 public:
     ArrayColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iterator,
                         std::unique_ptr<ColumnIterator> array_size_iterator,
-                        std::unique_ptr<ColumnIterator> element_iterator);
-    ArrayColumnIterator(ColumnReader* reader, ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
-                        ColumnIterator* element_iterator);
+                        std::unique_ptr<ColumnIterator> element_iterator, const ColumnAccessPath* paths);
 
     ~ArrayColumnIterator() override = default;
 
@@ -56,6 +55,9 @@ private:
     std::unique_ptr<ColumnIterator> _null_iterator;
     std::unique_ptr<ColumnIterator> _array_size_iterator;
     std::unique_ptr<ColumnIterator> _element_iterator;
+    const ColumnAccessPath* _path;
+
+    bool _access_values = true;
 };
 
 } // namespace starrocks

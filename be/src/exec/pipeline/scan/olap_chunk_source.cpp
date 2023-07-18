@@ -272,12 +272,12 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     for (const auto& path : *paths) {
         auto& root = path->path();
         int32_t index = _tablet->field_index(root);
-        auto filed = schema->get_field_by_name(root);
+        auto field = schema->get_field_by_name(root);
         if (index >= 0) {
-            auto res = path->convert_by_index(filed.get(), index);
+            auto res = path->convert_by_index(field.get(), index);
             // read whole data, doesn't effect query
             if (res.ok()) {
-                _column_access_paths[index] = std::move(res.value());
+                _column_access_paths.emplace_back(std::move(res.value()));
             }
         }
     }
