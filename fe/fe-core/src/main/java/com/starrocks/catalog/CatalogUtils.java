@@ -306,7 +306,7 @@ public class CatalogUtils {
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
 
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            backendNum += GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
         }
 
         // When POC, the backends is not greater than three most of the time.
