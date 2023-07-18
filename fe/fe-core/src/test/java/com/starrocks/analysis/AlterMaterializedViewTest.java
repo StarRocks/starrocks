@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -78,6 +79,21 @@ public class AlterMaterializedViewTest {
         AlterMaterializedViewStmt alterMvStmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
         Assert.assertEquals(alterMvStmt.getRefreshSchemeDesc().getType(), MaterializedView.RefreshType.SYNC);
+    }
+
+    @Test
+    public void testAlterChangeRefresh() throws Exception {
+        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 hour)";
+        AlterMaterializedViewStmt alterMvStmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        new AlterJobMgr().processAlterMaterializedView(alterMvStmt);
+
+        alterMvSql = "alter materialized view mv1 refresh ASYNC";
+        alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        new AlterJobMgr().processAlterMaterializedView(alterMvStmt);
+        MaterializedView mv = (MaterializedView) currentState.getDb("test").getTable("mv1");
+        String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
+        Assert.assertFalse(showCreateStmt.contains("EVERY(INTERVAL 1 HOUR)"));
     }
 
     @Test
