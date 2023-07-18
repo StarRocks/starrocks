@@ -1547,7 +1547,7 @@ public class Config extends ConfigBase {
     public static boolean enable_dict_optimize_routine_load = false;
 
     @ConfField(mutable = true)
-    public static boolean enable_dict_optimize_stream_load = true;
+    public static boolean enable_dict_optimize_stream_load = false;
 
     /**
      * If set to true, the following rules will apply to see if the password is secure upon the creation of a user.
