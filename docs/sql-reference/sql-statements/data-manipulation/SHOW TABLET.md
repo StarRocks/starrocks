@@ -2,15 +2,11 @@
 
 ## Description
 
-Displays tablet related information.
+Displays tablet-related information.
 
 > **NOTE**
 >
-<<<<<<< HEAD
-> This operation requires the SELECT_PRIV privilege.
-=======
-> For v3.0 and later, this operation requires the SYSTEM-level OPERATE privilege and TABLE-level SELECT privilege. For v2.5 and earlier, this operation requires the ADMIN_PRIV privilege.
->>>>>>> b6d5f1ae4 ([Doc] add func/datatype overview (#27428))
+> This operation requires the ADMIN_PRIV privilege.
 
 ## Syntax
 
