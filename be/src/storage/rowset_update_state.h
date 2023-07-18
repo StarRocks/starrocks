@@ -37,7 +37,7 @@ struct PartialUpdateState {
             if (write_columns[i] != nullptr) {
                 byte_size += write_columns[i]->byte_size();
             }
-        } 
+        }
     }
 
     void release() {

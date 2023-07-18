@@ -171,8 +171,8 @@ public:
 
     int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
 
-    int64_t get_data_size() { 
-        auto res = _fs->get_file_size(_fname); 
+    int64_t get_data_size() {
+        auto res = _fs->get_file_size(_fname);
         if (res.ok()) {
             return res.value();
         }
