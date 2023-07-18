@@ -983,7 +983,7 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
     case EMPTY:
         return 0;
     case SINGLE: {
-        if (_sv < range_start || limit == 0) {
+        if ((limit > 0 && _sv < range_start) || (limit < 0 && _sv > range_start) || limit == 0) {
             return 0;
         } else {
             ret_bitmap->add(_sv);
