@@ -297,12 +297,7 @@
       + Semi-structured
         + [ARRAY](./sql-reference/sql-statements/data-types/Array.md)
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
-<<<<<<< HEAD
-=======
-        + [MAP](./sql-reference/sql-statements/data-types/Map.md)
-        + [STRUCT](./sql-reference/sql-statements/data-types/STRUCT.md)
       + Others
->>>>>>> 73797fe93e ([Doc] add func/datatype overview (#27428))
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
@@ -311,11 +306,6 @@
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
     + [Lambda expression](./sql-reference/sql-functions/Lambda_expression.md)
     + Aggregate Functions
-<<<<<<< HEAD
-      + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
-      + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
-=======
->>>>>>> 73797fe93e ([Doc] add func/datatype overview (#27428))
       + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
@@ -325,6 +315,7 @@
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
+      + [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
       + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
       + [hll_raw_agg](./sql-reference/sql-functions/aggregate-functions/hll_raw_agg.md)
