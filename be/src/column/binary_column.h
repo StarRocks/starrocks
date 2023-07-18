@@ -50,29 +50,31 @@ public:
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
-    BinaryColumnBase<T>() { _offsets.emplace_back(0); }
+    BinaryColumnBase() { _offsets.emplace_back(0); }
+
     // Default value is empty string
-    explicit BinaryColumnBase<T>(size_t size) : _offsets(size + 1, 0) {}
-    BinaryColumnBase<T>(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
+    explicit BinaryColumnBase(size_t size) : _offsets(size + 1, 0) {}
+
+    BinaryColumnBase(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
         }
     }
 
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumnBase<T>(const BinaryColumnBase<T>& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
+    BinaryColumnBase(const BinaryColumnBase& rhs) : _bytes(rhs._bytes), _offsets(rhs._offsets) {}
 
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumnBase<T>(BinaryColumnBase<T>&& rhs) noexcept
+    BinaryColumnBase(BinaryColumnBase&& rhs) noexcept
             : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
 
-    BinaryColumnBase<T>& operator=(const BinaryColumnBase<T>& rhs) {
+    BinaryColumnBase& operator=(const BinaryColumnBase& rhs) {
         BinaryColumnBase<T> tmp(rhs);
         this->swap_column(tmp);
         return *this;
     }
 
-    BinaryColumnBase<T>& operator=(BinaryColumnBase<T>&& rhs) noexcept {
+    BinaryColumnBase& operator=(BinaryColumnBase&& rhs) noexcept {
         BinaryColumnBase<T> tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;
@@ -84,7 +86,7 @@ public:
 
     bool has_large_column() const override;
 
-    ~BinaryColumnBase<T>() override {
+    ~BinaryColumnBase() override {
         if (!_offsets.empty()) {
             DCHECK_EQ(_bytes.size(), _offsets.back());
         } else {
