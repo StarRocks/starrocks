@@ -171,6 +171,14 @@ public:
 
     int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
 
+    int64_t get_data_size() { 
+        auto res = _fs->get_file_size(_fname); 
+        if (res.ok()) {
+            return res.value();
+        }
+        return 0;
+    }
+
     // read short_key_index, for data check, just used in unit test now
     [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
 

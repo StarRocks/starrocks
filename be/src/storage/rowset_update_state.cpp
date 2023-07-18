@@ -371,6 +371,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
         _memory_usage += _partial_update_states[idx].write_columns[col_idx]->memory_usage();
     }
     int64_t t_end = MonotonicMillis();
+    _partial_update_states[idx].update_byte_size();
     _partial_update_states[idx].inited = true;
 
     LOG(INFO) << strings::Substitute(
@@ -577,7 +578,8 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 
 Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
                                 EditVersion latest_applied_version, const PrimaryIndex& index,
-                                std::unique_ptr<Column>& delete_pks) {
+                                std::unique_ptr<Column>& delete_pks,
+                                int64_t* append_column_size) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0 ||
         rowset_meta_pb.txn_meta().has_merge_condition()) {
@@ -648,6 +650,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
                 _memory_usage -= write_column->memory_usage();
             }
         }
+        *append_column_size += _partial_update_states[segment_id].byte_size;
         _partial_update_states[segment_id].release();
     }
     if (txn_meta.has_auto_increment_partial_update_column_id()) {
