@@ -140,7 +140,7 @@ TEST_F(MapElementExprTest, test_map_int_int) {
         expr->add_child(new_fake_col_expr(column, type_map_int_int));
         expr->add_child(new_fake_const_expr(const_int_column(2, column->size()), type_int));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         EXPECT_EQ(5, result->size());
@@ -180,7 +180,7 @@ TEST_F(MapElementExprTest, test_map_int_int) {
         expr->add_child(new_fake_col_expr(column, type_map_int_int));
         expr->add_child(new_fake_const_expr(const_int_column(3, column->size()), type_int));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         EXPECT_EQ(5, result->size());
@@ -220,7 +220,7 @@ TEST_F(MapElementExprTest, test_map_int_int) {
         auto type = TypeDescriptor(LogicalType::TYPE_INT);
         expr->add_child(new_fake_col_expr(ColumnTestHelper::build_column<int32_t>({3, 3, 3, 0, 0}), type));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         EXPECT_EQ(5, result->size());
@@ -301,7 +301,7 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
         expr->add_child(new_fake_col_expr(column, type_map_varchar_int));
         expr->add_child(new_fake_const_expr(const_varchar_column("b", column->size()), type_varchar));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         EXPECT_EQ(6, result->size());
@@ -344,7 +344,7 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
         expr->add_child(new_fake_col_expr(column, type_map_varchar_int));
         expr->add_child(new_fake_const_expr(const_varchar_column("c", column->size()), type_varchar));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         EXPECT_EQ(6, result->size());
@@ -417,7 +417,7 @@ TEST_F(MapElementExprTest, test_map_const) {
         expr->add_child(new_fake_col_expr(column, type_map_int_int));
         expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), type_int));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         EXPECT_EQ(5, result->size());
@@ -433,7 +433,7 @@ TEST_F(MapElementExprTest, test_map_const) {
         expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), type_int));
         expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), type_int));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->only_null());
     }
@@ -455,7 +455,9 @@ TEST_F(MapElementExprTest, test_map_const) {
         expr->add_child(new_fake_col_expr(const_map, type_map_int_int));
         expr->add_child(new_fake_const_expr(const_int_column(3, column->size()), type_int));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
-        ASSERT_TRUE(expr->open(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
+        // corner test
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_constant());
         EXPECT_EQ(33, result->get(0).get_int32());
