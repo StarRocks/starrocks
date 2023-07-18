@@ -26,7 +26,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.catalog.system.starrocks.StarRocksDb;
+import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -150,7 +150,7 @@ public class LocalMetaStoreTest {
 
         Assert.assertNotNull(localMetaStore.getDb(SystemId.INFORMATION_SCHEMA_DB_ID));
         Assert.assertNotNull(localMetaStore.getDb(InfoSchemaDb.DATABASE_NAME));
-        Assert.assertNotNull(localMetaStore.getDb(SystemId.STARROCKS_DB_ID));
-        Assert.assertNotNull(localMetaStore.getDb(StarRocksDb.DATABASE_NAME));
+        Assert.assertNotNull(localMetaStore.getDb(SystemId.SYS_DB_ID));
+        Assert.assertNotNull(localMetaStore.getDb(SysDb.DATABASE_NAME));
     }
 }
