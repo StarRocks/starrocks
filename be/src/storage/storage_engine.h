@@ -83,9 +83,9 @@ struct DeltaColumnGroupKey {
     RowsetId rowsetid;
     uint32_t segment_id;
 
-    DeltaColumnGroupKey() {}
+    DeltaColumnGroupKey() = default;
     DeltaColumnGroupKey(int64_t tid, RowsetId rid, uint32_t sid) : tablet_id(tid), rowsetid(rid), segment_id(sid) {}
-    ~DeltaColumnGroupKey() {}
+    ~DeltaColumnGroupKey() = default;
 
     bool operator==(const DeltaColumnGroupKey& rhs) const {
         return tablet_id == rhs.tablet_id && segment_id == rhs.segment_id && rowsetid == rhs.rowsetid;
@@ -125,6 +125,9 @@ class StorageEngine {
 public:
     StorageEngine(const EngineOptions& options);
     virtual ~StorageEngine();
+
+    StorageEngine(const StorageEngine&) = delete;
+    const StorageEngine& operator=(const StorageEngine&) = delete;
 
     static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
 
@@ -230,8 +233,6 @@ public:
     bool rowset_id_in_use(const RowsetId& rowset_id) { return _rowset_id_generator->id_in_use(rowset_id); }
 
     void release_rowset_id(const RowsetId& rowset_id) { return _rowset_id_generator->release_id(rowset_id); }
-
-    void set_heartbeat_flags(HeartbeatFlags* heartbeat_flags) { _heartbeat_flags = heartbeat_flags; }
 
     // start all backgroud threads. This should be call after env is ready.
     virtual Status start_bg_threads();
@@ -408,8 +409,6 @@ private:
     bool _need_report_tablet = false;
     bool _need_report_disk_stat = false;
 
-    std::mutex _engine_task_mutex;
-
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TxnManager> _txn_manager;
 
@@ -427,8 +426,6 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
-    HeartbeatFlags* _heartbeat_flags = nullptr;
-
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
     std::mutex _auto_increment_mutex;
@@ -440,9 +437,6 @@ private:
     std::mutex _delta_column_group_cache_lock;
     std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
-
-    StorageEngine(const StorageEngine&) = delete;
-    const StorageEngine& operator=(const StorageEngine&) = delete;
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,
