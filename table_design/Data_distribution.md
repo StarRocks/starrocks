@@ -50,25 +50,27 @@ StarRocks 采用分区 + 分桶的两层分布方式来灵活地划分数据。
 
 ```SQL
 CREATE TABLE site_access(
-    site_id INT DEFAULT '10',
-    city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
 )
-AGGREGATE KEY(site_id, city_code, user_name); -- 没有设置分布方式
+DUPLICATE KEY(event_day,site_id,pv); -- 没有设置分布方式
 ```
 
 建表时设置数据分布方式为 Hash 分布：
 
 ```SQL
 CREATE TABLE site_access(
+    event_day DATE,
     site_id INT DEFAULT '10',
     city_code SMALLINT,
     user_name VARCHAR(32) DEFAULT '',
     pv BIGINT SUM DEFAULT '0'
 )
-AGGREGATE KEY(site_id, city_code, user_name)
-DISTRIBUTED BY HASH(site_id); -- 设置分桶方式为 Hash 分桶，并且必须指定分桶键
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+DISTRIBUTED BY HASH(event_day,site_id); -- 设置分桶方式为 Hash 分桶，并且必须指定分桶键
 ```
 
 建表时设置数据分布方式为 Range + Random 分布：
@@ -76,13 +78,14 @@ DISTRIBUTED BY HASH(site_id); -- 设置分桶方式为 Hash 分桶，并且必�
 ```SQL
 CREATE TABLE site_access(
     event_day DATE,
-    site_id INT DEFAULT '10',
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
     city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    user_name VARCHAR(32) DEFAULT ''
 )
-AGGREGATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY RANGE(event_day)( -- 设置分区方式为 Range 分区
+DUPLICATE KEY(event_day,site_id,pv)
+-- 设置分区方式为 Range 分区
+PARTITION BY RANGE(event_day) (
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
@@ -100,12 +103,14 @@ CREATE TABLE site_access(
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY RANGE(event_day)( -- 设置分区方式为 Range 分区
+-- 设置分区方式为 Range 分区
+PARTITION BY RANGE(event_day) (
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
 )
-DISTRIBUTED BY HASH(site_id); -- 设置分桶方式为 Hash 分桶，必须指定分桶键
+-- 设置分桶方式为 Hash 分桶，必须指定分桶键
+DISTRIBUTED BY HASH(event_day, site_id);
 ```
 
 #### 分区
@@ -360,25 +365,25 @@ SHOW PARTITIONS FROM site_access;
 ```SQL
 CREATE TABLE site_access1(
     event_day DATE,
-    site_id INT DEFAULT '10',
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
     city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    user_name VARCHAR(32) DEFAULT ''
 )
-DUPLICATE KEY(event_day,site_id,city_code,pv);
+DUPLICATE KEY(event_day,site_id,pv);
 ```
 
 当然，如果您比较熟悉 StarRocks 的分桶机制，使用随机分桶建表时，也可以手动设置分桶数量。
 
 ```SQL
-CREATE TABLE site_access(
+CREATE TABLE site_access2(
     event_day DATE,
-    site_id INT DEFAULT '10',
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
     city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    user_name VARCHAR(32) DEFAULT ''
 )
-DUPLICATE KEY(event_day,site_id,city_code,pv)
+DUPLICATE KEY(event_day,site_id,pv)
 DISTRIBUTED BY RANDOM BUCKETS 8; --手动设置分桶数量为 8
 ```
 
@@ -416,7 +421,7 @@ CREATE TABLE site_access(
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY RANGE(event_day)(
+PARTITION BY RANGE(event_day) (
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
