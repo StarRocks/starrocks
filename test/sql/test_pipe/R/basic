@@ -1,0 +1,79 @@
+-- name: test_pipe_basic
+show pipes;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: No database selected.')
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+create database db_${uuid1};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+show pipes;
+-- result:
+-- !result
+show pipes from db_${uuid1};
+-- result:
+-- !result
+create table t1 (id int, name string) duplicate key(id) properties('replication_num' = '1');
+-- result:
+-- !result
+create pipe p1 as 
+    insert into t1 
+    select * from files('path' = 'fake://file.parquet', 'format'='parquet');
+-- result:
+-- !result
+[UC]show pipes;
+-- result:
+269428	269437	p1	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	RUNNING	0	0	0
+-- !result
+[UC]desc pipe p1;
+-- result:
+269428	269437	p1	FILE	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	FILE_SOURCE(path=fake://file.parquet)	insert into t1 
+    select * from files('path' = 'fake://file.parquet', 'format'='parquet');
+-- !result
+alter pipe p1 pause;
+-- result:
+-- !result
+[UC]show pipes;
+-- result:
+269428	269437	p1	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	PAUSED	0	0	0
+-- !result
+alter pipe p1 resume;
+-- result:
+-- !result
+[UC]show pipes;
+-- result:
+269428	269437	p1	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	RUNNING	0	0	0
+-- !result
+use db_${uuid1};
+-- result:
+-- !result
+[UC]show pipes from db_${uuid0};
+-- result:
+269428	269437	p1	db_7bed7a380f2a11eeabf0c9d28a9636a8.t1	RUNNING	0	0	0
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+drop pipe p1;
+-- result:
+-- !result
+show pipes;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+show pipes;
+-- result:
+-- !result
