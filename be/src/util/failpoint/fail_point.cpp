@@ -108,7 +108,6 @@ FailPoint* FailPointRegistry::get(const std::string& name) {
     if (iter == _fps.end()) {
         return nullptr;
     }
-
     return iter->second;
 }
 

@@ -83,9 +83,7 @@ public:
 #define DEFINE_SCOPED_FAIL_POINT(NAME)                      \
     starrocks::failpoint::ScopedFailPoint sfp##NAME(#NAME); \
     starrocks::failpoint::FailPointRegisterer fpr##NAME(&sfp##NAME);
-
 #define FAIL_POINT_SCOPE(NAME) starrocks::failpoint::ScopedFailPointGuard sfpg##NAME(#NAME);
-
 #define FAIL_POINT_TRIGGER_EXECUTE(NAME, stmt) fiu_do_on(#NAME, stmt)
 #define FAIL_POINT_TRIGGER_RETURN(NAME, retVal) fiu_return_on(#NAME, retVal)
 #define FAIL_POINT_TRIGGER_RETURN_ERROR(NAME) \
