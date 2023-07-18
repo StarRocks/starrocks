@@ -29,6 +29,6 @@ select c2.C2_SUB1, c2.c2_sub2 from struct_upper_case order by c1;
 -- !result
 select test_struct.struct_upper_case.C2.C2_SUB1, test_struct.struct_upper_case.C2.c2_sub2 from struct_upper_case order by c1;
 -- result:
-1   1
-2   2
+1	1
+2	2
 -- !result
