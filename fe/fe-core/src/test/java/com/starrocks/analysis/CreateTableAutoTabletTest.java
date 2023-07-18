@@ -14,6 +14,8 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.ColocateGroupSchema;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -252,6 +254,12 @@ public class CreateTableAutoTabletTest {
             db.readUnlock();
         }
         Assert.assertEquals(bucketNum, 10);
+
+        Long dbId = db.getId();
+        String fullGroupName = dbId + "_g1";
+        ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateGroupSchema groupSchema = index.getGroupSchema(fullGroupName);
+        Assert.assertEquals(groupSchema.getBucketsNum(), 10);
     }
 
 
