@@ -466,7 +466,21 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         size_t col = 0;
-        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator());
+
+        ColumnAccessPath* value_path = nullptr;
+        if (path != nullptr && !path->children().empty()) {
+            // must be OFFSET or INDEX or ALL
+            if (UNLIKELY(path->children().size() != 1)) {
+                LOG(WARNING) << "bad access path on column: " << *path;
+            } else {
+                auto* p = path->children()[0].get();
+                if (p->is_index() || p->is_all()) {
+                    value_path = p;
+                }
+            }
+        }
+
+        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator(value_path));
 
         std::unique_ptr<ColumnIterator> null_iterator;
         if (is_nullable()) {
@@ -475,30 +489,33 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         ASSIGN_OR_RETURN(auto array_size_iterator, (*_sub_readers)[col++]->new_iterator());
 
         return std::make_unique<ArrayColumnIterator>(this, std::move(null_iterator), std::move(array_size_iterator),
-                                                     std::move(element_iterator));
+                                                     std::move(element_iterator), path);
     } else if (_column_type == LogicalType::TYPE_MAP) {
         size_t col = 0;
 
-        ColumnAccessPath* key_path = nullptr;
-        std::vector<ColumnAccessPath*> child_paths;
+        ColumnAccessPath* value_path = nullptr;
         if (path != nullptr && !path->children().empty()) {
-            for (const auto& child : path->children()) {
-                if (child->is_key()) {
-                    key_path = child.get();
+            // must be OFFSET or INDEX or ALL or KEY
+            if (UNLIKELY(path->children().size() != 1)) {
+                LOG(WARNING) << "bad access path on column: " << *path;
+            } else {
+                auto* p = path->children()[0].get();
+                if (p->is_index() || p->is_all()) {
+                    value_path = p;
                 }
-                child_paths.emplace_back(child.get());
             }
         }
 
-        ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator(key_path));
-        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator());
+        // key must scalar type now
+        ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator());
+        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator(value_path));
         std::unique_ptr<ColumnIterator> nulls;
         if (is_nullable()) {
             ASSIGN_OR_RETURN(nulls, (*_sub_readers)[col++]->new_iterator());
         }
         ASSIGN_OR_RETURN(auto offsets, (*_sub_readers)[col++]->new_iterator());
         return std::make_unique<MapColumnIterator>(this, std::move(nulls), std::move(offsets), std::move(keys),
-                                                   std::move(values), std::move(child_paths));
+                                                   std::move(values), path);
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
         auto num_fields = _sub_readers->size();
 
@@ -508,16 +525,11 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[num_fields]->new_iterator());
         }
 
-        std::vector<uint8_t> access_flags;
         std::vector<ColumnAccessPath*> child_paths(num_fields, nullptr);
         if (path != nullptr && !path->children().empty()) {
-            access_flags.resize(num_fields, 0);
             for (const auto& child : path->children()) {
                 child_paths[child->index()] = child.get();
-                access_flags[child->index()] = 1;
             }
-        } else {
-            access_flags.resize(num_fields, 1);
         }
 
         std::vector<std::unique_ptr<ColumnIterator>> field_iters;
@@ -525,7 +537,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[i]->new_iterator(child_paths[i]));
             field_iters.emplace_back(std::move(iter));
         }
-        return create_struct_iter(this, std::move(null_iter), std::move(field_iters), std::move(access_flags));
+        return create_struct_iter(this, std::move(null_iter), std::move(field_iters), path);
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }

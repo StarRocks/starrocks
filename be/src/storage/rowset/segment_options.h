@@ -88,7 +88,7 @@ public:
 
     const std::atomic<bool>* is_cancelled = nullptr;
 
-    std::unordered_map<uint32_t, ColumnAccessPathPtr>* column_access_paths = nullptr;
+    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     RowsetId rowsetid;
 
