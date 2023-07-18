@@ -17,7 +17,6 @@ package com.starrocks.sql;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Maps;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.StatementBase;
