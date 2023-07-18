@@ -153,7 +153,7 @@ However, note that the query performance provided by random bucketing may not be
 - You can not specify a [Colocation Group](../using_starrocks/Colocate_join.md) for a table bucketed randomly.
 - [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
 
-The following example does not include the DISTRIBUTED BY xxx clause, so StarRocks uses random bucketing by default and automatically determines the number of buckets.
+The following example does not include the DISTRIBUTED BY clause, so StarRocks uses random bucketing by default and automatically determines the number of buckets.
 
 ```SQL
 CREATE TABLE site_access1(
