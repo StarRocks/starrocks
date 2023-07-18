@@ -248,6 +248,7 @@ public:
     int hour() const { return _hour; }
     int minute() const { return _minute; }
     int second() const { return _second; }
+    int microsecond() const { return _microsecond; }
 
     void cast_to_date() {
         _hour = 0;

@@ -629,7 +629,7 @@ TEST_F(TimeFunctionsTest, now) {
         ASSERT_TRUE(ptr->is_constant());
         ASSERT_FALSE(ptr->is_timestamp());
         auto v = ColumnHelper::as_column<ConstColumn>(ptr);
-        ASSERT_EQ("2019-08-06 01:38:57", v->get(0).get_timestamp().to_string());
+        ASSERT_EQ("2019-08-06 01:38:57.000805", v->get(0).get_timestamp().to_string());
     }
 
     {
@@ -644,7 +644,7 @@ TEST_F(TimeFunctionsTest, now) {
         ASSERT_TRUE(ptr->is_constant());
         ASSERT_FALSE(ptr->is_timestamp());
         auto v = ColumnHelper::as_column<ConstColumn>(ptr);
-        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57), v->get(0).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 805), v->get(0).get_timestamp());
     }
 }
 
