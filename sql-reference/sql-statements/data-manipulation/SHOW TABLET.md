@@ -4,9 +4,9 @@
 
 查看 Tablet 相关信息。
 
-> **说明**
+> **注意**
 >
-> 3.0 版本之前，该操作需要 SELECT_PRIV 权限。3.0 版本及以后，该操作需要 TABLE 级别 SELECT 权限。
+> 从 3.0 版本开始，该操作需要 SYSTEM 级 OPERATE 权限，以及对应表的 SELECT 权限。2.5 及之前版本，该操作需要 ADMIN_PRIV 权限。
 
 ## 语法
 
