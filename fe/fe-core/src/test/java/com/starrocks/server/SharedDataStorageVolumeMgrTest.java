@@ -76,7 +76,9 @@ public class SharedDataStorageVolumeMgrTest {
             private long id = 1;
             @Mock
             public String addFileStore(FileStoreInfo fsInfo) {
-                fsInfo = fsInfo.toBuilder().setFsKey(String.valueOf(id++)).build();
+                if (fsInfo.getFsKey().isEmpty()) {
+                    fsInfo = fsInfo.toBuilder().setFsKey(String.valueOf(id++)).build();
+                }
                 fileStores.put(fsInfo.getFsKey(), fsInfo);
                 return fsInfo.getFsKey();
             }
@@ -308,6 +310,8 @@ public class SharedDataStorageVolumeMgrTest {
 
         Config.enable_load_volume_from_conf = true;
         String id = sdsvm.createBuiltinStorageVolume();
+        String[] bucketAndPrefix = Deencapsulation.invoke(sdsvm, "getBucketAndPrefix");
+        Assert.assertEquals(bucketAndPrefix[0], id);
         Assert.assertTrue(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
         StorageVolume sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         Assert.assertEquals(id, sdsvm.getDefaultStorageVolumeId());
@@ -355,7 +359,8 @@ public class SharedDataStorageVolumeMgrTest {
         Config.cloud_native_storage_type = "hdfs";
         Config.cloud_native_hdfs_url = "hdfs://url";
         sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-        sdsvm.createBuiltinStorageVolume();
+        id = sdsvm.createBuiltinStorageVolume();
+        Assert.assertEquals(Config.cloud_native_hdfs_url, id);
         sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().hasHdfsFsInfo());
 

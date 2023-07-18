@@ -78,6 +78,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             throws DdlException {
         FileStoreInfo fileStoreInfo = StorageVolume.createFileStoreInfo(name, svType,
                 locations, params, enabled.orElse(true), comment);
+        if (name.equals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME)) {
+            String fsKey = parseBuiltinFsKeyFromConfig();
+            fileStoreInfo = fileStoreInfo.toBuilder().setFsKey(fsKey).build();
+        }
         return GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(fileStoreInfo);
     }
 
@@ -382,5 +386,17 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 return params;
         }
         return params;
+    }
+
+    private String parseBuiltinFsKeyFromConfig() {
+        switch (Config.cloud_native_storage_type.toLowerCase()) {
+            case "s3":
+                String[] bucketAndPrefix = getBucketAndPrefix();
+                return bucketAndPrefix[0];
+            case "hdfs":
+                return Config.cloud_native_hdfs_url;
+            default:
+                return "";
+        }
     }
 }
