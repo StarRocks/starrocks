@@ -922,8 +922,13 @@ private:
             return _array_has_non_nullable(*array_col, *target_col);
         }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
         auto result = _array_has_non_nullable(*array_col, *target_col);
         DCHECK_EQ(array_nullable->size(), result->size());
+=======
+        ASSIGN_OR_RETURN(auto result, _array_has_non_nullable(*array_col, *target_col));
+        DCHECK_EQ(array_col->size(), result->size());
+>>>>>>> 7c982ad29 ([BugFix] fix array_has_generic DCHECK error (#27396)):be/src/exprs/array_functions.cpp
         return NullableColumn::create(std::move(result), merge_nullcolum(array_nullable, target_nullable));
     }
 };
