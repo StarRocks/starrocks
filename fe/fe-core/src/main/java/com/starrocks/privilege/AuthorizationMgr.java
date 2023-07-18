@@ -1072,20 +1072,6 @@ public class AuthorizationMgr {
         }
     }
 
-    public Map<ObjectType, List<PrivilegeEntry>> getMergedTypeToPrivilegeEntryListByUser(
-            UserIdentity userIdentity) {
-        userReadLock();
-        try {
-            UserPrivilegeCollectionV2 userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
-            PrivilegeCollectionV2 collection = mergePrivilegeCollection(userIdentity, userPrivilegeCollection.getAllRoles());
-            return collection.getTypeToPrivilegeEntryList();
-        } catch (PrivilegeException e) {
-            throw new SemanticException(e.getMessage());
-        } finally {
-            userReadUnlock();
-        }
-    }
-
     public List<String> getAllRoles() {
         roleReadLock();
         try {

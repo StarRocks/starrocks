@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.catalog.system.starrocks;
+package com.starrocks.catalog.system.sys;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -23,11 +23,11 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 // Mysql schema used for MySQL compatible.
-public class StarRocksDb extends Database {
-    public static final String DATABASE_NAME = "starrocks";
+public class SysDb extends Database {
+    public static final String DATABASE_NAME = "sys";
 
-    public StarRocksDb() {
-        super(SystemId.STARROCKS_DB_ID, DATABASE_NAME);
+    public SysDb() {
+        super(SystemId.SYS_DB_ID, DATABASE_NAME);
         super.registerTableUnlocked(RoleEdges.create());
         super.registerTableUnlocked(GrantsTo.createGrantsToRoles());
         super.registerTableUnlocked(GrantsTo.createGrantsToUsers());
