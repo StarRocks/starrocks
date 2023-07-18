@@ -236,6 +236,9 @@ public class OptOlapPartitionPruner {
                     continue;
                 }
                 List<LiteralExpr> values = entry.getValue();
+                if (values == null || values.isEmpty()) {
+                    continue;
+                }
                 values.forEach(value ->
                         putValueMapItem(partitionValueToIds, partitionId, value));
             }
@@ -258,6 +261,9 @@ public class OptOlapPartitionPruner {
                         continue;
                     }
                     List<List<LiteralExpr>> multiValues = entry.getValue();
+                    if (multiValues == null || multiValues.isEmpty()) {
+                        continue;
+                    }
                     for (List<LiteralExpr> values : multiValues) {
                         LiteralExpr value = values.get(i);
                         putValueMapItem(partitionValueToIds, partitionId, value);
