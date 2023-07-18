@@ -281,16 +281,9 @@
         + [FLOAT](./sql-reference/sql-statements/data-types/FLOAT.md)
         + [BOOLEAN](./sql-reference/sql-statements/data-types/BOOLEAN.md)
       + String
-<<<<<<< HEAD
-        + [CHAR](./sql-reference/sql-statements/data-types/CHAR.md)
-        + [VARCHAR](./sql-reference/sql-statements/data-types/VARCHAR.md)
-        + [STRING](./sql-reference/sql-statements/data-types/STRING.md)
-=======
-        + [BINARY](./sql-reference/sql-statements/data-types/BINARY.md)
         + [CHAR](./sql-reference/sql-statements/data-types/CHAR.md)
         + [STRING](./sql-reference/sql-statements/data-types/STRING.md)
         + [VARCHAR](./sql-reference/sql-statements/data-types/VARCHAR.md)
->>>>>>> b6d5f1ae4 ([Doc] add func/datatype overview (#27428))
       + Date
         + [DATE](./sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
@@ -324,7 +317,6 @@
       + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
       + [max_by](./sql-reference/sql-functions/aggregate-functions/max_by.md)
       + [min](./sql-reference/sql-functions/aggregate-functions/min.md)
-      + [min_by](./sql-reference/sql-functions/aggregate-functions/min_by.md)
       + [multi_distinct_sum](./sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
       + [multi_distinct_count](./sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
       + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
