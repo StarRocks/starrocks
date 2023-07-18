@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -104,7 +105,9 @@ public class LoadTest {
         List<Expr> params1 = Lists.newArrayList();
         params1.add(new SlotRef(null, c1Name));
         Expr mapping1 = new FunctionCallExpr(FunctionSet.YEAR, params1);
-        columnExprs.add(new ImportColumnDesc(c1Name, mapping1));
+        CompoundPredicate compoundPredicate = new CompoundPredicate(CompoundPredicate.Operator.OR,
+                mapping1, new SlotRef(null, c0Name));
+        columnExprs.add(new ImportColumnDesc(c1Name, compoundPredicate));
 
         // c1 is from path
         // path/c1=2021-03-01/file
