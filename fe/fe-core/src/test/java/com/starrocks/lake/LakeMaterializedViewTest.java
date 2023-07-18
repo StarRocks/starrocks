@@ -136,6 +136,7 @@ public class LakeMaterializedViewTest {
             FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
                     .setFsKey("1").setFsType(FileStoreType.S3)
                     .setS3FsInfo(s3FileStoreInfo).build();
+
             @Mock
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
@@ -328,6 +329,7 @@ public class LakeMaterializedViewTest {
         Assert.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
         Assert.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"true\""));
+        Assert.assertTrue(ddlStmt.contains("\"storage_volume\" = \"builtin_storage_volume\""));
 
         // check task
         String mvTaskName = "mv-" + mv.getId();
