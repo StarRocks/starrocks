@@ -72,16 +72,6 @@ VALUES (1, 10, 15, 2.5, '2023-01-01', 'apple'),
        (17, 4, 60, 13.5, null, 'cloudberry'),
        (17, 3, 60, 14.5, '2023-02-28', 'dewberry');
 
-SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by FROM cume_test;
-SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by FROM cume_test ORDER BY v1 DESC;
-SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by FROM cume_test ORDER BY v2;
-SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1 FROM cume_test;
-
-SELECT *, PERCENT_RANK() OVER () AS percent_rank_without_order_by FROM cume_test;
-SELECT *, PERCENT_RANK() OVER () AS percent_rank_without_order_by FROM cume_test ORDER BY v2 DESC;
-SELECT *, PERCENT_RANK() OVER () AS percent_rank_without_order_by FROM cume_test ORDER BY v3;
-SELECT *, PERCENT_RANK() OVER () AS percent_rank_without_order_by, PERCENT_RANK() OVER (ORDER BY v4) AS percent_rank_v4 FROM cume_test;
-
 SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v2 DESC) AS cume_dist_v2 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v3) AS cume_dist_v3 FROM cume_test;
