@@ -366,7 +366,8 @@ Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Fi
         for (auto& it : conjunct_ctxs_by_slot) {
             ASSIGN_OR_RETURN(chunk_size, ExecNode::eval_conjuncts_into_filter(it.second, chunk->get(), filter));
             if (chunk_size == 0) {
-                break;
+                (*chunk)->set_num_rows(0);
+                return Status::OK();
             }
         }
         if (chunk_size != 0 && chunk_size != (*chunk)->num_rows()) {
