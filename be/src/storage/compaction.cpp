@@ -235,7 +235,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         bool is_key = (i == 0);
         if (!is_key) {
             // read mask buffer from the beginning
-            mask_buffer->flip_to_read();
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
         }
 
         Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema(), _column_groups[i]);

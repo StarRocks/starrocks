@@ -717,7 +717,7 @@ Status SegmentDump::_output_short_key_string(const std::vector<ColItem>& cols, s
     size_t num_short_key_columns = cols.size();
     const KeyCoder* coder = get_key_coder(cols[idx].type->type());
     uint8_t* tmp_mem = _mem_pool.allocate(item_size);
-    coder->decode_ascending(&convert_key, item_size, tmp_mem, &_mem_pool);
+    RETURN_IF_ERROR(coder->decode_ascending(&convert_key, item_size, tmp_mem, &_mem_pool));
 
     auto logical_type = cols[idx].type->type();
 

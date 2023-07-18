@@ -385,12 +385,11 @@ Status KafkaDataConsumer::cancel(StreamLoadContext* ctx) {
     return Status::OK();
 }
 
-Status KafkaDataConsumer::reset() {
+void KafkaDataConsumer::reset() {
     std::unique_lock<std::mutex> l(_lock);
     _cancelled = false;
     _k_consumer->unassign();
     _non_eof_partition_count = 0;
-    return Status::OK();
 }
 
 Status KafkaDataConsumer::commit(std::vector<RdKafka::TopicPartition*>& offset) {
@@ -597,11 +596,10 @@ Status PulsarDataConsumer::cancel(StreamLoadContext* ctx) {
     return Status::OK();
 }
 
-Status PulsarDataConsumer::reset() {
+void PulsarDataConsumer::reset() {
     std::unique_lock<std::mutex> l(_lock);
     _cancelled = false;
     _p_consumer.close();
-    return Status::OK();
 }
 
 Status PulsarDataConsumer::acknowledge_cumulative(pulsar::MessageId& message_id) {

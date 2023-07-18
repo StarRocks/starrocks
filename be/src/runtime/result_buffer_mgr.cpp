@@ -117,7 +117,7 @@ void ResultBufferMgr::fetch_data(const PUniqueId& finst_id, GetResultBatchCtx* c
     cb->get_batch(ctx);
 }
 
-Status ResultBufferMgr::cancel(const TUniqueId& query_id) {
+void ResultBufferMgr::cancel(const TUniqueId& query_id) {
     std::lock_guard<std::mutex> l(_lock);
     auto iter = _buffer_map.find(query_id);
 
@@ -125,11 +125,9 @@ Status ResultBufferMgr::cancel(const TUniqueId& query_id) {
         iter->second->cancel();
         _buffer_map.erase(iter);
     }
-
-    return Status::OK();
 }
 
-Status ResultBufferMgr::cancel_at_time(time_t cancel_time, const TUniqueId& query_id) {
+void ResultBufferMgr::cancel_at_time(time_t cancel_time, const TUniqueId& query_id) {
     std::lock_guard<std::mutex> l(_timeout_lock);
     auto iter = _timeout_map.find(cancel_time);
 
@@ -139,7 +137,6 @@ Status ResultBufferMgr::cancel_at_time(time_t cancel_time, const TUniqueId& quer
     }
 
     iter->second.push_back(query_id);
-    return Status::OK();
 }
 
 void ResultBufferMgr::cancel_thread() {

@@ -96,7 +96,8 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     tablet_meta_pb.set_in_restore_mode(false);
 
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
-    convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema, compression_type);
+    (void)convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema,
+                                        compression_type);
 
     init_from_pb(&tablet_meta_pb);
     MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());

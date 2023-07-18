@@ -55,7 +55,7 @@ FileResultWriter::FileResultWriter(const ResultFileOptions* file_opts,
         : _file_opts(file_opts), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
 
 FileResultWriter::~FileResultWriter() {
-    _close_file_writer(true);
+    (void)_close_file_writer(true);
 }
 
 Status FileResultWriter::init(RuntimeState* state) {

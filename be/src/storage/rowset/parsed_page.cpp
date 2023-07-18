@@ -100,7 +100,7 @@ public:
             pos_in_data = offset_in_data + skips - skip_nulls;
         }
 
-        _data_decoder->seek_to_position_in_page(pos_in_data);
+        RETURN_IF_ERROR(_data_decoder->seek_to_position_in_page(pos_in_data));
         _offset_in_page = offset;
         return Status::OK();
     }

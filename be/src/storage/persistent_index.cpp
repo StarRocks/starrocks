@@ -461,7 +461,8 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
 
 ImmutableIndexWriter::~ImmutableIndexWriter() {
     if (_wb) {
-        FileSystem::Default()->delete_file(_idx_file_path_tmp);
+        WARN_IF_ERROR(FileSystem::Default()->delete_file(_idx_file_path_tmp),
+                      fmt::format("delete file {} error", _idx_file_path_tmp));
     }
 }
 
@@ -548,7 +549,7 @@ Status ImmutableIndexWriter::write_shard_as_rawbuff(const ImmutableIndex::ShardI
     raw::stl_string_resize_uninitialized(&buff, old_shard_info.bytes);
     RETURN_IF_ERROR(immutable_index->_file->read_at_fully(old_shard_info.offset, buff.data(), buff.size()));
     size_t pos_before = _wb->size();
-    _wb->append(Slice(buff.data(), buff.size()));
+    RETURN_IF_ERROR(_wb->append(Slice(buff.data(), buff.size())));
     size_t pos_after = _wb->size();
     auto shard_info = _meta.add_shards();
     shard_info->set_size(old_shard_info.size);
@@ -1750,9 +1751,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         WritableFileOptions wblock_opts;
         wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wblock_opts, file_name));
-        DeferOp close_block([&wfile] {
+        DeferOp close_block([&wfile, &file_name] {
             if (wfile) {
-                wfile->close();
+                WARN_IF_ERROR(wfile->close(), fmt::format("close file {} error", file_name));
             }
         });
         meta->clear_wals();
@@ -1772,7 +1773,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         std::string file_name = get_l0_index_file_name(_path, version);
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
-        FileSystem::Default()->delete_file(file_name);
+        WARN_IF_ERROR(FileSystem::Default()->delete_file(file_name), fmt::format("delete file {} error", file_name));
         std::set<uint32_t> dumped_shard_idxes;
         {
             // File is closed when archive object is destroyed and file size will be updated after file is
@@ -1909,7 +1910,7 @@ Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& pa
                         LOG(WARNING) << "failed to create bloom filter, status: " << st;
                         return st;
                     }
-                    bf->init(size, 0.05, HASH_MURMUR3_X64_64);
+                    RETURN_IF_ERROR(bf->init(size, 0.05, HASH_MURMUR3_X64_64));
                     RETURN_IF_ERROR(_shards[shard_offset + i]->flush_to_immutable_index(
                             writer, expand_exponent, npage_hint, nbucket, !write_tmp_l1, bf.get()));
                     (*bf_map)[key_size] = std::move(bf);
@@ -2926,7 +2927,8 @@ public:
               _index(index) {}
 
     void run() override {
-        _index->get_from_one_immutable_index(_num, _keys, _values, _keys_info_by_key_size, &_found_keys_info, _idx);
+        (void)_index->get_from_one_immutable_index(_num, _keys, _values, _keys_info_by_key_size, &_found_keys_info,
+                                                   _idx);
     }
 
 private:
@@ -3665,7 +3667,7 @@ Status PersistentIndex::_merge_compaction_internal(ImmutableIndexWriter* writer,
                 LOG(WARNING) << "failed to create bloom filter, status: " << st;
                 return st;
             }
-            bf->init(total_size, 0.05, HASH_MURMUR3_X64_64);
+            RETURN_IF_ERROR(bf->init(total_size, 0.05, HASH_MURMUR3_X64_64));
         }
         // shard iteration example:
         //
@@ -3800,7 +3802,7 @@ Status PersistentIndex::_merge_compaction_advance() {
 
             auto iter = usage_and_size_stat.find(key_size);
             if (iter == usage_and_size_stat.end()) {
-                usage_and_size_stat.insert({key_size, {usage, size}});
+                (void)usage_and_size_stat.insert({key_size, {usage, size}});
             } else {
                 iter->second.first += usage;
                 iter->second.second += size;

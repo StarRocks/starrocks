@@ -68,10 +68,10 @@ public:
     void fetch_data(const PUniqueId& finst_id, GetResultBatchCtx* ctx);
 
     // cancel
-    Status cancel(const TUniqueId& fragment_id);
+    void cancel(const TUniqueId& fragment_id);
 
     // cancel one query at a future time.
-    Status cancel_at_time(time_t cancel_time, const TUniqueId& query_id);
+    void cancel_at_time(time_t cancel_time, const TUniqueId& query_id);
 
 private:
     typedef std::unordered_map<TUniqueId, std::shared_ptr<BufferControlBlock>> BufferMap;

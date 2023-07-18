@@ -153,13 +153,12 @@ Status PartitionedSpillerWriter::acquire_stream(const SpillPartitionInfo* partit
     return Status::OK();
 }
 
-Status PartitionedSpillerWriter::get_spill_partitions(std::vector<const SpillPartitionInfo*>* res) {
+void PartitionedSpillerWriter::get_spill_partitions(std::vector<const SpillPartitionInfo*>* res) {
     for (const auto& [level, partitions] : _level_to_partitions) {
         for (const auto& partition : partitions) {
             res->push_back(partition.get());
         }
     }
-    return Status::OK();
 }
 
 Status PartitionedSpillerWriter::reset_partition(const std::vector<const SpillPartitionInfo*>& partitions) {
@@ -532,11 +531,6 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
     AccumulateWriter left_accumulate_writer(spill_left_partition, _runtime_state->chunk_size());
     AccumulateWriter right_accumulate_writer(spill_right_partition, _runtime_state->chunk_size());
 
-    auto defer = DeferOp([&]() {
-        left_accumulate_writer.flush();
-        right_accumulate_writer.flush();
-    });
-
     while (true) {
         RETURN_IF_ERROR(reader->trigger_restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
         if (!reader->has_output_data()) {
@@ -584,16 +578,18 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
         if (left_channel_size > 0) {
             ChunkPtr left_chunk = chunk->clone_empty();
             left_chunk->append_selective(*chunk, selection.data(), 0, left_channel_size);
-            left_accumulate_writer.write(left_chunk);
+            RETURN_IF_ERROR(left_accumulate_writer.write(left_chunk));
         }
         if (hash_data.size() != left_channel_size) {
             ChunkPtr right_chunk = chunk->clone_empty();
             right_chunk->append_selective(*chunk, selection.data(), left_channel_size,
                                           hash_data.size() - left_channel_size);
-            right_accumulate_writer.write(right_chunk);
+            RETURN_IF_ERROR(right_accumulate_writer.write(right_chunk));
         }
     }
     DCHECK_EQ(restore_rows, partition->num_rows);
+    RETURN_IF_ERROR(left_accumulate_writer.flush());
+    RETURN_IF_ERROR(right_accumulate_writer.flush());
     return Status::OK();
 }
 

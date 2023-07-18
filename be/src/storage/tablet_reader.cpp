@@ -91,7 +91,8 @@ Status TabletReader::prepare() {
     Rowset::acquire_readers(_rowsets);
     // ensure all input rowsets are loaded into memory
     for (const auto& rowset : _rowsets) {
-        rowset->load();
+        // @TODO
+        (void)rowset->load();
     }
     return st;
 }

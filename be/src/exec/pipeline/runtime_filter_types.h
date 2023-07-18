@@ -392,8 +392,9 @@ private:
                 return true;
             }
             _bloom_filter_descriptors = std::move(bloom_filter_descriptors);
-            merge_local_in_filters();
-            merge_local_bloom_filters();
+            // @TODO need confirm
+            (void)merge_local_in_filters();
+            (void)merge_local_bloom_filters();
             return true;
         }
         return false;

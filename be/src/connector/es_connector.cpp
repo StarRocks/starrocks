@@ -215,7 +215,7 @@ Status ESDataSource::_create_scanner() {
 
 void ESDataSource::close(RuntimeState* state) {
     if (_es_reader != nullptr) {
-        _es_reader->close();
+        WARN_IF_ERROR(_es_reader->close(), "es_scan_reader close error");
     }
 }
 

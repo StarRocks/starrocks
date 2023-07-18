@@ -303,11 +303,12 @@ Status DataDir::load() {
     if (load_tablet_status.is_time_out()) {
         Status s = _kv_store->compact();
         if (!s.ok()) {
-            LOG(ERROR) << "data dir " << _path << " compact meta befor load failed";
+            LOG(ERROR) << "data dir " << _path << " compact meta before load failed";
             return s;
         }
         for (auto tablet_id : tablet_ids) {
-            _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+            WARN_IF_ERROR(_tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles),
+                          fmt::format("drop tablet {} error", tablet_id));
         }
         tablet_ids.clear();
         failed_tablet_ids.clear();

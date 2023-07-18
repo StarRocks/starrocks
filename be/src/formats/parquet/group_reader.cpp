@@ -95,7 +95,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
         SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
-        has_filter = _dict_filter_ctx.filter_chunk(&active_chunk, &chunk_filter);
+        ASSIGN_OR_RETURN(has_filter, _dict_filter_ctx.filter_chunk(&active_chunk, &chunk_filter));
     }
 
     // row id filter
@@ -640,16 +640,16 @@ void GroupReader::DictFilterContext::init_chunk(const GroupReaderParam& param, C
     }
 }
 
-bool GroupReader::DictFilterContext::filter_chunk(ChunkPtr* chunk, Filter* filter) {
+StatusOr<bool> GroupReader::DictFilterContext::filter_chunk(ChunkPtr* chunk, Filter* filter) {
     if (_predicates.empty()) return false;
     auto iter = _predicates.begin();
     SlotId slot_id = iter->first;
     auto pred = iter->second;
-    pred->evaluate((*chunk)->get_column_by_slot_id(slot_id).get(), filter->data());
+    RETURN_IF_ERROR(pred->evaluate((*chunk)->get_column_by_slot_id(slot_id).get(), filter->data()));
     while (++iter != _predicates.end()) {
         slot_id = iter->first;
         pred = iter->second;
-        pred->evaluate_and((*chunk)->get_column_by_slot_id(slot_id).get(), filter->data());
+        RETURN_IF_ERROR(pred->evaluate_and((*chunk)->get_column_by_slot_id(slot_id).get(), filter->data()));
     }
     return true;
 }

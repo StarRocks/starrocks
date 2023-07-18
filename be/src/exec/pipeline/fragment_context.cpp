@@ -168,7 +168,8 @@ void FragmentContext::set_final_status(const Status& status) {
                 LOG(WARNING) << ss.str();
             }
             DriverExecutor* executor = _runtime_state->exec_env()->wg_driver_executor();
-            iterate_drivers([executor](const DriverPtr& driver) {
+            // @TODO
+            (void)iterate_drivers([executor](const DriverPtr& driver) {
                 executor->cancel(driver.get());
                 return Status::OK();
             });
@@ -193,8 +194,9 @@ void FragmentContext::cancel(const Status& status) {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
-                                                                                             _fragment_instance_id);
+        // @TODO change to void?
+        (void)starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                _query_id, _fragment_instance_id);
     }
 
     if (_stream_load_contexts.size() > 0) {

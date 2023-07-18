@@ -154,7 +154,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
 
     if (!ctx->status.ok() && ctx->status.code() != TStatusCode::PUBLISH_TIMEOUT) {
         if (ctx->need_rollback) {
-            _exec_env->stream_load_executor()->rollback_txn(ctx);
+            WARN_IF_ERROR(_exec_env->stream_load_executor()->rollback_txn(ctx), "rollback txn error");
             ctx->need_rollback = false;
         }
         if (ctx->body_sink != nullptr) {
@@ -187,7 +187,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
     } else {
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
             ctx->buffer->flip();
-            ctx->body_sink->append(std::move(ctx->buffer));
+            RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
             ctx->buffer = nullptr;
         }
         RETURN_IF_ERROR(ctx->body_sink->finish());
@@ -241,7 +241,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     if (!st.ok()) {
         ctx->status = st;
         if (ctx->need_rollback) {
-            _exec_env->stream_load_executor()->rollback_txn(ctx);
+            WARN_IF_ERROR(_exec_env->stream_load_executor()->rollback_txn(ctx), "rollback txn error");
             ctx->need_rollback = false;
         }
         if (ctx->body_sink != nullptr) {

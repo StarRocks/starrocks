@@ -277,7 +277,7 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(AlterTabletType 
                 // if this is a new alter tablet, has to set its state to not ready
                 // because schema change hanlder depends on it to check whether history data
                 // convert finished
-                tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
+                (void)tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
             }
             // Possible cases:
             // 1. Because system time may rollback, creation_time of new table will be earlier
@@ -1286,7 +1286,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
             // meta from storage, and assuming that no thread will change the tablet state back
             // to 'RUNNING' from 'SHUTDOWN'.
             std::unique_lock l(dropped_tablet->get_header_lock());
-            dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
         }
 
         // Remove tablet meta from storage, crash the program if failed.
@@ -1301,7 +1301,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         {
             // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
-            dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
             dropped_tablet->save_meta();
         }
 

@@ -103,7 +103,8 @@ bool SpillableHashJoinProbeOperator::has_output() const {
             if (_current_reader[i]->has_output_data()) {
                 return true;
             } else if (!_current_reader[i]->has_restore_task()) {
-                _current_reader[i]->trigger_restore(
+                // @TODO change return type for provider?
+                (void)_current_reader[i]->trigger_restore(
                         runtime_state(), *_executor,
                         RESOURCE_TLS_MEMTRACER_GUARD(runtime_state(), std::weak_ptr(_current_reader[i])));
             }
@@ -225,7 +226,8 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
             // TODO: add chunk accumulator here
             auto partitioned_chunk = chunk->clone_empty();
             partitioned_chunk->append_selective(*chunk, selection.data(), from, size);
-            _probers[iter->second]->push_probe_chunk(state, std::move(partitioned_chunk));
+            // @TODO: handle error
+            (void)_probers[iter->second]->push_probe_chunk(state, std::move(partitioned_chunk));
         }
         probe_partition->num_rows += size;
     };
@@ -335,7 +337,7 @@ Status SpillableHashJoinProbeOperator::_restore_probe_partition(RuntimeState* st
             auto chunk_st = _current_reader[i]->restore(
                     state, *_executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_current_reader[i])));
             if (chunk_st.ok() && chunk_st.value() && !chunk_st.value()->is_empty()) {
-                _probers[i]->push_probe_chunk(state, std::move(chunk_st.value()));
+                RETURN_IF_ERROR(_probers[i]->push_probe_chunk(state, std::move(chunk_st.value())));
             } else if (chunk_st.status().is_end_of_file()) {
                 _probe_read_eofs[i] = true;
             } else if (!chunk_st.ok()) {
@@ -431,7 +433,8 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
             _pid_to_build_partition[partition->partition_id] = partition;
         }
 
-        _probe_spiller->set_partition(_build_partitions);
+        // @TODO handle error
+        (void)_probe_spiller->set_partition(_build_partitions);
         COUNTER_SET(metrics.hash_partitions, (int64_t)_build_partitions.size());
     }
 

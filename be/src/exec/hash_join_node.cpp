@@ -263,7 +263,7 @@ Status HashJoinNode::open(RuntimeState* state) {
 
         {
             SCOPED_TIMER(_build_conjunct_evaluate_timer);
-            _evaluate_build_keys(chunk);
+            RETURN_IF_ERROR(_evaluate_build_keys(chunk));
         }
 
         {
@@ -558,7 +558,7 @@ bool HashJoinNode::_has_null(const ColumnPtr& column) {
 Status HashJoinNode::_build(RuntimeState* state) {
     // build hash table
     SCOPED_TIMER(_build_ht_timer);
-    TRY_CATCH_BAD_ALLOC(_ht.build(state));
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state)));
     return Status::OK();
 }
 
@@ -889,7 +889,7 @@ Status HashJoinNode::_push_down_in_filter(RuntimeState* state) {
             builder.use_as_join_runtime_filter();
             Status st = builder.create();
             if (!st.ok()) continue;
-            builder.add_values(column, kHashJoinKeyColumnOffset);
+            RETURN_IF_ERROR(builder.add_values(column, kHashJoinKeyColumnOffset));
             _runtime_in_filters.push_back(builder.get_in_const_predicate());
         }
     }

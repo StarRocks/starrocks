@@ -90,7 +90,7 @@ public:
     virtual std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const = 0;
 
     //Release the resources constructed in init and prepare
-    virtual Status close(RuntimeState* runtime_state, TableFunctionState* context) const = 0;
+    virtual void close(RuntimeState* runtime_state, TableFunctionState* context) const = 0;
 };
 
 using TableFunctionPtr = std::shared_ptr<TableFunction>;

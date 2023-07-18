@@ -118,7 +118,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             column = ColumnHelper::align_return_type(column, type().children[0], cur_chunk->num_rows(), true);
         } else { // split large chunks into small ones to avoid too large or various batch_size
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
-            accumulator.push(std::move(cur_chunk));
+            RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
                 ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));

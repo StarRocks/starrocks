@@ -255,7 +255,8 @@ void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::strin
     std::iota(dict_codes, dict_codes + dict_size, 0);
 
     auto column = BinaryColumn::create();
-    column_iterator->decode_dict_codes(dict_codes, dict_size, column.get());
+    // @TODO chang to void
+    (void)column_iterator->decode_dict_codes(dict_codes, dict_size, column.get());
 
     for (int i = 0; i < dict_size; ++i) {
         dicts->emplace_back(column->get_slice(i).to_string(), dict_codes[i]);
@@ -273,7 +274,8 @@ void ColumnPredicateRewriter::_get_segment_dict_vec(ColumnIterator* iter, Column
     std::iota(dict_codes, dict_codes + dict_size, 0);
 
     auto dict_col = BinaryColumn::create();
-    column_iterator->decode_dict_codes(dict_codes, dict_size, dict_col.get());
+    // @TODO
+    (void)column_iterator->decode_dict_codes(dict_codes, dict_size, dict_col.get());
 
     if (field_nullable) {
         // create nullable column with NULL at last.
@@ -374,7 +376,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     builder.set_is_not_in(is_not_in);
     builder.use_array_set(code_size);
     DCHECK_IF_ERROR(builder.create());
-    builder.add_values(used_values, 0);
+    RETURN_IF_ERROR(builder.add_values(used_values, 0));
     ExprContext* filter = builder.get_in_const_predicate();
 
     DCHECK_IF_ERROR(filter->prepare(state));

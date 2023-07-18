@@ -27,9 +27,8 @@ Status DummyLoadPathMgr::allocate_dir(const std::string& db, const std::string& 
 
 void DummyLoadPathMgr::get_load_data_path(std::vector<std::string>* data_paths) {}
 
-Status DummyLoadPathMgr::get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) {
+void DummyLoadPathMgr::get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) {
     *error_path = "";
-    return Status::OK();
 }
 
 std::string DummyLoadPathMgr::get_load_error_absolute_path(const std::string& file_path) {

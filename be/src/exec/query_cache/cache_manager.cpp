@@ -23,11 +23,10 @@ static void delete_cache_entry(const CacheKey& key, void* value) {
     delete cache_value;
 }
 
-Status CacheManager::populate(const std::string& key, const CacheValue& value) {
+void CacheManager::populate(const std::string& key, const CacheValue& value) {
     auto* cache_value = new CacheValue(value);
     auto* handle = _cache.insert(key, cache_value, cache_value->size(), &delete_cache_entry, CachePriority::NORMAL);
     DeferOp defer([this, handle]() { _cache.release(handle); });
-    return handle != nullptr ? Status::OK() : Status::InternalError("Insert failure");
 }
 
 static const Status CACHE_MISS = Status::NotFound("CacheMiss");

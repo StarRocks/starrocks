@@ -69,7 +69,7 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
 
     Status set_offset(int64_t table_version, int64_t changelog_id) override;
-    Status reset_status() override;
+    void reset_status() override;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;

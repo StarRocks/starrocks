@@ -304,7 +304,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         ExecEnv::GetInstance()->load_mem_tracker());
-        StorageEngine::instance()->execute_task(&engine_task);
+        WARN_IF_ERROR(StorageEngine::instance()->execute_task(&engine_task), "execute EngineBatchLoadTask error");
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -419,7 +419,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         ExecEnv::GetInstance()->load_mem_tracker());
-        StorageEngine::instance()->execute_task(&engine_task);
+        WARN_IF_ERROR(StorageEngine::instance()->execute_task(&engine_task), "execute EngineBatchLoadTask error");
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -597,7 +597,7 @@ void* ReportDiskStateTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             continue;
         }
         std::vector<DataDirInfo> data_dir_infos;
-        StorageEngine::instance()->get_all_data_dir_info(&data_dir_infos, true /* update */);
+        (void)StorageEngine::instance()->get_all_data_dir_info(&data_dir_infos, true /* update */);
 
         std::map<std::string, TDisk> disks;
         for (auto& root_path_info : data_dir_infos) {

@@ -140,7 +140,7 @@ Status HttpServiceBE::start() {
 
     // register pprof actions
     if (!config::pprof_profile_dir.empty()) {
-        fs::create_directories(config::pprof_profile_dir);
+        RETURN_IF_ERROR(fs::create_directories(config::pprof_profile_dir));
     }
 
     auto* heap_action = new HeapAction();

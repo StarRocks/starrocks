@@ -46,7 +46,7 @@ Status BinlogBuilder::commit(BinlogBuildResult* result) {
     if (_current_writer->file_size() > _params->max_file_size) {
         // ignore close failure for the last writer because
         // all binlog data has been committed (persisted)
-        _close_current_writer();
+        (void)_close_current_writer();
         _current_writer.reset();
     }
 
@@ -63,7 +63,7 @@ void BinlogBuilder::abort(BinlogBuildResult* result) {
     //    deleting newly created binlog files
     bool fail_delete_new_files = false;
     if (!_new_files.empty()) {
-        _close_current_writer();
+        (void)_close_current_writer();
         Status st = BinlogBuilder::delete_binlog_files(_new_files);
         fail_delete_new_files = !st.ok();
     } else if (_current_writer != nullptr) {
@@ -73,7 +73,7 @@ void BinlogBuilder::abort(BinlogBuildResult* result) {
         if (_current_writer->is_writing()) {
             Status status = _abort_current_writer();
             if (!status.ok()) {
-                _close_current_writer();
+                (void)_close_current_writer();
             }
         }
     }
@@ -282,7 +282,8 @@ BinlogFileWriterPtr BinlogBuilder::discard_binlog_build_result(int64_t version, 
         // 2.1 reset the writer to the previous meta for reuse
         st = current_active_writer->reset(params->active_file_meta.get());
         if (!st.ok()) {
-            current_active_writer->close(false);
+            WARN_IF_ERROR(current_active_writer->close(false),
+                          fmt::format("Fail to close current active writer {}", current_active_writer->file_path()));
             LOG(WARNING) << "Fail to reset active writer when discarding data for version " << version
                          << ", file path: " << current_active_writer->file_path() << ", " << st;
         } else {

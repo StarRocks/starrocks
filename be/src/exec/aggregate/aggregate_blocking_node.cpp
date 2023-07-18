@@ -235,7 +235,8 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
         return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, [this]() {
             std::vector<ExprContext*> group_by_expr_ctxs;
-            Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
+            // @TODO
+            (void)Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
             return group_by_expr_ctxs;
         });
     };

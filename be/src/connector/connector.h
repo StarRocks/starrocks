@@ -81,7 +81,7 @@ protected:
 class StreamDataSource : public DataSource {
 public:
     virtual Status set_offset(int64_t table_version, int64_t changelog_id) = 0;
-    virtual Status reset_status() = 0;
+    virtual void reset_status() = 0;
 
     // how many rows returned in the current epoch.
     virtual int64_t num_rows_read_in_epoch() const = 0;

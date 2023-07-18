@@ -30,7 +30,7 @@ Status IcebergTableSinkOperator::prepare(RuntimeState* state) {
 void IcebergTableSinkOperator::close(RuntimeState* state) {
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
-            writer.second->close(state);
+            WARN_IF_ERROR(writer.second->close(state), "close writer error");
         }
     }
     Operator::close(state);
@@ -62,7 +62,7 @@ bool IcebergTableSinkOperator::is_finished() const {
 Status IcebergTableSinkOperator::set_finishing(RuntimeState* state) {
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
-            writer.second->close(state);
+            WARN_IF_ERROR(writer.second->close(state), "close writer error");
         }
     }
 
@@ -98,9 +98,9 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
             _partition_writers.insert({ICEBERG_UNPARTITIONED_TABLE_LOCATION, std::move(writer)});
         }
 
-        _partition_writers[ICEBERG_UNPARTITIONED_TABLE_LOCATION]->append_chunk(chunk.get(), state);
+        RETURN_IF_ERROR(_partition_writers[ICEBERG_UNPARTITIONED_TABLE_LOCATION]->append_chunk(chunk.get(), state));
     } else if (_is_static_partition_insert && !_partition_writers.empty()) {
-        _partition_writers.begin()->second->append_chunk(chunk.get(), state);
+        RETURN_IF_ERROR(_partition_writers.begin()->second->append_chunk(chunk.get(), state));
     } else {
         Columns partitions_columns;
         partitions_columns.resize(_partition_expr.size());
@@ -131,9 +131,9 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
             _partition_writers.insert({partition_location, std::move(writer)});
-            _partition_writers[partition_location]->append_chunk(chunk.get(), state);
+            RETURN_IF_ERROR(_partition_writers[partition_location]->append_chunk(chunk.get(), state));
         } else {
-            partition_writer->second->append_chunk(chunk.get(), state);
+            RETURN_IF_ERROR(partition_writer->second->append_chunk(chunk.get(), state));
         }
     }
     return Status::OK();
@@ -302,7 +302,8 @@ void IcebergTableSinkOperator::add_iceberg_commit_info(starrocks::parquet::Async
     iceberg_data_file.__set_record_count(writer->metadata()->num_rows());
     iceberg_data_file.__set_file_size_in_bytes(writer->file_size());
     std::vector<int64_t> split_offsets;
-    writer->split_offsets(split_offsets);
+    // @TODO
+    (void)writer->split_offsets(split_offsets);
     iceberg_data_file.__set_split_offsets(split_offsets);
     iceberg_data_file.__set_column_stats(iceberg_column_stats);
 

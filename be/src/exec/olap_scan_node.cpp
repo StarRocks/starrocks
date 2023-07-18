@@ -214,7 +214,7 @@ void OlapScanNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
     }
-    exec_debug_action(TExecNodePhase::CLOSE);
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
     _update_status(Status::Cancelled("closed"));
     _result_chunks.shutdown();
     while (_running_threads.load(std::memory_order_acquire) > 0) {
@@ -340,7 +340,7 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
             // _chunk_pool is empty and scanner has been placed into _pending_scanners,
             // nothing to do here.
         } else if (status.is_end_of_file()) {
-            scanner->close(runtime_state());
+            (void)scanner->close(runtime_state());
             _closed_scanners.fetch_add(1, std::memory_order_release);
             // pick next scanner to run.
             std::lock_guard<std::mutex> l(_mtx);
@@ -350,13 +350,13 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
             }
         } else {
             _update_status(status);
-            scanner->close(runtime_state());
+            (void)scanner->close(runtime_state());
             _closed_scanners.fetch_add(1, std::memory_order_release);
             _close_pending_scanners();
         }
     } else {
         if (scanner != nullptr) {
-            scanner->close(runtime_state());
+            (void)scanner->close(runtime_state());
             _closed_scanners.fetch_add(1, std::memory_order_release);
             _close_pending_scanners();
         } else {
@@ -619,7 +619,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
+    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state));
 
     int tablet_count = _scan_ranges.size();
     for (int k = 0; k < tablet_count; ++k) {
@@ -799,7 +799,7 @@ void OlapScanNode::_close_pending_scanners() {
     std::lock_guard<std::mutex> l(_mtx);
     while (!_pending_scanners.empty()) {
         TabletScanner* scanner = _pending_scanners.pop();
-        scanner->close(runtime_state());
+        (void)scanner->close(runtime_state());
         _closed_scanners.fetch_add(1, std::memory_order_release);
     }
 }

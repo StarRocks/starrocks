@@ -84,7 +84,7 @@ void QueryContext::count_down_fragments() {
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
-        query_trace->dump();
+        WARN_IF_ERROR(query_trace->dump(), fmt::format("dump query trace error, query id: {}", print_id(_query_id)));
     }
 }
 

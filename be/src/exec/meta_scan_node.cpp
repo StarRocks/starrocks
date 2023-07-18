@@ -25,7 +25,7 @@ MetaScanNode::MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
 
 MetaScanNode::~MetaScanNode() {
     if (runtime_state() != nullptr) {
-        close(runtime_state());
+        (void)close(runtime_state());
     }
 }
 

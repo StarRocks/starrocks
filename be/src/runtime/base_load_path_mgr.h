@@ -33,7 +33,7 @@ public:
 
     virtual void get_load_data_path(std::vector<std::string>* data_paths) = 0;
 
-    virtual Status get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) = 0;
+    virtual void get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) = 0;
     virtual std::string get_load_error_absolute_path(const std::string& file_path) = 0;
     const std::string& get_load_error_file_dir() const { return _error_log_dir; }
 

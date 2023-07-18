@@ -977,7 +977,8 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
 
-    _build_final_chunk(_context);
+    // @TODO change to void?
+    RETURN_IF_ERROR(_build_final_chunk(_context));
     chunk = _context->_final_chunk.get();
 
     bool need_switch_context = false;
@@ -1038,7 +1039,8 @@ void SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
         const ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
         for (ColumnIterator* iter : to->_column_iterators) {
-            iter->seek_to_ordinal(ordinal);
+            // @TODO handle error?
+            (void)iter->seek_to_ordinal(ordinal);
         }
         _context->close();
     }
@@ -1090,11 +1092,11 @@ StatusOr<uint16_t> SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid
         SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
         const ColumnPredicate* pred = _vectorized_preds[0];
         Column* c = chunk->get_column_by_id(pred->column_id()).get();
-        pred->evaluate(c, _selection.data(), from, to);
+        RETURN_IF_ERROR(pred->evaluate(c, _selection.data(), from, to));
         for (int i = 1; i < _vectorized_preds.size(); ++i) {
             pred = _vectorized_preds[i];
             c = chunk->get_column_by_id(pred->column_id()).get();
-            pred->evaluate_and(c, _selection.data(), from, to);
+            RETURN_IF_ERROR(pred->evaluate_and(c, _selection.data(), from, to));
         }
     }
 
@@ -1155,12 +1157,12 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
         SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
         const auto* pred = _expr_ctx_preds[0];
         Column* c = chunk->get_column_by_id(pred->column_id()).get();
-        pred->evaluate(c, _selection.data(), 0, chunk_size);
+        RETURN_IF_ERROR(pred->evaluate(c, _selection.data(), 0, chunk_size));
 
         for (int i = 1; i < _expr_ctx_preds.size(); ++i) {
             pred = _expr_ctx_preds[i];
             c = chunk->get_column_by_id(pred->column_id()).get();
-            pred->evaluate_and(c, _selection.data(), 0, chunk_size);
+            RETURN_IF_ERROR(pred->evaluate_and(c, _selection.data(), 0, chunk_size));
         }
 
         size_t hit_count = SIMD::count_nonzero(_selection.data(), chunk_size);

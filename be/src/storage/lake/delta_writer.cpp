@@ -202,7 +202,7 @@ void DeltaWriterImpl::TEST_set_partial_update(std::shared_ptr<const TabletSchema
                                               const std::vector<int32_t>& referenced_column_ids) {
     _partial_update_tablet_schema = std::move(tschema);
     _referenced_column_ids = referenced_column_ids;
-    build_schema_and_writer();
+    (void)build_schema_and_writer();
     // recover _tablet_schema with partial update schema
     _tablet_schema = _partial_update_tablet_schema;
 }

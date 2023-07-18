@@ -24,7 +24,7 @@ AggregateBaseNode::AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, c
 
 AggregateBaseNode::~AggregateBaseNode() {
     if (runtime_state() != nullptr) {
-        close(runtime_state());
+        (void)close(runtime_state());
     }
 }
 

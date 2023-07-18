@@ -31,12 +31,12 @@
 
 namespace starrocks::pipeline {
 
-void NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
+Status NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
     if (build_chunk == nullptr || build_chunk->is_empty()) {
-        return;
+        return Status::OK();
     }
     _num_rows += build_chunk->num_rows();
-    _accumulator.push(std::move(build_chunk));
+    return _accumulator.push(std::move(build_chunk));
 }
 
 Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk,
@@ -46,7 +46,7 @@ Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, C
     }
 
     _num_rows += build_chunk->num_rows();
-    _accumulator.push(std::move(build_chunk));
+    RETURN_IF_ERROR(_accumulator.push(std::move(build_chunk)));
     if (auto chunk = _accumulator.pull()) {
         RETURN_IF_ERROR(_spiller->spill(state, chunk, executor, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
     }
@@ -94,7 +94,7 @@ Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* du
 
     stream = spill::SpillInputStream::union_all(spilled_input_streams);
     _reader = std::make_shared<spill::SpillerReader>(dummy_spiller);
-    RETURN_IF_ERROR(_reader->set_stream(std::move(stream)));
+    _reader->set_stream(std::move(stream));
 
     return Status::OK();
 }
@@ -216,8 +216,8 @@ const std::vector<uint8_t> NLJoinContext::get_shared_build_match_flag() const {
     return _shared_build_match_flag;
 }
 
-void NLJoinContext::append_build_chunk(int32_t sinker_id, const ChunkPtr& chunk) {
-    _input_channel[sinker_id]->add_chunk(chunk);
+Status NLJoinContext::append_build_chunk(int32_t sinker_id, const ChunkPtr& chunk) {
+    return _input_channel[sinker_id]->add_chunk(chunk);
 }
 
 size_t NLJoinContext::channel_num_rows(int32_t sinker_id) {
@@ -254,7 +254,7 @@ Status NLJoinContext::finish_one_right_sinker(int32_t sinker_id, RuntimeState* s
 Status NLJoinContext::finish_one_left_prober(RuntimeState* state) {
     if (_num_left_probers == _num_finished_left_probers.fetch_add(1) + 1) {
         // All the probers have finished, so the builders can be short-circuited.
-        set_finished();
+        RETURN_IF_ERROR(set_finished());
     }
     return Status::OK();
 }

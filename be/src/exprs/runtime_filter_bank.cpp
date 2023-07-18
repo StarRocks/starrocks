@@ -314,8 +314,9 @@ void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, c
     _probe_expr_ctx->close(state);
     // create new probe expr and open it.
     _probe_expr_ctx = state->obj_pool()->add(new ExprContext(new_probe_expr_ctx->root()));
-    _probe_expr_ctx->prepare(state);
-    _probe_expr_ctx->open(state);
+    // @TODO use CHECK?
+    (void)_probe_expr_ctx->prepare(state);
+    (void)_probe_expr_ctx->open(state);
 }
 
 std::string RuntimeFilterProbeDescriptor::debug_string() const {

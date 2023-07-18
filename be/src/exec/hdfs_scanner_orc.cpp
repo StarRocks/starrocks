@@ -283,7 +283,9 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
 
         // do evaluation with dictionary.
-        ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(), filter_ptr);
+        // @TODO what if eval error
+        (void)ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(),
+                                       filter_ptr);
         if (dict_value_chunk->num_rows() == 0) {
             // release memory early.
             _dict_filter_eval_cache.clear();

@@ -349,7 +349,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                 LOG(WARNING) << fmt::format("transmit chunk rpc failed:{}, msg:{}", print_id(ctx.instance_id),
                                             status.message());
             } else {
-                _try_to_send_rpc(ctx.instance_id, [&]() {
+                (void)_try_to_send_rpc(ctx.instance_id, [&]() {
                     _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receiver_post_process_time());
                     _process_send_window(ctx.instance_id, ctx.sequence);
                 });

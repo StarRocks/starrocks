@@ -27,7 +27,7 @@ public:
 
     bool probe_chunk_empty() const { return _probe_chunk == nullptr; }
 
-    void push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk);
+    Status push_probe_chunk(RuntimeState* state, ChunkPtr&& chunk);
 
     // probe hash table
     StatusOr<ChunkPtr> probe_chunk(RuntimeState* state, JoinHashTable* hash_table);

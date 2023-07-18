@@ -131,7 +131,7 @@ Status Spiller::_acquire_input_stream(RuntimeState* state) {
     std::shared_ptr<SpillInputStream> input_stream;
 
     RETURN_IF_ERROR(_writer->acquire_stream(&input_stream));
-    RETURN_IF_ERROR(_reader->set_stream(std::move(input_stream)));
+    _reader->set_stream(std::move(input_stream));
 
     return Status::OK();
 }

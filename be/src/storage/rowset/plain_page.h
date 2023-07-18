@@ -147,7 +147,7 @@ public:
 
         _parsed = true;
 
-        seek_to_position_in_page(0);
+        RETURN_IF_ERROR(seek_to_position_in_page(0));
         return Status::OK();
     }
 

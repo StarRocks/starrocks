@@ -590,7 +590,7 @@ Status StoredColumnReader::_next_selected_page(size_t records_to_read, ColumnCon
             RETURN_IF_ERROR(_reader->load_page());
             _num_values_left_in_cur_page = _reader->num_values();
             size_t batch_size = records_to_read;
-            _lazy_load_page_rows(batch_size, content_type, dst);
+            RETURN_IF_ERROR(_lazy_load_page_rows(batch_size, content_type, dst));
             _num_values_skip_in_cur_page = 0;
             break;
         }

@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include "common/status.h"
+#include "fmt/format.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/seekable_input_stream.h"
 
@@ -49,7 +50,7 @@ public:
     void seek_to_offset(uint64_t offset) {
         _offset = offset;
         _next_header_pos = offset;
-        _stream->seek(offset);
+        WARN_IF_ERROR(_stream->seek(offset), fmt::format("seek to offset {} error", offset));
     }
 
     uint64_t get_offset() const { return _offset; }

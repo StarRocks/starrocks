@@ -279,7 +279,7 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
     _waiting_rpc.push_back(ctx);
 }
 
-Status BufferControlBlock::close(Status exec_status) {
+void BufferControlBlock::close(Status exec_status) {
     std::unique_lock<std::mutex> l(_lock);
     _is_close = true;
     _status = std::move(exec_status);
@@ -298,10 +298,9 @@ Status BufferControlBlock::close(Status exec_status) {
         }
         _waiting_rpc.clear();
     }
-    return Status::OK();
 }
 
-Status BufferControlBlock::cancel() {
+void BufferControlBlock::cancel() {
     std::unique_lock<std::mutex> l(_lock);
     _is_cancelled = true;
     _data_removal.notify_all();
@@ -310,7 +309,6 @@ Status BufferControlBlock::cancel() {
         ctx->on_failure(Status::Cancelled("Cancelled BufferControlBlock::cancel"));
     }
     _waiting_rpc.clear();
-    return Status::OK();
 }
 
 } // namespace starrocks

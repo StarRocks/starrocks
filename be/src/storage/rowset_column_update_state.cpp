@@ -232,7 +232,8 @@ Status RowsetColumnUpdateState::_resolve_conflict(Tablet* tablet, uint32_t rowse
     int64_t t_start = MonotonicMillis();
     // rebuild src_rss_rowids;
     DCHECK(_upserts[segment_id]->size() == _partial_update_states[segment_id].src_rss_rowids.size());
-    index.get(*_upserts[segment_id], &_partial_update_states[segment_id].src_rss_rowids);
+    // @TODO should handle error?
+    RETURN_IF_ERROR(index.get(*_upserts[segment_id], &_partial_update_states[segment_id].src_rss_rowids));
     int64_t t_read_index = MonotonicMillis();
     // rebuild rss_rowid_to_update_rowid
     _partial_update_states[segment_id].build_rss_rowid_to_update_rowid();
@@ -501,7 +502,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
         RETURN_IF_ERROR(_read_chunk_from_update(each.second, update_file_iters, rowids, update_chunk_ptr.get()));
         int64_t t3 = MonotonicMillis();
         // 4.3 merge source chunk and update chunk
-        RETURN_IF_ERROR(source_chunk_ptr->update_rows(*update_chunk_ptr, rowids.data()));
+        source_chunk_ptr->update_rows(*update_chunk_ptr, rowids.data());
         // 4.4 write column to delta column file
         int64_t t4 = MonotonicMillis();
         uint64_t segment_file_size = 0;

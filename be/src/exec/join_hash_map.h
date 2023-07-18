@@ -691,7 +691,7 @@ public:
     void close();
 
     Status build(RuntimeState* state);
-    Status reset_probe_state(RuntimeState* state);
+    void reset_probe_state(RuntimeState* state);
     Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 

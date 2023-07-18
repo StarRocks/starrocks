@@ -191,7 +191,7 @@ public:
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
         SparseRangeIterator<> iter = range.new_iterator();
         while (to_read > 0 && _cur_index < _num_elements) {
-            seek_to_position_in_page(iter.begin());
+            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
             Range<> r = iter.next(to_read);
             const size_t ori_size = dst->size();
             dst->resize(ori_size + r.span_size());

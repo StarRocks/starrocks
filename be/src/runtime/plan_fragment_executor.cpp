@@ -141,7 +141,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        scan_node->set_scan_ranges(scan_ranges);
+        (void)scan_node->set_scan_ranges(scan_ranges);
         VLOG(1) << "scan_node_Id=" << scan_node->id() << " size=" << scan_ranges.size();
     }
 
@@ -283,7 +283,7 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
 
 void PlanFragmentExecutor::collect_query_statistics() {
     _query_statistics->clear();
-    _plan->collect_query_statistics(_query_statistics.get());
+    (void)_plan->collect_query_statistics(_query_statistics.get());
 }
 
 void PlanFragmentExecutor::send_report(bool done) {
@@ -352,7 +352,7 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
         // if current `_status` is ok, set it to `new_status` to record the error.
         if (_status.ok()) {
             if (new_status.is_mem_limit_exceeded()) {
-                _runtime_state->set_mem_limit_exceeded(new_status.get_error_msg());
+                (void)_runtime_state->set_mem_limit_exceeded(new_status.get_error_msg());
             }
             _status = new_status;
             if (_runtime_state->query_options().query_type == TQueryType::EXTERNAL) {
@@ -380,7 +380,7 @@ void PlanFragmentExecutor::cancel() {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+        (void)starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                 _runtime_state->fragment_instance_id());
     }
     if (_stream_load_contexts.size() > 0) {
@@ -445,7 +445,7 @@ void PlanFragmentExecutor::close() {
              query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
              query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
             !_runtime_state->is_cancelled()) {
-            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+            (void)starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                     _runtime_state->fragment_instance_id());
         }
 
@@ -473,9 +473,9 @@ void PlanFragmentExecutor::close() {
                     std::lock_guard<std::mutex> l(_status_lock);
                     status = _status;
                 }
-                _sink->close(runtime_state(), status);
+                (void)_sink->close(runtime_state(), status);
             } else {
-                _sink->close(runtime_state(), Status::InternalError("prepare failed"));
+                (void)_sink->close(runtime_state(), Status::InternalError("prepare failed"));
             }
         }
 

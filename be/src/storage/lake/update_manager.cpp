@@ -101,10 +101,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     }
 
     for (const auto& one_delete : state.deletes()) {
-        index.erase(*one_delete, &new_deletes);
+        (void)index.erase(*one_delete, &new_deletes);
     }
     for (const auto& one_delete : state.auto_increment_deletes()) {
-        index.erase(*one_delete, &new_deletes);
+        (void)index.erase(*one_delete, &new_deletes);
     }
     // 4. generate delvec
     size_t ndelvec = new_deletes.size();
@@ -165,7 +165,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
 Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const std::vector<ColumnUniquePtr>& upserts,
                                  PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes) {
-    index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+    (void)index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
     return Status::OK();
 }
 
@@ -180,7 +180,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
     read_column_ids.push_back(condition_column);
 
     std::vector<uint64_t> old_rowids(upserts[upsert_idx]->size());
-    index.get(*upserts[upsert_idx], &old_rowids);
+    (void)index.get(*upserts[upsert_idx], &old_rowids);
     bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
     if (!non_old_value) {
         std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
@@ -218,8 +218,8 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
             } else {
                 int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
                 if (r > 0) {
-                    index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
-                                 idx_begin + upsert_idx_step, new_deletes);
+                    (void)index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                       idx_begin + upsert_idx_step, new_deletes);
 
                     idx_begin = j + 1;
                     upsert_idx_step = 0;
@@ -233,11 +233,11 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
         }
 
         if (idx_begin < old_column->size()) {
-            index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin, idx_begin + upsert_idx_step,
-                         new_deletes);
+            (void)index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin, idx_begin + upsert_idx_step,
+                               new_deletes);
         }
     } else {
-        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+        (void)index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
     }
 
     return Status::OK();
@@ -269,7 +269,7 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
             auto& pks = *upserts[i];
-            index.get(pks, (*rss_rowids)[i]);
+            (void)index.get(pks, (*rss_rowids)[i]);
         }
     });
 }
@@ -282,7 +282,7 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
         uint32_t num_segments = upserts.size();
         for (size_t i = 0; i < num_segments; i++) {
             auto& pks = *upserts[i];
-            index.get(pks, &((*rss_rowids)[i]));
+            (void)index.get(pks, &((*rss_rowids)[i]));
         }
     });
 }
@@ -308,7 +308,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
                                 tablet_column.is_nullable(), type_info, tablet_column.length(), 1);
                 ColumnIteratorOptions iter_opts;
                 RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-                default_value_iter->fetch_values_by_rowid(nullptr, 1, (*columns)[i].get());
+                RETURN_IF_ERROR(default_value_iter->fetch_values_by_rowid(nullptr, 1, (*columns)[i].get()));
             } else {
                 (*columns)[i]->append_default();
             }
@@ -488,7 +488,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         uint32_t rssid = rowset_id + i;
         tmp_deletes.clear();
         // replace will not grow hashtable, so don't need to check memory limit
-        index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
+        (void)index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
             dv->init(metadata.version(), nullptr, 0);

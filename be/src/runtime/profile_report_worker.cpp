@@ -55,12 +55,11 @@ Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, co
     return Status::OK();
 }
 
-Status ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
+void ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
     LOG(INFO) << "unregister_pipeline_load query_id=" << print_id(query_id)
               << ", fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_pipeline_report_mutex);
     _pipeline_report_tasks.erase(PipeLineReportTaskKey(query_id, fragment_instance_id));
-    return Status::OK();
 }
 
 void ProfileReportWorker::_start_report_profile() {

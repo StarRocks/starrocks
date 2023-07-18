@@ -599,7 +599,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     std::shared_ptr<JoinRuntimeFilter> shared_rf(rf);
     // for pipeline engine
     if (request.has_is_pipeline() && request.is_pipeline()) {
-        receive_total_runtime_filter_pipeline(request, shared_rf);
+        (void)receive_total_runtime_filter_pipeline(request, shared_rf);
     } else {
         _exec_env->fragment_mgr()->receive_runtime_filter(request, shared_rf);
     }

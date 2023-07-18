@@ -124,8 +124,8 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
     auto iter = expr_ctxs->begin();
     while (iter != expr_ctxs->end()) {
         if ((*iter)->root()->is_bound(_tuple_ids)) {
-            (*iter)->prepare(state);
-            (*iter)->open(state);
+            (void)(*iter)->prepare(state);
+            (void)(*iter)->open(state);
             _conjunct_ctxs.push_back(*iter);
             iter = expr_ctxs->erase(iter);
         } else {
@@ -321,7 +321,7 @@ Status ExecNode::reset(RuntimeState* state) {
 Status ExecNode::collect_query_statistics(QueryStatistics* statistics) {
     DCHECK(statistics != nullptr);
     for (auto child_node : _children) {
-        child_node->collect_query_statistics(statistics);
+        RETURN_IF_ERROR(child_node->collect_query_statistics(statistics));
     }
     return Status::OK();
 }
@@ -331,7 +331,7 @@ void ExecNode::close(RuntimeState* state) {
         return;
     }
     _is_closed = true;
-    exec_debug_action(TExecNodePhase::CLOSE);
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
 
     if (_rows_returned_counter != nullptr) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);

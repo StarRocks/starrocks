@@ -698,7 +698,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
     // clear linked files if errors happen
     if (!res.ok()) {
-        fs::remove(linked_success_files);
+        RETURN_IF_ERROR(fs::remove(linked_success_files));
     }
 
     return res;

@@ -68,7 +68,7 @@ public:
     // return ERROR
     virtual Status cancel(StreamLoadContext* ctx) = 0;
     // reset the data consumer before being reused
-    virtual Status reset() = 0;
+    virtual void reset() = 0;
     // return true the if the consumer match the need
     virtual bool match(StreamLoadContext* ctx) = 0;
 
@@ -134,7 +134,7 @@ public:
     Status consume(StreamLoadContext* ctx) override { return Status::OK(); }
     Status cancel(StreamLoadContext* ctx) override;
     // reassign partition topics
-    Status reset() override;
+    void reset() override;
     bool match(StreamLoadContext* ctx) override;
     // commit kafka offset
     Status commit(std::vector<RdKafka::TopicPartition*>& offset);
@@ -187,7 +187,7 @@ public:
     Status consume(StreamLoadContext* ctx) override { return Status::OK(); }
     Status cancel(StreamLoadContext* ctx) override;
     // reassign partition topics
-    Status reset() override;
+    void reset() override;
     bool match(StreamLoadContext* ctx) override;
     // acknowledge pulsar message
     Status acknowledge_cumulative(pulsar::MessageId& message_id);

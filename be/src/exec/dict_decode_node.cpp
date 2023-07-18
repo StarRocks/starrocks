@@ -77,7 +77,7 @@ Status DictDecodeNode::open(RuntimeState* state) {
         auto dict_not_contains_cid = dict_iter == global_dict.end();
         if (dict_not_contains_cid) {
             auto& [expr_ctx, dict_ctx] = v;
-            _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+            RETURN_IF_ERROR(_dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx));
             if (!dict_ctx.could_apply_dict_optimize) {
                 return Status::InternalError(fmt::format(
                         "Not found dict for function-called cid:{} it may cause by unsupported function", slot_id));

@@ -235,9 +235,9 @@ bool HashJoiner::has_output() const {
     return false;
 }
 
-void HashJoiner::push_chunk(RuntimeState* state, ChunkPtr&& chunk) {
+Status HashJoiner::push_chunk(RuntimeState* state, ChunkPtr&& chunk) {
     DCHECK(chunk && !chunk->is_empty());
-    _hash_join_prober->push_probe_chunk(state, std::move(chunk));
+    return _hash_join_prober->push_probe_chunk(state, std::move(chunk));
 }
 
 StatusOr<ChunkPtr> HashJoiner::pull_chunk(RuntimeState* state) {
@@ -330,7 +330,8 @@ void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
 
 void HashJoiner::set_prober_finished() {
     if (++_num_finished_probers == _num_probers) {
-        set_finished();
+        // @TODO
+        (void)set_finished();
     }
 }
 void HashJoiner::decr_prober(RuntimeState* state) {
@@ -544,7 +545,7 @@ Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
             if (probe_expr->type().is_string_type()) {
                 _string_key_columns.emplace_back(column);
             }
-            builder.add_values(column, kHashJoinKeyColumnOffset);
+            RETURN_IF_ERROR(builder.add_values(column, kHashJoinKeyColumnOffset));
             _runtime_in_filters.push_back(builder.get_in_const_predicate());
         }
     }

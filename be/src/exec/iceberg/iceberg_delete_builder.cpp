@@ -42,7 +42,11 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
     std::unique_ptr<IcebergDeleteFileIterator> iter(new IcebergDeleteFileIterator());
     RETURN_IF_ERROR(iter->init(_fs, timezone, delete_file_path, file_length, slot_descriptors, true));
     std::shared_ptr<::arrow::RecordBatch> batch;
-    while (iter->has_next()) {
+    while (true) {
+        ASSIGN_OR_RETURN(bool has_next, iter->has_next());
+        if (!has_next) {
+            break;
+        }
         batch = iter->next();
         ::arrow::StringArray* file_path_array = static_cast<arrow::StringArray*>(batch->column(0).get());
         ::arrow::Int64Array* pos_array = static_cast<arrow::Int64Array*>(batch->column(1).get());

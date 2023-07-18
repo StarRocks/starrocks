@@ -174,7 +174,7 @@ public:
         _bit_width = (Type == TYPE_BOOLEAN) ? 1 : SIZE_OF_TYPE * 8;
         _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
                                            _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
-        seek_to_position_in_page(0);
+        RETURN_IF_ERROR(seek_to_position_in_page(0));
         return Status::OK();
     }
 
@@ -221,7 +221,7 @@ public:
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
         SparseRangeIterator<> iter = range.new_iterator();
         while (to_read > 0) {
-            seek_to_position_in_page(iter.begin());
+            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
             Range<> r = iter.next(to_read);
             for (size_t i = 0; i < r.span_size(); ++i) {
                 if (PREDICT_FALSE(!_rle_decoder.Get(&value))) {

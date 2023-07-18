@@ -71,7 +71,7 @@ public:
                           .set_max_queue_size(INT_MAX)
                           .build(&_thread_pool);
         DCHECK(st.ok());
-        _data_consumer_pool.start_bg_worker();
+        WARN_IF_ERROR(_data_consumer_pool.start_bg_worker(), "Failed to start data consumer pool");
     }
 
     ~RoutineLoadTaskExecutor() noexcept {

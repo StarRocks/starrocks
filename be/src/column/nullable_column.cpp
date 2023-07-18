@@ -204,23 +204,21 @@ void NullableColumn::update_has_null() {
     _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0);
 }
 
-Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
+void NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t replace_num = src.size();
     if (src.is_nullable()) {
         const auto& c = down_cast<const NullableColumn&>(src);
-        RETURN_IF_ERROR(_null_column->update_rows(*c._null_column, indexes));
-        RETURN_IF_ERROR(_data_column->update_rows(*c._data_column, indexes));
+        _null_column->update_rows(*c._null_column, indexes);
+        _data_column->update_rows(*c._data_column, indexes);
         // update rows may convert between null and not null, so we need count every times
         update_has_null();
     } else {
         auto new_null_column = NullColumn::create();
         new_null_column->get_data().insert(new_null_column->get_data().end(), replace_num, 0);
-        RETURN_IF_ERROR(_null_column->update_rows(*new_null_column.get(), indexes));
-        RETURN_IF_ERROR(_data_column->update_rows(src, indexes));
+        _null_column->update_rows(*new_null_column.get(), indexes);
+        _data_column->update_rows(src, indexes);
     }
-
-    return Status::OK();
 }
 
 size_t NullableColumn::filter_range(const Filter& filter, size_t from, size_t to) {

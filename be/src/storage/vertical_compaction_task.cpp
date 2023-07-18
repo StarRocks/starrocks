@@ -80,7 +80,7 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
         bool is_key = (i == 0);
         if (!is_key) {
             // read mask buffer from the beginning
-            mask_buffer->flip_to_read();
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
         }
         RETURN_IF_ERROR(_compact_column_group(is_key, i, column_groups[i], output_rs_writer.get(), mask_buffer.get(),
                                               source_masks.get(), statistics));

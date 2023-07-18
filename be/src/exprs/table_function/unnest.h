@@ -87,10 +87,7 @@ public:
 
     Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); };
 
-    Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
-        delete state;
-        return Status::OK();
-    }
+    void close(RuntimeState* runtime_state, TableFunctionState* state) const override { delete state; }
 };
 
 } // namespace starrocks

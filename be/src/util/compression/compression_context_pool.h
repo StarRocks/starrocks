@@ -115,7 +115,7 @@ public:
 private:
     void add(InternalRef ptr) {
         DCHECK(ptr);
-        _resetter(ptr.get());
+        (void)_resetter(ptr.get());
         Status status = _resetter(ptr.get());
         // if reset fail, then delete this context
         if (!status.ok()) {

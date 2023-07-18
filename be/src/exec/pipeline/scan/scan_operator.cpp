@@ -486,7 +486,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;
-            set_finishing(state);
+            RETURN_IF_ERROR(set_finishing(state));
             return status;
         }
         need_detach = false;

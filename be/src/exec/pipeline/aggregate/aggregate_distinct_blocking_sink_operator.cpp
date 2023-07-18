@@ -64,7 +64,7 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
         if (limit_with_no_agg) {
             auto size = _aggregator->hash_set_variant().size();
             if (size >= _aggregator->limit()) {
-                set_finishing(state);
+                RETURN_IF_ERROR(set_finishing(state));
                 return Status::OK();
             }
         }

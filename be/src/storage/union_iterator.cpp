@@ -42,17 +42,17 @@ public:
     size_t merged_rows() const override { return _merged_rows; }
 
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
-        ChunkIterator::init_encoded_schema(dict_maps);
+        RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         for (auto& child : _children) {
-            child->init_encoded_schema(dict_maps);
+            RETURN_IF_ERROR(child->init_encoded_schema(dict_maps));
         }
         return Status::OK();
     }
 
     Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
+        RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         for (auto& child : _children) {
-            child->init_output_schema(unused_output_column_ids);
+            RETURN_IF_ERROR(child->init_output_schema(unused_output_column_ids));
         }
         return Status::OK();
     }

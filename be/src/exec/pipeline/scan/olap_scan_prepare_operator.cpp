@@ -65,7 +65,7 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
 
     _ctx->set_prepare_finished();
     if (!status.ok()) {
-        _ctx->set_finished();
+        RETURN_IF_ERROR(_ctx->set_finished());
         return status;
     }
 

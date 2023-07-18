@@ -138,13 +138,12 @@ Status BinlogDataSource::set_offset(int64_t table_version, int64_t changelog_id)
     return Status::OK();
 }
 
-Status BinlogDataSource::reset_status() {
+void BinlogDataSource::reset_status() {
     _rows_read_number = 0;
     _bytes_read = 0;
     _cpu_time_ns = 0;
     VLOG(3) << "Binlog connector reset status, tablet: " << _tablet->full_name()
             << ", binlog reader id: " << _binlog_reader->reader_id();
-    return Status::OK();
 }
 
 BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_cid) {

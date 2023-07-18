@@ -47,7 +47,7 @@ SelectNode::SelectNode(ObjectPool* pool, const TPlanNode& tnode, const Descripto
 
 SelectNode::~SelectNode() {
     if (runtime_state() != nullptr) {
-        ExecNode::close(runtime_state());
+        (void)ExecNode::close(runtime_state());
     }
 }
 

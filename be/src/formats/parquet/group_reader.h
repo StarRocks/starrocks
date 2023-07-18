@@ -102,7 +102,7 @@ private:
                 bool* is_group_filtered);
 
         void init_chunk(const GroupReaderParam& param, ChunkPtr* chunk);
-        bool filter_chunk(ChunkPtr* chunk, Filter* filter);
+        StatusOr<bool> filter_chunk(ChunkPtr* chunk, Filter* filter);
         Status decode_chunk(const GroupReaderParam& param,
                             std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers,
                             const ChunkPtr& read_chunk, ChunkPtr* chunk);

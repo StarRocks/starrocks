@@ -58,7 +58,7 @@ void JniScanner::do_update_counter(HdfsScanProfile* profile) {}
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
     _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
-    _check_jni_exception(_jni_env, "Failed to close the off-heap table scanner.");
+    (void)_check_jni_exception(_jni_env, "Failed to close the off-heap table scanner.");
     _jni_env->DeleteLocalRef(_jni_scanner_obj);
     _jni_env->DeleteLocalRef(_jni_scanner_cls);
 }

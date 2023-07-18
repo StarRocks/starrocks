@@ -435,7 +435,7 @@ public:
     }
 
     Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
+        RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         return _iter->init_output_schema(unused_output_column_ids);
     }
 
@@ -740,7 +740,7 @@ Status Rowset::verify() {
         }
     }
     if (!st.ok()) {
-        st.clone_and_append(strings::Substitute("rowset:$0 path:$1", rowset_id().to_string(), rowset_path()));
+        (void)st.clone_and_append(strings::Substitute("rowset:$0 path:$1", rowset_id().to_string(), rowset_path()));
     }
     return st;
 }

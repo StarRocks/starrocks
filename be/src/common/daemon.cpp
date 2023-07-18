@@ -274,7 +274,7 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     LOG(INFO) << MemInfo::debug_string();
     LOG(INFO) << base::CPU::instance()->debug_string();
 
-    UserFunctionCache::instance()->init(config::user_function_dir);
+    WARN_IF_ERROR(UserFunctionCache::instance()->init(config::user_function_dir), "init user function cache error");
 
     date::init_date_cache();
 

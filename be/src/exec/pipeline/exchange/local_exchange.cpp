@@ -221,7 +221,7 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
 
 Status BroadcastExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     for (auto* source : _source->get_sources()) {
-        source->add_chunk(chunk);
+        RETURN_IF_ERROR(source->add_chunk(chunk));
     }
     return Status::OK();
 }
@@ -229,9 +229,9 @@ Status BroadcastExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
 Status PassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     size_t sources_num = _source->get_sources().size();
     if (sources_num == 1) {
-        _source->get_sources()[0]->add_chunk(chunk);
+        RETURN_IF_ERROR(_source->get_sources()[0]->add_chunk(chunk));
     } else {
-        _source->get_sources()[(_next_accept_source++) % sources_num]->add_chunk(chunk);
+        RETURN_IF_ERROR(_source->get_sources()[(_next_accept_source++) % sources_num]->add_chunk(chunk));
     }
 
     return Status::OK();
@@ -278,9 +278,9 @@ Status AdaptivePassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t
     // random shuffle each rows for the input chunk to seperate it evenly.
     if (_is_pass_through_by_chunk) {
         if (num_partitions == 1) {
-            _source->get_sources()[0]->add_chunk(chunk);
+            RETURN_IF_ERROR(_source->get_sources()[0]->add_chunk(chunk));
         } else {
-            _source->get_sources()[(_next_accept_source++) % num_partitions]->add_chunk(chunk);
+            RETURN_IF_ERROR(_source->get_sources()[(_next_accept_source++) % num_partitions]->add_chunk(chunk));
         }
     } else {
         // The first `num_partitions / 2` will pass through by rows to split more meanly, and if there are more

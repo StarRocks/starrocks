@@ -150,8 +150,8 @@ Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
         // if array column in nullable or element of array is empty, element_read_range may be empty.
         // so we should reseek the element_ordinal
         if (element_read_range.span_size() == 0) {
-            _keys->seek_to_ordinal(element_ordinal);
-            _values->seek_to_ordinal(element_ordinal);
+            RETURN_IF_ERROR(_keys->seek_to_ordinal(element_ordinal));
+            RETURN_IF_ERROR(_values->seek_to_ordinal(element_ordinal));
         }
         // 2. Read offset column
         // [1, 2, 3], [4, 5, 6]

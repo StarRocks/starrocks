@@ -270,7 +270,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        Expr::prepare(ctx, state);
+        RETURN_IF_ERROR(Expr::prepare(ctx, state));
     }
 
     if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
@@ -361,9 +361,9 @@ void Analytor::close(RuntimeState* state) {
 
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, agg_close);
-        promise_st->get_future().get();
+        (void)promise_st->get_future().get();
     } else {
-        agg_close();
+        (void)agg_close();
     }
 }
 

@@ -34,7 +34,9 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
           _commit_func(std::move(commit_func)),
           _state(state),
           _driver_id(driver_id) {
-    init_rolling_writer();
+    if (Status st = init_rolling_writer(); !st.ok()) {
+        throw std::runtime_error("init_rolling_writer error");
+    }
 }
 
 Status RollingAsyncParquetWriter::init_rolling_writer() {
@@ -87,7 +89,7 @@ Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state
     if (_writer->file_size() > _max_file_size) {
         auto st = close_current_writer(state);
         if (st.ok()) {
-            _new_file_writer();
+            RETURN_IF_ERROR(_new_file_writer());
         }
     }
     auto st = _writer->write(chunk);

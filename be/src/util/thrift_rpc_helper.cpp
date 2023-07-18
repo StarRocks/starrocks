@@ -37,6 +37,7 @@
 #include <sstream>
 
 #include "common/status.h"
+#include "fmt/format.h"
 #include "gen_cpp/FrontendService.h"
 #include "monotime.h"
 #include "runtime/client_cache.h"
@@ -86,7 +87,8 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
         LOG(WARNING) << ss.str();
         SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms * 2));
         // just reopen to disable this connection
-        client.reopen(timeout_ms);
+        WARN_IF_ERROR(client.reopen(timeout_ms),
+                      fmt::format("client reopen error, address={}:{}", address.hostname, address.port));
         return Status::ThriftRpcError(ss.str());
     }
     return Status::OK();

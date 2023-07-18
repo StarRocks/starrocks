@@ -90,7 +90,7 @@ public:
 
     Status read_chunk(Chunk* chunk, int32_t rows_to_read);
 
-    Status close();
+    void close();
 
     struct PreviousParsedItem {
         PreviousParsedItem(const std::string_view& key) : key(key), column_index(-1) {}

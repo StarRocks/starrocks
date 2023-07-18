@@ -43,7 +43,7 @@ public:
 
     ~ExceptNode() override {
         if (runtime_state() != nullptr) {
-            close(runtime_state());
+            (void)close(runtime_state());
         }
     }
 

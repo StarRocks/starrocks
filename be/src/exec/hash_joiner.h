@@ -206,7 +206,7 @@ public:
 
     Status build_ht(RuntimeState* state);
     // probe phase
-    void push_chunk(RuntimeState* state, ChunkPtr&& chunk);
+    Status push_chunk(RuntimeState* state, ChunkPtr&& chunk);
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
     pipeline::RuntimeInFilters& get_runtime_in_filters() { return _runtime_in_filters; }
@@ -259,14 +259,14 @@ public:
     void set_spill_strategy(spill::SpillStrategy strategy) { _spill_strategy = strategy; }
     spill::SpillStrategy spill_strategy() { return _spill_strategy; }
 
-    void prepare_probe_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
+    Status prepare_probe_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
         SCOPED_TIMER(probe_metrics().probe_conjunct_evaluate_timer);
-        _prepare_key_columns(*key_columns, chunk, _probe_expr_ctxs);
+        return _prepare_key_columns(*key_columns, chunk, _probe_expr_ctxs);
     }
 
-    void prepare_build_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
+    Status prepare_build_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
         SCOPED_TIMER(build_metrics().build_conjunct_evaluate_timer);
-        _prepare_key_columns(*key_columns, chunk, _build_expr_ctxs);
+        return _prepare_key_columns(*key_columns, chunk, _build_expr_ctxs);
     }
 
     const std::vector<ExprContext*> probe_expr_ctxs() { return _probe_expr_ctxs; }

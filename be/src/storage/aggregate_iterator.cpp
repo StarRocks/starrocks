@@ -71,7 +71,7 @@ public:
     }
 
     Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
+        RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         RETURN_IF_ERROR(_child->init_output_schema(unused_output_column_ids));
         _curr_chunk = ChunkHelper::new_chunk(output_schema(), _chunk_size);
         _aggregator = std::make_unique<ChunkAggregator>(&output_schema(), _chunk_size, _pre_aggregate_factor / 100,

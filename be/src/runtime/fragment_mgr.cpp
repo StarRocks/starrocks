@@ -239,7 +239,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         std::stringstream ss;
         ss << "couldn't get a client for " << _coord_addr;
         LOG(WARNING) << ss.str();
-        update_status(Status::InternalError(ss.str()));
+        (void)update_status(Status::InternalError(ss.str()));
         return;
     }
 
@@ -328,7 +328,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 
             if (!rpc_status.ok()) {
                 // we need to cancel the execution of this fragment
-                update_status(rpc_status);
+                (void)update_status(rpc_status);
                 _executor.cancel();
                 return;
             }
@@ -345,7 +345,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 
     if (!rpc_status.ok()) {
         // we need to cancel the execution of this fragment
-        update_status(rpc_status);
+        (void)update_status(rpc_status);
         _executor.cancel();
     }
 }
@@ -394,7 +394,7 @@ void FragmentMgr::exec_actual(const std::shared_ptr<FragmentExecState>& exec_sta
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(s_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    exec_state->execute();
+    (void)exec_state->execute();
 
     // Callback after remove from this id
     cb(exec_state->executor());
@@ -453,7 +453,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
 
     auto st = _thread_pool->submit_func([this, exec_state, cb] { exec_actual(exec_state, cb); });
     if (!st.ok()) {
-        exec_state->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
+        (void)exec_state->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
         std::string error_msg = strings::Substitute("Put planfragment $0 to thread pool failed. err = $1",
                                                     print_id(fragment_instance_id), st.get_error_msg());
         LOG(WARNING) << error_msg;
@@ -486,7 +486,7 @@ Status FragmentMgr::cancel(const TUniqueId& id, const PPlanFragmentCancelReason&
     auto profile = exec_state->runtime_state()->runtime_profile_ptr();
     auto q_tracker = exec_state->runtime_state()->query_mem_tracker_ptr();
     auto s_tracker = exec_state->runtime_state()->instance_mem_tracker_ptr();
-    exec_state->cancel(reason);
+    (void)exec_state->cancel(reason);
     exec_state.reset();
 
     return Status::OK();
@@ -545,7 +545,7 @@ void FragmentMgr::cancel_worker() {
             }
         }
         for (auto& id : to_delete) {
-            cancel(id, PPlanFragmentCancelReason::TIMEOUT);
+            (void)cancel(id, PPlanFragmentCancelReason::TIMEOUT);
             LOG(INFO) << "FragmentMgr cancel worker going to cancel timeout fragment " << print_id(id);
         }
 
@@ -603,7 +603,7 @@ void FragmentMgr::report_fragments_with_same_host(
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
                 reported[i] = true;
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                (void)starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                         fragment_exec_state->fragment_instance_id());
                 continue;
             }
@@ -668,7 +668,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
 
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                (void)starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                         fragment_exec_state->fragment_instance_id());
                 continue;
             }
@@ -681,7 +681,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fragment_exec_state->coord_addr();
                 LOG(WARNING) << ss.str();
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                (void)starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                         fragment_exec_state->fragment_instance_id());
                 fragment_exec_state->exec_env()->frontend_client_cache()->close_connections(
                         fragment_exec_state->coord_addr());
@@ -750,7 +750,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                     int32_t index = cur_batch_report_indexes[j];
                     FragmentExecState* fragment_exec_state = need_report_exec_states[index].get();
                     PlanFragmentExecutor* executor = fragment_exec_state->executor();
-                    fragment_exec_state->update_status(rpc_status);
+                    (void)fragment_exec_state->update_status(rpc_status);
                     executor->cancel();
                 }
             }
@@ -758,7 +758,8 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
     }
 
     for (const auto& fragment_instance_id : fragments_non_exist) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(fragment_instance_id);
+        (void)starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                fragment_instance_id);
     }
 }
 

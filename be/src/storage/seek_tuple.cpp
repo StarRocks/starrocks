@@ -26,7 +26,9 @@ void SeekTuple::convert_to(SeekTuple* new_tuple, const std::vector<LogicalType>&
     _schema.convert_to(&new_tuple->_schema, new_types);
 
     RowConverter converter;
-    converter.init(_schema, new_tuple->_schema);
+    if (auto st = converter.init(_schema, new_tuple->_schema); !st.ok()) {
+        LOG(FATAL) << "init converter error: " << st.to_string();
+    }
     converter.convert(&new_tuple->_values, _values);
 }
 

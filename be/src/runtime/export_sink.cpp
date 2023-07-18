@@ -174,7 +174,8 @@ Status ExportSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     Status status = _file_builder->add_chunk(chunk);
     if (!status.ok()) {
         Status status;
-        close(state, status);
+        // @TODO change to void
+        (void)close(state, status);
     }
     return status;
 }

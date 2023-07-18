@@ -206,7 +206,7 @@ Status MultiCastLocalExchangeSourceOperator::set_finishing(RuntimeState* state) 
 StatusOr<ChunkPtr> MultiCastLocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
     auto ret = _exchanger->pull_chunk(state, _mcast_consumer_index);
     if (ret.status().is_end_of_file()) {
-        set_finishing(state);
+        RETURN_IF_ERROR(set_finishing(state));
     }
     return ret;
 }

@@ -1017,11 +1017,13 @@ void Tablet::delete_all_files() {
     // removing hash_map item and iterating hash_map concurrently.
     std::shared_lock rdlock(_meta_lock);
     for (const auto& it : _rs_version_map) {
-        it.second->remove();
+        // @TODO should handle error?
+        (void)it.second->remove();
     }
     _rs_version_map.clear();
     for (const auto& it : _inc_rs_version_map) {
-        it.second->remove();
+        // @TODO: should handle error?
+        (void)it.second->remove();
     }
     _inc_rs_version_map.clear();
     _stale_rs_version_map.clear();

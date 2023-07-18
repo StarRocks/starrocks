@@ -63,7 +63,7 @@ public:
 
     void get_load_data_path(std::vector<std::string>* data_paths) override;
 
-    Status get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) override;
+    void get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) override;
     std::string get_load_error_absolute_path(const std::string& file_path) override;
 
     std::string get_load_rejected_record_absolute_path(const std::string& rejected_record_dir, const std::string& db,

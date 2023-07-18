@@ -335,7 +335,7 @@ Status FileWriterBase::write(Chunk* chunk) {
     }
 
     _generate_chunk_writer();
-    _chunk_writer->write(chunk);
+    RETURN_IF_ERROR(_chunk_writer->write(chunk));
 
     if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size && !is_last_row_group()) {
         RETURN_IF_ERROR(_flush_row_group());

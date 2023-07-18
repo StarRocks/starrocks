@@ -38,7 +38,7 @@ BinlogManager::BinlogManager(int64_t tablet_id, std::string path, int64_t max_fi
 BinlogManager::~BinlogManager() {
     std::unique_lock lock(_meta_lock);
     if (_active_binlog_writer != nullptr) {
-        _active_binlog_writer->close(true);
+        (void)_active_binlog_writer->close(true);
         _active_binlog_writer.reset();
     }
 }
@@ -571,7 +571,7 @@ BinlogRange BinlogManager::current_binlog_range() {
 
 void BinlogManager::close_active_writer() {
     if (_active_binlog_writer != nullptr) {
-        _active_binlog_writer->close(true);
+        (void)_active_binlog_writer->close(true);
         _active_binlog_writer.reset();
     }
 }

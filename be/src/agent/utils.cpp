@@ -38,6 +38,7 @@
 
 #include "agent/master_info.h"
 #include "common/status.h"
+#include "fmt/format.h"
 
 using std::map;
 using std::string;
@@ -76,7 +77,9 @@ AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, T
             client->finishTask(*result, request);
         }
     } catch (TException& e) {
-        client.reopen(config::thrift_rpc_timeout_ms);
+        WARN_IF_ERROR(client.reopen(config::thrift_rpc_timeout_ms),
+                      fmt::format("reopen thrift client error, host={}, port={}", network_address.hostname,
+                                  network_address.port));
         LOG(WARNING) << "Fail to finish_task. "
                      << "host=" << network_address.hostname << ", port=" << network_address.port
                      << ", error=" << e.what();
@@ -122,7 +125,9 @@ AgentStatus MasterServerClient::report(const TReportRequest& request, TMasterRes
             }
         }
     } catch (TException& e) {
-        client.reopen(config::thrift_rpc_timeout_ms);
+        WARN_IF_ERROR(client.reopen(config::thrift_rpc_timeout_ms),
+                      fmt::format("reopen thrift client error, host={}, port={}", network_address.hostname,
+                                  network_address.port));
         LOG(WARNING) << "Fail to report to master. "
                      << "host=" << network_address.hostname << ", port=" << network_address.port
                      << ", code=" << client_status.code();

@@ -58,33 +58,34 @@ public:
 
 private:
     static Status convert(SimdJsonValue value, std::string_view field_name, bool is_object, vpack::Builder* builder) {
+        Status status;
         switch (value.type()) {
         case so::json_type::array: {
-            convert(value.get_array().value(), field_name, is_object, builder);
+            status = convert(value.get_array().value(), field_name, is_object, builder);
             break;
         }
         case so::json_type::object: {
-            convert(value.get_object().value(), field_name, is_object, builder);
+            status = convert(value.get_object().value(), field_name, is_object, builder);
             break;
         }
         case so::json_type::number: {
-            convert(value.get_number().value(), field_name, is_object, builder);
+            status = convert(value.get_number().value(), field_name, is_object, builder);
             break;
         }
         case so::json_type::string: {
-            convert(value.get_string().value(), field_name, is_object, builder);
+            status = convert(value.get_string().value(), field_name, is_object, builder);
             break;
         }
         case so::json_type::boolean: {
-            convert(value.get_bool().value(), field_name, is_object, builder);
+            status = convert(value.get_bool().value(), field_name, is_object, builder);
             break;
         }
         case so::json_type::null: {
-            convert_null(field_name, is_object, builder);
+            status = convert_null(field_name, is_object, builder);
             break;
         }
         }
-        return Status::OK();
+        return status;
     }
 
     static Status convert(SimdJsonObject obj, std::string_view field_name, bool is_object, vpack::Builder* builder) {
@@ -109,7 +110,7 @@ private:
             builder->add(vpack::Value(vpack::ValueType::Array));
         }
         for (auto element : arr) {
-            convert(element.value(), {}, false, builder);
+            RETURN_IF_ERROR(convert(element.value(), {}, false, builder));
         }
         builder->close();
         return Status::OK();

@@ -113,13 +113,12 @@ Status JavaUDTFFunction::open(RuntimeState* runtime_state, TableFunctionState* s
     return Status::OK();
 }
 
-Status JavaUDTFFunction::close(RuntimeState* runtime_state, TableFunctionState* state) const {
+void JavaUDTFFunction::close(RuntimeState* runtime_state, TableFunctionState* state) const {
     auto promise = call_function_in_pthread(runtime_state, [state]() {
         delete state;
         return Status::OK();
     });
-    RETURN_IF_ERROR(promise->get_future().get());
-    return Status::OK();
+    (void)promise->get_future().get();
 }
 
 std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(TableFunctionState* state) const {

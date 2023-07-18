@@ -148,12 +148,11 @@ void LoadPathMgr::get_load_data_path(std::vector<std::string>* data_paths) {
 const std::string ERROR_FILE_NAME = "error_log";
 const std::string REJECTED_RECORD_FILE_NAME = "rejected_record";
 
-Status LoadPathMgr::get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) {
+void LoadPathMgr::get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) {
     std::stringstream ss;
     // add shard sub dir to file path
     ss << ERROR_FILE_NAME << "_" << std::hex << fragment_instance_id.hi << "_" << fragment_instance_id.lo;
     *error_path = ss.str();
-    return Status::OK();
 }
 
 std::string LoadPathMgr::get_load_error_absolute_path(const std::string& file_path) {

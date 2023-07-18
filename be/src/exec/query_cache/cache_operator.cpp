@@ -521,9 +521,9 @@ Status CacheOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_owner) 
         _lane_arbiter->enable_passthrough_mode();
         for (auto i = 0; i <= premature_finished_idx; ++i) {
             auto& multi_op = _multilane_operators[i];
-            multi_op->set_finished(state);
+            RETURN_IF_ERROR(multi_op->set_finished(state));
         }
-        _scan_operator->set_finished(state);
+        RETURN_IF_ERROR(_scan_operator->set_finished(state));
     }
     return Status::OK();
 }

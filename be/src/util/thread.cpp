@@ -213,7 +213,7 @@ Thread::~Thread() {
 }
 
 void Thread::join() {
-    ThreadJoiner(this).join();
+    (void)ThreadJoiner(this).join();
 }
 
 int64_t Thread::tid() const {

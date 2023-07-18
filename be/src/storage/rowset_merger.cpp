@@ -433,7 +433,7 @@ private:
         auto source_masks = std::make_unique<vector<RowSourceMask>>();
         for (size_t i = 1; i < column_groups.size(); ++i) {
             // read mask buffer from the beginning
-            mask_buffer->flip_to_read();
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
 
             _entries.clear();
             _entries.reserve(rowsets.size());
@@ -443,7 +443,7 @@ private:
             Schema schema = ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[i]);
             for (size_t j = 0; j < rowsets.size(); j++) {
                 const auto& rowset = rowsets[j];
-                rowsets_mask_buffer[j]->flip_to_read();
+                RETURN_IF_ERROR(rowsets_mask_buffer[j]->flip_to_read());
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
@@ -467,7 +467,7 @@ private:
 
             CHECK_EQ(rowsets.size(), iterators.size());
             std::shared_ptr<ChunkIterator> iter = new_mask_merge_iterator(iterators, mask_buffer.get());
-            iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+            RETURN_IF_ERROR(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
             auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
             auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);

@@ -86,7 +86,8 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
                 return false;
             }
             if (!only_check_if_has_data) {
-                chunks_sorter->get_next(chunk, eos);
+                // @TODO should handle error
+                (void)chunks_sorter->get_next(chunk, eos);
             }
             return true;
         });

@@ -223,7 +223,7 @@ public:
 
     ~ShardByLengthMutableIndex() {
         if (_index_file) {
-            _index_file->close();
+            WARN_IF_ERROR(_index_file->close(), "close index file error");
         }
     }
 
@@ -383,7 +383,8 @@ public:
 
     void destroy() {
         if (_file != nullptr) {
-            FileSystem::Default()->delete_file(_file->filename());
+            WARN_IF_ERROR(FileSystem::Default()->delete_file(_file->filename()),
+                          fmt::format("delete file[{}] error", _file->filename()));
             _file.reset();
         }
     }

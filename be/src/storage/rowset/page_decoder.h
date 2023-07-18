@@ -90,7 +90,7 @@ public:
     virtual size_t seek_forward(uint32_t n) {
         uint32_t step = std::min(n, count() - current_index());
         DCHECK_GE(step, 0);
-        seek_to_position_in_page(current_index() + step);
+        WARN_IF_ERROR(seek_to_position_in_page(current_index() + step), "seek_to_position_in_page error");
         return step;
     }
 

@@ -168,7 +168,10 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
         size += 2;
     }
     // if all of them are evaluated to false, we don't need this zone.
-    evaluate(col.get(), selection, 0, size);
+    if (auto status = evaluate(col.get(), selection, 0, size); !status.ok()) {
+        LOG(WARNING) << "evaluate expr on zone_map_filter error: " << status.to_string();
+        return false;
+    }
     for (uint16_t i = 0; i < size; i++) {
         if (selection[i] != 0) {
             return true;
@@ -263,9 +266,10 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
         ASSIGN_OR_RETURN(ColumnExprPredicate * new_pred, ColumnExprPredicate::make_column_expr_predicate(
                                                                  _type_info, _column_id, _state, nullptr, _slot_desc));
         new_pred = pool->add(new_pred);
-        new_pred->_add_expr_ctx(std::move(expr_rewrite));
+        // @TODO change to void?
+        RETURN_IF_ERROR(new_pred->_add_expr_ctx(std::move(expr_rewrite)));
         for (int i = 1; i < _expr_ctxs.size(); i++) {
-            new_pred->_add_expr_ctx(_expr_ctxs[i]);
+            RETURN_IF_ERROR(new_pred->_add_expr_ctx(_expr_ctxs[i]));
         }
         output->emplace_back(new_pred);
     }

@@ -263,8 +263,8 @@ void DataStreamRecvr::close() {
         _sender_queue->close();
     }
     // Remove this receiver from the DataStreamMgr that created it.
-    // TODO: log error msg
-    _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
+    WARN_IF_ERROR(_mgr->deregister_recvr(fragment_instance_id(), dest_node_id()),
+                  fmt::format("deregister_recvr error"));
     _mgr = nullptr;
     _chunks_merger.reset();
     _cascade_merger.reset();

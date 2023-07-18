@@ -419,9 +419,10 @@ void PipelineDriver::check_short_circuit() {
         return;
     }
 
-    _mark_operator_finishing(_operators[last_finished + 1], _runtime_state);
+    // @TODO
+    (void)_mark_operator_finishing(_operators[last_finished + 1], _runtime_state);
     for (auto i = _first_unfinished; i <= last_finished; ++i) {
-        _mark_operator_finished(_operators[i], _runtime_state);
+        (void)_mark_operator_finished(_operators[i], _runtime_state);
     }
     _first_unfinished = last_finished + 1;
 
@@ -490,19 +491,19 @@ void PipelineDriver::submit_operators() {
 
 void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
-        _mark_operator_finished(op, runtime_state);
+        WARN_IF_ERROR(_mark_operator_finished(op, runtime_state), "mark operator finished error");
     }
 }
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
-        _mark_operator_cancelled(op, runtime_state);
+        WARN_IF_ERROR(_mark_operator_cancelled(op, runtime_state), "mark operator cancelled error");
     }
 }
 
 void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
-        _mark_operator_closed(op, runtime_state);
+        WARN_IF_ERROR(_mark_operator_closed(op, runtime_state), "mark operator closed error");
     }
 }
 

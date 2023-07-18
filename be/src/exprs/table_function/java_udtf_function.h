@@ -29,6 +29,6 @@ public:
     Status prepare(TableFunctionState* state) const override;
     Status open(RuntimeState* runtime_state, TableFunctionState* state) const override;
     std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const override;
-    Status close(RuntimeState* _runtime_state, TableFunctionState* state) const override;
+    void close(RuntimeState* _runtime_state, TableFunctionState* state) const override;
 };
 } // namespace starrocks

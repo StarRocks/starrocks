@@ -116,7 +116,7 @@ Status RawSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, TaskE
         DCHECK(_mem_table != nullptr);
     }
 
-    RETURN_IF_ERROR(_mem_table->append(chunk));
+    _mem_table->append(chunk);
 
     if (_mem_table->is_full()) {
         return flush(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard));
@@ -196,7 +196,9 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
         _running_restore_tasks++;
         auto restore_task = [this, guard, trace = TraceInfo(state)]() {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
-            RETURN_IF(!guard.scoped_begin(), Status::OK());
+            if (!guard.scoped_begin()) {
+                return;
+            }
             auto defer = DeferOp([&]() { _running_restore_tasks--; });
             {
                 Status res;
@@ -211,7 +213,6 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
                 }
             };
             guard.scoped_end();
-            return Status::OK();
         };
         RETURN_IF_ERROR(executor.submit(std::move(restore_task)));
     }
@@ -235,7 +236,8 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
                                [&chunk](SpilledPartition* partition, const std::vector<uint32_t>& selection,
                                         int32_t from, int32_t size) {
                                    auto mem_table = partition->spill_writer->mem_table();
-                                   mem_table->append_selective(*chunk, selection.data(), from, size);
+                                   // @TODO
+                                   (void)mem_table->append_selective(*chunk, selection.data(), from, size);
                                    partition->mem_size = mem_table->mem_usage();
                                    partition->num_rows += size;
                                });
