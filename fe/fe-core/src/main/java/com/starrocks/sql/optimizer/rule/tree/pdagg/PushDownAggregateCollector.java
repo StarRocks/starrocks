@@ -541,7 +541,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
                 return true;
             }
             return statistics.getOutputRowCount() >=
-                    StatisticsEstimateCoefficient.DEFAULT_PUSH_DOWN_AGGREGATE_ROWS_LIMIT;
+                    StatisticsEstimateCoefficient.SMALL_SCALE_ROWS_LIMIT;
         }
 
         return false;
