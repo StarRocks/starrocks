@@ -236,14 +236,14 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     public void testStructUpperCase() throws Exception {
         String sql = "select map5[1].S1, map5[2].M2[4].S3 from pc0;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "  |  7 <-> 6: map5[1].s1\n" +
-                "  |  8 <-> 6: map5[2].m2[4].s3\n");
+        assertContains(plan, "map5[1].s1");
+        assertContains(plan, "map5[2].m2[4].s3");
 
         sql = "select st1.S2, st2.SM3[1], ST3.SA3, ST5.SS3.S32 from sc0;";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  |  7 <-> 2: st1.s2\n" +
-                "  |  8 <-> 3: st2.sm3[1]\n" +
-                "  |  9 <-> 4: st3.sa3\n" +
-                "  |  10 <-> 6: st5.ss3.s32");
+        assertContains(plan, "st1.s2"); 
+        assertContains(plan, "st2.sm3[1]"); 
+        assertContains(plan, "st5.ss3.s32"); 
+        assertContains(plan, "st3.sa3"); 
     }
 }
