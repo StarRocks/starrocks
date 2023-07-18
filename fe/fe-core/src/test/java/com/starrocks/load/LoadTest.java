@@ -105,8 +105,7 @@ public class LoadTest {
         List<Expr> params1 = Lists.newArrayList();
         params1.add(new SlotRef(null, c1Name));
         Expr mapping1 = new FunctionCallExpr(FunctionSet.YEAR, params1);
-        CompoundPredicate compoundPredicate = new CompoundPredicate(CompoundPredicate.Operator.OR,
-                mapping1, new SlotRef(null, c0Name));
+        columnExprs.add(new ImportColumnDesc(c1Name, mapping1));
         columnExprs.add(new ImportColumnDesc(c1Name, compoundPredicate));
 
         // c1 is from path
