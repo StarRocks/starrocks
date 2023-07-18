@@ -31,8 +31,6 @@ StarRocks supports the following data types: [Numeric](#numeric), [String](#stri
 
 - [ARRAY](../data-types/Array.md)
 - [JSON](../data-types/JSON.md)
-- [MAP](../data-types/Map.md)
-- [STRUCT](../data-types/STRUCT.md)
 
 ## Others
 
