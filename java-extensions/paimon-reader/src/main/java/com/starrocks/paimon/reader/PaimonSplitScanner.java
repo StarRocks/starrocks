@@ -62,6 +62,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private Table table;
     private RecordReader<InternalRow> reader;
     private RecordReader.RecordIterator<InternalRow> batch;
+    private boolean continueCurrentBatch;
     private final int fetchSize;
     private final ClassLoader classLoader;
 
@@ -162,8 +163,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     @Override
     public int getNext() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            InternalRow row = null;
-            if (batch == null || (row = batch.next()) == null) {
+            if (batch == null || !continueCurrentBatch) {
                 if (batch != null) {
                     this.batch.releaseBatch();
                 }
@@ -171,8 +171,12 @@ public class PaimonSplitScanner extends ConnectorScanner {
             }
             int numRows = 0;
             if (batch != null) {
-                row = row != null ? row : batch.next();
-                while (numRows < fetchSize && row != null) {
+                InternalRow row = null;
+                while (numRows < fetchSize) {
+                    row = batch.next();
+                    if (row == null) {
+                        break;
+                    }
                     for (int i = 0; i < requiredFields.length; i++) {
                         Object fieldData = InternalRowUtils.get(row, i, logicalTypes[i]);
                         if (fieldData == null) {
@@ -183,8 +187,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
                         }
                     }
                     numRows++;
-                    row = batch.next();
                 }
+                this.continueCurrentBatch = row != null;
             }
             return numRows;
         } catch (Exception e) {
