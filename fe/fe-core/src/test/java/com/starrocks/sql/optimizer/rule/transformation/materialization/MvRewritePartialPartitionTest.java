@@ -556,6 +556,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "REFRESH MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
+                        "'olap_table_query_rewrite_consistency' = 'checked', " +
                         "\"force_external_table_query_rewrite\" = \"disable\"\n" +
                         ")\n" +
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
