@@ -22,8 +22,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [Percentile functions](#percentile-functions)
 - [Scalar functions](#scalar-functions)
 - [String functions](#string-functions)
-- [Struct functions](#struct-functions)
-- [Table functions](#table-functions)
 - [Utility functions](#utility-functions)
 - [Window functions](Window_function.md)
 
@@ -38,6 +36,7 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [count](../sql-functions/aggregate-functions/count.md)
 - [grouping](../sql-functions/aggregate-functions/grouping.md)
 - [grouping_id](../sql-functions/aggregate-functions/grouping_id.md)
+- [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
 - [hll_empty](../sql-functions/aggregate-functions/hll_empty.md)
 - [hll_hash](../sql-functions/aggregate-functions/hll_hash.md)
 - [hll_raw_agg](../sql-functions/aggregate-functions/hll_raw_agg.md)
@@ -46,7 +45,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [max](../sql-functions/aggregate-functions/max.md)
 - [max_by](../sql-functions/aggregate-functions/max_by.md)
 - [min](../sql-functions/aggregate-functions/min.md)
-- [min_by](../sql-functions/aggregate-functions/min_by.md)
 - [multi_distinct_sum](../sql-functions/aggregate-functions/multi_distinct_sum.md)
 - [multi_distinct_count](../sql-functions/aggregate-functions/multi_distinct_count.md)
 - [percentile_approx](../sql-functions/aggregate-functions/percentile_approx.md)
@@ -62,8 +60,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 ## Array functions
 
-- [all_match](../sql-functions/array-functions/all_match.md)
-- [any_match](../sql-functions/array-functions/any_match.md)
 - [array_agg](../sql-functions/array-functions/array_agg.md)
 - [array_append](../sql-functions/array-functions/array_append.md)
 - [array_avg](../sql-functions/array-functions/array_avg.md)
@@ -308,7 +304,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 - [starts_with](../sql-functions/string-functions/starts_with.md)
 - [strleft](../sql-functions/string-functions/strleft.md)
 - [strright](../sql-functions/string-functions/strright.md)
-- [str_to_map](../sql-functions/string-functions/str_to_map.md)
 - [substr, substring](../sql-functions/string-functions/substring.md)
 - [trim](../sql-functions/string-functions/trim.md)
 - [ucase](../sql-functions/string-functions/ucase.md)
@@ -320,11 +315,8 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 ## Map functions
 
 - [cardinality](../sql-functions/map-functions/cardinality.md)
-- [distinct_map_keys](../sql-functions/map-functions/distinct_map_keys.md)
 - [element_at](../sql-functions/map-functions/element_at.md)
 - [map_apply](../sql-functions/map-functions/map_apply.md)
-- [map_concat](../sql-functions/map-functions/map_concat.md)
-- [map_filter](../sql-functions/map-functions/map_filter.md)
 - [map_from_arrays](../sql-functions/map-functions/map_from_arrays.md)
 - [map_keys](../sql-functions/map-functions/map_keys.md)
 - [map_size](../sql-functions/map-functions/map_size.md)
@@ -394,15 +386,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 ## Scalar functions
 
 - [hll_cardinality](../sql-functions/scalar-functions/hll_cardinality.md)
-
-## Struct functions
-
-- [named_struct](../sql-functions/struct-functions/named_struct.md)
-- [row](../sql-functions/struct-functions/row.md)
-
-## Table functions
-
-- [generate_series](../sql-functions/table-functions/generate_series.md)
 
 ## Utility functions
 
