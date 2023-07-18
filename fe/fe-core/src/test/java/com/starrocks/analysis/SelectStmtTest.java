@@ -317,6 +317,7 @@ public class SelectStmtTest {
                 "  |  group by: 3: expr\n" +
                 "  |  \n" +
                 "  4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(2: split)\n" +
                 "  |  group by: 3: expr\n" +
                 "  |  \n" +
@@ -433,12 +434,12 @@ public class SelectStmtTest {
                                 "  |----17:EXCHANGE"
                 },
                 {"select count(distinct k1, k2), count(distinct k3) from db1.tbl1 group by k4 limit 1",
-                    "18:Project\n" +
+                    "14:Project\n" +
                             "  |  <slot 5> : 5: count\n" +
                             "  |  <slot 6> : 6: count\n" +
                             "  |  limit: 1\n" +
                             "  |  \n" +
-                            "  17:HASH JOIN\n" +
+                            "  13:HASH JOIN\n" +
                             "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                             "  |  colocate: false, reason: \n" +
                             "  |  equal join conjunct: 9: k4 <=> 11: k4\n" +
@@ -446,12 +447,12 @@ public class SelectStmtTest {
                 },
                 {"select * from (select count(distinct k1, k2), count(distinct k3) from db1.tbl1 group by k4, k3) t1" +
                         " limit 1",
-                       "16:Project\n" +
+                       "14:Project\n" +
                                "  |  <slot 5> : 5: count\n" +
                                "  |  <slot 6> : 6: count\n" +
                                "  |  limit: 1\n" +
                                "  |  \n" +
-                               "  15:HASH JOIN\n" +
+                               "  13:HASH JOIN\n" +
                                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                                "  |  colocate: false, reason: \n" +
                                "  |  equal join conjunct: 10: k4 <=> 12: k4\n" +
@@ -460,12 +461,12 @@ public class SelectStmtTest {
                 },
                 {"with t1 as (select count(distinct k1, k2) as a, count(distinct k3) as b from db1.tbl1 " +
                         "group by k2, k3, k4) select * from t1 limit 1",
-                        "16:Project\n" +
+                        "14:Project\n" +
                                 "  |  <slot 11> : 11: count\n" +
                                 "  |  <slot 12> : 12: count\n" +
                                 "  |  limit: 1\n" +
                                 "  |  \n" +
-                                "  15:HASH JOIN\n" +
+                                "  13:HASH JOIN\n" +
                                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                                 "  |  colocate: false, reason: \n" +
                                 "  |  equal join conjunct: 14: k2 <=> 17: k2\n" +

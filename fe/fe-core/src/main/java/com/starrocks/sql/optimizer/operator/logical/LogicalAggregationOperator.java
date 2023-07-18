@@ -35,7 +35,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
-import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -164,12 +163,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
     public boolean hasSkew() {
         return this.getAggregations().values().stream().anyMatch(call ->
                 call.isDistinct() && call.getFnName().equals(FunctionSet.COUNT) && call.getHints().contains("skew"));
-    }
-
-    // only split local agg with group by keys and a child not distinct local agg can use streaming preAgg
-    public boolean canUseStreamingPreAgg() {
-        return type.isLocal() && isSplit && CollectionUtils.isNotEmpty(groupingKeys)
-                && singleDistinctFunctionPos == -1;
     }
 
     public boolean checkGroupByCountDistinctWithSkewHint() {
