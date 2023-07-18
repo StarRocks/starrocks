@@ -77,7 +77,7 @@ public:
 
     OlapRuntimeScanRangePruner runtime_range_pruner;
 
-    std::unordered_map<uint32_t, ColumnAccessPathPtr>* column_access_paths = nullptr;
+    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 };
 
 } // namespace starrocks

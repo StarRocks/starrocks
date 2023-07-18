@@ -36,6 +36,7 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
@@ -174,6 +175,8 @@ import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule.DecodeVisitor;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -647,6 +650,36 @@ public class PlanFragmentBuilder {
             return inputFragment;
         }
 
+        // get all column access path, and mark paths which one is predicate used
+        private List<ColumnAccessPath> computeAllColumnAccessPath(PhysicalScanOperator scan) {
+            if (scan.getPredicate() == null) {
+                return scan.getColumnAccessPaths();
+            }
+
+            SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
+            scan.getPredicate().accept(collector, null);
+
+            List<ColumnAccessPath> paths = Lists.newArrayList();
+            SubfieldAccessPathNormalizer normalizer = new SubfieldAccessPathNormalizer();
+            collector.getComplexExpressions().forEach(normalizer::add);
+
+            for (ColumnRefOperator key : scan.getColRefToColumnMetaMap().keySet()) {
+                if (!key.getType().isComplexType()) {
+                    continue;
+                }
+
+                String name = scan.getColRefToColumnMetaMap().get(key).getName();
+                ColumnAccessPath path = normalizer.normalizePath(key, name);
+                if (path.onlyRoot()) {
+                    continue;
+                }
+                path.setFromPredicate(true);
+                paths.add(path);
+            }
+            paths.addAll(scan.getColumnAccessPaths());
+            return paths;
+        }
+
         @Override
         public PlanFragment visitPhysicalOlapScan(OptExpression optExpr, ExecPlan context) {
             PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
@@ -718,7 +751,7 @@ public class PlanFragmentBuilder {
             }
 
             // set column access path
-            scanNode.setColumnAccessPaths(node.getColumnAccessPaths());
+            scanNode.setColumnAccessPaths(computeAllColumnAccessPath(node));
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());

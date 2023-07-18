@@ -451,16 +451,19 @@ struct TSchemaScanNode {
 }
 
 enum TAccessPathType {
-    ROOT,
-    KEY,
-    OFFSET,
-    FIELD,
+    ROOT,       // ROOT
+    KEY,        // MAP KEY
+    OFFSET,     // ARRAY/MAP OFFSET
+    FIELD,      // STRUCT FIELD
+    INDEX,      // ARRAY/MAP INDEX-AT POSITION DATA
+    ALL,        // ARRAY/MAP ALL DATA
 }
 
 struct TColumnAccessPath {
     1: optional TAccessPathType type
     2: optional Exprs.TExpr path
     3: optional list<TColumnAccessPath> children
+    4: optional bool from_predicate
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
