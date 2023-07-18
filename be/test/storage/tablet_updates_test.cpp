@@ -1556,29 +1556,34 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
     DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
 
     int N = 100;
+    int loop = 4;
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet_with_sort_key(rand(), rand(), {1, 2});
-    std::vector<int64_t> keys;
-    for (int i = 0; i < N; i++) {
-        keys.push_back(i);
+
+    std::vector<int64_t> sorted_keys;
+    for (int i = 0; i < 100; i++) {
+        for (int j = 0; j < loop; j++) {
+            sorted_keys.emplace_back(100 * j + i);
+        }
     }
-    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
-    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    for (int i = 0; i < loop; i++) {
+        std::vector<int64_t> keys;
+        for (int j = 0; j < N; j++) {
+            keys.push_back(i * 100 + j);
+        }
+        ASSERT_TRUE(_tablet->rowset_commit(2 + i, create_rowset(_tablet, keys)).ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    ASSERT_EQ(N * loop, read_tablet(_tablet, loop + 1));
     const auto& best_tablet =
             StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
     EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 3, keys));
+    EXPECT_EQ(N * loop, read_tablet_and_compare(best_tablet, loop + 1, sorted_keys));
     ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
-    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), loop + 2);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 
@@ -1587,9 +1592,9 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
     auto& cols = sk_chunk->columns();
     for (int i = 0; i < loop; i++) {
         int64_t key = sorted_keys[i * 100];
-        cols[0]->append_datum(Datum(key));
-        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+        cols[0]->append_datum(vectorized::Datum(key));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+        cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
     }
     std::vector<RowsetSharedPtr> rowsets;
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(loop + 1, &rowsets).ok());
@@ -1600,7 +1605,7 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
     ASSERT_EQ(sk_index_values.size(), loop);
     size_t keys = _tablet->tablet_schema().num_short_key_columns();
     for (size_t i = 0; i < loop; i++) {
-        SeekTuple tuple(schema, sk_chunk->get(i).datums());
+        vectorized::SeekTuple tuple(schema, sk_chunk->get(i).datums());
         std::string encoded_key = tuple.short_key_encode(keys, {1, 2}, 0);
         ASSERT_EQ(encoded_key, sk_index_values[i]);
     }
@@ -1680,29 +1685,35 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
     DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
 
     int N = 100;
+    int loop = 4;
     srand(GetCurrentTimeMicros());
-    _tablet = create_tablet_with_sort_key(rand(), rand(), {1});
-    std::vector<int64_t> keys;
-    for (int i = 0; i < N; i++) {
-        keys.push_back(i);
+    _tablet = create_tablet_with_sort_key(rand(), rand(), {1, 2});
+    std::vector<int64_t> sorted_keys;
+    for (int i = 0; i < 100; i++) {
+        for (int j = 0; j < loop; j++) {
+            sorted_keys.emplace_back(100 * j + i);
+        }
     }
-    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
-    ASSERT_EQ(N, read_tablet(_tablet, 4));
+
+    for (int i = 0; i < loop; i++) {
+        std::vector<int64_t> keys;
+        for (int j = 0; j < N; j++) {
+            keys.push_back(i * 100 + j);
+        }
+        ASSERT_TRUE(_tablet->rowset_commit(2 + i, create_rowset(_tablet, keys)).ok());
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+    ASSERT_EQ(N * loop, read_tablet(_tablet, loop + 1));
     const auto& best_tablet =
             StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
     EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    EXPECT_EQ(N, read_tablet_and_compare(best_tablet, 3, keys));
+    EXPECT_EQ(N * loop, read_tablet_and_compare(best_tablet, loop + 1, sorted_keys));
     ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
-    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), loop + 2);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 
@@ -1711,9 +1722,9 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
     auto& cols = sk_chunk->columns();
     for (int i = 0; i < loop; i++) {
         int64_t key = sorted_keys[i * 100];
-        cols[0]->append_datum(Datum(key));
-        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+        cols[0]->append_datum(vectorized::Datum(key));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+        cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
     }
     std::vector<RowsetSharedPtr> rowsets;
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(loop + 1, &rowsets).ok());
@@ -1724,7 +1735,7 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
     ASSERT_EQ(sk_index_values.size(), loop);
     size_t keys = _tablet->tablet_schema().num_short_key_columns();
     for (size_t i = 0; i < loop; i++) {
-        SeekTuple tuple(schema, sk_chunk->get(i).datums());
+        vectorized::SeekTuple tuple(schema, sk_chunk->get(i).datums());
         std::string encoded_key = tuple.short_key_encode(keys, {1, 2}, 0);
         ASSERT_EQ(encoded_key, sk_index_values[i]);
     }
