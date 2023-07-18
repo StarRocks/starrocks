@@ -686,4 +686,16 @@ public class StarOSAgent {
             throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
         }
     }
+
+    // dump all starmgr meta, for DEBUG purpose
+    public String dump() {
+        prepare();
+
+        try {
+            return client.dump();
+        } catch (StarClientException e) {
+            String str = "Fail to dump starmgr meta, " + e.getMessage();
+            return str;
+        }
+    }
 }
