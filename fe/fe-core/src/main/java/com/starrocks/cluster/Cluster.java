@@ -39,7 +39,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.catalog.system.starrocks.StarRocksDb;
+import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.LinkDbInfo;
@@ -181,8 +181,8 @@ public class Cluster implements Writable {
             dbCount--;
         }
 
-        if (dbNames.contains(StarRocksDb.DATABASE_NAME) &&
-                dbNameToIDs.get(StarRocksDb.DATABASE_NAME).equals(SystemId.STARROCKS_DB_ID)) {
+        if (dbNames.contains(SysDb.DATABASE_NAME) &&
+                dbNameToIDs.get(SysDb.DATABASE_NAME).equals(SystemId.SYS_DB_ID)) {
             dbCount--;
         }
 
@@ -191,8 +191,8 @@ public class Cluster implements Writable {
         for (String name : dbNames) {
             if (name.equals(InfoSchemaDb.DATABASE_NAME)) {
                 dbIds.remove(dbNameToIDs.get(name));
-            } else if (name.equals(StarRocksDb.DATABASE_NAME) &&
-                    dbNameToIDs.get(StarRocksDb.DATABASE_NAME).equals(SystemId.STARROCKS_DB_ID)) {
+            } else if (name.equals(SysDb.DATABASE_NAME) &&
+                    dbNameToIDs.get(SysDb.DATABASE_NAME).equals(SystemId.SYS_DB_ID)) {
                 dbIds.remove(dbNameToIDs.get(name));
             } else {
                 Text.writeString(out, ClusterNamespace.getFullName(name));
