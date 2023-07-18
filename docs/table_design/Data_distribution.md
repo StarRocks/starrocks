@@ -148,7 +148,7 @@ However, note that the query performance provided by random bucketing may not be
 **Precautions**
 
 - You can only use random bucketing to create Duplicate Key tables.
-  - You can not specify a [Colocation Group](../using_starrocks/Colocate_join.md) for a table bucketed randomly.
+- You can not specify a [Colocation Group](../using_starrocks/Colocate_join.md) for a table bucketed randomly.
 - [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
 
 The following example does not include the DISTRIBUTED BY xxx clause, so StarRocks uses random bucketing by default and automatically determines the number of buckets.
@@ -156,25 +156,25 @@ The following example does not include the DISTRIBUTED BY xxx clause, so StarRoc
 ```SQL
 CREATE TABLE site_access1(
     event_day DATE,
-    site_id INT DEFAULT '10',
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
     city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    user_name VARCHAR(32) DEFAULT ''
 )
-DUPLICATE KEY(event_day,site_id,city_code,pv);
+DUPLICATE KEY(event_day,site_id,pv);
 ```
 
 Also, if you are familiar with StarRocks's bucketing mechanism, you can also manually set the number of buckets when creating a table with random bucketing.
 
 ```SQL
-CREATE TABLE site_access(
+CREATE TABLE site_access2(
     event_day DATE,
-    site_id INT DEFAULT '10',
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
     city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    user_name VARCHAR(32) DEFAULT ''
 )
-DUPLICATE KEY(event_day,site_id,city_code,pv)
+DUPLICATE KEY(event_day,site_id,pv)
 DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
 ```
 
