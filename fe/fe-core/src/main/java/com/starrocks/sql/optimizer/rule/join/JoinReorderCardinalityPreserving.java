@@ -257,15 +257,19 @@ public class JoinReorderCardinalityPreserving extends JoinOrder {
             used[index] = true;
 
             GroupInfo rightGroup = atoms.get(index);
-            ExpressionInfo joinExpr = buildJoinExpr(leftGroup, atoms.get(index));
-            joinExpr.expr.deriveLogicalPropertyItself();
+            Optional<ExpressionInfo> joinExpr = buildJoinExpr(leftGroup, atoms.get(index));
+            if (!joinExpr.isPresent()) {
+                return;
+            }
+
+            joinExpr.get().expr.deriveLogicalPropertyItself();
 
             BitSet joinBitSet = new BitSet();
             joinBitSet.or(leftGroup.atoms);
             joinBitSet.or(rightGroup.atoms);
 
             leftGroup = new GroupInfo(joinBitSet);
-            leftGroup.bestExprInfo = joinExpr;
+            leftGroup.bestExprInfo = joinExpr.get();
         }
         bestPlanRoot = Optional.of(leftGroup.bestExprInfo.expr);
     }
