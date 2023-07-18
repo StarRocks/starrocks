@@ -28,6 +28,7 @@ static TCounterStrategy create_strategy(TUnit::type type) {
 }
 
 TEST(TestRuntimeProfile, testMergeIsomorphicProfiles1) {
+    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
     std::vector<RuntimeProfile*> profiles;
 
     auto profile1 = std::make_shared<RuntimeProfile>("profile");
@@ -56,9 +57,8 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles1) {
         profiles.push_back(profile2.get());
     }
 
-    RuntimeProfile::merge_isomorphic_profiles(profiles);
+    auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
 
-    auto* merged_profile = profiles[0];
     auto* merged_time1 = merged_profile->get_counter("time1");
     ASSERT_EQ(2000000000L, merged_time1->value());
     auto* merged_min_of_time1 = merged_profile->get_counter("__MIN_OF_time1");
@@ -88,6 +88,7 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles1) {
 }
 
 TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
+    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
     std::vector<RuntimeProfile*> profiles;
 
     auto profile1 = std::make_shared<RuntimeProfile>("profile");
@@ -136,9 +137,7 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
         profiles.push_back(profile2.get());
     }
 
-    RuntimeProfile::merge_isomorphic_profiles(profiles);
-
-    auto* merged_profile = profiles[0];
+    auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
     auto* merged_time1 = merged_profile->get_counter("time1");
     ASSERT_EQ(2500000000L, merged_time1->value());
     auto* merged_min_of_time1 = merged_profile->get_counter("__MIN_OF_time1");
@@ -159,6 +158,7 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
 }
 
 TEST(TestRuntimeProfile, testProfileMergeStrategy) {
+    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
     std::vector<RuntimeProfile*> profiles;
 
     TCounterStrategy strategy1;
@@ -210,9 +210,7 @@ TEST(TestRuntimeProfile, testProfileMergeStrategy) {
         profiles.push_back(profile2.get());
     }
 
-    RuntimeProfile::merge_isomorphic_profiles(profiles);
-
-    auto* merged_profile = profiles[0];
+    auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
 
     auto* merged_time1 = merged_profile->get_counter("time1");
     ASSERT_EQ(2000000000L, merged_time1->value());
@@ -248,6 +246,7 @@ TEST(TestRuntimeProfile, testProfileMergeStrategy) {
 }
 
 TEST(TestRuntimeProfile, testConflictInfoString) {
+    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
     std::vector<RuntimeProfile*> profiles;
     auto profile1 = std::make_shared<RuntimeProfile>("profile");
     {
@@ -277,9 +276,7 @@ TEST(TestRuntimeProfile, testConflictInfoString) {
         profiles.push_back(profile5.get());
     }
 
-    RuntimeProfile::merge_isomorphic_profiles(profiles);
-
-    auto* merged_profile = profiles[0];
+    auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
     const std::set<std::string> expected_values{"value1", "value2", "value3", "value4", "value5", "value6"};
     std::set<std::string> actual_values;
     ASSERT_TRUE(merged_profile->get_info_string("key1") != nullptr);

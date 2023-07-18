@@ -583,7 +583,7 @@ public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile
-    static void merge_isomorphic_profiles(std::vector<RuntimeProfile*>& profiles);
+    static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles);
 
 private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;

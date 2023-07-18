@@ -131,6 +131,10 @@ public:
     // 3. operators decorated by MultilaneOperator except case 2: e.g. ProjectOperator, Chunk AccumulateOperator and etc.
     virtual Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) { return Status::OK(); }
 
+    // Some operator's metrics are updated in the finishing stage, which is not suitable to the runtime profile mechanism.
+    // So we add this function for manual updation of metrics when reporting the runtime profile.
+    virtual void update_metrics(RuntimeState* state) {}
+
     virtual size_t output_amplification_factor() const { return 1; }
     enum class OutputAmplificationType { ADD, MAX };
     virtual OutputAmplificationType intra_pipeline_amplification_type() const { return OutputAmplificationType::MAX; }
@@ -317,7 +321,7 @@ public:
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
     virtual void close(RuntimeState* state);
-    std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
+    std::string get_name() const { return _name + "_(" + std::to_string(_plan_node_id) + ")"; }
     std::string get_raw_name() const { return _name; }
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.
