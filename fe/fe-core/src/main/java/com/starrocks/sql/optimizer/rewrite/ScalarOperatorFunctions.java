@@ -384,11 +384,15 @@ public class ScalarOperatorFunctions {
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
         return dateFormat(dl, fmtLiteral);
     }
-
-    @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)
+    @ConstantFunction.List(list = {
+        @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME),
+        @ConstantFunction(name = "current_timestamp", argTypes = {}, returnType = DATETIME),
+        @ConstantFunction(name = "localtime", argTypes = {}, returnType = DATETIME),
+        @ConstantFunction(name = "localtimestamp", argTypes = {}, returnType = DATETIME)
+    })
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
-        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetime(startTime);
     }
@@ -429,7 +433,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "utc_timestamp", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator utcTimestamp() {
         // for consistency with mysql, ignore milliseconds
-        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime() / 1000 * 1000)
+        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         return ConstantOperator.createDatetime(utcStartTime);
     }
