@@ -492,7 +492,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     auto meta_store = tablet->data_dir()->get_meta();
     DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
     for (const auto& snapshot_rowset : snapshot_rowsets) {
-        for (int i = 0; i < snapshot_rowset->segments().size(); ++i) {
+        for (int i = 0; i < snapshot_rowset->num_segments(); ++i) {
             int64_t tablet_id = tablet->tablet_id();
             RowsetId rowsetid = snapshot_rowset->rowset_meta()->rowset_id();
 
