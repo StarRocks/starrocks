@@ -43,8 +43,7 @@ public class HashAggImplementationRule extends ImplementationRule {
                 logical.isSplit(),
                 logical.getLimit(),
                 logical.getPredicate(),
-                logical.getProjection(),
-                logical.canUseStreamingPreAgg());
+                logical.getProjection());
         physical.setDistinctColumnDataSkew(logical.getDistinctColumnDataSkew());
         OptExpression result = OptExpression.create(physical, input.getInputs());
         return Lists.newArrayList(result);
