@@ -52,6 +52,7 @@ To achieve more flexible data distribution, you can combine the preceding four p
 
   For example, the following statement creates a table `site_access` that is partitioned by the `event_day` column. The table contains 3 partitions: `p1`, `p2`, and `p3`. Each partition is divided into tablets based on the `site_id` column and the number of buckets.
 
+<<<<<<< HEAD
   ```SQL
   CREATE TABLE site_access(
       event_day DATE,
@@ -69,6 +70,81 @@ To achieve more flexible data distribution, you can combine the preceding four p
   )
   DISTRIBUTED BY HASH(site_id);
   ```
+=======
+In summary, StarRocks supports four data distribution methods: Random, Hash, Range + Random, and Range + Hash.
+
+- **Random distribution**: The entire table is regarded as one partition. The data in the table is randomly distributed across different buckets. This is suitable for scenarios with small volume of data that grows slowly over time. **If you don't specify the data distribution method, StarRocks uses this data distribution method by default.**
+- **Hash distribution**: The entire table is regarded as one partition. The data in the table is divided into buckets based on the bucketing column and the number of buckets (either manually specified or automatically configured).
+- **Range+Random distribution**: The data of the table is partitioned based on the range of values in the partitioning column. The data within a partition is randomly distributed across different buckets.
+- **Range+hash distribution**: The data of the table is partitioned based on the range of values in the partitioning column. The data within a partition is further distributed into buckets based on the bucketing column and the number of buckets.
+
+For example, if you create a table without specifying the data distribution method, StarRocks uses Random distribution by default:
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
+)
+DUPLICATE KEY(event_day,site_id,pv); -- The data distribution method is not specified.
+```
+
+Specify Hash distribution as the data distribution method at table creation.
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code SMALLINT,
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+DISTRIBUTED BY HASH(event_day,site_id); -- Set the bucketing method as Hash bucketing and specify the bucketing key.
+```
+
+Specify Range + Random distribution as the data distribution method at table creation.
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
+)
+DUPLICATE KEY(event_day,site_id,pv)
+PARTITION BY RANGE(event_day) (
+    -- Set the partitioning method as Range partitioning.
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-31")
+); -- The bucketing method is not specified, and StarRocks uses Random bucketing by default.
+```
+
+Specify Range + Hash distribution as the data distribution method at table creation.
+
+```SQL
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+-- Set the partitioning method as Range partitioning.
+PARTITION BY RANGE(event_day) (
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-31")
+)
+-- Set the bucketing method as Hash bucketing and specify the bucketing key.
+DISTRIBUTED BY HASH(event_day, site_id);
+```
+>>>>>>> 3e1c814aba ([Doc] bugfix in 3.1 (#27408))
 
 ## Design partitioning and bucketing rules
 
@@ -84,7 +160,69 @@ Data in a partitioned table is divided based on partitioning columns, also calle
 
 ### Choose bucketing columns
 
+<<<<<<< HEAD
 Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
+=======
+Data in partitions can be subdivided into multiple buckets, and the data within a bucket can be referred to as a tablet.
+
+- Bucketing methods: supports Random bucketing (since v3.1) and Hash bucketing.
+Random bucketing: does not require the bucketing key when creating a table or adding a partition. The data is randomly distributed across different buckets.
+- Hash bucketing: requires the bucketing key when creating a table or adding a partition. Data within a partition is subdivided into buckets based on the bucketing key. Rows with the same bucketing key value are assigned to the corresponding and unique bucket.
+
+The number of buckets: By default, StarRocks automatically sets the number of buckets (since version 2.5.7). However, you can also manually set the number of buckets. For more information, see [Determine the number of buckets](#determine-the-number-of-buckets).
+
+#### Random bucketing (since v3.1)
+
+For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. This method is suitable for scenarios with small data volumes and low requirements for query performance. If you do not set a bucketing method, StarRocks uses random bucketing by default and automatically determines the number of buckets.
+
+However, note that the query performance provided by random bucketing may not be ideal when you query massive amounts of data and frequently use certain columns as conditional columns. In this scenario, it is recommended to use [hash bucketing](#hash-bucketing). Because only a small number of buckets need to be scanned and computed, significantly improving query performance.
+
+**Precautions**
+
+- You can only use random bucketing to create Duplicate Key tables.
+- You can not specify a [Colocation Group](../using_starrocks/Colocate_join.md) for a table bucketed randomly.
+- [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+
+The following example does not include the DISTRIBUTED BY clause, so StarRocks uses random bucketing by default and automatically determines the number of buckets.
+
+```SQL
+CREATE TABLE site_access1(
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
+)
+DUPLICATE KEY(event_day,site_id,pv);
+```
+
+Also, if you are familiar with StarRocks's bucketing mechanism, you can also manually set the number of buckets when creating a table with random bucketing.
+
+```SQL
+CREATE TABLE site_access2(
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
+)
+DUPLICATE KEY(event_day,site_id,pv)
+DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
+```
+
+#### Hash bucketing
+
+Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. In hash bucketing, the value of the bucketing column is used as input to calculate a hash value by using the hash function, and then the data is assigned to the corresponding bucket based on that hash value.
+
+**Advantages**
+
+- Improved query performance: Rows with the same bucketing key value are assigned to the same bucket, which reduces the amount of data scanned during queries.
+- Even data distribution: By using the high-cardinality column (with a large number of unique values) as the bucketing key, data can be more evenly distributed across buckets.
+
+**Choose the bucketing key**
+
+We recommend that you choose the column or columns that satisfy the following two requirements as the bucketing key.
+>>>>>>> 3e1c814aba ([Doc] bugfix in 3.1 (#27408))
 
 - high cardinality column such as ID
 - column that often used as a filter in queries
