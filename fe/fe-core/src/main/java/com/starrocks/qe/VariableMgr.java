@@ -291,6 +291,14 @@ public class VariableMgr {
         }
     }
 
+    public static void checkSystemVariableExist(SystemVariable setVar) throws DdlException {
+        VarContext ctx = getVarContext(setVar.getVariable());
+        if (ctx == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
+                    findSimilarVarNames(setVar.getVariable()));
+        }
+    }
+
     // Entry of handling SetVarStmt
     // Input:
     //      sessionVariable: the variable of current session
@@ -300,18 +308,14 @@ public class VariableMgr {
         if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
             return;
         }
-
-        VarContext ctx = getVarContext(setVar.getVariable());
-        if (ctx == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
-                    findSimilarVarNames(setVar.getVariable()));
-        }
+        checkSystemVariableExist(setVar);
 
         if (setVar.getType() == SetType.VERBOSE) {
             ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, setVar.getVariable());
         }
 
         // Check variable attribute and setVar
+        VarContext ctx = getVarContext(setVar.getVariable());
         checkUpdate(setVar, ctx.getFlag());
 
         // To modify to default value.
