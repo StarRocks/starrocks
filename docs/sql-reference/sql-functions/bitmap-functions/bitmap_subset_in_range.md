@@ -4,7 +4,7 @@
 
 Intercepts elements from a Bitmap value within the range of `start_range` and `end_range` (exclusive). The output elements are a subset of the Bitmap value.
 
-This function is mainly used for scenarios such as paginated queries. It is supported from v2.5.
+This function is mainly used for scenarios such as paginated queries. It is supported from v3.1.
 
 ## Syntax
 
@@ -41,7 +41,7 @@ select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,1,3,1,5,3,5
 +-------+
 ```
 
-Example 2: Obtain subset elements from the BITMAP value with elements value in the range 1 to 100, the end value exceeds the maximum element value of the BITMAP value and all the matching elements are returned.
+Example 2: Obtain subset elements from the BITMAP value with elements value in the range 1 to 100. The end value exceeds the maximum length of the BITMAP value and all the matching elements are returned.
 
 ```Plaintext
 select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,1,3,1,5,3,5,7,7,9'), 0, 100)) value;
@@ -52,7 +52,7 @@ select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,1,3,1,5,3,5
 +-----------+
 ```
 
-Example 3: NULL is returned because the end range `3` is less than start range `4`.
+Example 3: NULL is returned because the end range `3` is less than the start range `4`.
 
 ```Plaintext
 select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,1,3,1,5,3,5,7,7,9'), 4, 3)) value;
@@ -63,7 +63,7 @@ select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,1,3,1,5,3,5
 +-------+
 ```
 
-Example 4: The start range 10 exceeds the maximum length of the BITMAP value `1,3,5,7,9`. NULL is returned.
+Example 4: The start range 10 exceeds the maximum length (5) of the BITMAP value `1,3,5,7,9`. NULL is returned.
 
 ```Plain
 select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,1,3,1,5,3,5,7,7,9'), 10, 15)) value;
@@ -74,7 +74,7 @@ select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,1,3,1,5,3,5
 +-------+
 ```
 
-Example 5: The returned subset includes 1 but excludes 3.
+Example 5: The returned subset includes the start value `1` but excludes the end value `3`.
 
 ```plaintext
 select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,1,3,1,5,4,5,6,7,9'), 1, 3)) value;
