@@ -106,7 +106,7 @@ Specify Range + Hash distribution as the data distribution method at table creat
 CREATE TABLE site_access(
     event_day DATE,
     site_id INT DEFAULT '10',
-    city_code SMALLINT,
+    city_code VARCHAR(100),
     user_name VARCHAR(32) DEFAULT '',
     pv BIGINT SUM DEFAULT '0'
 )
