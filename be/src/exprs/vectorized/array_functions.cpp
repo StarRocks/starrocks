@@ -923,7 +923,7 @@ private:
         }
 
         auto result = _array_has_non_nullable(*array_col, *target_col);
-        DCHECK_EQ(array_nullable->size(), result->size());
+        DCHECK_EQ(array_col->size(), result->size());
         return NullableColumn::create(std::move(result), merge_nullcolum(array_nullable, target_nullable));
     }
 };
