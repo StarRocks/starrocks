@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.List;
 
 public class ScanTest extends PlanTestBase {
     @Test
@@ -451,5 +453,14 @@ public class ScanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count((CAST(1: v1 AS BOOLEAN)) OR (CAST(2: v2 AS BOOLEAN)))");
+    }
+
+    @Test
+    public void testPruneColumnTest() throws Exception {
+        String sql = "select count(*) from lineitem_partition";
+
+        ExecPlan plan = getExecPlan(sql);
+        List<ScanNode> scanNodeList = plan.getScanNodes();
+        Assert.assertTrue(scanNodeList.get(0).getCanUseAnyColumn());
     }
 }

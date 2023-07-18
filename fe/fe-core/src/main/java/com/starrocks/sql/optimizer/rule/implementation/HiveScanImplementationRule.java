@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -34,19 +33,9 @@ public class HiveScanImplementationRule extends ImplementationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        OptExpression result = null;
         LogicalHiveScanOperator scan = (LogicalHiveScanOperator) input.getOp();
-        if (scan.getTable().getType() == Table.TableType.HIVE) {
-            PhysicalHiveScanOperator physicalHiveScan = new PhysicalHiveScanOperator(scan.getTable(),
-                    scan.getColRefToColumnMetaMap(),
-                    scan.getScanOperatorPredicates(),
-                    scan.getLimit(),
-                    scan.getPredicate(),
-                    scan.getProjection());
-            physicalHiveScan.setCanUseAnyColumn(scan.getCanUseAnyColumn());
-            physicalHiveScan.setCanUseMinMaxCountOpt(scan.getCanUseMinMaxCountOpt());
-            result = new OptExpression(physicalHiveScan);
-        }
+        PhysicalHiveScanOperator physicalHiveScan = new PhysicalHiveScanOperator(scan);
+        OptExpression result = new OptExpression(physicalHiveScan);
         return Lists.newArrayList(result);
     }
 }

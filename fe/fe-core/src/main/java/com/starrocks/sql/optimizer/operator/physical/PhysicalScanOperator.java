@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -79,6 +80,13 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         } else {
             outputColumns = ImmutableList.copyOf(colRefToColumnMetaMap.keySet());
         }
+    }
+
+    public PhysicalScanOperator(OperatorType type, LogicalScanOperator scanOperator) {
+        this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
+                scanOperator.getPredicate(), scanOperator.getProjection());
+        this.canUseAnyColumn = scanOperator.getCanUseAnyColumn();
+        this.canUseMinMaxCountOpt = scanOperator.getCanUseMinMaxCountOpt();
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
