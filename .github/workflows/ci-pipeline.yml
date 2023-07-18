@@ -486,7 +486,7 @@ jobs:
 
   fe-ut:
     runs-on: [self-hosted, normal]
-    needs: [fe-codestyle-check,]
+    needs: [fe-codestyle-check]
     name: FE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
