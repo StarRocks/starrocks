@@ -122,6 +122,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv10");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+<<<<<<< HEAD
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10`\n" +
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -134,6 +135,20 @@ public class ShowCreateMaterializedViewStmtTest {
                 ")\n" +
                 "AS SELECT `hive0`.`partitioned_db2`.`t2`.`c1`, `hive0`.`partitioned_db`.`t1`.`c2`\n" +
                 "FROM `hive0`.`partitioned_db`.`t1` INNER JOIN `hive0`.`partitioned_db2`.`t2` ON `hive0`.`partitioned_db`.`t1`.`c2` = `hive0`.`partitioned_db2`.`t2`.`c2`;",
+=======
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10` (`c1`, `c2`)\n" +
+                        "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\",\n" +
+                        "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) REFERENCES hive0.partitioned_db2.t2(c2)\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `hive0`.`partitioned_db2`.`t2`.`c1`, `hive0`.`partitioned_db`.`t1`.`c2`\n" +
+                        "FROM `hive0`.`partitioned_db`.`t1` INNER JOIN `hive0`.`partitioned_db2`.`t2` ON `hive0`.`partitioned_db`.`t1`.`c2` = `hive0`.`partitioned_db2`.`t2`.`c2`;",
+>>>>>>> 66371dbca0 ([BugFix] Fix mv_rewrite_staleness_second property lost in show create mv (#27309))
                 createTableStmt.get(0));
     }
 
@@ -428,5 +443,36 @@ public class ShowCreateMaterializedViewStmtTest {
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No Exception throws.");
+    }
+
+    @Test
+    public void testShowCreateMVWithStaleness() throws Exception {
+        String createMvSql = "create materialized view mv_with_staleness " +
+                "distributed by hash(k1) buckets 10 " +
+                "refresh manual " +
+                "PROPERTIES (\n" +
+                "\"mv_rewrite_staleness_second\" = \"60\"\n" +
+                ")\n" +
+                "as select k1, k2 from tbl1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getDb("test").getTable("mv_with_staleness");
+        List<String> createTableStmt = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv_with_staleness` (`k1`, `k2`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"mv_rewrite_staleness_second\" = \"60\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `tbl1`.`k1`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
+        String copySql = createTableStmt.get(0).replaceAll("mv_with_staleness", "mv_with_staleness_copy");
+        currentState.createMaterializedView(
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
+
     }
 }

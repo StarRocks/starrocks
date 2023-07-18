@@ -3518,6 +3518,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
+<<<<<<< HEAD
         // process properties
         Map<String, String> properties = stmt.getProperties();
         if (properties == null) {
@@ -3542,6 +3543,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 PropertyAnalyzer.analyzeBooleanProp(
                         properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
                         Config.enable_replicated_storage_as_default_engine));
+=======
+>>>>>>> 66371dbca0 ([BugFix] Fix mv_rewrite_staleness_second property lost in show create mv (#27309))
         boolean isNonPartitioned = partitionInfo.getType() == PartitionType.UNPARTITIONED;
         DataProperty dataProperty = analyzeMVDataProperties(db, materializedView, properties, isNonPartitioned);
 
@@ -3604,6 +3607,28 @@ public class LocalMetastore implements ConnectorMetadata {
                                                  boolean isNonPartitioned) throws DdlException {
         DataProperty dataProperty;
         try {
+<<<<<<< HEAD
+=======
+            // replicated storage
+            materializedView.setEnableReplicatedStorage(
+                    PropertyAnalyzer.analyzeBooleanProp(
+                            properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                            Config.enable_replicated_storage_as_default_engine));
+
+            // replication_num
+            short replicationNum = RunMode.defaultReplicationNum();
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                materializedView.setReplicationNum(replicationNum);
+            }
+            // mv_rewrite_staleness second.
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+                Integer maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
+                materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND, maxMVRewriteStaleness.toString());
+            }
+>>>>>>> 66371dbca0 ([BugFix] Fix mv_rewrite_staleness_second property lost in show create mv (#27309))
             // set storage medium
             boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
@@ -3616,6 +3641,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                                 String.valueOf(dataProperty.getCooldownTimeMs()));
             }
+            // partition ttl number
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
                 int number = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
                 materializedView.getTableProperty().getProperties()
@@ -3626,6 +3652,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             + " does not support non-partitioned materialized view.");
                 }
             }
+            // partition auto refresh partitions limit
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
                 int limit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
                 materializedView.getTableProperty().getProperties()
@@ -3636,6 +3663,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             + " does not support non-partitioned materialized view.");
                 }
             }
+            // partition refresh number
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
                 int number = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
                 materializedView.getTableProperty().getProperties()
@@ -3646,6 +3674,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             + " does not support non-partitioned materialized view.");
                 }
             }
+            // exclude trigger tables
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
                 List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
                 StringBuilder tableSb = new StringBuilder();
@@ -3664,6 +3693,21 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
                 materializedView.getTableProperty().setExcludedTriggerTables(tables);
             }
+<<<<<<< HEAD
+=======
+            // resource_group
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
+                String resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
+                if (GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroup) == null) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP
+                            + " " + resourceGroup + " does not exist.");
+                }
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
+                materializedView.getTableProperty().setResourceGroup(resourceGroup);
+            }
+            // force external query rewrite
+>>>>>>> 66371dbca0 ([BugFix] Fix mv_rewrite_staleness_second property lost in show create mv (#27309))
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
                 boolean forceExternalTableQueryReWrite = PropertyAnalyzer.
                         analyzeForceExternalTableQueryRewrite(properties);
@@ -3672,21 +3716,37 @@ public class LocalMetastore implements ConnectorMetadata {
                                 String.valueOf(forceExternalTableQueryReWrite));
                 materializedView.getTableProperty().setForceExternalTableQueryRewrite(forceExternalTableQueryReWrite);
             }
+            // unique keys
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                 List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db,
                         materializedView);
                 materializedView.setUniqueConstraints(uniqueConstraints);
             }
+            // foreign keys
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
                 List<ForeignKeyConstraint> foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(
                         properties, db, materializedView);
                 materializedView.setForeignKeyConstraints(foreignKeyConstraints);
             }
+<<<<<<< HEAD
 
+=======
+            // colocate_with
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                if (StringUtils.isNotEmpty(colocateGroup) &&
+                        !materializedView.getDefaultDistributionInfo().supportColocate()) {
+                    throw new AnalysisException(": random distribution does not support 'colocate_with'");
+                }
+                colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
+                        materializedView.isCloudNativeMaterializedView());
+            }
+            // lake storage info
+>>>>>>> 66371dbca0 ([BugFix] Fix mv_rewrite_staleness_second property lost in show create mv (#27309))
             if (materializedView.isCloudNativeMaterializedView()) {
                 setLakeStorageInfo(materializedView, properties);
             }
-
+            // session properties
             if (!properties.isEmpty()) {
                 // analyze properties
                 List<SetListItem> setListItems = Lists.newArrayList();
@@ -3700,6 +3760,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     String varKey = entry.getKey().substring(
                             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
                     SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+                    VariableMgr.checkSystemVariableExist(variable);
                     setListItems.add(variable);
                 }
                 SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);

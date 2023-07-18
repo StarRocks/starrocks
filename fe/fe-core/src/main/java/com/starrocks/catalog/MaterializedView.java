@@ -908,6 +908,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE).append("\" = \"");
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)).append("\"");
         }
+
         // mv_rewrite_staleness
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
@@ -930,8 +931,27 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     .append("\"");
         }
 
+<<<<<<< HEAD
+=======
+        // colocateTable
+        if (colocateGroup != null) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
+                    .append("\" = \"");
+            sb.append(colocateGroup).append("\"");
+        }
+
+        // resource group
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                    PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP).append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)).append("\"");
+        }
+
+        // storage medium
+>>>>>>> 66371dbca0 ([BugFix] Fix mv_rewrite_staleness_second property lost in show create mv (#27309))
         appendUniqueProperties(sb);
 
+        // session properties
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(entry.getKey())
