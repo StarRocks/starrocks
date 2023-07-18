@@ -59,12 +59,13 @@ For example, if you create a table without specifying the data distribution meth
 
 ```SQL
 CREATE TABLE site_access(
-    site_id INT DEFAULT '10',
-    city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
 )
-AGGREGATE KEY(site_id, city_code, user_name); -- The data distribution method is not specified.
+DUPLICATE KEY(event_day,site_id,pv); -- The data distribution method is not specified.
 ```
 
 Specify Hash distribution as the data distribution method at table creation.
@@ -85,12 +86,12 @@ Specify Range + Random distribution as the data distribution method at table cre
 ```SQL
 CREATE TABLE site_access(
     event_day DATE,
-    site_id INT DEFAULT '10',
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
     city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
+    user_name VARCHAR(32) DEFAULT ''
 )
-AGGREGATE KEY(event_day, site_id, city_code, user_name)
+DUPLICATE KEY(event_day,site_id,pv)
 PARTITION BY RANGE(event_day) ( -- Set the partitioning method as Range partitioning.
     PARTITION p1 VALUES LESS THAN ("2020-01-31"),
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
