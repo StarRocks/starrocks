@@ -128,6 +128,7 @@ int main(int argc, char** argv) {
             as_cn = true;
         }
     }
+    google::ParseCommandLineFlags(&argc, &argv, true);
 
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
