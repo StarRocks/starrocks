@@ -24,7 +24,7 @@ Fixed the following issues:
 - Some data rows queried fail to be returned for INSERT INTO SELECT with FULL JOIN. [#26603](https://github.com/StarRocks/starrocks/pull/26603)
 - An error `ERROR xxx: Unknown table property xxx` occurs when the ALTER TABLE statement is used to modify the table's property `default.storage_medium`. [#25870](https://github.com/StarRocks/starrocks/issues/25870)
 - An error occurs when Broker Load is used to load empty files. [#26212](https://github.com/StarRocks/starrocks/pull/26212)
-- Demissioning a BE sometimes hangs. [#26509](https://github.com/StarRocks/starrocks/pull/26509)
+- Decommissioning a BE sometimes hangs. [#26509](https://github.com/StarRocks/starrocks/pull/26509)
 
 ## 3.0.3
 
