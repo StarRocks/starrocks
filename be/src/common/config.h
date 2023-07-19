@@ -771,7 +771,7 @@ CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
 
 // hdfs hedged read
-CONF_mBool(hdfs_client_enable_hedged_read, "true");
+CONF_mBool(hdfs_client_enable_hedged_read, "false");
 // dfs.client.hedged.read.threadpool.size
 CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
 // dfs.client.hedged.read.threshold.millis
