@@ -687,6 +687,42 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     return best_tablet;
 }
 
+// pick tablets to do primary index compaction
+std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_bg_compaction() {
+    std::vector<TabletAndScore> pick_tablets;
+    // 1. pick valid tablet, which score is larger than 0
+    for (const auto& tablets_shard : _tablets_shards) {
+        std::shared_lock rlock(tablets_shard.lock);
+        for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+            if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
+                continue;
+            }
+            // A not-ready tablet maybe a newly created tablet under schema-change, skip it
+            if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {
+                continue;
+            }
+
+            double score = tablet_ptr->updates()->get_pk_index_write_amp_score();
+            if (score <= 0) {
+                // score == 0 means this tablet's pk index doesn't need bg compaction
+                continue;
+            }
+
+            pick_tablets.emplace_back(tablet_ptr, score);
+        }
+    }
+    // 2. sort tablet by score, by ascending order.
+    std::sort(pick_tablets.begin(), pick_tablets.end(), [](TabletAndScore& a, TabletAndScore& b) {
+        // We try to compact tablet with small write amplification score first,
+        // to improve the total write IO amplification
+        return a.second < b.second;
+    });
+    if (!pick_tablets.empty()) {
+        LOG(INFO) << fmt::format("found {} tablets to do pk index bg compaction", pick_tablets.size());
+    }
+    return pick_tablets;
+}
+
 TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir* data_dir) {
     int64_t highest_score = 0;
     TabletSharedPtr best_tablet;

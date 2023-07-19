@@ -56,6 +56,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
+#include "storage/persistent_index_compaction_manager.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
@@ -103,6 +104,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
             StorageEngine::instance()->increase_update_compaction_thread(
                     config::update_compaction_num_threads_per_disk);
+        });
+        _config_callback.emplace("pindex_bg_compaction_num_threads", [&]() {
+            PersistentIndexCompactionManager* mgr =
+                    StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
+            if (mgr != nullptr) {
+                (void)mgr->update_max_threads(config::pindex_bg_compaction_num_threads);
+            }
         });
         _config_callback.emplace("update_memory_limit_percent", [&]() {
             StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(

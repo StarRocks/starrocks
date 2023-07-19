@@ -36,6 +36,7 @@
 #include "storage/del_vector.h"
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
+#include "storage/persistent_index.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -1254,7 +1255,9 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     full_rowset_size = rowset->total_segment_data_size();
 
     PersistentIndexMetaPB index_meta;
+    PersistentIndexMetaLockGuard index_meta_lock_guard;
     if (enable_persistent_index) {
+        index.get_persistent_index_meta_lock_guard(&index_meta_lock_guard);
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
@@ -1914,7 +1917,9 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     int64_t t_index_delvec = MonotonicMillis();
 
     PersistentIndexMetaPB index_meta;
+    PersistentIndexMetaLockGuard index_meta_lock_guard;
     if (enable_persistent_index) {
+        index.get_persistent_index_meta_lock_guard(&index_meta_lock_guard);
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = strings::Substitute("get persistent index meta failed: $0", st.to_string());
@@ -3767,6 +3772,33 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
         info.index_mem = index_entry->size();
         index_cache.release(index_entry);
     }
+}
+
+double TabletUpdates::get_pk_index_write_amp_score() {
+    double score = 0.0;
+    auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
+    auto index_entry = index_cache.get(_tablet.tablet_id());
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        score = index.get_write_amp_score();
+        index_cache.release(index_entry);
+    }
+    return score;
+}
+
+Status TabletUpdates::pk_index_bg_compaction() {
+    Status st = Status::OK();
+    auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
+    auto index_entry = index_cache.get(_tablet.tablet_id());
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        st = index.bg_compaction(&_tablet);
+        index_cache.release(index_entry);
+    }
+    if (!st.ok()) {
+        LOG(WARNING) << "PerstentIndex bg compaction failed, tablet_id: " << _tablet.tablet_id() << " st: " << st;
+    }
+    return st;
 }
 
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {

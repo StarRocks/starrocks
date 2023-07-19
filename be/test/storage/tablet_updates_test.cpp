@@ -3691,4 +3691,20 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
     ASSERT_TRUE(count == keys.size());
 }
 
+TEST_F(TabletUpdatesTest, test_pk_index_compaction) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    std::vector<int64_t> keys;
+    for (int i = 0; i < 100; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys), 60000).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    auto tablets = StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_bg_compaction();
+    EXPECT_TRUE(!tablets.empty());
+    // trigger pk index compaction
+    ASSERT_OK(tablets[0].first->updates()->pk_index_bg_compaction());
+}
+
 } // namespace starrocks

@@ -22,6 +22,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
+#include "storage/persistent_index_compaction_manager.h"
 #include "storage/rowset_column_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -113,6 +114,8 @@ Status UpdateManager::init() {
     RETURN_IF_ERROR(
             ThreadPoolBuilder("get_pindex").set_max_threads(max_get_thread_cnt).build(&_get_pindex_thread_pool));
 
+    _persistent_index_compaction_mgr = std::make_unique<PersistentIndexCompactionManager>();
+    RETURN_IF_ERROR(_persistent_index_compaction_mgr->init());
     return Status::OK();
 }
 

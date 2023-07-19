@@ -315,6 +315,10 @@ public:
 
     Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
+    double get_pk_index_write_amp_score();
+
+    Status pk_index_bg_compaction();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

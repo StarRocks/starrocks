@@ -327,6 +327,8 @@ private:
     void* _repair_compaction_thread_callback(void* arg);
     // manual compaction function
     void* _manual_compaction_thread_callback(void* arg);
+    // pk index bg compaction function
+    void* _pk_index_bg_compaction_thread_callback(void* arg);
 
     bool _check_and_run_manual_compaction_task();
 
@@ -393,6 +395,8 @@ private:
     std::vector<std::pair<int64_t, std::vector<uint32_t>>> _repair_compaction_tasks;
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
     std::vector<std::thread> _manual_compaction_threads;
+    // thread to run pk index bg compaction
+    std::thread _pk_index_bg_compaction_thread;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
     std::thread _adjust_cache_thread;
