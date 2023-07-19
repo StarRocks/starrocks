@@ -1,5 +1,30 @@
 # StarRocks version 2.5
 
+## 2.5.9
+
+Release date: July 19, 2023
+
+### New features
+
+- Queries that contain a different type of join than the materialized view can be rewritten. [#25099](https://github.com/StarRocks/starrocks/pull/25099)
+
+### Improvements
+
+- StarRocks external tables whose destination cluster is the current StarRocks cluster cannot be created. [#25441](https://github.com/StarRocks/starrocks/pull/25441)
+- If the queried fields are not included in the output columns of a materialized view but are included in the predicate of the materialized view, the query can still be rewritten. [#23028](https://github.com/StarRocks/starrocks/issues/23028)
+- Added a new field `table_id` to the table `tables_config` in the database `Information_schema`. You can join `tables_config` with `be_tablets` on the column `table_id` to query the names of the database and table to which a tablet belongs. [#24061](https://github.com/StarRocks/starrocks/pull/24061)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Count Distinct result is incorrect for Duplicate Key tables. [#24222](https://github.com/StarRocks/starrocks/pull/24222)
+- BEs may crash if the Join key is a large BINARY column. [#25084](https://github.com/StarRocks/starrocks/pull/25084)
+- The INSERT operation hangs if the length of CHAR data in a STRUCT to be inserted exceeds the maximum CHAR length defined in the STRUCT column. [#25942](https://github.com/StarRocks/starrocks/pull/25942)
+- The result of coalesce() is incorrect. [#26250](https://github.com/StarRocks/starrocks/pull/26250)
+- The version number for a tablet is inconsistent between the BE and FE after data is restored. [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- Partitions cannot be automatically created for recovered tables. [#26813](https://github.com/StarRocks/starrocks/pull/26813)
+
 ## 2.5.8
 
 Release date: June 30, 2023
@@ -236,7 +261,7 @@ Release date: January 22, 2023
 - Supports isolating compute resources occupied by data loading, thereby limiting the resource consumption of data loading tasks. For more information, see [Resource group](../administration/resource_group.md). [#12606](https://github.com/StarRocks/starrocks/pull/12606)
 - Supports specifying the following data compression algorithms for StarRocks native tables: LZ4, Zstd, Snappy, and Zlib. For more information, see [Data compression](../table_design/data_compression.md). [#10097](https://github.com/StarRocks/starrocks/pull/10097) [#12020](https://github.com/StarRocks/starrocks/pull/12020)
 - Supports [user-defined variables](../reference/user_defined_variables.md). [#10011](https://github.com/StarRocks/starrocks/pull/10011)
-- Supports [lambda expression](../sql-reference/sql-functions/Lambda_expression.md) and the following higher-order functions: [array_map](../sql-reference/sql-functions/array-functions/array_map.md), [array_filter](../sql-reference/sql-functions/array-functions/array_filter.md), [array_sum](../sql-reference/sql-functions/array-functions/array_sum.md), and [array_sortby](../sql-reference/sql-functions/array-functions/array_sortby.md). [#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
+- Supports [lambda expression](../sql-reference/sql-functions/Lambda_expression.md) and the following higher-order functions: [array_map](../sql-reference/sql-functions/array-functions/array_map.md), [array_sum](../sql-reference/sql-functions/array-functions/array_sum.md), and [array_sortby](../sql-reference/sql-functions/array-functions/array_sortby.md). [#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
 - Provides the QUALIFY clause that filters the results of [window functions](../sql-reference/sql-functions/Window_function.md). [#13239](https://github.com/StarRocks/starrocks/pull/13239)
 - Supports using the result returned by the uuid() and uuid_numeric() functions as the default value of a column when you create a table. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). [#11155](https://github.com/StarRocks/starrocks/pull/11155)
 - Supports the following functions: [map_size](../sql-reference/sql-functions/map-functions/map_size.md), [map_keys](../sql-reference/sql-functions/map-functions/map_keys.md), [map_values](../sql-reference/sql-functions/map-functions/map_values.md), [max_by](../sql-reference/sql-functions/aggregate-functions/max_by.md), [sub_bitmap](../sql-reference/sql-functions/bitmap-functions/sub_bitmap.md), [bitmap_to_base64](../sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md), [host_name](../sql-reference/sql-functions/utility-functions/host_name.md), and [date_slice](../sql-reference/sql-functions/date-time-functions/date_slice.md). [#11299](https://github.com/StarRocks/starrocks/pull/11299) [#11323](https://github.com/StarRocks/starrocks/pull/11323) [#12243](https://github.com/StarRocks/starrocks/pull/12243) [#11776](https://github.com/StarRocks/starrocks/pull/11776) [#12634](https://github.com/StarRocks/starrocks/pull/12634) [#14225](https://github.com/StarRocks/starrocks/pull/14225)
