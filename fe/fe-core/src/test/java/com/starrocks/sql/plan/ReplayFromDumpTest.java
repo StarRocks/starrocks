@@ -919,4 +919,12 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("mv2"));
         FeConstants.isReplayFromQueryDump = false;
     }
+
+    @Test
+    public void test() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/test"),
+                        null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+    }
 }
