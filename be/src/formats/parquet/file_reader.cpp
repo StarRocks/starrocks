@@ -59,7 +59,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> names;
     _meta_helper->set_existed_column_names(&names);
-    _scanner_ctx->set_columns_from_file(names);
+    _scanner_ctx->update_materialized_columns(names);
 
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
@@ -423,8 +423,8 @@ bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
 }
 
 void FileReader::_prepare_read_columns() {
-    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols,
-                                       _is_only_partition_scan);
+    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols);
+    _no_materialized_column_scan = (_group_reader_param.read_cols.size() == 0);
 }
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
@@ -508,8 +508,8 @@ Status FileReader::get_next(ChunkPtr* chunk) {
     if (_is_file_filtered) {
         return Status::EndOfFile("");
     }
-    if (_is_only_partition_scan) {
-        RETURN_IF_ERROR(_exec_only_partition_scan(chunk));
+    if (_no_materialized_column_scan) {
+        RETURN_IF_ERROR(_exec_no_materialized_column_scan(chunk));
         return Status::OK();
     }
 
@@ -540,7 +540,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
     return Status::EndOfFile("");
 }
 
-Status FileReader::_exec_only_partition_scan(ChunkPtr* chunk) {
+Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
         _scanner_ctx->update_not_existed_columns_of_chunk(chunk, read_size);

@@ -450,12 +450,15 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
                 newPredicate = Utils.compoundAnd(predicates);
                 if (context.hasEncoded) {
+                    // TODO: maybe have to implement a clone method to create a physical node.
                     PhysicalOlapScanOperator newOlapScan =
                             new PhysicalOlapScanOperator(scanOperator.getTable(), newColRefToColumnMetaMap,
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
                                     scanOperator.getSelectedTabletId(), scanOperator.getPrunedPartitionPredicates(),
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex());
+                    newOlapScan.setCanUseAnyColumn(scanOperator.getCanUseAnyColumn());
+                    newOlapScan.setCanUseMinMaxCountOpt(scanOperator.getCanUseMinMaxCountOpt());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
