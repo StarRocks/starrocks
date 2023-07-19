@@ -1639,7 +1639,11 @@ public class LocalMetastore implements ConnectorMetadata {
             return;
         }
         int numAliveNodes = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
-        String currentWarehouseName = ConnectContext.get().getCurrentWarehouse();
+        // TODO: need pass warehouse after, mayhe route the request to wrong warehouse
+        String currentWarehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (ConnectContext.get() != null) {
+            currentWarehouseName = ConnectContext.get().getCurrentWarehouse();
+        }
 
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             numAliveNodes = 0;
