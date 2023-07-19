@@ -35,7 +35,11 @@ import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
+=======
+import com.starrocks.sql.optimizer.rule.transformation.LabelMinMaxCountOnScanRule;
+>>>>>>> f373d57b3e ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -85,6 +89,11 @@ public class Optimizer {
     private OptimizerContext context;
     private final OptimizerConfig optimizerConfig;
 
+<<<<<<< HEAD
+=======
+    private long updateTableId = -1;
+
+>>>>>>> f373d57b3e ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
     public Optimizer() {
         this(OptimizerConfig.defaultConfig());
     }
@@ -223,15 +232,58 @@ public class Optimizer {
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !optimizerConfig.isRuleBased()) {
+<<<<<<< HEAD
+=======
+            MvRewritePreprocessor preprocessor =
+                    new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
+>>>>>>> f373d57b3e ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
                 MvRewritePreprocessor preprocessor =
                         new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
                 preprocessor.prepareMvCandidatesForPlan();
+<<<<<<< HEAD
+=======
+                if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
+                    preprocessor.prepareSyncMvCandidatesForPlan();
+                }
+>>>>>>> f373d57b3e ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
             }
         }
     }
 
+<<<<<<< HEAD
     private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
+=======
+    private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableRboTablePrune()) {
+            // PARTITION_PRUNE is required to run before ReorderJoinRule because ReorderJoinRule's
+            // Statistics calculation on Operators depends on row count yielded by the PARTITION_PRUNE.
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+            // ReorderJoinRule is a in-memo rule, when it is used outside memo, we must apply
+            // MergeProjectWithChildRule to merge LogicalProjectionOperator into its child's
+            // projection before ReorderJoinRule's application, after that, we must separate operator's
+            // projection as LogicalProjectionOperator from the operator by applying SeparateProjectRule.
+            ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            tree = new UniquenessBasedTablePruneRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            tree = new ReorderJoinRule().rewrite(tree, context);
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            tree = new PrimaryKeyUpdateTableRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            tree = new RboTablePruneRule().rewrite(tree, rootTaskContext);
+            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+            context.setEnableLeftRightJoinEquivalenceDerive(true);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        }
+    }
+
+    private OptExpression logicalRuleRewrite(ConnectContext connectContext,
+                                             OptExpression tree,
+                                             TaskContext rootTaskContext) {
+>>>>>>> f373d57b3e ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
         tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
         ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         deriveLogicalProperty(tree);
@@ -329,6 +381,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new LabelMinMaxCountOnScanRule());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());

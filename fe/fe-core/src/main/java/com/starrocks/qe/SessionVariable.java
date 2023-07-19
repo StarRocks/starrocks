@@ -457,6 +457,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
 
+<<<<<<< HEAD
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
@@ -466,6 +467,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
+=======
+    public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
+>>>>>>> f373d57b3e ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1186,6 +1190,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SIMPLIFY_CASE_WHEN, flag = VariableMgr.INVISIBLE)
     private boolean enableSimplifyCaseWhen = true;
 
+<<<<<<< HEAD
     // This variable is introduced to solve compatibility issues/
     // see more details: https://github.com/StarRocks/starrocks/pull/29678
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
@@ -1193,6 +1198,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean enableExprPrunePartition = true;
+=======
+    @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
+    private boolean enableCountStarOptimization = true;
+>>>>>>> f373d57b3e ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
 
     private int exprChildrenLimit = -1;
 
@@ -2260,6 +2269,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
     }
 
+<<<<<<< HEAD
     public boolean isEnableExprPrunePartition() {
         return enableExprPrunePartition;
     }
@@ -2281,6 +2291,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
+=======
+    public boolean isEnableCountStarOptimization() {
+        return enableCountStarOptimization;
+    }
+
+    public void setEnableCountStarOptimization(boolean v) {
+        enableCountStarOptimization = v;
+>>>>>>> f373d57b3e ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
     }
 
     // Serialize to thrift object

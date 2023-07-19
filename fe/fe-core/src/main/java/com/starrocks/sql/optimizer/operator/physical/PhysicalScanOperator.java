@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -42,6 +43,12 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
      * The ColumnRefMap contains Scan output columns and predicate used columns
      */
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+<<<<<<< HEAD
+=======
+    protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
+>>>>>>> f373d57b3e ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -76,6 +83,13 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         }
     }
 
+    public PhysicalScanOperator(OperatorType type, LogicalScanOperator scanOperator) {
+        this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
+                scanOperator.getPredicate(), scanOperator.getProjection());
+        this.canUseAnyColumn = scanOperator.getCanUseAnyColumn();
+        this.canUseMinMaxCountOpt = scanOperator.getCanUseMinMaxCountOpt();
+    }
+
     public List<ColumnRefOperator> getOutputColumns() {
         return outputColumns;
     }
@@ -90,6 +104,22 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public Map<ColumnRefOperator, Column> getColRefToColumnMetaMap() {
         return colRefToColumnMetaMap;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
     }
 
     public Table getTable() {

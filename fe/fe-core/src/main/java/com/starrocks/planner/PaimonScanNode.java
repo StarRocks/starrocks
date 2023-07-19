@@ -12,25 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.DeltaLakeTable;
-import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.PartitionUtil;
-import com.starrocks.connector.delta.DeltaLakeConnector;
-import com.starrocks.connector.delta.DeltaUtils;
-import com.starrocks.connector.delta.ExpressionConverter;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.paimon.PaimonConnector;
+import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
@@ -42,40 +39,35 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import io.delta.standalone.DeltaLog;
-import io.delta.standalone.DeltaScan;
-import io.delta.standalone.Snapshot;
-import io.delta.standalone.actions.AddFile;
-import io.delta.standalone.actions.Metadata;
-import io.delta.standalone.data.CloseableIterator;
-import io.delta.standalone.expressions.And;
-import io.delta.standalone.expressions.Expression;
-import io.delta.standalone.types.StructType;
-import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.table.source.DataSplit;
+import org.apache.paimon.table.source.Split;
+import org.apache.paimon.utils.InstantiationUtil;
 
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.thrift.TExplainLevel.VERBOSE;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
-public class DeltaLakeScanNode extends ScanNode {
-    private static final Logger LOG = LogManager.getLogger(DeltaLakeScanNode.class);
+public class PaimonScanNode extends ScanNode {
+    private static final Logger LOG = LogManager.getLogger(PaimonScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
-    private DeltaLakeTable deltaLakeTable;
-    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
-    private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
-    private Optional<Expression> deltaLakePredicates = Optional.empty();
+    private final PaimonTable paimonTable;
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
 
-    public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
+    public PaimonScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
-        deltaLakeTable = (DeltaLakeTable) desc.getTable();
+        this.paimonTable = (PaimonTable) desc.getTable();
         setupCloudCredential();
     }
 
@@ -83,16 +75,16 @@ public class DeltaLakeScanNode extends ScanNode {
         return scanNodePredicates;
     }
 
-    public DeltaLakeTable getDeltaLakeTable() {
-        return deltaLakeTable;
+    public PaimonTable getPaimonTable() {
+        return paimonTable;
     }
 
     private void setupCloudCredential() {
-        String catalog = deltaLakeTable.getCatalogName();
+        String catalog = paimonTable.getCatalogName();
         if (catalog == null) {
             return;
         }
-        DeltaLakeConnector connector = (DeltaLakeConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
+        PaimonConnector connector = (PaimonConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
                 getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
@@ -103,27 +95,8 @@ public class DeltaLakeScanNode extends ScanNode {
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
         helper.addValue(super.debugString());
-        helper.addValue("deltaLakeTable=" + deltaLakeTable.getName());
+        helper.addValue("paimonTable=" + paimonTable.getName());
         return helper.toString();
-    }
-
-    private void preProcessConjuncts(StructType tableSchema) {
-        List<Expression> expressions = new ArrayList<>(conjuncts.size());
-        ExpressionConverter convertor = new ExpressionConverter(tableSchema);
-        for (Expr expr : conjuncts) {
-            Expression filterExpr = convertor.convert(expr);
-            if (filterExpr != null) {
-                try {
-                    expressions.add(filterExpr);
-                } catch (Exception e) {
-                    LOG.debug("binding to the table schema failed, cannot be pushed down expression: {}", expr.toSql());
-                }
-            }
-        }
-
-        LOG.debug("Number of predicates pushed down / Total number of predicates: {}/{}",
-                expressions.size(), conjuncts.size());
-        deltaLakePredicates = expressions.stream().reduce(And::new);
     }
 
     @Override
@@ -131,67 +104,43 @@ public class DeltaLakeScanNode extends ScanNode {
         return scanRangeLocationsList;
     }
 
-    public void setupScanRangeLocations(DescriptorTable descTbl) throws AnalysisException {
-        DeltaLog deltaLog = deltaLakeTable.getDeltaLog();
-        if (!deltaLog.tableExists()) {
+    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
+        List<String> fieldNames = tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
+        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
+                paimonTable.getCatalogName(), paimonTable, null, -1, predicate, fieldNames);
+        RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+        PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
+        String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
+        List<Split> splits = splitsInfo.getPaimonSplits();
+
+        if (splits.isEmpty()) {
+            LOG.warn("There is no paimon splits on {}.{} and predicate: [{}]",
+                    paimonTable.getDbName(), paimonTable.getTableName(), predicate);
             return;
         }
-        // use current snapshot now
-        Snapshot snapshot = deltaLog.snapshot();
-        preProcessConjuncts(snapshot.getMetadata().getSchema());
-        List<String> partitionColumnNames = snapshot.getMetadata().getPartitionColumns();
-        // PartitionKey -> partition id
-        Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
-        DeltaScan scan = deltaLakePredicates.isPresent() ? snapshot.scan(deltaLakePredicates.get()) : snapshot.scan();
-
-        for (CloseableIterator<AddFile> it = scan.getFiles(); it.hasNext(); ) {
-            AddFile file = it.next();
-            Map<String, String> partitionValueMap = file.getPartitionValues();
-            List<String> partitionValues = partitionColumnNames.stream().map(partitionValueMap::get).collect(
-                    Collectors.toList());
-
-            Metadata metadata = snapshot.getMetadata();
-            PartitionKey partitionKey =
-                    PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
-                            deltaLakeTable.getType());
-            addPartitionLocations(partitionKeys, partitionKey, descTbl, file, metadata);
+        Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
+        for (Split split : splits) {
+            DataSplit dataSplit = (DataSplit) split;
+            addScanRangeLocations(dataSplit, predicateInfo);
+            BinaryRow partitionValue = dataSplit.partition();
+            if (!selectedPartitions.containsKey(partitionValue)) {
+                selectedPartitions.put(partitionValue, nextPartitionId());
+            }
         }
-
-        scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());
+        scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
     }
 
-    private void addPartitionLocations(Map<PartitionKey, Long> partitionKeys, PartitionKey partitionKey,
-                                       DescriptorTable descTbl, AddFile file, Metadata metadata) {
-        long partitionId = -1;
-        if (!partitionKeys.containsKey(partitionKey)) {
-            partitionId = nextPartitionId();
-            String tableLocation = deltaLakeTable.getTableLocation();
-            Path filePath = new Path(tableLocation, file.getPath());
-
-            DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
-                    new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey,
-                            filePath.getParent().toString());
-            descTbl.addReferencedPartitions(deltaLakeTable, referencedPartitionInfo);
-            partitionKeys.put(partitionKey, partitionId);
-        } else {
-            partitionId = partitionKeys.get(partitionKey);
-        }
-        addScanRangeLocations(file, partitionId, metadata);
-
-    }
-
-    private void addScanRangeLocations(AddFile file, Long partitionId, Metadata metadata) {
+    private void addScanRangeLocations(DataSplit split, String predicateInfo) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
+        hdfsScanRange.setUse_paimon_jni_reader(true);
+        hdfsScanRange.setPaimon_split_info(encodeObjectToString(split));
+        hdfsScanRange.setPaimon_predicate_info(predicateInfo);
+        long totalFileLength = split.files().stream().map(DataFileMeta::fileSize).reduce(0L, Long::sum);
+        hdfsScanRange.setFile_length(totalFileLength);
 
-        hdfsScanRange.setRelative_path(new Path(file.getPath()).getName());
-        hdfsScanRange.setOffset(0);
-        hdfsScanRange.setLength(file.getSize());
-        hdfsScanRange.setPartition_id(partitionId);
-        hdfsScanRange.setFile_length(file.getSize());
-        hdfsScanRange.setFile_format(DeltaUtils.getRemoteFileFormat(metadata.getFormat().getProvider()).toThrift());
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
@@ -210,7 +159,7 @@ public class DeltaLakeScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(deltaLakeTable.getName()).append("\n");
+        output.append(prefix).append("TABLE: ").append(paimonTable.getName()).append("\n");
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
@@ -233,7 +182,7 @@ public class DeltaLakeScanNode extends ScanNode {
         }
 
         List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
+                paimonTable.getCatalogName(), paimonTable.getDbName(), paimonTable.getTableName());
 
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
@@ -246,17 +195,14 @@ public class DeltaLakeScanNode extends ScanNode {
             output.append("\n");
         }
 
-        output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
-        output.append("\n");
-
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
+        output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
 
         if (detailLevel == TExplainLevel.VERBOSE) {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
-                    output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
         }
@@ -276,6 +222,9 @@ public class DeltaLakeScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
 
+        String sqlPredicates = getExplainString(conjuncts);
+        msg.hdfs_scan_node.setSql_predicates(sqlPredicates);
+
         List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
         if (!minMaxConjuncts.isEmpty()) {
             String minMaxSqlPredicate = getExplainString(minMaxConjuncts);
@@ -286,8 +235,8 @@ public class DeltaLakeScanNode extends ScanNode {
             msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
         }
 
-        if (deltaLakeTable != null) {
-            msg.hdfs_scan_node.setTable_name(deltaLakeTable.getName());
+        if (paimonTable != null) {
+            msg.hdfs_scan_node.setTable_name(paimonTable.getName());
         }
 
         if (cloudConfiguration != null) {
@@ -308,5 +257,17 @@ public class DeltaLakeScanNode extends ScanNode {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
+    }
+
+    private static final Base64.Encoder BASE64_ENCODER =
+            java.util.Base64.getUrlEncoder().withoutPadding();
+
+    public static <T> String encodeObjectToString(T t) {
+        try {
+            byte[] bytes = InstantiationUtil.serializeObject(t);
+            return new String(BASE64_ENCODER.encode(bytes), UTF_8);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

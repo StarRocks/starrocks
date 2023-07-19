@@ -20,14 +20,14 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
-import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 
-public class PhysicalHudiScanOperator extends PhysicalScanOperator {
+public class PhysicalPaimonScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
 
-    public PhysicalHudiScanOperator(LogicalHudiScanOperator scanOperator) {
-        super(OperatorType.PHYSICAL_HUDI_SCAN, scanOperator);
-        this.predicates = scanOperator.getScanOperatorPredicates();
+    public PhysicalPaimonScanOperator(LogicalPaimonScanOperator scan) {
+        super(OperatorType.PHYSICAL_PAIMON_SCAN, scan);
+        this.predicates = scan.getScanOperatorPredicates();
     }
 
     @Override
@@ -42,12 +42,12 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPhysicalHudiScan(this, context);
+        return visitor.visitPhysicalPaimonScan(this, context);
     }
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
-        return visitor.visitPhysicalHudiScan(optExpression, context);
+        return visitor.visitPhysicalPaimonScan(optExpression, context);
     }
 
     @Override
