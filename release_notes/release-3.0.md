@@ -1,5 +1,31 @@
 # StarRocks version 3.0
 
+## 3.0.4
+
+发布日期：2023 年 7 月 18 日
+
+### 新增特性
+
+- 查询和物化视图的 Join 类型不同时，也支持对查询进行改写。[#25099](https://github.com/StarRocks/starrocks/pull/25099)
+
+### 功能优化
+
+- 如果查询的字段不包含在物化视图的 output 列但是包含在其谓词条件中，仍可使用该物化视图进行查询改写。[#23028](https://github.com/StarRocks/starrocks/issues/23028)
+- [切换至 Trino 语法](../reference/System_variable.md) `set sql_dialect = 'trino';`，查询时表别名大小写不敏感，支持函数 json_array。[#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
+- `Information_schema.tables_config` 表中增加了 `table_id` 字段。您可以基于 `table_id` 字段关联数据库 `Information_schema` 中的表 `tables_config` 和 `be_tablets`，来查询 tablet 所属数据库和表名称。[#24061](https://github.com/StarRocks/starrocks/pull/24061)
+
+### 问题修复
+
+修复了如下问题：
+
+- sum 聚合函数的查询改写至单表物化视图时，会因为类型推导问题导致 sum 的查询结果出错。[#25512](https://github.com/StarRocks/starrocks/pull/25512)
+- 存算分离模式下，使用 SHOW PROC 查看 tablet 信息时报错。
+- 插入数据长度超出 STRUCT 定义的 CHAR 长度时，插入无响应。 [#25942](https://github.com/StarRocks/starrocks/pull/25942)
+- 当 INSERT INTO SELECT 存在 FULL JOIN 时，返回结果有遗漏。[#26603](https://github.com/StarRocks/starrocks/pull/26603)
+- 使用 ALTER TABLE 命令修改表的 `default.storage_medium` 属性时报错 `ERROR xxx: Unknown table property xxx`。[#25870](https://github.com/StarRocks/starrocks/issues/25870)
+- Broker Load 导入空文件时报错。[#26212](https://github.com/StarRocks/starrocks/pull/26212)
+- BE 下线偶尔会卡住。[#26509](https://github.com/StarRocks/starrocks/pull/26509)
+
 ## 3.0.3
 
 发布日期：2023 年 6 月 28 日
