@@ -43,6 +43,7 @@ jobs:
           echo "${{ github.head_ref }}"
 
 
+<<<<<<< HEAD
   doc-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
@@ -114,6 +115,8 @@ jobs:
           ignore: node_modules
           version: 0.28.1
 
+=======
+>>>>>>> ab4ef32b5 ([Tool] Fix doc label (#27513))
   be-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
