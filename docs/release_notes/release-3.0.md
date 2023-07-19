@@ -137,7 +137,7 @@ Release date: April 28, 2023
 #### SQL reference
 
 - Added the following privilege-related SQL statements: [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md), [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md), [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md), and [SHOW USERS](../sql-reference/sql-statements/account-management/SHOW%20USERS.md).
-- Added the following semi-structured data analysis functions: [map_apply](../sql-reference/sql-functions/map-functions/map_apply.md), [map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md), [map_filter](../sql-reference/sql-functions/map-functions/map_filter.md), [transform_keys](../sql-reference/sql-functions/map-functions/transform_keys.md), and [transform_values](../sql-reference/sql-functions/map-functions/transform_values.md).
+- Added the following semi-structured data analysis functions: [map_apply](../sql-reference/sql-functions/map-functions/map_apply.md), [map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md).
 - [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) supports ORDER BY.
 - Window functions [lead](../sql-reference/sql-functions/Window_function.md#lead) and [lag](../sql-reference/sql-functions/Window_function.md#lag) support IGNORE NULLS.
 - Added string functions [replace](../sql-reference/sql-functions/string-functions/replace.md), [hex_decode_binary](../sql-reference/sql-functions/string-functions/hex_decode_binary.md), and [hex_decode_string()](../sql-reference/sql-functions/string-functions/hex_decode_string.md).
