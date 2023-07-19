@@ -81,7 +81,7 @@ private:
     Status _get_next_internal(ChunkPtr* chunk);
 
     // only scan partition column + not exist column
-    Status _exec_only_partition_scan(ChunkPtr* chunk);
+    Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
 
     // get partition column idx in param.partition_columns
     int32_t _get_partition_column_idx(const std::string& col_name) const;
@@ -120,7 +120,7 @@ private:
 
     size_t _total_row_count = 0;
     size_t _scan_row_count = 0;
-    bool _is_only_partition_scan = false;
+    bool _no_materialized_column_scan = false;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;

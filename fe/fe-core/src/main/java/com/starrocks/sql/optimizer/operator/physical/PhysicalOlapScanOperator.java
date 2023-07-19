@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -72,6 +73,16 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.selectedTabletId = selectedTabletId;
         this.prunedPartitionPredicates = prunedPartitionPredicates;
         this.usePkIndex = usePkIndex;
+    }
+
+    public PhysicalOlapScanOperator(LogicalOlapScanOperator scanOperator) {
+        super(OperatorType.PHYSICAL_OLAP_SCAN, scanOperator);
+        this.distributionSpec = scanOperator.getDistributionSpec();
+        this.selectedIndexId = scanOperator.getSelectedIndexId();
+        this.selectedPartitionId = scanOperator.getSelectedPartitionId();
+        this.selectedTabletId = scanOperator.getSelectedTabletId();
+        this.prunedPartitionPredicates = scanOperator.getPrunedPartitionPredicates();
+        this.usePkIndex = scanOperator.isUsePkIndex();
     }
 
     public long getSelectedIndexId() {
