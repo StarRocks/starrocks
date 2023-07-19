@@ -50,6 +50,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -89,6 +90,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         public BasePartitionInfo(long id, long version) {
             this.id = id;
             this.version = version;
+        }
+
+        public static BasePartitionInfo fromExternalTable(com.starrocks.connector.PartitionInfo info) {
+            // TODO: id and version
+            return new BasePartitionInfo(-1, -1, info.getModifiedTime());
+        }
+
+        public static BasePartitionInfo fromOlapTable(Partition partition) {
+            return new BasePartitionInfo(partition.getId(), partition.getVisibleVersion(), -1);
         }
 
         public long getId() {
@@ -211,6 +221,32 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.asyncRefreshContext = new AsyncRefreshContext();
             this.lastRefreshTime = 0;
         }
+<<<<<<< HEAD
+=======
+
+        public MvRefreshScheme(RefreshType type) {
+            this.type = type;
+            this.moment = RefreshMoment.IMMEDIATE;
+            this.asyncRefreshContext = new AsyncRefreshContext();
+            this.lastRefreshTime = 0;
+        }
+
+        public boolean isIncremental() {
+            return this.type.equals(RefreshType.INCREMENTAL);
+        }
+
+        public boolean isSync() {
+            return this.type.equals(RefreshType.SYNC);
+        }
+
+        public RefreshMoment getMoment() {
+            return moment;
+        }
+
+        public void setMoment(RefreshMoment moment) {
+            this.moment = moment;
+        }
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
 
         public RefreshType getType() {
             return type;
@@ -443,39 +479,90 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return result;
     }
 
+<<<<<<< HEAD
     public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable)  {
+=======
+    private boolean isLessThanMVRewriteStaleness() {
+        if (this.maxMVRewriteStaleness <= 0) {
+            return false;
+        }
+        // Use mv's last refresh time to check whether to satisfy the `max_staleness`.
+        long lastRefreshTime = refreshScheme.getLastRefreshTime();
+        long currentTimestamp = System.currentTimeMillis();
+        if (lastRefreshTime < currentTimestamp - this.maxMVRewriteStaleness * 1000) {
+            return false;
+        }
+        return true;
+    }
+
+    public Map<String, BasePartitionInfo> getBaseTableRefreshInfo(BaseTableInfo baseTable) {
+        return getRefreshScheme()
+                .getAsyncRefreshContext()
+                .getBaseTableInfoVisibleVersionMap()
+                .computeIfAbsent(baseTable, k -> Maps.newHashMap());
+    }
+
+    public List<BasePartitionInfo> getBaseTableLatestPartitionInfo(Table baseTable) {
+        if (baseTable.isNativeTableOrMaterializedView()) {
+            return baseTable.getPartitions().stream()
+                    .map(BasePartitionInfo::fromOlapTable).collect(Collectors.toList());
+        }
+
+        return MapUtils.emptyIfNull(PartitionUtil.getPartitionNameWithPartitionInfo(baseTable)).values()
+                .stream().map(BasePartitionInfo::fromExternalTable).collect(Collectors.toList());
+    }
+
+    public Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable) {
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
         if (!baseTable.isHiveTable()) {
             // Only support hive table now
             return null;
         }
         Set<String> result = Sets.newHashSet();
+<<<<<<< HEAD
         Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+=======
+
+        // NOTE: For query dump replay, ignore updated partition infos only to check mv can rewrite query or not.
+        if (FeConstants.isReplayFromQueryDump) {
+            return result;
+        }
+
+        Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
                 PartitionUtil.getPartitionNameWithPartitionInfo(baseTable);
 
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
                 continue;
             }
-            Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getRefreshScheme()
-                    .getAsyncRefreshContext()
-                    .getBaseTableInfoVisibleVersionMap()
-                    .computeIfAbsent(baseTableInfo, k -> Maps.newHashMap());
+            Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getBaseTableRefreshInfo(baseTableInfo);
 
             // check whether there are partitions added
+<<<<<<< HEAD
             for (String partitionName : partitionNameWithPartition.keySet()) {
                 if (!baseTableInfoVisibleVersionMap.containsKey(partitionName)) {
                     result.add(partitionName);
+=======
+            for (Map.Entry<String, com.starrocks.connector.PartitionInfo> entry : latestPartitionInfo.entrySet()) {
+                if (!baseTableInfoVisibleVersionMap.containsKey(entry.getKey())) {
+                    result.add(entry.getKey());
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
                 }
             }
 
             for (Map.Entry<String, BasePartitionInfo> versionEntry : baseTableInfoVisibleVersionMap.entrySet()) {
                 String basePartitionName = versionEntry.getKey();
-                if (!partitionNameWithPartition.containsKey(basePartitionName)) {
+                if (!latestPartitionInfo.containsKey(basePartitionName)) {
                     // partitions deleted
+<<<<<<< HEAD
                     result.addAll(partitionNameWithPartition.keySet());
                     return result;
+=======
+                    return latestPartitionInfo.keySet();
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
                 }
-                long basePartitionVersion = partitionNameWithPartition.get(basePartitionName).getModifiedTime();
+                long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
 
                 BasePartitionInfo basePartitionInfo = versionEntry.getValue();
                 if (basePartitionInfo == null || basePartitionVersion != basePartitionInfo.getVersion()) {
@@ -600,6 +687,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, mv only supports one expression
+<<<<<<< HEAD
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
         // for Partition slot ref, the SlotDescriptor is not serialized, so should recover it here.
         // the SlotDescriptor is used by toThrift, which influences the execution process.
@@ -613,6 +701,25 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     SlotDescriptor slotDescriptor =
                             new SlotDescriptor(new SlotId(i), column.getName(), column.getType(), column.isAllowNull());
                     slotRefs.get(0).setDesc(slotDescriptor);
+=======
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+            // for Partition slot ref, the SlotDescriptor is not serialized, so should recover it here.
+            // the SlotDescriptor is used by toThrift, which influences the execution process.
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            partitionExpr.collect(SlotRef.class, slotRefs);
+            Preconditions.checkState(slotRefs.size() == 1);
+            if (slotRefs.get(0).getSlotDescriptorWithoutCheck() == null) {
+                for (int i = 0; i < fullSchema.size(); i++) {
+                    Column column = fullSchema.get(i);
+                    if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                        SlotDescriptor slotDescriptor =
+                                new SlotDescriptor(new SlotId(i), column.getName(), column.getType(),
+                                        column.isAllowNull());
+                        slotRefs.get(0).setDesc(slotDescriptor);
+                    }
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
                 }
             }
         }
@@ -643,7 +750,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
     }
 
+<<<<<<< HEAD
     public boolean isForceExternalTableQueryRewrite() {
+=======
+    public TableProperty.QueryRewriteConsistencyMode getForceExternalTableQueryRewrite() {
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
         return tableProperty.getForceExternalTableQueryRewrite();
     }
 
@@ -780,7 +891,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         // foreign keys constraints
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                     .append("\" = \"");
             sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
                     .append("\"");
@@ -856,13 +968,19 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public Set<String> getPartitionNamesToRefreshForMv() {
         PartitionInfo partitionInfo = getPartitionInfo();
+<<<<<<< HEAD
 
         boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
+=======
+        TableProperty.QueryRewriteConsistencyMode externalTableRewriteMode = getForceExternalTableQueryRewrite();
+        TableProperty.QueryRewriteConsistencyMode olapTableRewriteMode = tableProperty.getOlapTableQueryRewrite();
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             for (BaseTableInfo tableInfo : baseTableInfos) {
                 Table table = tableInfo.getTable();
 
+<<<<<<< HEAD
                 // we can not judge whether mv based on external table is update-to-date,
                 // because we do not know that any changes in external table.
                 if (!table.isNativeTable()) {
@@ -870,11 +988,46 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                         if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
                             // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
                             continue;
+=======
+                if (table.isView()) {
+                    // freshness of view should be ignored
+                    continue;
+                }
+                // we can not judge whether mv based on external table is update-to-date,
+                // because we do not know that any changes in external table.
+                if (!table.isNativeTableOrMaterializedView()) {
+                    switch (externalTableRewriteMode) {
+                        case DISABLE:
+                            return getPartitionNames();
+                        case LOOSE: {
+                            return Sets.newHashSet();
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
                         }
-                    } else {
-                        return getPartitionNames();
+                        case CHECKED:
+                            if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
+                                continue;
+                            }
+                            break;
+                        default:
+                            Preconditions.checkState(false, "unknown force_external_table_rewrite");
                     }
                 }
+<<<<<<< HEAD
+=======
+                if (table.isNativeTableOrMaterializedView()) {
+                    switch (olapTableRewriteMode) {
+                        case DISABLE:
+                            return getPartitionNames();
+                        case LOOSE:
+                            return Sets.newHashSet();
+                        case CHECKED:
+                        default:
+                            break;
+                    }
+                }
+
+                // Check the partition consistency
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
                 Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
                 if (CollectionUtils.isNotEmpty(partitionNames)) {
                     return getPartitionNames();
@@ -904,19 +1057,48 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             throw new RuntimeException(String.format("getting partition info failed for mv: %s", name));
         }
         Table partitionTable = partitionInfo.first;
-        boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
+        TableProperty.QueryRewriteConsistencyMode externalTableRewriteMode = getForceExternalTableQueryRewrite();
+        TableProperty.QueryRewriteConsistencyMode olapTableRewriteMode = tableProperty.getOlapTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
             Table table = tableInfo.getTable();
+<<<<<<< HEAD
             if (!table.isNativeTable()) {
                 if (forceExternalTableQueryRewrite) {
                     // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
                     if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
+=======
+            if (table.isView()) {
+                continue;
+            }
+            if (!table.isNativeTableOrMaterializedView()) {
+                switch (externalTableRewriteMode) {
+                    case DISABLE:
+                        return getPartitionNames();
+                    case LOOSE:
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
                         return Sets.newHashSet();
+                    case CHECKED: {
+                        if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
+                            continue;
+                        }
+                        break;
                     }
-                } else {
-                    return getPartitionNames();
+                    default:
+                        Preconditions.checkState(false, "unknown force_external_table_query_rewrite");
                 }
             }
+            if (table.isNativeTableOrMaterializedView()) {
+                switch (olapTableRewriteMode) {
+                    case DISABLE:
+                        return getPartitionNames();
+                    case LOOSE:
+                        return Sets.newHashSet();
+                    case CHECKED:
+                    default:
+                        break;
+                }
+            }
+
             if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
                 continue;
             }
@@ -1010,7 +1192,86 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return mvRewriteContext;
     }
 
+<<<<<<< HEAD
     public void setPlanContext(MvRewriteContext mvRewriteContext) {
         this.mvRewriteContext = mvRewriteContext;
+=======
+    public void setMaintenancePlan(ExecPlan maintenancePlan) {
+        this.maintenancePlan = maintenancePlan;
+    }
+
+    public MVRewriteContextCache getPlanContext() {
+        return mvRewriteContextCache;
+    }
+
+    public void setPlanContext(MVRewriteContextCache mvRewriteContextCache) {
+        this.mvRewriteContextCache = mvRewriteContextCache;
+    }
+
+    /**
+     * Infer the distribution info based on tables and MV query.
+     * Currently is max{bucket_num of base_table}
+     * TODO: infer the bucket number according to MV pattern and cardinality
+     */
+    @Override
+    public void inferDistribution(DistributionInfo info) throws DdlException {
+        if (info.getBucketNum() == 0) {
+            int inferredBucketNum = 0;
+            for (BaseTableInfo base : getBaseTableInfos()) {
+                if (base.getTable().isNativeTableOrMaterializedView()) {
+                    OlapTable olapTable = (OlapTable) base.getTable();
+                    DistributionInfo dist = olapTable.getDefaultDistributionInfo();
+                    inferredBucketNum = Math.max(inferredBucketNum, dist.getBucketNum());
+                }
+            }
+            if (inferredBucketNum == 0) {
+                inferredBucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+            }
+            info.setBucketNum(inferredBucketNum);
+        }
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = super.getProperties();
+        // For materialized view, add into session variables into properties.
+        if (super.getTableProperty() != null && super.getTableProperty().getProperties() != null) {
+            for (Map.Entry<String, String> entry : super.getTableProperty().getProperties().entrySet()) {
+                if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    String varKey = entry.getKey().substring(
+                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                    properties.put(varKey, entry.getValue());
+                }
+            }
+        }
+        return properties;
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        this.serializedPartitionRefTableExprs = new ArrayList<>();
+        if (partitionRefTableExprs != null) {
+            for (Expr partitionExpr : partitionRefTableExprs) {
+                if (partitionExpr != null) {
+                    serializedPartitionRefTableExprs.add(
+                            new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+                }
+            }
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        partitionRefTableExprs = new ArrayList<>();
+        if (serializedPartitionRefTableExprs != null) {
+            for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
+                if (expressionSql != null) {
+                    partitionRefTableExprs.add(
+                            SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+                }
+            }
+        }
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
     }
 }
