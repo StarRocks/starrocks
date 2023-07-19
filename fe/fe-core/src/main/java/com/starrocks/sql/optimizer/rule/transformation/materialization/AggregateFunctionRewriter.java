@@ -101,8 +101,9 @@ public class AggregateFunctionRewriter {
             return rewriteCountDistinct(aggFunc);
         } else if (aggFuncName.equals(FunctionSet.AVG)) {
             return rewriteAvg(aggFunc);
-        } else if (aggFuncName.equals(FunctionSet.HLL_UNION_AGG) || aggFuncName.equals(FunctionSet.HLL_CARDINALITY)) {
-            return rewriteHllAggFunction(aggFunc);
+        } else if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV) ||
+                aggFuncName.equals(FunctionSet.HLL_UNION_AGG) || aggFuncName.equals(FunctionSet.HLL_CARDINALITY)) {
+            return rewriteApproxCount(aggFunc);
         } else if (aggFuncName.equals(FunctionSet.PERCENTILE_APPROX)) {
             return rewritePercentile(aggFunc);
         } else {
@@ -198,7 +199,7 @@ public class AggregateFunctionRewriter {
                         IS_IDENTICAL));
     }
 
-    private CallOperator rewriteHllAggFunction(CallOperator aggFunc) {
+    private CallOperator rewriteApproxCount(CallOperator aggFunc) {
         Type childType = aggFunc.getChild(0).getType();
         List<ScalarOperator> aggChild = aggFunc.getChildren();
         if (!childType.isHllType()) {
@@ -212,6 +213,8 @@ public class AggregateFunctionRewriter {
             aggChild = Lists.newArrayList(hllHashOp);
         }
 
+        // Rewrite approx_count_distinct to hll_cardinality(hll_union(hll_hash(x))).
+        // For approx_count_distinct and ndv, just used for mv rewrite.
         CallOperator hllUnionOp = new CallOperator(FunctionSet.HLL_UNION,
                 Type.HLL,
                 aggChild,
