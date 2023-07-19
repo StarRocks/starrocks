@@ -301,6 +301,12 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
     std::sort(all_ref_columns_ids.begin(), all_ref_columns_ids.end());
     std::sort(new_columns_ids.begin(), new_columns_ids.end());
 
+    // If all expression is constant, all_ref_columns_ids will be empty.
+    // we just append 0 into it to construct the read schema for simplicity.
+    if (all_ref_columns_ids.size() == 0) {
+        all_ref_columns_ids.emplace_back(0);
+    }
+
     Schema read_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema(), all_ref_columns_ids);
     ChunkPtr read_chunk = ChunkHelper::new_chunk(read_schema, config::vector_chunk_size);
 
