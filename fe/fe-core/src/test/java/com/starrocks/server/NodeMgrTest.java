@@ -40,7 +40,7 @@ public class NodeMgrTest {
 
     @Test
     public void testCheckFeExistByRpcPort() {
-        NodeMgr nodeMgr = new NodeMgr();
+        NodeMgr nodeMgr = new NodeMgr(false, GlobalStateMgr.getCurrentState());
         Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "node1", "10.0.0.3", 9010);
         fe.handleHbResponse(new FrontendHbResponse("node1", 9030, 9020, 1,
                 System.currentTimeMillis(), System.currentTimeMillis(), "v1"), true);
