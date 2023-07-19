@@ -920,11 +920,4 @@ public class ReplayFromDumpTest {
         FeConstants.isReplayFromQueryDump = false;
     }
 
-    @Test
-    public void test() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/test"),
-                        null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
-    }
 }
