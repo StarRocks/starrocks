@@ -261,7 +261,7 @@ public class LakeMaterializedViewTest {
         Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
         FileCacheInfo cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         Partition p1 = newMv.getPartition(partitionId);
@@ -281,7 +281,7 @@ public class LakeMaterializedViewTest {
         Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
         cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         // Test appendUniqueProperties
@@ -317,7 +317,7 @@ public class LakeMaterializedViewTest {
         // check table default cache info
         FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(0L);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         // replication num
