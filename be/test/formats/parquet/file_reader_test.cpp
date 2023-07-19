@@ -2576,22 +2576,22 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
 
     TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
 
-    Utils::SlotDesc slot_descs[] = {
+    SlotDesc slot_descs[] = {
             {"data", type_data},
             {"struct", type_struct},
             {"int", type_int},
             {""},
     };
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
 
-    Utils::SlotDesc min_max_slots[] = {
+    SlotDesc min_max_slots[] = {
             {"int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
             {""},
     };
-    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+    ctx->min_max_tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
     _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 5, &ctx->min_max_conjunct_ctxs);
     _create_int_conjunct_ctxs(TExprOpcode::LE, 0, 5, &ctx->min_max_conjunct_ctxs);
     // --------------finish init context---------------
