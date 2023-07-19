@@ -31,7 +31,7 @@ PROPERTIES("replicated_storage" = "true");
 
 ### Assign values for `AUTO_INCREMENT` column
 
-**Assign values implicitly**
+#### Assign values implicitly
 
 When you load data into a StarRocks table, you do not need to specify the values for the `AUTO_INCREMENT` column. StarRocks automatically assigns unique integer values for that column and inserts them into the table.
 
@@ -97,7 +97,7 @@ mysql > SELECT * FROM test_tbl1 ORDER BY id;
 6 rows in set (0.01 sec)
 ```
 
-**Specify values explicitly**
+#### Specify values explicitly
 
 You can also explicitly specify the values for the `AUTO_INCREMENT` column and insert them into the table.
 
