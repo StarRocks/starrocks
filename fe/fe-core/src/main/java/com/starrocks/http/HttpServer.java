@@ -95,6 +95,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -223,7 +224,7 @@ public class HttpServer {
                     .addLast(new ChunkedWriteHandler())
                     // add content compressor
                     .addLast(new CustomHttpContentCompressor())
-                    .addLast(new HttpServerHandler(controller));
+                    .addLast(new DefaultEventLoopGroup(), new HttpServerHandler(controller));
         }
     }
 

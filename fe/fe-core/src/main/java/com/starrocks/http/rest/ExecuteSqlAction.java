@@ -49,6 +49,7 @@ import com.starrocks.http.HttpConnectProcessor;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.service.ExecuteEnv;
@@ -262,7 +263,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         }
 
         // exception was caught in StmtExecutor and set Error info in QueryState, so just send status 500 with exception info
-        if (!context.getState().getErrorMessage().isEmpty()) {
+        if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             // for queryStatement, if some data already sent, we just close the channel
             if (parsedStmt instanceof QueryStatement && context.getSendDate()) {
                 context.getNettyChannel().close();

@@ -84,7 +84,7 @@ public class HttpResultSender {
         while (true) {
             batch = coord.getNext();
             if (batch.getBatch() != null) {
-                writeResultBatch(batch.getBatch(), nettyChannel);
+                writeResultBatch(batch.getBatch(), nettyChannel, coord);
                 context.updateReturnRows(batch.getBatch().getRows().size());
             }
             if (batch.isEos()) {
@@ -115,14 +115,24 @@ public class HttpResultSender {
     }
 
     // BE already transferred results into json format, FE just need to Forward json objects to the client
-    private void writeResultBatch(TResultBatch resultBatch, ChannelHandlerContext channel) throws IOException {
+    private void writeResultBatch(TResultBatch resultBatch, ChannelHandlerContext channel, Coordinator coord)
+            throws Exception {
         int rowsSize = resultBatch.getRowsSize();
         for (ByteBuffer row : resultBatch.getRows()) {
+            // when channel is not writeable, sleep a while to balance read/write speed to avoid oom
+            while (!channel.channel().isWritable()) {
+                // if channel is closed, cancel query
+                if (!channel.channel().isActive()) {
+                    coord.cancel();
+                    return;
+                }
+                Thread.sleep(10);
+            }
             // only flush once
             if (row != resultBatch.getRows().get(rowsSize - 1)) {
-                channel.write(Unpooled.copiedBuffer(row));
+                channel.write(Unpooled.wrappedBuffer(row));
             } else {
-                channel.writeAndFlush(Unpooled.copiedBuffer(row));
+                channel.writeAndFlush(Unpooled.wrappedBuffer(row));
             }
         }
     }
