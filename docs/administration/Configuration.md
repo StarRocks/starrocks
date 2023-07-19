@@ -74,6 +74,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | max_partitions_in_one_batch              | -    | 4096         | The maximum number of partitions that can be created when you bulk create partitions. |
 | max_query_retry_time                     | -    | 2            | The maximum number of query retries on an FE.                |
 | max_create_table_timeout_second          | s    | 600          | The maximum timeout duration for creating a table, in seconds. |
+| create_table_max_serial_replicas         | -    | 128          | The maximum number of replicas to create serially. If actual replica count exceeds this, replicas will be created concurrently. Try to reduce this config if table creation is taking a long time to complete. |
 | max_running_rollup_job_num_per_table     | -    | 1            | The maximum number of rollup jobs can run in parallel for a table. |
 | max_planner_scalar_rewrite_num           | -    | 100000       | The maximum number of times that the optimizer can rewrite a scalar operator. |
 | enable_statistic_collect                 | -    | TRUE         | Whether to collect statistics for the CBO. This feature is enabled by default. |

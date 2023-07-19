@@ -1069,6 +1069,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_create_table_timeout_second = 600;
 
+    @ConfField(mutable = true, comment = "The maximum number of replicas to create serially." +
+            "If actual replica count exceeds this, replicas will be created concurrently.")
+    public static int create_table_max_serial_replicas = 128;
+
     // Configurations for backup and restore
     /**
      * Plugins' path for BACKUP and RESTORE operations. Currently, deprecated.
