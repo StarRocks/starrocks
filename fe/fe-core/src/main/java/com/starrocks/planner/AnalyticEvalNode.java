@@ -108,6 +108,10 @@ public class AnalyticEvalNode extends PlanNode {
         nullableTupleIds = Sets.newHashSet(input.getNullableTupleIds());
     }
 
+    public List<Expr> getAnalyticFnCalls() {
+        return analyticFnCalls;
+    }
+
     public List<Expr> getPartitionExprs() {
         return partitionExprs;
     }

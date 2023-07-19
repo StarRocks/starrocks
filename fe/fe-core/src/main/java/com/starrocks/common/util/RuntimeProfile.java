@@ -71,8 +71,8 @@ public class RuntimeProfile {
 
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
     private static final String ROOT_COUNTER = "";
-    private static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
-    private static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
+    public static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
+    public static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
 
     private final Counter counterTotalTime;
 
@@ -343,7 +343,14 @@ public class RuntimeProfile {
         return formater.format(this);
     }
 
-    private String printCounter(long value, TUnit type) {
+    public static String printCounter(Counter counter) {
+        if (counter == null) {
+            return null;
+        }
+        return printCounter(counter.getValue(), counter.getType());
+    }
+
+    private static String printCounter(long value, TUnit type) {
         StringBuilder builder = new StringBuilder();
         long tmpValue = value;
         switch (type) {
