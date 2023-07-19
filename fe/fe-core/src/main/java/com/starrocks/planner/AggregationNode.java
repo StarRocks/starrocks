@@ -130,6 +130,10 @@ public class AggregationNode extends PlanNode {
         return aggInfo;
     }
 
+    public boolean isNeedsFinalize() {
+        return needsFinalize;
+    }
+
     /**
      * Have this node materialize the aggregation's intermediate tuple instead of
      * the output tuple.
