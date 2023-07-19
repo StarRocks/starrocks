@@ -797,3 +797,135 @@ DROP TABLE t;
 DROP DATABASE test_schema_change_for_add_optimization;
 -- result:
 -- !result
+-- name: test_schema_change_for_constant_expression
+CREATE DATABASE test_schema_change_for_constant_expression;
+-- result:
+-- !result
+USE test_schema_change_for_constant_expression;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1),(2),(3);
+-- result:
+-- !result
+ALTER TABLE t ADD COLUMN newcol1 TINYINT AS 1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	1
+2	1
+3	1
+-- !result
+ALTER TABLE t ADD COLUMN (newcol2 TINYINT AS 2, newcol3 TINYINT AS 3);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	1	2	3
+2	1	2	3
+3	1	2	3
+-- !result
+ALTER TABLE t ADD COLUMN (newcol4 TINYINT AS 4, newcol5 BIGINT AS id * 5, newcol6 TINYINT AS 6);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	1	2	3	4	5	6
+2	1	2	3	4	10	6
+3	1	2	3	4	15	6
+-- !result
+ALTER TABLE t ADD COLUMN (newcol7 BIGINT AS id * 7, newcol8 TINYINT AS 8, newcol9 BIGINT AS id * 9);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	1	2	3	4	5	6	7	8	9
+2	1	2	3	4	10	6	14	8	18
+3	1	2	3	4	15	6	21	8	27
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL) DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1),(2),(3);
+-- result:
+-- !result
+ALTER TABLE t ADD COLUMN newcol1 TINYINT AS 1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	1
+2	1
+3	1
+-- !result
+ALTER TABLE t ADD COLUMN (newcol2 TINYINT AS 2, newcol3 TINYINT AS 3);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	1	2	3
+2	1	2	3
+3	1	2	3
+-- !result
+ALTER TABLE t ADD COLUMN (newcol4 TINYINT AS 4, newcol5 BIGINT AS id * 5, newcol6 TINYINT AS 6);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	1	2	3	4	5	6
+2	1	2	3	4	10	6
+3	1	2	3	4	15	6
+-- !result
+ALTER TABLE t ADD COLUMN (newcol7 BIGINT AS id * 7, newcol8 TINYINT AS 8, newcol9 BIGINT AS id * 9);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t ORDER BY id;
+-- result:
+1	1	2	3	4	5	6	7	8	9
+2	1	2	3	4	10	6	14	8	18
+3	1	2	3	4	15	6	21	8	27
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP DATABASE test_schema_change_for_constant_expression;
+-- result:
+-- !result
