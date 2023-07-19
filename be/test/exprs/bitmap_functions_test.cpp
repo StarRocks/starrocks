@@ -2417,6 +2417,45 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
         auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
         ASSERT_EQ("1", res->get_object(0)->to_string());
     }
+    // single bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        BitmapValue single({1});
+        bitmap_column->append(&single);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(0);
+        len->append(0);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::sub_bitmap(ctx, columns).value();
+        ASSERT_TRUE(column->is_null(0));
+    }
+    // single bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        BitmapValue single({1});
+        bitmap_column->append(&single);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(-1);
+        len->append(1);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::sub_bitmap(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+        ASSERT_EQ("1", res->get_object(0)->to_string());
+    }
     // set bitmap
     {
         auto bitmap_column = BitmapColumn::create();
@@ -2441,6 +2480,94 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
         auto column = BitmapFunctions::sub_bitmap(ctx, columns).value();
         auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
         ASSERT_EQ("3,4", res->get_object(0)->to_string());
+    }
+    // set bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        // Adding values one by one, no more than 32, which makes the bitmap stores value with set
+        BitmapValue set;
+        set.add(1);
+        set.add(2);
+        set.add(3);
+        set.add(4);
+        bitmap_column->append(&set);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(-3);
+        len->append(3);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::sub_bitmap(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+        ASSERT_EQ("2,3,4", res->get_object(0)->to_string());
+    }
+    // 32bit Bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
+        BitmapValue bmp32bit({1});
+        bitmap_column->append(&bmp32bit);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(0);
+        len->append(1);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::sub_bitmap(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+        ASSERT_EQ("1", res->get_object(0)->to_string());
+    }
+    // 32bit Bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
+        BitmapValue bmp32bit({1});
+        bitmap_column->append(&bmp32bit);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(-1);
+        len->append(1);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::sub_bitmap(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+        ASSERT_EQ("1", res->get_object(0)->to_string());
+    }
+    // 32bit Bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
+        BitmapValue bmp32bit({1, 2, 3, 4});
+        bitmap_column->append(&bmp32bit);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(-3);
+        len->append(3);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::sub_bitmap(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+        ASSERT_EQ("2,3,4", res->get_object(0)->to_string());
     }
     // 32bit Bitmap
     {
@@ -2739,6 +2866,45 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
         auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
         ASSERT_EQ("1", res->get_object(0)->to_string());
     }
+    // single bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        BitmapValue single({1});
+        bitmap_column->append(&single);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(2);
+        len->append(-1);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+        ASSERT_EQ("1", res->get_object(0)->to_string());
+    }
+    // single bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        BitmapValue single({1});
+        bitmap_column->append(&single);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(0);
+        len->append(-1);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
+        ASSERT_TRUE(column->is_null(0));
+    }
     // set bitmap
     {
         auto bitmap_column = BitmapColumn::create();
@@ -2764,6 +2930,93 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
         auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
         ASSERT_EQ("2,3,4", res->get_object(0)->to_string());
     }
+    // set bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        // Adding values one by one, no more than 32, which makes the bitmap stores value with set
+        BitmapValue set;
+        set.add(1);
+        set.add(2);
+        set.add(3);
+        set.add(4);
+        bitmap_column->append(&set);
+
+        Columns columns;
+        auto range_start = Int64Column::create();
+        auto limit = Int64Column::create();
+        range_start->append(3);
+        limit->append(-3);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(range_start);
+        columns.emplace_back(limit);
+
+        auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+        ASSERT_EQ("1,2,3", res->get_object(0)->to_string());
+    }
+    // 32bit Bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
+        BitmapValue bmp32bit({1});
+        bitmap_column->append(&bmp32bit);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(0);
+        len->append(1);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+        ASSERT_EQ("1", res->get_object(0)->to_string());
+    }
+    // 32bit Bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
+        BitmapValue bmp32bit({1});
+        bitmap_column->append(&bmp32bit);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(0);
+        len->append(-1);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
+        ASSERT_TRUE(column->is_null(0));
+    }
+    // 32bit Bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
+        BitmapValue bmp32bit({1});
+        bitmap_column->append(&bmp32bit);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(2);
+        len->append(-1);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+        ASSERT_EQ("1", res->get_object(0)->to_string());
+    }
     // 32bit Bitmap
     {
         auto bitmap_column = BitmapColumn::create();
@@ -2784,6 +3037,27 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
         auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
         auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
         ASSERT_EQ("2,3,4", res->get_object(0)->to_string());
+    }
+    // 32bit Bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
+        BitmapValue bmp32bit({1, 2, 3, 4});
+        bitmap_column->append(&bmp32bit);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(3);
+        len->append(-3);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::bitmap_subset_limit(ctx, columns).value();
+        auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+        ASSERT_EQ("1,2,3", res->get_object(0)->to_string());
     }
     // 64bit bitmap
     {
@@ -3061,6 +3335,25 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
         auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
         ASSERT_EQ("1", res->get_object(0)->to_string());
     }
+    // single bitmap
+    {
+        auto bitmap_column = BitmapColumn::create();
+        BitmapValue single({1});
+        bitmap_column->append(&single);
+
+        Columns columns;
+        auto offset = Int64Column::create();
+        auto len = Int64Column::create();
+        offset->append(2);
+        len->append(3);
+
+        columns.emplace_back(bitmap_column);
+        columns.emplace_back(offset);
+        columns.emplace_back(len);
+
+        auto column = BitmapFunctions::bitmap_subset_in_range(ctx, columns).value();
+        ASSERT_TRUE(column->is_null(0));
+    }
     // set bitmap
     {
         auto bitmap_column = BitmapColumn::create();
@@ -3076,7 +3369,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
         auto offset = Int64Column::create();
         auto len = Int64Column::create();
         offset->append(2);
-        len->append(3);
+        len->append(4);
 
         columns.emplace_back(bitmap_column);
         columns.emplace_back(offset);
@@ -3084,7 +3377,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
 
         auto column = BitmapFunctions::bitmap_subset_in_range(ctx, columns).value();
         auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
-        ASSERT_EQ("2", res->get_object(0)->to_string());
+        ASSERT_EQ("2,3", res->get_object(0)->to_string());
     }
     // 32bit Bitmap
     {
@@ -3097,7 +3390,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
         auto offset = Int64Column::create();
         auto len = Int64Column::create();
         offset->append(2);
-        len->append(3);
+        len->append(4);
 
         columns.emplace_back(bitmap_column);
         columns.emplace_back(offset);
@@ -3105,7 +3398,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
 
         auto column = BitmapFunctions::bitmap_subset_in_range(ctx, columns).value();
         auto res = ColumnHelper::cast_to<TYPE_OBJECT>(column);
-        ASSERT_EQ("2", res->get_object(0)->to_string());
+        ASSERT_EQ("2,3", res->get_object(0)->to_string());
     }
     // 64bit bitmap
     {
