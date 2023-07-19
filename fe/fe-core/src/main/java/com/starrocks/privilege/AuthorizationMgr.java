@@ -66,7 +66,7 @@ public class AuthorizationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthorizationMgr.class);
 
     @SerializedName(value = "r")
-    private final Map<String, Long> roleNameToId;
+    private Map<String, Long> roleNameToId;
     @SerializedName(value = "i")
     private short pluginId;
     @SerializedName(value = "v")
@@ -1730,11 +1730,9 @@ public class AuthorizationMgr {
     }
 
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        AuthorizationMgr ret = null;
-
         try {
             // 1 json for myself
-            ret = reader.readJson(AuthorizationMgr.class);
+            AuthorizationMgr ret = reader.readJson(AuthorizationMgr.class);
             ret.globalStateMgr = globalStateMgr;
             if (provider == null) {
                 ret.provider = new DefaultAuthorizationProvider();
@@ -1786,6 +1784,9 @@ public class AuthorizationMgr {
 
             // mark data is loaded
             isLoaded = true;
+            roleNameToId = ret.roleNameToId;
+            pluginId = ret.pluginId;
+            pluginVersion = ret.pluginVersion;
             userToPrivilegeCollection = ret.userToPrivilegeCollection;
             roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
         } catch (PrivilegeException e) {
