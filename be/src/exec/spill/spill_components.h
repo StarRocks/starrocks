@@ -315,7 +315,7 @@ private:
 
     size_t _partition_rows() {
         size_t total_rows = 0;
-        for (const auto [pid, partition] : _id_to_partitions) {
+        for (const auto& [pid, partition] : _id_to_partitions) {
             total_rows += partition->num_rows;
         }
         return total_rows;

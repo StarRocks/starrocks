@@ -47,8 +47,7 @@ void ParquetMetaHelper::build_column_name_2_pos_in_meta(
 }
 
 void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                             std::vector<GroupReaderParam::Column>& read_cols,
-                                             bool& _is_only_partition_scan) const {
+                                             std::vector<GroupReaderParam::Column>& read_cols) const {
     for (auto& materialized_column : materialized_columns) {
         int32_t field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.col_name);
         if (field_idx < 0) continue;
@@ -58,7 +57,6 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
                                                         materialized_column.col_type, materialized_column.slot_id);
         read_cols.emplace_back(column);
     }
-    _is_only_partition_scan = read_cols.empty();
 }
 
 const ParquetField* ParquetMetaHelper::get_parquet_field(const std::string& col_name) const {
@@ -105,8 +103,7 @@ void IcebergMetaHelper::build_column_name_2_pos_in_meta(
 }
 
 void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                             std::vector<GroupReaderParam::Column>& read_cols,
-                                             bool& _is_only_partition_scan) const {
+                                             std::vector<GroupReaderParam::Column>& read_cols) const {
     for (auto& materialized_column : materialized_columns) {
         const std::string& format_col_name = _case_sensitive
                                                      ? materialized_column.col_name
@@ -128,7 +125,6 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
                               materialized_column.slot_id, iceberg_it->second);
         read_cols.emplace_back(column);
     }
-    _is_only_partition_scan = read_cols.empty();
 }
 
 const ParquetField* IcebergMetaHelper::get_parquet_field(const std::string& col_name) const {

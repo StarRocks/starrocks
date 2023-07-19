@@ -57,6 +57,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -108,6 +110,22 @@ public abstract class LogicalScanOperator extends LogicalOperator {
                 .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
         cachedColumnNameToColRefMap = Optional.of(columnRefOperatorMap);
         return columnRefOperatorMap;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
     }
 
     @Override
@@ -199,6 +217,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
             builder.columnFilters = scanOperator.columnFilters;
             builder.columnAccessPaths = scanOperator.columnAccessPaths;
+            builder.canUseAnyColumn = scanOperator.canUseAnyColumn;
+            builder.canUseMinMaxCountOpt = scanOperator.canUseMinMaxCountOpt;
             return (B) this;
         }
 

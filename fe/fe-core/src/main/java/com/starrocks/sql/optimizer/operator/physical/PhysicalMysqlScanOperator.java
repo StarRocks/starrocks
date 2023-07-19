@@ -14,37 +14,24 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-
-import java.util.Map;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 
 public class PhysicalMysqlScanOperator extends PhysicalScanOperator {
 
     // Optional temporal clause for querying historical data
     private String temporalClause;
 
-    public PhysicalMysqlScanOperator(Table table,
-                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                     long limit,
-                                     ScalarOperator predicate,
-                                     Projection projection) {
-        super(OperatorType.PHYSICAL_MYSQL_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
+    public PhysicalMysqlScanOperator(LogicalMysqlScanOperator scanOperator) {
+        super(OperatorType.PHYSICAL_MYSQL_SCAN, scanOperator);
+        temporalClause = scanOperator.getTemporalClause();
     }
 
     public String getTemporalClause() {
         return temporalClause;
-    }
-
-    public void setTemporalClause(String temporalClause) {
-        this.temporalClause = temporalClause;
     }
 
     @Override
