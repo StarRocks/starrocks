@@ -421,9 +421,6 @@ void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& re
             // Secondary replica will commit/abort by Primary replica
             if (delta_writer->replica_state() != Secondary) {
                 if (UNLIKELY(_partition_ids.count(delta_writer->partition_id()) == 0)) {
-                    LOG(WARNING) << "Commit non-existed partition id:" << delta_writer->partition_id()
-                                 << ", tablet_id=" << tablet_id << ", registered partition_ids="
-                                 << std::string(_partition_ids.begin(), _partition_ids.end());
                     // no data load, abort txn without printing log
                     delta_writer->abort(false);
 
