@@ -118,7 +118,7 @@ public class StarOSAgent {
         try {
             return client.addFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
-            throw new DdlException("Failed to add file store", e);
+            throw new DdlException("Failed to add file store, error: " + e.getMessage());
         }
     }
 
@@ -126,7 +126,7 @@ public class StarOSAgent {
         try {
             client.removeFileStoreByName(fsName, serviceId);
         } catch (StarClientException e) {
-            throw new DdlException("Failed to remove file store", e);
+            throw new DdlException("Failed to remove file store, error: " + e.getMessage());
         }
     }
 
@@ -134,7 +134,7 @@ public class StarOSAgent {
         try {
             client.updateFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
-            throw new DdlException("Failed to update file store", e);
+            throw new DdlException("Failed to update file store, error: " + e.getMessage());
         }
     }
 
@@ -145,7 +145,7 @@ public class StarOSAgent {
             if (e.getCode() == StatusCode.NOT_EXIST) {
                 return null;
             }
-            throw new DdlException("Failed to get file store", e);
+            throw new DdlException("Failed to get file store, error: " + e.getMessage());
         }
     }
 
@@ -156,7 +156,7 @@ public class StarOSAgent {
             if (e.getCode() == StatusCode.NOT_EXIST) {
                 return null;
             }
-            throw new DdlException("Failed to get file store", e);
+            throw new DdlException("Failed to get file store, error: " + e.getMessage());
         }
     }
 
@@ -164,7 +164,7 @@ public class StarOSAgent {
         try {
             return client.listFileStore(serviceId);
         } catch (StarClientException e) {
-            throw new DdlException("Failed to list file store", e);
+            throw new DdlException("Failed to list file store, error: " + e.getMessage());
         }
     }
 
@@ -190,7 +190,7 @@ public class StarOSAgent {
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
-            throw new DdlException("Failed to allocate file path from StarMgr", e);
+            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
         }
     }
 
@@ -201,7 +201,7 @@ public class StarOSAgent {
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
-            throw new DdlException("Failed to allocate file path from StarMgr", e);
+            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
         }
     }
 
