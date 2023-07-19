@@ -575,12 +575,12 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`l_shipdate`) BUCKETS 10\n" +
-                        "REFRESH DEFERRED MANUAL\n" +
+                        "REFRESH MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"force_external_table_query_rewrite\" = \"checked\"\n" +
                         ")\n" +
-                        "AS SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                        "AS SELECT `l_shipdate`, sum(`l_orderkey`) as sum  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                         "GROUP BY l_shipdate");
 
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
@@ -598,7 +598,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                        "REFRESH DEFERRED MANUAL\n" +
+                        "REFRESH MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"force_external_table_query_rewrite\" = \"loose\"\n" +
