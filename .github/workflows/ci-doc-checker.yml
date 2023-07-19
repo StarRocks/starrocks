@@ -16,7 +16,6 @@ permissions:
 jobs:
   doc-checker:
     runs-on: ubuntu-latest
-    needs: sync-checker
     name: DOC FILTER
     if: >
       !contains(github.event.pull_request.title, '(sync #') &&
