@@ -501,21 +501,20 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     auto query_ctx = _query_ctx.lock();
     // _query_ctx uses lazy initialization, maybe it is not initialized
-    // under certian circumstance
+    // under certain circumstance
     if (query_ctx == nullptr) {
         query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
         DCHECK(query_ctx != nullptr);
     }
-    if (!query_ctx->is_report_profile()) {
+    if (!query_ctx->enable_profile()) {
         return;
     }
     std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
     for (auto i = 0; i < _chunk_source_profiles.size(); i++) {
         profiles[i] = _chunk_source_profiles[i].get();
     }
-    RuntimeProfile::merge_isomorphic_profiles(profiles);
 
-    RuntimeProfile* merged_profile = profiles[0];
+    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), profiles);
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);

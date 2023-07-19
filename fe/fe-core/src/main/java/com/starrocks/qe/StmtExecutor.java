@@ -188,6 +188,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.OPTIMIZER;
+import static com.starrocks.sql.ast.StatementBase.ExplainLevel.REWRITE;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 // Do one COM_QUERY process.
@@ -241,9 +242,8 @@ public class StmtExecutor {
         return this.coord;
     }
 
-    // At the end of query execution, we begin to add up profile
-    public void initProfile(long beginTimeInNanoSecond) {
-        profile = new RuntimeProfile("Query");
+    private RuntimeProfile buildTopLevelProfile() {
+        RuntimeProfile profile = new RuntimeProfile("Query");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
         summaryProfile.addInfoString(ProfileManager.START_TIME, TimeUtils.longToTimeString(context.getStartTime()));
@@ -254,7 +254,7 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
-        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toString());
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toProfileString());
         summaryProfile.addInfoString("StarRocks Version",
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
@@ -276,6 +276,9 @@ public class StmtExecutor {
             sb.append(SessionVariable.ENABLE_RUNTIME_ADAPTIVE_DOP).append("=")
                     .append(variables.isEnableRuntimeAdaptiveDop())
                     .append(",");
+            sb.append(SessionVariable.RUNTIME_PROFILE_REPORT_INTERVAL).append("=")
+                    .append(variables.getRuntimeProfileReportInterval())
+                    .append(",");
             if (context.getResourceGroup() != null) {
                 sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
                         .append(",");
@@ -289,13 +292,17 @@ public class StmtExecutor {
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
         profile.addChild(plannerProfile);
         context.getPlannerProfile().build(plannerProfile);
+        return profile;
+    }
 
+    // At the end of query execution, we begin to add up profile
+    private void initProfile(long beginTimeInNanoSecond) {
+        profile = buildTopLevelProfile();
         if (coord != null) {
             if (coord.getQueryProfile() != null) {
                 coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 coord.endProfile();
-                coord.mergeIsomorphicProfiles(getQueryStatisticsForAuditLog());
-                profile.addChild(coord.getQueryProfile());
+                profile.addChild(coord.buildMergedQueryProfile(getQueryStatisticsForAuditLog()));
             }
             coord = null;
         }
@@ -384,13 +391,17 @@ public class StmtExecutor {
                     }
                     context.setSessionVariable(sessionVariable);
                 }
+
+                if (parsedStmt.isExplain()) {
+                    context.setExplainLevel(parsedStmt.getExplainLevel());
+                }
             }
 
             // execPlan is the output of new planner
             ExecPlan execPlan = null;
             boolean execPlanBuildByNewPlanner = false;
 
-            try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Total")) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Total")) {
                 redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
                     if (context.shouldDumpQuery()) {
@@ -833,6 +844,7 @@ public class StmtExecutor {
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
 
         coord.exec();
+        coord.setTopProfileSupplier(this::buildTopLevelProfile);
 
         // send result
         // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
@@ -1278,7 +1290,9 @@ public class StmtExecutor {
             explainString += "NOT AVAILABLE";
         } else {
             if (parsedStmt.getExplainLevel() == OPTIMIZER) {
-                explainString += PlannerProfile.printPlannerTimeCost(context.getPlannerProfile());
+                explainString += PlannerProfile.printPlannerTimer(context.getPlannerProfile());
+            } else if (parsedStmt.getExplainLevel() == REWRITE) {
+                explainString += PlannerProfile.printPlannerTrace(context.getPlannerProfile());
             } else {
                 explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
             }

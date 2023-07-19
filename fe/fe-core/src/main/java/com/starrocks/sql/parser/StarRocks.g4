@@ -1888,7 +1888,7 @@ relationPrimary
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | TABLE '(' qualifiedName '(' expressionList ')' ')'
         (AS? alias=identifier columnAliases?)?                                          #normalizedTableFunction
-    | TABLE propertyList
+    | FILES propertyList
         (AS? alias=identifier columnAliases?)?                                          #fileTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
     ;
@@ -2217,7 +2217,7 @@ explainDesc
     ;
 
 optimizerTrace
-    : TRACE OPTIMIZER
+    : TRACE (OPTIMIZER | REWRITE)
     ;
 
 partitionDesc
@@ -2512,7 +2512,7 @@ nonReserved
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
     | PERCENT_RANK | PRECEDING | PROC | PROCESSLIST | PRIVILEGES | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUEUE | QUOTA | QUALIFY
-    | REMOVE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
+    | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
     | SAMPLE | SCHEDULER | SECOND | SECURITY | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START

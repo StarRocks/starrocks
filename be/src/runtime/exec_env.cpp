@@ -246,6 +246,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
     int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
+    if (config::hdfs_client_enable_hedged_read) {
+        // Set hdfs client hedged read pool size
+        config::hdfs_client_hedged_read_threadpool_size =
+                std::min(connector_num_io_threads * 2, config::hdfs_client_hedged_read_threadpool_size);
+        CHECK_GT(config::hdfs_client_hedged_read_threadpool_size, 0)
+                << "hdfs_client_hedged_read_threadpool_size should greater than 0";
+    }
+
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
     RETURN_IF_ERROR(ThreadPoolBuilder("con_wg_scan_io")
                             .set_min_threads(0)

@@ -411,6 +411,9 @@ public:
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
     void check_short_circuit();
 
+    void report_exec_state_if_necessary();
+    void runtime_report_action();
+
     std::string to_readable_string() const;
 
     workgroup::WorkGroup* workgroup();

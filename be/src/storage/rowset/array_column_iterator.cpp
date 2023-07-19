@@ -15,6 +15,7 @@
 #include "storage/rowset/array_column_iterator.h"
 
 #include "column/array_column.h"
+#include "column/column_access_path.h"
 #include "column/nullable_column.h"
 #include "storage/rowset/scalar_column_iterator.h"
 
@@ -22,19 +23,12 @@ namespace starrocks {
 
 ArrayColumnIterator::ArrayColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iterator,
                                          std::unique_ptr<ColumnIterator> array_size_iterator,
-                                         std::unique_ptr<ColumnIterator> element_iterator)
+                                         std::unique_ptr<ColumnIterator> element_iterator, const ColumnAccessPath* path)
         : _reader(reader),
           _null_iterator(std::move(null_iterator)),
           _array_size_iterator(std::move(array_size_iterator)),
-          _element_iterator(std::move(element_iterator)) {}
-
-ArrayColumnIterator::ArrayColumnIterator(ColumnReader* reader, ColumnIterator* null_iterator,
-                                         ColumnIterator* array_size_iterator, ColumnIterator* element_iterator) {
-    _reader = reader;
-    _null_iterator.reset(null_iterator);
-    _array_size_iterator.reset(array_size_iterator);
-    _element_iterator.reset(element_iterator);
-}
+          _element_iterator(std::move(element_iterator)),
+          _path(std::move(path)) {}
 
 Status ArrayColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_null_iterator != nullptr) {
@@ -42,6 +36,11 @@ Status ArrayColumnIterator::init(const ColumnIteratorOptions& opts) {
     }
     RETURN_IF_ERROR(_array_size_iterator->init(opts));
     RETURN_IF_ERROR(_element_iterator->init(opts));
+
+    // only offset
+    if (_path != nullptr && _path->children().size() == 1 && _path->children()[0]->is_offset()) {
+        _access_values = false;
+    }
     return Status::OK();
 }
 
@@ -83,7 +82,11 @@ Status ArrayColumnIterator::next_batch(size_t* n, Column* dst) {
     num_to_read = end_offset - num_to_read;
 
     // 3. Read elements
-    RETURN_IF_ERROR(_element_iterator->next_batch(&num_to_read, array_column->elements_column().get()));
+    if (_access_values) {
+        RETURN_IF_ERROR(_element_iterator->next_batch(&num_to_read, array_column->elements_column().get()));
+    } else {
+        array_column->elements_column()->append_default(num_to_read);
+    }
 
     return Status::OK();
 }
@@ -115,6 +118,7 @@ Status ArrayColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     // array column can be nested, range may be empty
     DCHECK(range.empty() || (range.begin() == _array_size_iterator->get_current_ordinal()));
     SparseRange element_read_range;
+    size_t read_rows = 0;
     while (iter.has_more()) {
         Range r = iter.next(to_read);
 
@@ -144,13 +148,18 @@ Status ArrayColumnIterator::next_batch(const SparseRange& range, Column* dst) {
             data[i] = end_offset;
         }
         num_to_read = end_offset - num_to_read;
+        read_rows += num_to_read;
 
         element_read_range.add(Range(element_ordinal, element_ordinal + num_to_read));
     }
 
-    // if array column is nullable, element_read_range may be empty
-    DCHECK(element_read_range.empty() || (element_read_range.begin() == _element_iterator->get_current_ordinal()));
-    RETURN_IF_ERROR(_element_iterator->next_batch(element_read_range, array_column->elements_column().get()));
+    if (_access_values) {
+        // if array column is nullable, element_read_range may be empty
+        DCHECK(element_read_range.empty() || (element_read_range.begin() == _element_iterator->get_current_ordinal()));
+        RETURN_IF_ERROR(_element_iterator->next_batch(element_read_range, array_column->elements_column().get()));
+    } else {
+        array_column->elements_column()->append_default(read_rows);
+    }
 
     return Status::OK();
 }
@@ -191,7 +200,11 @@ Status ArrayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t 
         size_t element_ordinal = _array_size_iterator->element_ordinal();
         RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
         size_t size_to_read = array_size.get_data()[i];
-        RETURN_IF_ERROR(_element_iterator->next_batch(&size_to_read, array_column->elements_column().get()));
+        if (_access_values) {
+            RETURN_IF_ERROR(_element_iterator->next_batch(&size_to_read, array_column->elements_column().get()));
+        } else {
+            array_column->elements_column()->append_default(size_to_read);
+        }
     }
     return Status::OK();
 }

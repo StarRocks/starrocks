@@ -377,6 +377,7 @@ message PFetchDataResult {
 
 message PTriggerProfileReportRequest {
     repeated PUniqueId instance_ids = 1;
+    optional PUniqueId query_id = 2;
 };
 
 message PTriggerProfileReportResult {

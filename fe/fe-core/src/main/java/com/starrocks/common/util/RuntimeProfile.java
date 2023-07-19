@@ -477,13 +477,15 @@ public class RuntimeProfile {
     }
 
     // Copy all info strings from src profile
-    public void copyAllInfoStringsFrom(RuntimeProfile srcProfile) {
+    public void copyAllInfoStringsFrom(RuntimeProfile srcProfile, Set<String> excludedInfoStrings) {
         if (srcProfile == null || this == srcProfile) {
             return;
         }
 
         srcProfile.infoStrings.forEach((key, value) -> {
-            if (!this.infoStrings.containsKey(key)) {
+            if (CollectionUtils.isNotEmpty(excludedInfoStrings) && excludedInfoStrings.contains(key)) {
+                return;
+            } else if (!this.infoStrings.containsKey(key)) {
                 this.infoStrings.put(key, value);
             } else if (!Objects.equals(value, this.infoStrings.get(key))) {
                 String originalKey = key;
@@ -531,16 +533,16 @@ public class RuntimeProfile {
 
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
-    // The merged result will be stored in the first profile
-    public static void mergeIsomorphicProfiles(List<RuntimeProfile> profiles) {
+    public static RuntimeProfile mergeIsomorphicProfiles(List<RuntimeProfile> profiles,
+                                                         Set<String> excludedInfoStrings) {
         if (CollectionUtils.isEmpty(profiles)) {
-            return;
+            return null;
         }
 
-        RuntimeProfile profile0 = profiles.get(0);
+        RuntimeProfile mergedProfile = new RuntimeProfile(profiles.get(0).getName());
 
-        for (int i = 1; i < profiles.size(); i++) {
-            profile0.copyAllInfoStringsFrom(profiles.get(i));
+        for (RuntimeProfile runtimeProfile : profiles) {
+            mergedProfile.copyAllInfoStringsFrom(runtimeProfile, excludedInfoStrings);
         }
 
         // Find all counters, although these profiles are expected to be isomorphic,
@@ -569,9 +571,6 @@ public class RuntimeProfile {
                     Pair<Counter, String> pair = profile.counterMap.get(name);
                     Preconditions.checkNotNull(pair);
                     Counter counter = pair.first;
-                    if (counter.isSkipMerge()) {
-                        continue;
-                    }
                     String parentName = pair.second;
 
                     while (allLevelCounters.size() <= levelIdx) {
@@ -587,8 +586,8 @@ public class RuntimeProfile {
                     if (!existType.equals(counter.getType())) {
                         LOG.warn(
                                 "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
-                                profile0.name, name, existType.name(), counter.getType().name());
-                        return;
+                                mergedProfile.name, name, existType.name(), counter.getType().name());
+                        continue;
                     }
                 }
             }
@@ -618,6 +617,8 @@ public class RuntimeProfile {
             long minValue = Long.MAX_VALUE;
             long maxValue = Long.MIN_VALUE;
             boolean alreadyMerged = false;
+            boolean skipMerge = false;
+            Counter skipMergeCounter = null;
             TCounterStrategy strategy = null;
             for (RuntimeProfile profile : profiles) {
                 Counter counter = profile.getCounter(name);
@@ -631,10 +632,15 @@ public class RuntimeProfile {
                 if (!type.equals(counter.getType())) {
                     LOG.warn(
                             "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
-                            profile0.name, name, type.name(), counter.getType().name());
-                    return;
+                            mergedProfile.name, name, type.name(), counter.getType().name());
+                    continue;
                 }
                 strategy = counter.getStrategy();
+                if (counter.isSkipMerge()) {
+                    skipMerge = true;
+                    skipMergeCounter = counter;
+                    break;
+                }
 
                 Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
                 if (minCounter != null) {
@@ -652,56 +658,60 @@ public class RuntimeProfile {
                 }
                 counters.add(counter);
             }
-            Counter.MergedInfo mergedInfo = Counter.mergeIsomorphicCounters(counters);
-            final long mergedValue = mergedInfo.mergedValue;
-            if (!alreadyMerged) {
-                minValue = mergedInfo.minValue;
-                maxValue = mergedInfo.maxValue;
-            }
-
-            Counter counter0 = profile0.getCounter(name);
-            // As stated before, some counters may only attach to one of the isomorphic profiles
-            // and the first profile may not have this counter, so we create a counter here
-            if (counter0 == null) {
-                if (!Objects.equals(ROOT_COUNTER, parentName) && profile0.getCounter(parentName) != null) {
-                    counter0 = profile0.addCounter(name, type, strategy, parentName);
-                } else {
-                    if (!Objects.equals(ROOT_COUNTER, parentName)) {
-                        LOG.warn("missing parent counter, profileName={}, counterName={}, parentCounterName={}",
-                                profile0.name, name, parentName);
-                    }
-                    counter0 = profile0.addCounter(name, type, strategy);
+            Counter mergedCounter = null;
+            if (!Objects.equals(ROOT_COUNTER, parentName) && mergedProfile.getCounter(parentName) != null) {
+                mergedCounter = mergedProfile.addCounter(name, type, strategy, parentName);
+            } else {
+                if (!Objects.equals(ROOT_COUNTER, parentName)) {
+                    LOG.warn("missing parent counter, profileName={}, counterName={}, parentCounterName={}",
+                            mergedProfile.name, name, parentName);
                 }
+                mergedCounter = mergedProfile.addCounter(name, type, strategy);
             }
-            counter0.setValue(mergedValue);
+            if (skipMerge) {
+                mergedCounter.setValue(skipMergeCounter.getValue());
+            } else {
+                Counter.MergedInfo mergedInfo = Counter.mergeIsomorphicCounters(counters);
+                final long mergedValue = mergedInfo.mergedValue;
+                if (!alreadyMerged) {
+                    minValue = mergedInfo.minValue;
+                    maxValue = mergedInfo.maxValue;
+                }
+                mergedCounter.setValue(mergedValue);
 
-            Counter minCounter = profile0.addCounter(MERGED_INFO_PREFIX_MIN + name, type, counter0.getStrategy(), name);
-            Counter maxCounter = profile0.addCounter(MERGED_INFO_PREFIX_MAX + name, type, counter0.getStrategy(), name);
-            minCounter.setValue(minValue);
-            maxCounter.setValue(maxValue);
+                Counter minCounter =
+                        mergedProfile.addCounter(MERGED_INFO_PREFIX_MIN + name, type, mergedCounter.getStrategy(),
+                                name);
+                Counter maxCounter =
+                        mergedProfile.addCounter(MERGED_INFO_PREFIX_MAX + name, type, mergedCounter.getStrategy(),
+                                name);
+                minCounter.setValue(minValue);
+                maxCounter.setValue(maxValue);
+            }
+
         }
 
         // merge children
-        for (int i = 0; i < profile0.childList.size(); i++) {
+        for (int i = 0; i < profiles.get(0).childList.size(); i++) {
             List<RuntimeProfile> subProfiles = Lists.newArrayList();
-            RuntimeProfile child0 = profile0.childList.get(i).first;
-            subProfiles.add(child0);
-            for (int j = 1; j < profiles.size(); j++) {
-                RuntimeProfile profile = profiles.get(j);
+            for (RuntimeProfile profile : profiles) {
                 if (i >= profile.childList.size()) {
                     LOG.warn("find non-isomorphic children, profileName={}, childProfileNames={}" +
                                     ", another profileName={}, another childProfileNames={}",
-                            profile0.name,
-                            profile0.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()),
+                            mergedProfile.name,
+                            mergedProfile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()),
                             profile.name,
                             profile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()));
-                    return;
+                    continue;
                 }
                 RuntimeProfile child = profile.childList.get(i).first;
                 subProfiles.add(child);
             }
-            mergeIsomorphicProfiles(subProfiles);
+            RuntimeProfile mergedChild = mergeIsomorphicProfiles(subProfiles, excludedInfoStrings);
+            mergedProfile.addChild(mergedChild);
         }
+
+        return mergedProfile;
     }
 
     public static void removeRedundantMinMaxMetrics(RuntimeProfile profile) {

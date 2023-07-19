@@ -22,6 +22,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "util/time.h"
 
 namespace starrocks::pipeline {
 
@@ -80,12 +81,13 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
     _data_sink = std::move(data_sink);
 }
 
-void FragmentContext::count_down_pipeline(RuntimeState* state, size_t val) {
+void FragmentContext::count_down_pipeline(size_t val) {
     bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == _pipelines.size();
     if (!all_pipelines_finished) {
         return;
     }
 
+    auto* state = runtime_state();
     auto* query_ctx = state->query_ctx();
 
     state->runtime_profile()->reverse_childs();
@@ -99,11 +101,53 @@ void FragmentContext::count_down_pipeline(RuntimeState* state, size_t val) {
 
     finish();
     auto status = final_status();
-    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true);
+    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true, true);
 
     destroy_pass_through_chunk_buffer();
 
     query_ctx->count_down_fragments();
+}
+
+bool FragmentContext::need_report_exec_state() {
+    auto* state = runtime_state();
+    auto* query_ctx = state->query_ctx();
+    if (!query_ctx->enable_profile()) {
+        return false;
+    }
+
+    return (MonotonicNanos() - _last_report_exec_state_ns) >= query_ctx->get_runtime_profile_report_interval_ns();
+}
+
+void FragmentContext::report_exec_state_if_necessary() {
+    auto* state = runtime_state();
+    auto* query_ctx = state->query_ctx();
+    if (!query_ctx->enable_profile()) {
+        return;
+    }
+    const auto now = MonotonicNanos();
+    const auto interval_ns = query_ctx->get_runtime_profile_report_interval_ns();
+    auto last_report_ns = _last_report_exec_state_ns.load();
+    if (now - last_report_ns < interval_ns) {
+        return;
+    }
+
+    for (auto& pipeline : _pipelines) {
+        for (auto& driver : pipeline->drivers()) {
+            driver->runtime_report_action();
+        }
+    }
+
+    int64_t normalized_report_ns;
+    if (now - last_report_ns > 2 * interval_ns) {
+        // Maybe the first time, then initialized it.
+        normalized_report_ns = now;
+    } else {
+        // Fix the report interval regardless the noise.
+        normalized_report_ns = last_report_ns + interval_ns;
+    }
+    if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+        state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+    }
 }
 
 void FragmentContext::set_final_status(const Status& status) {
