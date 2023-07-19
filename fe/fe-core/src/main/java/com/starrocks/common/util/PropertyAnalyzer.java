@@ -155,6 +155,11 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
+<<<<<<< HEAD
+=======
+    public static final String PROPERTIES_OLAP_TABLE_QUERY_REWRITE = "olap_table_query_rewrite_consistency";
+    public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
 
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
@@ -368,6 +373,7 @@ public class PropertyAnalyzer {
         return maxMVRewriteStaleness;
     }
 
+<<<<<<< HEAD
     public static boolean analyzeForceExternalTableQueryRewrite(Map<String, String> properties) {
         boolean forceExternalTableQueryRewrite = false;
         if (properties != null && properties.containsKey(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
@@ -378,6 +384,8 @@ public class PropertyAnalyzer {
         return forceExternalTableQueryRewrite;
     }
 
+=======
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
     public static Short analyzeReplicationNum(Map<String, String> properties, short oldReplicationNum)
             throws AnalysisException {
         short replicationNum = oldReplicationNum;
