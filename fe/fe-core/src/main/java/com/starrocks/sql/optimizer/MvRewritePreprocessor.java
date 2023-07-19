@@ -76,10 +76,6 @@ public class MvRewritePreprocessor {
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
         if (relatedMvs.isEmpty()) {
-<<<<<<< HEAD
-=======
-            logMVPrepare(connectContext, "No Related MVs for the query plan");
->>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
             return;
         }
 
@@ -92,13 +88,9 @@ public class MvRewritePreprocessor {
                 LOG.warn("preprocess mv {} failed for query tables:{}", mv.getName(), tableNames, e);
             }
         }
-<<<<<<< HEAD
-=======
         if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "No Related MVs after process");
             return;
         }
->>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
         // all base table related mvs
         List<String> relatedMvNames = relatedMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList());
         // all mvs that match SPJG pattern and can ben used to try mv rewrite
@@ -128,8 +120,6 @@ public class MvRewritePreprocessor {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             if (!partitionNamesToRefresh.isEmpty()) {
-<<<<<<< HEAD
-=======
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
                     String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
@@ -137,14 +127,10 @@ public class MvRewritePreprocessor {
                 }
                 LOG.info("[MV PREPARE] MV {} is outdated, stale partitions {}, detailed version info: {}",
                         mv.getName(), partitionNamesToRefresh, sb.toString());
->>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
                 return;
             }
         } else if (!mv.getPartitionNames().isEmpty() && partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
             // if the mv is partitioned, and all partitions need refresh,
-<<<<<<< HEAD
-            // then it can not be an candidate
-=======
             // then it can not be a candidate
 
             StringBuilder sb = new StringBuilder();
@@ -154,7 +140,6 @@ public class MvRewritePreprocessor {
             }
             LOG.info("[MV PREPARE] MV {} is outdated and all its partitions need to be " +
                     "refreshed: {}, detailed info: {}", mv.getName(), partitionNamesToRefresh, sb.toString());
->>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
             return;
         }
 
@@ -218,22 +203,6 @@ public class MvRewritePreprocessor {
 
         final ColumnRefFactory columnRefFactory = mvContext.getQueryRefFactory();
         int relationId = columnRefFactory.getNextRelationId();
-<<<<<<< HEAD
-=======
-
-        // first add base schema to avoid replaced in full schema.
-        Set<String> columnNames = Sets.newHashSet();
-        for (Column column : mv.getBaseSchema()) {
-            ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
-                    column.getType(),
-                    column.isAllowNull());
-            columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
-            columnRefFactory.updateColumnRefToColumns(columnRef, column, mv);
-            colRefToColumnMetaMapBuilder.put(columnRef, column);
-            columnMetaToColRefMapBuilder.put(column, columnRef);
-            columnNames.add(column.getName());
-        }
->>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
         for (Column column : mv.getFullSchema()) {
             ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                     column.getType(),
