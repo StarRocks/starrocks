@@ -153,16 +153,13 @@ static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
 
 bool ExecEnv::_is_init = false;
 
-Status ExecEnv::init(ExecEnv* env, const std::vector<StorePath>& store_paths, bool as_cn) {
-    DeferOp op([]() { ExecEnv::_is_init = true; });
-    return env->_init(store_paths, as_cn);
-}
-
 bool ExecEnv::is_init() {
     return _is_init;
 }
 
-Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
+Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
+    DeferOp op([]() { ExecEnv::_is_init = true; });
+
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
     _metrics = StarRocksMetrics::instance()->metrics();
@@ -482,14 +479,14 @@ Status ExecEnv::_init_storage_page_cache() {
     return Status::OK();
 }
 
-void ExecEnv::_stop() {
+void ExecEnv::stop() {
     // Clear load channel should be executed before stopping the storage engine,
     // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
     // so when the ThreadPool is destroyed, it will crash.
-    _load_channel_mgr->clear();
-}
+    if (_load_channel_mgr) {
+        _load_channel_mgr->clear();
+    }
 
-void ExecEnv::_destroy() {
     if (_automatic_partition_pool) {
         _automatic_partition_pool->shutdown();
     }
@@ -497,7 +494,9 @@ void ExecEnv::_destroy() {
     if (_load_rpc_pool) {
         _load_rpc_pool->shutdown();
     }
+}
 
+void ExecEnv::destroy() {
     SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);
     SAFE_DELETE(_profile_report_worker);
@@ -560,14 +559,6 @@ std::shared_ptr<MemTracker> ExecEnv::regist_tracker(Args&&... args) {
     auto mem_tracker = std::make_shared<MemTracker>(std::forward<Args>(args)...);
     _mem_trackers.emplace_back(mem_tracker);
     return mem_tracker;
-}
-
-void ExecEnv::destroy(ExecEnv* env) {
-    env->_destroy();
-}
-
-void ExecEnv::stop(ExecEnv* exec_env) {
-    exec_env->_stop();
 }
 
 int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
