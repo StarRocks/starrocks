@@ -12,7 +12,7 @@ When executing the UPDATE statement involving multiple tables, StarRocks convert
 
 ## Syntax
 
-**Single-table UPDATE**
+### Single-table UPDATE
 
 If the data rows of the table to be updated meet the WHERE condition, the specified columns of these data rows are assigned new values.
 
@@ -23,7 +23,7 @@ UPDATE <table_name>
     WHERE <where_condition>
 ```
 
-**Multi-table UPDATE**
+### Multi-table UPDATE
 
 The result set from the multi-table join is matched against the table to be updated. If the data rows of the table to be updated match the result set and meet the WHERE condition, the specified columns of these data rows are assigned new values.
 
