@@ -71,7 +71,7 @@ protected:
     int64_t _num_writers;
 };
 
-std::string TabletsChannelOpenTimeStat::to_string() {
+inline std::string TabletsChannelOpenTimeStat::to_string() {
     std::stringstream ss;
     ss << "TabletsChannel={start_time_ns=" << get_start_time() << ", num_writers=" << _num_writers
        << ", open_writer_cost_ns=" << _open_writer_cost_ns
