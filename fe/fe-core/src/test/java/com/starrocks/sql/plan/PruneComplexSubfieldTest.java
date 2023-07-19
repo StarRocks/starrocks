@@ -317,4 +317,19 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "ColumnAccessPath: [/a1/ALL]");
         assertContains(plan, "PredicateAccessPath: [/a1/INDEX]");
     }
+
+    @Test
+    public void testStructUpperCase() throws Exception {
+        String sql = "select map5[1].S1, map5[2].M2[4].S3 from pc0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "map5[1].s1");
+        assertContains(plan, "map5[2].m2[4].s3");
+
+        sql = "select st1.S2, st2.SM3[1], ST3.SA3, ST5.SS3.S32 from sc0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "st1.s2"); 
+        assertContains(plan, "st2.sm3[1]"); 
+        assertContains(plan, "st5.ss3.s32"); 
+        assertContains(plan, "st3.sa3"); 
+    }
 }

@@ -58,7 +58,7 @@ public class SubfieldOperator extends ScalarOperator {
     private SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames) {
         super(OperatorType.SUBFIELD, type);
         this.children.add(child);
-        this.fieldNames = fieldNames.stream().map(String::toLowerCase).collect(ImmutableList.toImmutableList());
+        this.fieldNames = ImmutableList.copyOf(fieldNames); 
     }
 
     public List<String> getFieldNames() {
