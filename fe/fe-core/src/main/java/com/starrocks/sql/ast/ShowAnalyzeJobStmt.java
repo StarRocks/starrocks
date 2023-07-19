@@ -18,15 +18,17 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.StatsConstants;
@@ -89,7 +91,10 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                 // In new privilege framework(RBAC), user needs any action on the table to show analysis job on it,
                 // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
                 // table to check privilege on.
-                if (!PrivilegeActions.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
+                try {
+                    PrivilegeChecker.checkAnyActionOnTable(context.getCurrentUserIdentity(),
+                            context.getCurrentRoleIds(), new TableName(db.getOriginName(), table.getName()));
+                } catch (AccessDeniedException e) {
                     return null;
                 }
 

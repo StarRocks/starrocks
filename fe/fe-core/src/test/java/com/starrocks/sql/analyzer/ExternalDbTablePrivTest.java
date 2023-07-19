@@ -20,6 +20,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -107,7 +108,7 @@ public class ExternalDbTablePrivTest {
         try {
             PrivilegeChecker.check(statement, ctx);
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -125,7 +126,7 @@ public class ExternalDbTablePrivTest {
         try {
             PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
-        } catch (SemanticException e) {
+        } catch (AccessDeniedException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
@@ -165,20 +166,20 @@ public class ExternalDbTablePrivTest {
                 "select * from hive0.tpch.region",
                 "grant select on table tpch.region to test",
                 "revoke select on table tpch.region from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE region for this operation");
         // Test brief syntax
         verifyGrantRevoke(
                 "select * from hive0.tpch.region",
                 "grant select on tpch.region to test",
                 "revoke select on tpch.region from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
+                "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE region for this operation");
 
         // Test drop on table
         verifyGrantRevoke(
                 "drop table hive0.tpch.region",
                 "grant drop on tpch.region to test",
                 "revoke drop on tpch.region from test",
-                "DROP command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
+                "Access denied; you need (at least one of) the DROP privilege(s) on TABLE region for this operation");
 
         // Test show tables for external catalog, only show table where the user has any action on it
         grantRevokeSqlAsRoot("grant select on tpch.nation to test");
@@ -203,7 +204,7 @@ public class ExternalDbTablePrivTest {
                 "drop database tpch",
                 "grant drop on database tpch to test",
                 "revoke drop on database tpch from test",
-                "Access denied for user 'test' to database 'tpch'");
+                "Access denied; you need (at least one of) the DROP privilege(s) on DATABASE tpch for this operation");
 
         // Test show databases, check any action on table
         grantRevokeSqlAsRoot("grant drop on tpch.region to test");
@@ -245,6 +246,6 @@ public class ExternalDbTablePrivTest {
                 "set catalog hive0",
                 "grant select on tpch.region to test",
                 "revoke select on tpch.region from test",
-                "Access denied for user 'test' to catalog 'hive0'");
+                "Access denied; you need (at least one of) the ANY IN CATALOG hive0 privilege(s) for this operation");
     }
 }

@@ -20,6 +20,7 @@ import com.google.gson.Gson;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
@@ -33,8 +34,9 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
@@ -91,7 +93,11 @@ public class InformationSchemaDataSource {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
         }
         for (String fullName : dbNames) {
-            if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
+
+            try {
+                PrivilegeChecker.checkAnyActionOnOrInDb(currentUser, null,
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
+            } catch (AccessDeniedException e) {
                 continue;
             }
 
@@ -130,7 +136,10 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
-                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
+                        try {
+                            PrivilegeChecker.checkAnyActionOnTableLikeObject(result.currentUser,
+                                    null, dbName, table);
+                        } catch (AccessDeniedException e) {
                             continue;
                         }
 
@@ -294,7 +303,9 @@ public class InformationSchemaDataSource {
                 try {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
-                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
+                        try {
+                            PrivilegeChecker.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
+                        } catch (AccessDeniedException e) {
                             continue;
                         }
 

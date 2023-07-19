@@ -46,8 +46,8 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpAuthManager;
 import com.starrocks.http.HttpAuthManager.SessionValue;
-import com.starrocks.http.UnauthorizedException;
 import com.starrocks.http.rest.RestBaseResult;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -195,7 +195,7 @@ public class WebBaseAction extends BaseAction {
             ctx.setThreadLocalInfo();
 
             return true;
-        } catch (UnauthorizedException e) {
+        } catch (AccessDeniedException e) {
             response.appendContent("Authentication Failed. <br/> " + e.getMessage());
             writeAuthResponse(request, response);
             return false;
@@ -217,7 +217,7 @@ public class WebBaseAction extends BaseAction {
                 checkUserOwnsAdminRole(sessionValue.currentUser);
                 checkActionOnSystem(sessionValue.currentUser, PrivilegeType.NODE);
                 authorized = true;
-            } catch (UnauthorizedException e) {
+            } catch (AccessDeniedException e) {
                 // ignore
             }
 
