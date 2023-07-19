@@ -23,6 +23,7 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -1592,5 +1593,28 @@ public class AuthorizationMgrTest {
         manager.grantStorageVolumeUsageToPublicRole(storageVolumeId);
         setCurrentUserAndRoles(ctx, new UserIdentity("u1", "%"));
         Assert.assertTrue(PrivilegeActions.checkStorageVolumeAction(ctx, "test", PrivilegeType.USAGE));
+    }
+
+    @Test
+    public void testLoadV2() throws Exception {
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        AuthorizationMgr masterManager = masterGlobalStateMgr.getAuthorizationMgr();
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        for (int i = 0; i != 2; ++i) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "create role test_persist_role" + i, ctx), ctx);
+            Assert.assertTrue(masterManager.checkRoleExists("test_persist_role" + i));
+        }
+
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        masterGlobalStateMgr.getAuthorizationMgr().saveV2(emptyImage.getDataOutputStream());
+
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr();
+        SRMetaBlockReader reader = new SRMetaBlockReader(emptyImage.getDataInputStream());
+        authorizationMgr.loadV2(reader);
+
+        Assert.assertNotNull(authorizationMgr.getRolePrivilegeCollection("test_persist_role0"));
     }
 }
