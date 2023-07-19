@@ -59,7 +59,6 @@ public class LocalTablet extends Tablet {
         VERSION_INCOMPLETE, // alive replica num is enough, but version is missing.
         REPLICA_RELOCATING, // replica is healthy, but is under relocating (e.g. BE is decommission).
         REDUNDANT, // too much replicas.
-        REPLICA_MISSING_IN_CLUSTER, // not enough healthy replicas in correct cluster.
         FORCE_REDUNDANT, // some replica is missing or bad, but there is no other backends for repair,
         // at least one replica has to be deleted first to make room for new replica.
         COLOCATE_MISMATCH, // replicas do not all locate in right colocate backends set.
@@ -540,10 +539,8 @@ public class LocalTablet extends Tablet {
             }
         }
 
-        // 4. healthy replicas in cluster are not enough
-        if (availableInCluster < replicationNum) {
-            return Pair.create(TabletStatus.REPLICA_MISSING_IN_CLUSTER, TabletSchedCtx.Priority.LOW);
-        } else if (replicas.size() > replicationNum) {
+        // 4. replica redundant
+        if (replicas.size() > replicationNum) {
             // we set REDUNDANT as VERY_HIGH, because delete redundant replicas can free the space quickly.
             return createRedundantSchedCtx(TabletStatus.REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
                     needFurtherRepairReplica);

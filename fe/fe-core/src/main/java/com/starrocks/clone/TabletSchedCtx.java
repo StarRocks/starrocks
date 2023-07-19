@@ -71,28 +71,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private static final Logger LOG = LogManager.getLogger(TabletSchedCtx.class);
 
     /*
-     * SCHED_FAILED_COUNTER_THRESHOLD:
-     *    threshold of times a tablet failed to be scheduled
-     *
-     * MIN_ADJUST_PRIORITY_INTERVAL_MS:
-     *    min interval time of adjusting a tablet's priority
-     *
-     * MAX_NOT_BEING_SCHEDULED_INTERVAL_MS:
-     *    max gap time of a tablet NOT being scheduled.
-     *
-     * These 3 params is for adjusting priority.
-     * If a tablet being scheduled failed for more than SCHED_FAILED_COUNTER_THRESHOLD times, its priority
-     * will be downgraded. And the interval between adjustment is larger than MIN_ADJUST_PRIORITY_INTERVAL_MS,
-     * to avoid being downgraded too soon.
-     * And if a tablet is not being scheduled longer than MAX_NOT_BEING_SCHEDULED_INTERVAL_MS, its priority
-     * will be upgraded, to avoid starvation.
-     *
-     */
-    private static final int SCHED_FAILED_COUNTER_THRESHOLD = 5;
-    private static final long MIN_ADJUST_PRIORITY_INTERVAL_MS = 5 * 60 * 1000L; // 5 min
-    private static final long MAX_NOT_BEING_SCHEDULED_INTERVAL_MS = 30 * 60 * 1000L; // 30 min
-
-    /*
      *  A clone task timeout is between Config.min_clone_task_timeout_sec and Config.max_clone_task_timeout_sec,
      *  estimated by tablet size / MIN_CLONE_SPEED_MB_PER_SECOND.
      */
@@ -114,18 +92,18 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         HIGH,
         VERY_HIGH;
 
-        // VERY_HIGH can only be downgraded to NORMAL
+        // try to upgrade the priority
         // LOW can only be upgraded to HIGH
-        public Priority adjust(Priority origPriority, boolean isUp) {
+        public Priority adjust(Priority origPriority) {
             switch (this) {
                 case VERY_HIGH:
-                    return isUp ? VERY_HIGH : HIGH;
+                    return VERY_HIGH;
                 case HIGH:
-                    return isUp ? (origPriority == LOW ? HIGH : VERY_HIGH) : NORMAL;
+                    return origPriority == LOW ? HIGH : VERY_HIGH;
                 case NORMAL:
-                    return isUp ? HIGH : (origPriority == Priority.VERY_HIGH ? NORMAL : LOW);
+                    return HIGH;
                 default:
-                    return isUp ? NORMAL : LOW;
+                    return NORMAL;
             }
         }
 
@@ -765,7 +743,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         tablet.deleteReplicaByBackendId(replica.getBackendId());
     }
 
-    // database lock should be held.
     public CloneTask createCloneReplicaAndTask() throws SchedException {
         Backend srcBe = infoService.getBackend(srcReplica.getBackendId());
         if (srcBe == null) {
@@ -800,73 +777,97 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING or REPLICA_MISSING_IN_CLUSTER,
         // we create a new replica with state CLONE
-        if (tabletStatus == TabletStatus.REPLICA_MISSING || tabletStatus == TabletStatus.REPLICA_MISSING_IN_CLUSTER
-                || tabletStatus == TabletStatus.REPLICA_RELOCATING || tabletStatus == TabletStatus.COLOCATE_MISMATCH
-                || (type == Type.BALANCE && !cloneTask.isLocal())) {
-            Replica cloneReplica = new Replica(
-                    GlobalStateMgr.getCurrentState().getNextId(), destBackendId,
-                    -1 /* version */, schemaHash,
-                    -1 /* data size */, -1 /* row count */,
-                    ReplicaState.CLONE,
-                    committedVersion,
-                    -1 /* last success version */);
+        Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
+        if (db == null) {
+            throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " not exist");
+        }
+        try {
+            db.writeLock();
+            if (tabletStatus == TabletStatus.REPLICA_MISSING
+                    || tabletStatus == TabletStatus.REPLICA_RELOCATING
+                    || tabletStatus == TabletStatus.COLOCATE_MISMATCH
+                    || (type == Type.BALANCE && !cloneTask.isLocal())) {
+                Replica cloneReplica = new Replica(
+                        GlobalStateMgr.getCurrentState().getNextId(), destBackendId,
+                        -1 /* version */, schemaHash,
+                        -1 /* data size */, -1 /* row count */,
+                        ReplicaState.CLONE,
+                        committedVersion,
+                        -1 /* last success version */);
 
-            // addReplica() method will add this replica to tablet inverted index too.
-            tablet.addReplica(cloneReplica);
-        } else if (tabletStatus == TabletStatus.VERSION_INCOMPLETE) {
-            Preconditions.checkState(type == Type.REPAIR, type);
-            // double check
-            Replica replica = tablet.getReplicaByBackendId(destBackendId);
-            if (replica == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "dest replica does not exist on BE " + destBackendId);
-            }
+                // addReplica() method will add this replica to tablet inverted index too.
+                tablet.addReplica(cloneReplica);
+            } else if (tabletStatus == TabletStatus.VERSION_INCOMPLETE) {
+                Preconditions.checkState(type == Type.REPAIR, type);
+                // double check
+                Replica replica = tablet.getReplicaByBackendId(destBackendId);
+                if (replica == null) {
+                    throw new SchedException(Status.UNRECOVERABLE, "dest replica does not exist on BE " + destBackendId);
+                }
 
-            if (replica.getPathHash() != destPathHash) {
-                throw new SchedException(Status.UNRECOVERABLE, "dest replica's path hash is changed. "
-                        + "current: " + replica.getPathHash() + ", scheduled: " + destPathHash);
+                if (replica.getPathHash() != destPathHash) {
+                    throw new SchedException(Status.UNRECOVERABLE, "dest replica's path hash is changed. "
+                            + "current: " + replica.getPathHash() + ", scheduled: " + destPathHash);
+                }
+            } else if (type == Type.BALANCE && cloneTask.isLocal()) {
+                if (tabletStatus != TabletStatus.HEALTHY) {
+                    throw new SchedException(Status.SCHEDULE_RETRY, "tablet " + tabletId + " is not healthy");
+                }
             }
-        } else if (type == Type.BALANCE && cloneTask.isLocal()) {
-            if (tabletStatus != TabletStatus.HEALTHY) {
-                throw new SchedException(Status.SCHEDULE_RETRY, "tablet " + tabletId + " is not healthy");
-            }
+        } finally {
+            db.writeUnlock();
         }
 
         this.state = State.RUNNING;
         return cloneTask;
     }
 
-    public CreateReplicaTask createEmptyReplicaAndTask() {
+    public CreateReplicaTask createEmptyReplicaAndTask() throws SchedException {
         // only create this task if force recovery is true
         LOG.warn("tablet {} has only one replica {} on backend {}"
                         + " and it is lost. create an empty replica to recover it on backend {}",
                 tabletId, tablet.getSingleReplica(), tablet.getSingleReplica().getBackendId(), destBackendId);
 
         final GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(
-                globalStateMgr.getDbIncludeRecycleBin(dbId),
-                tblId);
-        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
-        CreateReplicaTask createReplicaTask = new CreateReplicaTask(destBackendId, dbId,
-                tblId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
-                indexMeta.getSchemaHash(), visibleVersion,
-                indexMeta.getKeysType(),
-                TStorageType.COLUMN,
-                TStorageMedium.HDD, indexMeta.getSchema(), olapTable.getCopiedBfColumns(), olapTable.getBfFpp(), null,
-                olapTable.getCopiedIndexes(),
-                olapTable.isInMemory(),
-                olapTable.enablePersistentIndex(),
-                olapTable.getPartitionInfo().getTabletType(partitionId));
-        createReplicaTask.setIsRecoverTask(true);
-        taskTimeoutMs = Config.min_clone_task_timeout_sec * 1000;
+        Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+        if (db == null) {
+            throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " does not exist");
+        }
+        try {
+            db.writeLock();
+            OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(
+                    globalStateMgr.getDbIncludeRecycleBin(dbId),
+                    tblId);
+            if (olapTable == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "table " + tblId + " does not exist");
+            }
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+            if (indexMeta == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "materialized view " + indexId + " does not exist");
+            }
+            CreateReplicaTask createReplicaTask = new CreateReplicaTask(destBackendId, dbId,
+                    tblId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
+                    indexMeta.getSchemaHash(), visibleVersion,
+                    indexMeta.getKeysType(),
+                    TStorageType.COLUMN,
+                    TStorageMedium.HDD, indexMeta.getSchema(), olapTable.getCopiedBfColumns(), olapTable.getBfFpp(), null,
+                    olapTable.getCopiedIndexes(),
+                    olapTable.isInMemory(),
+                    olapTable.enablePersistentIndex(),
+                    olapTable.getPartitionInfo().getTabletType(partitionId));
+            createReplicaTask.setIsRecoverTask(true);
+            taskTimeoutMs = Config.min_clone_task_timeout_sec * 1000;
 
-        Replica emptyReplica =
-                new Replica(tablet.getSingleReplica().getId(), destBackendId, ReplicaState.NORMAL, visibleVersion,
-                        indexMeta.getSchemaHash());
-        // addReplica() method will add this replica to tablet inverted index too.
-        tablet.addReplica(emptyReplica);
-
-        state = State.RUNNING;
-        return createReplicaTask;
+            Replica emptyReplica =
+                    new Replica(tablet.getSingleReplica().getId(), destBackendId, ReplicaState.NORMAL, visibleVersion,
+                            indexMeta.getSchemaHash());
+            // addReplica() method will add this replica to tablet inverted index too.
+            tablet.addReplica(emptyReplica);
+            state = State.RUNNING;
+            return createReplicaTask;
+        } finally {
+            db.writeUnlock();
+        }
     }
 
     // timeout is between MIN_CLONE_TASK_TIMEOUT_MS and MAX_CLONE_TASK_TIMEOUT_MS
@@ -1064,25 +1065,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
     }
 
-    /*
-     * we try to adjust the priority based on schedule history
-     * 1. If failed counter is larger than FAILED_COUNTER_THRESHOLD, which means this tablet is being scheduled
-     *    at least FAILED_TIME_THRESHOLD times and all are failed. So we downgrade its priority.
-     *    Also reset the failedCounter, or it will be downgraded forever.
-     *
-     * 2. Else, if it has been a long time since last time the tablet being scheduled, we upgrade its
-     *    priority to let it more available to be scheduled.
-     *
-     * The time gap between adjustment should be larger than MIN_ADJUST_PRIORITY_INTERVAL_MS, to avoid
-     * being downgraded too fast.
-     *
-     * eg:
-     *    A tablet has been scheduled for 5 times and all were failed. its priority will be downgraded. And if it is
-     *    scheduled for 5 times and all are failed again, it will be downgraded again, until to the LOW.
-     *    And than, because of LOW, this tablet can not be scheduled for a long time, and it will be upgraded
-     *    to NORMAL, if still not being scheduled, it will be upgraded up to VERY_HIGH.
-     *
-     * return true if dynamic priority changed
+    /**
+     * try to upgrade the priority if this tablet has not been scheduled for a long time
      */
     public boolean adjustPriority(TabletSchedulerStat stat) {
         long currentTime = System.currentTimeMillis();
@@ -1091,42 +1075,20 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             lastAdjustPrioTime = currentTime;
             return false;
         } else {
-            if (currentTime - lastAdjustPrioTime < MIN_ADJUST_PRIORITY_INTERVAL_MS) {
+            if (currentTime - lastAdjustPrioTime < Config.tablet_sched_max_not_being_scheduled_interval_ms) {
                 return false;
             }
         }
 
-        boolean isDowngrade = false;
-        boolean isUpgrade = false;
-
-        if (failedSchedCounter > SCHED_FAILED_COUNTER_THRESHOLD) {
-            isDowngrade = true;
-        } else {
-            long lastTime = lastSchedTime == 0 ? createTime : lastSchedTime;
-            if (currentTime - lastTime > MAX_NOT_BEING_SCHEDULED_INTERVAL_MS) {
-                isUpgrade = true;
-            }
-        }
+        lastAdjustPrioTime = System.currentTimeMillis();
 
         Priority originDynamicPriority = dynamicPriority;
-        if (isDowngrade) {
-            dynamicPriority = dynamicPriority.adjust(origPriority, false /* downgrade */);
-            failedSchedCounter = 0;
-            if (originDynamicPriority != dynamicPriority) {
-                LOG.debug("downgrade dynamic priority from {} to {}, origin: {}, tablet: {}",
-                        originDynamicPriority.name(), dynamicPriority.name(), origPriority.name(), tabletId);
-                stat.counterTabletPrioDowngraded.incrementAndGet();
-                return true;
-            }
-        } else if (isUpgrade) {
-            dynamicPriority = dynamicPriority.adjust(origPriority, true /* upgrade */);
-            // no need to set lastSchedTime, lastSchedTime is set each time we schedule this tablet
-            if (originDynamicPriority != dynamicPriority) {
-                LOG.debug("upgrade dynamic priority from {} to {}, origin: {}, tablet: {}",
-                        originDynamicPriority.name(), dynamicPriority.name(), origPriority.name(), tabletId);
-                stat.counterTabletPrioUpgraded.incrementAndGet();
-                return true;
-            }
+        dynamicPriority = dynamicPriority.adjust(origPriority);
+        if (originDynamicPriority != dynamicPriority) {
+            LOG.debug("upgrade dynamic priority from {} to {}, origin: {}, tablet: {}",
+                    originDynamicPriority.name(), dynamicPriority.name(), origPriority.name(), tabletId);
+            stat.counterTabletPrioUpgraded.incrementAndGet();
+            return true;
         }
         return false;
     }

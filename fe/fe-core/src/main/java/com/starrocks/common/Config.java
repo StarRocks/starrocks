@@ -1030,6 +1030,14 @@ public class Config extends ConfigBase {
     public static long tablet_sched_colocate_be_down_tolerate_time_s = 12 * 3600;
 
     /**
+     * If the tablet in scheduler queue has not been scheduled for tablet_sched_max_not_being_scheduled_interval_ms,
+     * its priority will upgrade.
+     * default is 15min
+     */
+    @ConfField(mutable = true)
+    public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
+
+    /**
      * the default slot number per path in tablet scheduler
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
