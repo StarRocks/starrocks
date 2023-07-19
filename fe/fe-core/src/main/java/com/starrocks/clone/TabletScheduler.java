@@ -1342,7 +1342,7 @@ public class TabletScheduler extends MasterDaemon {
      */
     private void addBackToPendingTablets(TabletSchedCtx tabletCtx, String message) {
         Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.PENDING);
-        addBackToPendingTablets(tabletCtx);
+        addTablet(tabletCtx, true /* force */);
     }
 
     private void finalizeTabletCtx(TabletSchedCtx tabletCtx, TabletSchedCtx.State state, String reason) {
