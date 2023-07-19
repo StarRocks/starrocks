@@ -1,4 +1,4 @@
-# Other FAQs
+# Other FAQ
 
 This topic provides answers to some general questions.
 
