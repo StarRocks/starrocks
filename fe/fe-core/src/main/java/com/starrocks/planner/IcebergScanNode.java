@@ -258,6 +258,8 @@ public class IcebergScanNode extends ScanNode {
             // For iceberg table we do not need partition id
             hdfsScanRange.setPartition_id(-1);
             hdfsScanRange.setFile_length(file.fileSizeInBytes());
+            // Iceberg data file cannot be overwritten
+            hdfsScanRange.setModification_time(0);
             hdfsScanRange.setFile_format(IcebergApiConverter.getHdfsFileFormat(file.format()).toThrift());
 
             hdfsScanRange.setDelete_files(task.deletes().stream().map(source -> {
