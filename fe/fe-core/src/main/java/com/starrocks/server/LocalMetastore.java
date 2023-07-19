@@ -2336,6 +2336,14 @@ public class LocalMetastore implements ConnectorMetadata {
             colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
             boolean addedToColocateGroup = processColocationProperties(colocateGroup, db,
                     table, false /* expectLakeTable */);
+            if (table instanceof ExternalOlapTable == false && addedToColocateGroup) {
+                // Colocate table should keep the same bucket number accross the partitions
+                DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
+                if (defaultDistributionInfo.getBucketNum() == 0) {
+                    int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                    defaultDistributionInfo.setBucketNum(bucketNum);
+                }
+            }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
