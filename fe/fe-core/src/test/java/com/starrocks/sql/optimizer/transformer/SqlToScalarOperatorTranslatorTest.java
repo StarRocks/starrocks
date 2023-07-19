@@ -68,10 +68,10 @@ public class SqlToScalarOperatorTranslatorTest {
         StringLiteral column = new StringLiteral("c1");
         StringLiteral firstWhen = new StringLiteral("str1");
         IntLiteral firstThen = new IntLiteral(1);
-        BinaryPredicate firstPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, column, firstWhen);
+        BinaryPredicate firstPredicate = new BinaryPredicate(BinaryType.EQ, column, firstWhen);
         StringLiteral secondWhen = new StringLiteral("str2");
         IntLiteral secondThen = new IntLiteral(2);
-        BinaryPredicate secondPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, column, secondWhen);
+        BinaryPredicate secondPredicate = new BinaryPredicate(BinaryType.EQ, column, secondWhen);
         IntLiteral elseResult = new IntLiteral(0);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.IFS,
                 ImmutableList.of(firstPredicate, firstThen, secondPredicate, secondThen, elseResult));
