@@ -236,14 +236,6 @@ public class StarRocksAssert {
 
     public StarRocksAssert withTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public List getWorkersByWorkerGroup(long workerGroupId) {
-                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
-            }
-        };
-
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         return this;
     }

@@ -105,7 +105,7 @@ public class PrivilegeCheckerTest {
                 "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
                 "PARTITION p20200324 VALUES LESS THAN (\"2020-03-25\")\n" +
                 ")\n" + "distributed by hash(k1) buckets 3 properties('replication_num' = '1', \n" +
-                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.enable\" = \"false\",\n" +
                 "    \"dynamic_partition.time_unit\" = \"DAY\",\n" +
                 "    \"dynamic_partition.start\" = \"-3\",\n" +
                 "    \"dynamic_partition.end\" = \"3\",\n" +
