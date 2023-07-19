@@ -19,8 +19,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 
 import java.util.List;
 
@@ -146,7 +149,8 @@ public class Binder {
      * extract GroupExpression by groupExpressionIndex
      */
     private GroupExpression extractGroupExpression(Pattern pattern, Group group) {
-        if (pattern.isPatternLeaf() || pattern.isPatternMultiLeaf() || pattern.isPatternMultiJoin()) {
+        if ((pattern.isPatternLeaf() || pattern.isPatternMultiLeaf() || pattern.isPatternMultiJoin())
+                && !shouldReturnMv(group)) {
             if (groupExpressionIndex.get(groupTraceKey) > 0) {
                 groupExpressionIndex.remove(groupTraceKey);
                 return null;
@@ -159,6 +163,31 @@ public class Binder {
                 return null;
             }
             return group.getLogicalExpressions().get(valueIndex);
+        }
+    }
+
+    // check whether return mv group expression
+    // in nested mv rewrite, agg/join may be rewritten by mv.
+    // In this case, we should return mv scan operator during binding process to match the pattern
+    private boolean shouldReturnMv(Group group) {
+        int valueIndex = groupExpressionIndex.get(groupTraceKey);
+        if (valueIndex >= group.getLogicalExpressions().size()) {
+            return false;
+        }
+        Operator op = group.getLogicalExpressions().get(valueIndex).getOp();
+        if (!(op instanceof LogicalScanOperator)) {
+            return false;
+        }
+        LogicalScanOperator scanOperator = op.cast();
+        if (!scanOperator.getTable().isMaterializedView()) {
+            return false;
+        }
+        GroupExpression firstExpr = group.getFirstLogicalExpression();
+        if (firstExpr.getOp() instanceof LogicalScanOperator) {
+            LogicalScanOperator firstScan = firstExpr.getOp().cast();
+            return scanOperator.getTable().getId() != firstScan.getTable().getId();
+        } else {
+            return true;
         }
     }
 
