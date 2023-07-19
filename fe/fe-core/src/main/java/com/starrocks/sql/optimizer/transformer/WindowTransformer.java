@@ -189,6 +189,12 @@ public class WindowTransformer {
             windowFrame = AnalyticWindow.DEFAULT_WINDOW;
         }
 
+        // Check if range window has order by clause
+        if (windowFrame != null
+                && AnalyticWindow.Type.RANGE.equals(windowFrame.getType())) {
+            Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
+        }
+
         // Change first_value/last_value RANGE windows to ROWS
         if ((callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)
                 || callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LASTVALUE))
