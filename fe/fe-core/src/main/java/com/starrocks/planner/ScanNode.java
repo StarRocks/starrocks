@@ -51,6 +51,12 @@ public abstract class ScanNode extends PlanNode {
     protected final TupleDescriptor desc;
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
+<<<<<<< HEAD
+=======
+    protected List<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
+>>>>>>> 19632110bc ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -63,6 +69,22 @@ public abstract class ScanNode extends PlanNode {
 
     public String getTableName() {
         return desc.getTable().getName();
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
     }
 
     /**

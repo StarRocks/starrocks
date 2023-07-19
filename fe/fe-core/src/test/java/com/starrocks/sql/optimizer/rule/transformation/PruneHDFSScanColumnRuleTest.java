@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
@@ -109,6 +108,9 @@ public class PruneHDFSScanColumnRuleTest {
                 taskContext.getRequiredColumns();
                 minTimes = 0;
                 result = requiredOutputColumns;
+
+                context.getSessionVariable().isEnableCountStarOptimization();
+                result = true;
             }
         };
         List<OptExpression> list = icebergRule.transform(scan, context);
@@ -156,8 +158,8 @@ public class PruneHDFSScanColumnRuleTest {
 
     @Test
     public void transformHudiWithUnknownScanColumn(@Mocked HudiTable table,
-                                              @Mocked OptimizerContext context,
-                                              @Mocked TaskContext taskContext) {
+                                                   @Mocked OptimizerContext context,
+                                                   @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
                 new LogicalHudiScanOperator(table,
                         scanColumnMapWithUnknown, Maps.newHashMap(), -1, null));
@@ -184,11 +186,15 @@ public class PruneHDFSScanColumnRuleTest {
                 taskContext.getRequiredColumns();
                 minTimes = 0;
                 result = requiredOutputColumns;
+
+                context.getSessionVariable().isEnableCountStarOptimization();
+                result = true;
             }
         };
         List<OptExpression> list = hudiRule.transform(scan, context);
-        Map<ColumnRefOperator, Column> transferMap = ((LogicalHudiScanOperator) list.get(0)
-                .getOp()).getColRefToColumnMetaMap();
+        LogicalHudiScanOperator scanOperator = (LogicalHudiScanOperator) list.get(0).getOp();
+        Assert.assertEquals(scanOperator.getCanUseAnyColumn(), (requiredOutputColumns.size() == 0));
+        Map<ColumnRefOperator, Column> transferMap = scanOperator.getColRefToColumnMetaMap();
         Assert.assertEquals(transferMap.size(), 1);
         Assert.assertEquals(transferMap.get(intColumnOperator).getName(), "id");
     }

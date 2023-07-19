@@ -12,32 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class SchemaScanImplementationRule extends ImplementationRule {
-    public SchemaScanImplementationRule() {
-        super(RuleType.IMP_SCHEMA_LSCAN_TO_PSCAN, Pattern.create(OperatorType.LOGICAL_SCHEMA_SCAN));
+public class PaimonScanImplementationRule extends ImplementationRule {
+    public PaimonScanImplementationRule() {
+        super(RuleType.IMP_PAIMON_LSCAN_TO_PSCAN,
+                Pattern.create(OperatorType.LOGICAL_PAIMON_SCAN));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalSchemaScanOperator logical = (LogicalSchemaScanOperator) input.getOp();
-        PhysicalSchemaScanOperator physical =
-                new PhysicalSchemaScanOperator(logical);
-
-        OptExpression result = new OptExpression(physical);
+        LogicalPaimonScanOperator scan = (LogicalPaimonScanOperator) input.getOp();
+        PhysicalPaimonScanOperator physicalPaimonScan = new PhysicalPaimonScanOperator(scan);
+        OptExpression result = new OptExpression(physicalPaimonScan);
         return Lists.newArrayList(result);
     }
 }

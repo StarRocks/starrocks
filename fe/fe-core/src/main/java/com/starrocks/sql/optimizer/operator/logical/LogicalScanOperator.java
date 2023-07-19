@@ -53,6 +53,12 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected final ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
     protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
+<<<<<<< HEAD
+=======
+    protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
+>>>>>>> 19632110bc ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
 
     public LogicalScanOperator(
             OperatorType type,
@@ -85,6 +91,38 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return columnMetaToColRefMap;
     }
 
+<<<<<<< HEAD
+=======
+    private Optional<Map<String, ColumnRefOperator>> cachedColumnNameToColRefMap = Optional.empty();
+
+    public Map<String, ColumnRefOperator> getColumnNameToColRefMap() {
+        if (cachedColumnNameToColRefMap.isPresent()) {
+            return cachedColumnNameToColRefMap.get();
+        }
+
+        Map<String, ColumnRefOperator> columnRefOperatorMap = columnMetaToColRefMap.entrySet().stream()
+                .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
+        cachedColumnNameToColRefMap = Optional.of(columnRefOperatorMap);
+        return columnRefOperatorMap;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
+    }
+
+>>>>>>> 19632110bc ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         return new RowOutputInfo(colRefToColumnMetaMap.keySet().stream()
@@ -170,11 +208,21 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         @Override
         public B withOperator(O scanOperator) {
             super.withOperator(scanOperator);
+<<<<<<< HEAD
 
             this.table = scanOperator.table;
             this.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
             this.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
             this.columnFilters = scanOperator.columnFilters;
+=======
+            builder.table = scanOperator.table;
+            builder.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
+            builder.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
+            builder.columnFilters = scanOperator.columnFilters;
+            builder.columnAccessPaths = scanOperator.columnAccessPaths;
+            builder.canUseAnyColumn = scanOperator.canUseAnyColumn;
+            builder.canUseMinMaxCountOpt = scanOperator.canUseMinMaxCountOpt;
+>>>>>>> 19632110bc ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
             return (B) this;
         }
 
