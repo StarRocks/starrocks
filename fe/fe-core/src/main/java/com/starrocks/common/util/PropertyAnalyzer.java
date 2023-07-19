@@ -131,6 +131,15 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
+<<<<<<< HEAD
+=======
+    public static final String PROPERTIES_OLAP_TABLE_QUERY_REWRITE = "olap_table_query_rewrite_consistency";
+    public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
+
+    public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
+
+    public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
 
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
@@ -302,6 +311,7 @@ public class PropertyAnalyzer {
         return tables;
     }
 
+<<<<<<< HEAD
     public static boolean analyzeForceExternalTableQueryRewrite(Map<String, String> properties) {
         boolean forceExternalTableQueryRewrite = false;
         if (properties != null && properties.containsKey(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
@@ -310,6 +320,23 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
         }
         return forceExternalTableQueryRewrite;
+=======
+    public static int analyzeMVRewriteStaleness(Map<String, String> properties)
+            throws AnalysisException {
+        int maxMVRewriteStaleness = INVALID;
+        if (properties != null && properties.containsKey(PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            try {
+                maxMVRewriteStaleness = Integer.parseInt(properties.get(PROPERTIES_MV_REWRITE_STALENESS_SECOND));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid maxMVRewriteStaleness Number: " + e.getMessage());
+            }
+            if (maxMVRewriteStaleness != INVALID && maxMVRewriteStaleness < 0) {
+                throw new AnalysisException("Illegal maxMVRewriteStaleness: " + maxMVRewriteStaleness);
+            }
+            properties.remove(PROPERTIES_MV_REWRITE_STALENESS_SECOND);
+        }
+        return maxMVRewriteStaleness;
+>>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
     }
 
     public static Short analyzeReplicationNum(Map<String, String> properties, short oldReplicationNum)
