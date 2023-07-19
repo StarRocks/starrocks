@@ -45,7 +45,7 @@ public:
     const TabletsChannelKey& key() const { return _key; }
 
     Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                bool is_incremental) override;
+                bool is_incremental, TabletsChannelOpenTimeStat* open_time_stat) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
@@ -154,7 +154,7 @@ private:
         std::shared_ptr<WriteContext> _context;
     };
 
-    Status _open_all_writers(const PTabletWriterOpenRequest& params);
+    Status _open_all_writers(const PTabletWriterOpenRequest& params, TabletsChannelOpenTimeStat* stat);
 
     StatusOr<std::shared_ptr<WriteContext>> _create_write_context(Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,

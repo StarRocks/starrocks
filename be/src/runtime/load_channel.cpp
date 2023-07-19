@@ -58,6 +58,18 @@
 
 namespace starrocks {
 
+LoadChannelOpenTimeStat::LoadChannelOpenTimeStat()
+        : _tablets_channel_stat(std::make_shared<LocalTabletsChannelOpenTimeStat>()) {}
+
+std::string LoadChannelOpenTimeStat::to_string() {
+    std::stringstream ss;
+    ss << "LoadChannel={start_time_ns=" << get_start_time() << ", lock_cost_ns=" << (get_lock_time() - get_start_time())
+       << ", tablets_channel_cost_ns=" << _tablets_channel_stat->get_total_time()
+       << ", other_cost_ns=" << (get_end_time() - _tablets_channel_stat->get_end_time()) << "}, "
+       << _tablets_channel_stat->to_string();
+    return ss.str();
+}
+
 LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, const UniqueId& load_id,
                          const std::string& txn_trace_parent, int64_t timeout_s,
                          std::unique_ptr<MemTracker> mem_tracker)
@@ -78,7 +90,9 @@ LoadChannel::~LoadChannel() {
 }
 
 void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
-                       PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
+                       PTabletWriterOpenResult* response, google::protobuf::Closure* done,
+                       LoadChannelOpenTimeStat* open_time_stat) {
+    open_time_stat->set_start_time(GetCurrentTimeNanos());
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
     auto scoped = trace::Scope(_span);
     ClosureGuard done_guard(done);
@@ -94,6 +108,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
         // it will block the bthread, so we put its destructor outside the lock.
         std::shared_ptr<TabletsChannel> channel;
         std::lock_guard l(_lock);
+        open_time_stat->set_lock_time(GetCurrentTimeNanos());
         if (_schema == nullptr) {
             _schema.reset(new OlapTableSchemaParam());
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
@@ -109,7 +124,8 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get());
             }
-            if (st = channel->open(request, _schema, request.is_incremental()); st.ok()) {
+            if (st = channel->open(request, _schema, request.is_incremental(), open_time_stat->getTabletsChannelStat());
+                st.ok()) {
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
         } else if (request.is_incremental()) {
@@ -153,6 +169,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);
     }
+    open_time_stat->set_end_time(GetCurrentTimeNanos());
 }
 
 void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,

@@ -64,10 +64,41 @@ class TabletsChannel;
 class LoadChannel;
 class LoadChannelMgr;
 class OlapTableSchemaParam;
+class TabletsChannelOpenTimeStat;
 
 namespace lake {
 class TabletManager;
 }
+
+class LoadChannelOpenTimeStat {
+public:
+    LoadChannelOpenTimeStat();
+
+    int64_t get_start_time() { return _start_time_ns; }
+
+    void set_start_time(int64_t start_time_ns) { _start_time_ns = start_time_ns; }
+
+    int64_t get_lock_time() { return _lock_time_ns; }
+
+    void set_lock_time(int64_t lock_time_ns) { _lock_time_ns = lock_time_ns; }
+
+    TabletsChannelOpenTimeStat* getTabletsChannelStat() { return _tablets_channel_stat.get(); }
+
+    int64_t get_end_time() { return _end_time_ns; }
+
+    void set_end_time(int64_t end_time_ns) { _end_time_ns = end_time_ns; }
+
+    int64_t get_total_time() { return _end_time_ns - _start_time_ns; }
+
+    std::string to_string();
+
+private:
+    int64_t _start_time_ns;
+    int64_t _lock_time_ns;
+    // TODO not support LakeTabletsChannel currently
+    std::shared_ptr<TabletsChannelOpenTimeStat> _tablets_channel_stat;
+    int64_t _end_time_ns;
+};
 
 // A LoadChannel manages tablets channels for all indexes
 // corresponding to a certain load job
@@ -85,7 +116,7 @@ public:
     // Open a new load channel if it does not exist.
     // NOTE: This method may be called multiple times, and each time with a different |request|.
     void open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request, PTabletWriterOpenResult* response,
-              google::protobuf::Closure* done);
+              google::protobuf::Closure* done, LoadChannelOpenTimeStat* open_time_stat);
 
     void add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
 

@@ -43,13 +43,48 @@ class PTabletWriterAddChunkRequest;
 class PTabletWriterAddSegmentRequest;
 class PTabletWriterAddSegmentResult;
 
+class TabletsChannelOpenTimeStat {
+public:
+    TabletsChannelOpenTimeStat() = default;
+
+    int64_t get_start_time() { return _start_time_ns; }
+
+    void set_start_time(int64_t start_time_ns) { _start_time_ns = start_time_ns; }
+
+    int64_t get_end_time() { return _end_time_ns; }
+
+    void set_end_time(int64_t end_time_ns) { _end_time_ns = end_time_ns; }
+
+    int64_t get_total_time() { return _end_time_ns - _start_time_ns; }
+
+    void add_open_writer_cost(int64_t cost_ns) {
+        _open_writer_cost_ns += cost_ns;
+        _num_writers += 1;
+    }
+
+    std::string to_string();
+
+protected:
+    int64_t _start_time_ns;
+    int64_t _end_time_ns;
+    int64_t _open_writer_cost_ns;
+    int64_t _num_writers;
+};
+
+std::string TabletsChannelOpenTimeStat::to_string() {
+    std::stringstream ss;
+    ss << "TabletsChannel={start_time_ns=" << get_start_time();
+    return ss.str();
+}
+
 class TabletsChannel {
 public:
     TabletsChannel() = default;
     virtual ~TabletsChannel() = default;
 
     [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params,
-                                      std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) = 0;
+                                      std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental,
+                                      TabletsChannelOpenTimeStat* open_time_stat) = 0;
 
     virtual Status incremental_open(const PTabletWriterOpenRequest& params,
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;

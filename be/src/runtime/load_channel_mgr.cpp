@@ -65,6 +65,46 @@ static int64_t calc_job_timeout_s(int64_t timeout_in_req_s) {
     return load_channel_timeout_s;
 }
 
+static void log_slow_open_if_needed(const PTabletWriterOpenRequest& request, LoadChannelMgrOpenTimeStat& time_stat) {
+    if (!request.has_request_time_ns()) {
+        return;
+    }
+
+    int64_t end_to_end_duration_ns = time_stat.get_end_time() - request.request_time_ns();
+    if (end_to_end_duration_ns / 1000 < config::olap_table_sink_slow_rpc_threshold_us) {
+        return;
+    }
+
+    // do not need high accuracy for concurrent open
+    static int64_t last_log_time_ms = 0;
+    int64_t current_time_ms = UnixMillis();
+    if (current_time_ms - last_log_time_ms < config::olap_table_sink_slow_rpc_log_interval_ms) {
+        return;
+    }
+    last_log_time_ms = current_time_ms;
+    int64_t wait_request_us = (time_stat.get_start_time() - request.request_time_ns()) / 1000;
+    std::stringstream ss;
+    ss << "LoadChannel open slow, txn_id: " << request.txn_id() << ", load_id: " << print_id(request.id())
+       << ", end to end cost: " << end_to_end_duration_ns / 1000
+       << " us, server cost: " << time_stat.get_total_time() / 1000 << "us, wait request cost: " << wait_request_us
+       << "us, client request time: " << request.request_time_ns() << " ns, " << time_stat.to_string();
+
+    LOG(INFO) << ss.str();
+}
+
+LoadChannelMgrOpenTimeStat::LoadChannelMgrOpenTimeStat()
+        : _load_channel_stat(std::make_shared<LoadChannelOpenTimeStat>()) {}
+
+std::string LoadChannelMgrOpenTimeStat::to_string() {
+    std::stringstream ss;
+    ss << "LoadChannelMgr={start_time_ns=" << get_start_time()
+       << ", lock_cost_ns=" << (get_lock_time() - get_start_time())
+       << ", load_channel_cost_ns=" << _load_channel_stat->get_total_time()
+       << ", other_cost_ns=" << (get_end_time() - _load_channel_stat->get_end_time()) << "}, "
+       << _load_channel_stat->to_string();
+    return ss.str();
+}
+
 LoadChannelMgr::LoadChannelMgr() : _mem_tracker(nullptr), _load_channels_clean_thread(INVALID_BTHREAD) {
     REGISTER_GAUGE_STARROCKS_METRIC(load_channel_count, [this]() {
         std::lock_guard l(_lock);
@@ -88,11 +128,14 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
 
 void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
+    LoadChannelMgrOpenTimeStat time_stat;
+    time_stat.set_start_time(GetCurrentTimeNanos());
     ClosureGuard done_guard(done);
     UniqueId load_id(request.id());
     std::shared_ptr<LoadChannel> channel;
     {
         std::lock_guard l(_lock);
+        time_stat.set_lock_time(GetCurrentTimeNanos());
         auto it = _load_channels.find(load_id);
         if (it != _load_channels.end()) {
             channel = it->second;
@@ -116,7 +159,9 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
             return;
         }
     }
-    channel->open(cntl, request, response, done_guard.release());
+    channel->open(cntl, request, response, done_guard.release(), time_stat.get_load_channel_stat());
+    time_stat.set_end_time(GetCurrentTimeNanos());
+    log_slow_open_if_needed(request, time_stat);
 }
 
 void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
