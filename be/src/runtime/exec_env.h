@@ -54,7 +54,6 @@ class BfdParser;
 class BrokerMgr;
 class BrpcStubCache;
 class DataStreamMgr;
-class DiskIoMgr;
 class EvHttpServer;
 class ExternalScanContextMgr;
 class FragmentMgr;
@@ -74,7 +73,6 @@ class WebPageHandler;
 class StreamLoadExecutor;
 class RoutineLoadTaskExecutor;
 class SmallFileMgr;
-class PluginMgr;
 class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
@@ -110,11 +108,12 @@ class DirManager;
 // once to properly initialise service state.
 class ExecEnv {
 public:
-    // Initial exec environment. must call this to init all
-    static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths, bool as_cn = false);
     static bool is_init();
-    static void stop(ExecEnv* exec_env);
-    static void destroy(ExecEnv* exec_env);
+
+    // Initial exec environment. must call this to init all
+    Status init(const std::vector<StorePath>& store_paths, bool as_cn = false);
+    void stop();
+    void destroy();
 
     /// Returns the first created exec env instance. In a normal starrocks, this is
     /// the only instance. In test setups with multiple ExecEnv's per process,
@@ -244,9 +243,6 @@ public:
     ThreadPool* delete_file_thread_pool();
 
 private:
-    Status _init(const std::vector<StorePath>& store_paths, bool as_cn);
-    void _stop();
-    void _destroy();
     void _reset_tracker();
     template <class... Args>
     std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
