@@ -63,7 +63,8 @@ LoadChannelOpenTimeStat::LoadChannelOpenTimeStat()
 
 std::string LoadChannelOpenTimeStat::to_string() {
     std::stringstream ss;
-    ss << "LoadChannel={start_time_ns=" << get_start_time() << ", lock_cost_ns=" << (get_lock_time() - get_start_time())
+    ss << "LoadChannel={start_time_ns=" << get_start_time() << ", total_cost_ns=" << get_total_time()
+       << ", lock_cost_ns=" << (get_lock_time() - get_start_time())
        << ", tablets_channel_cost_ns=" << _tablets_channel_stat->get_total_time()
        << ", other_cost_ns=" << (get_end_time() - _tablets_channel_stat->get_end_time()) << "}, "
        << _tablets_channel_stat->to_string();

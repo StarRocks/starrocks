@@ -87,7 +87,7 @@ static void log_slow_open_if_needed(const PTabletWriterOpenRequest& request, Loa
     ss << "LoadChannel open slow, txn_id: " << request.txn_id() << ", load_id: " << print_id(request.id())
        << ", end to end cost: " << end_to_end_duration_ns / 1000
        << " us, server cost: " << time_stat.get_total_time() / 1000 << "us, wait request cost: " << wait_request_us
-       << "us, client request time: " << request.request_time_ns() << " ns, " << time_stat.to_string();
+       << " us, client request time: " << request.request_time_ns() << " ns, " << time_stat.to_string();
 
     LOG(INFO) << ss.str();
 }
