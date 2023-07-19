@@ -173,6 +173,11 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
                 for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
                     auto col = _context.tablet_schema->column(i);
                     if (col.is_auto_increment()) {
+                        /*
+                            The auto increment id set here is inconsistent with the id in
+                            full tablet schema. The id here is indicate the offset id of
+                            auto increment column in partial segment file.
+                        */
                         _rowset_txn_meta_pb->set_auto_increment_partial_update_column_id(i);
                         break;
                     }
@@ -188,6 +193,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
                 auto col = _context.tablet_schema->column(i);
                 if (col.is_auto_increment()) {
+                    // same above
                     _rowset_txn_meta_pb->set_auto_increment_partial_update_column_id(i);
                     break;
                 }
