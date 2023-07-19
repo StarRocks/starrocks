@@ -207,8 +207,8 @@ public:
     }
 
     template <LogicalType LT>
-    static AggregateFunctionPtr MakeAllocateSessionWindowFunction() {
-        return std::make_shared<AllocateSessionWindowFunction<LT>>();
+    static AggregateFunctionPtr MakeSessionNumberWindowFunction() {
+        return std::make_shared<SessionNumberWindowFunction<LT>>();
     }
 
     template <LogicalType LT>
