@@ -1,5 +1,30 @@
 # StarRocks version 2.5
 
+## 2.5.9
+
+发布日期：2023 年 7 月 19 日
+
+### 新增特性
+
+- 查询和物化视图的 Join 类型不同时，也支持对查询进行改写。[#25099](https://github.com/StarRocks/starrocks/pull/25099)
+
+### 功能优化
+
+- 禁止创建目标集群是当前集群的 StarRocks 外表。[#25441](https://github.com/StarRocks/starrocks/pull/25441)
+- 如果查询的字段不包含在物化视图的 output 列但是包含在其谓词条件中，仍可使用该物化视图进行查询改写。[#23028](https://github.com/StarRocks/starrocks/issues/23028)
+- `Information_schema.tables_config` 表中增加了 `table_id` 字段。您可以基于 `table_id` 字段关联数据库 `Information_schema` 中的表 `tables_config` 和 `be_tablets`，来查询 tablet 所属数据库和表。[#24061](https://github.com/StarRocks/starrocks/pull/24061)
+
+### 问题修复
+
+修复了如下问题：
+
+- 明细模型表 Count Distinct 结果异常。[#24222](https://github.com/StarRocks/starrocks/pull/24222)
+- 当 Join 列是 BINARY 类型且过大时 BE 会 crash。[#25084](https://github.com/StarRocks/starrocks/pull/25084)
+- 插入数据长度超出建表时 STRUCT 定义的 CHAR 长度时，插入无响应。 [#25942](https://github.com/StarRocks/starrocks/pull/25942)
+- Coalesce 函数查询结果不正确。[#26250](https://github.com/StarRocks/starrocks/pull/26250)
+- Restore 后同一个 tablet 在 BE 和 FE 上的 version 不一致。[#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- Recover 的表自动创建分区失败。[#26813](https://github.com/StarRocks/starrocks/pull/26813)
+
 ## 2.5.8
 
 发布日期：2023 年 6 月 30 日
@@ -237,7 +262,7 @@
 - 支持通过资源组对导入计算进行资源隔离，从而间接控制导入任务对集群资源的消耗。相关文档，请参见[资源隔离](../administration/resource_group.md)。[#12606](https://github.com/StarRocks/starrocks/pull/12606)
 - 支持为 StarRocks 原生表手动设置数据压缩算法：LZ4、Zstd、Snappy 和 Zlib。相关文档，请参见[数据压缩](../table_design/data_compression.md)。[#10097](https://github.com/StarRocks/starrocks/pull/10097) [#12020](https://github.com/StarRocks/starrocks/pull/12020)
 - 支持[用户自定义变量](../reference/user_defined_variables.md) (user-defined variables)。[#10011](https://github.com/StarRocks/starrocks/pull/10011)
-- 支持 [Lambda 表达式](../sql-reference/sql-functions/Lambda_expression.md)及高阶函数，包括：[array_map](../sql-reference/sql-functions/array-functions/array_map.md)、[array_filter](../sql-reference/sql-functions/array-functions/array_filter.md)、[array_sum](../sql-reference/sql-functions/array-functions/array_sum.md) 和 [array_sortby](../sql-reference/sql-functions/array-functions/array_sortby.md)。[#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
+- 支持 [Lambda 表达式](../sql-reference/sql-functions/Lambda_expression.md)及高阶函数，包括：[array_map](../sql-reference/sql-functions/array-functions/array_map.md)、[array_sum](../sql-reference/sql-functions/array-functions/array_sum.md) 和 [array_sortby](../sql-reference/sql-functions/array-functions/array_sortby.md)。[#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
 - [窗口函数](../sql-reference/sql-functions/Window_function.md)中支持使用 QUALIFY 来筛选查询结果。[#13239](https://github.com/StarRocks/starrocks/pull/13239)
 - 建表时，支持指定 uuid 或 uuid_numeric 函数返回的结果作为列默认值。相关文档，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。[#11155](https://github.com/StarRocks/starrocks/pull/11155)
 - 新增以下函数：[map_size](../sql-reference/sql-functions/map-functions/map_size.md)、[map_keys](../sql-reference/sql-functions/map-functions/map_keys.md)、[map_values](../sql-reference/sql-functions/map-functions/map_values.md)、[max_by](../sql-reference/sql-functions/aggregate-functions/max_by.md)、[sub_bitmap](../sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)、[bitmap_to_base64](../sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md)、[host_name](../sql-reference/sql-functions/utility-functions/host_name.md) 和 [date_slice](../sql-reference/sql-functions/date-time-functions/date_slice.md)。[#11299](https://github.com/StarRocks/starrocks/pull/11299) [#11323](https://github.com/StarRocks/starrocks/pull/11323) [#12243](https://github.com/StarRocks/starrocks/pull/12243) [#11776](https://github.com/StarRocks/starrocks/pull/11776) [#12634](https://github.com/StarRocks/starrocks/pull/12634) [#14225](https://github.com/StarRocks/starrocks/pull/14225)

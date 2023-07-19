@@ -137,7 +137,7 @@
 **SQL 语句和函数**
 
 - 新增如下权限相关 SQL 语句：[SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md)、[SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md)、[SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md)、[SHOW USERS](../sql-reference/sql-statements/account-management/SHOW%20USERS.md)。
-- 新增半结构化数据分析相关函数：[map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md)、[map_apply](../sql-reference/sql-functions/map-functions/map_apply.md)、[map_filter](../sql-reference/sql-functions/map-functions/map_filter.md)、[transform_keys](../sql-reference/sql-functions/map-functions/transform_keys.md)、[transform_values](../sql-reference/sql-functions/map-functions/transform_values.md)。
+- 新增半结构化数据分析相关函数：[map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md)、[map_apply](../sql-reference/sql-functions/map-functions/map_apply.md)。
 - [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) 支持 ORDER BY。
 - 窗口函数 [lead](../sql-reference/sql-functions/Window_function.md#使用-lead-窗口函数)、[lag](../sql-reference/sql-functions/Window_function.md#使用-lag-窗口函数) 支持 IGNORE NULLS。
 - 新增 [BINARY/VARBINARY 数据类型](../sql-reference/sql-statements/data-types/BINARY.md)，新增 [to_binary](../sql-reference/sql-functions/binary-functions/to_binary.md)，[from_binary](../sql-reference/sql-functions/binary-functions/from_binary.md) 函数。
