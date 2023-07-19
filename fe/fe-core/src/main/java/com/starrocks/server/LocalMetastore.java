@@ -1689,6 +1689,7 @@ public class LocalMetastore implements ConnectorMetadata {
             return;
         }
         int numAliveBackends = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+<<<<<<< HEAD
         int numReplicas = 0;
         for (Partition partition : partitions) {
             numReplicas += partition.getReplicaCount();
@@ -1701,6 +1702,28 @@ public class LocalMetastore implements ConnectorMetadata {
             buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
         } else {
             throw new DdlException("no alive backend");
+=======
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            numAliveBackends += GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+        }
+        if (numAliveBackends == 0) {
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                throw new DdlException("no alive compute nodes");
+            } else {
+                throw new DdlException("no alive backends");
+            }
+>>>>>>> a98a145d8d ([Enhancement] Add configuration for parallel replica creation (#27418))
+        }
+
+        int numReplicas = 0;
+        for (Partition partition : partitions) {
+            numReplicas += partition.getReplicaCount();
+        }
+
+        if (numReplicas > Config.create_table_max_serial_replicas) {
+            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
+        } else {
+            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
         }
     }
 
@@ -1741,7 +1764,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void buildPartitionsConcurrently(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
                                              int numBackends) throws DdlException {
-        int timeout = numReplicas / numBackends * Config.tablet_create_timeout_second;
+        int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(Partition::getVisibleMaterializedIndicesCount).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);
