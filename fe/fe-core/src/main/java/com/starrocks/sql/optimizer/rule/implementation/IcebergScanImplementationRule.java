@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -36,18 +34,9 @@ public class IcebergScanImplementationRule extends ImplementationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        OptExpression result = null;
         LogicalIcebergScanOperator scan = (LogicalIcebergScanOperator) input.getOp();
-        if (scan.getTable().getType() == Table.TableType.ICEBERG) {
-            PhysicalIcebergScanOperator physicalIcebergScan = new PhysicalIcebergScanOperator(scan.getTable(),
-                    scan.getColRefToColumnMetaMap(),
-                    scan.getScanOperatorPredicates(),
-                    scan.getLimit(),
-                    scan.getPredicate(),
-                    scan.getProjection());
-
-            result = new OptExpression(physicalIcebergScan);
-        }
+        PhysicalIcebergScanOperator physicalIcebergScan = new PhysicalIcebergScanOperator(scan);
+        OptExpression result = new OptExpression(physicalIcebergScan);
         return Lists.newArrayList(result);
     }
 }
