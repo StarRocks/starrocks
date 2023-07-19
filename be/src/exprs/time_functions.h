@@ -560,18 +560,12 @@ public:
      */
     DEFINE_VECTORIZED_FN(to_days);
 
-    // try to transfer content to date format based on "%Y-%m-%d",
+    // try to transfer content to date format based on "%Y-%m-%d" or "%Y-%m-%d %H:%i:%s",
     // if successful, return result TimestampValue
     // else take a uncommon approach to process this content.
+    template <bool isYYYYMMDD>
     static StatusOr<ColumnPtr> str_to_date_from_date_format(FunctionContext* context, const starrocks::Columns& columns,
                                                             const char* str_format);
-
-    // try to transfer content to date format based on "%Y-%m-%d %H:%i:%s",
-    // if successful, return result TimestampValue
-    // else take a uncommon approach to process this content.
-    static StatusOr<ColumnPtr> str_to_date_from_datetime_format(FunctionContext* context,
-                                                                const starrocks::Columns& columns,
-                                                                const char* str_format);
 
     // Try to process string content, based on uncommon string format
     static StatusOr<ColumnPtr> str_to_date_uncommon(FunctionContext* context, const starrocks::Columns& columns);

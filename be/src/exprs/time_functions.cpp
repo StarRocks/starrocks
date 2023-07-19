@@ -779,14 +779,18 @@ TimestampValue timestamp_add(TimestampValue tsv, int count) {
     return tsv.add<UNIT>(count);
 }
 
-#define DEFINE_TIME_ADD_FN(FN, UNIT)                                                                               \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, value); } \
-                                                                                                                   \
+#define DEFINE_TIME_ADD_FN(FN, UNIT)                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+        return timestamp_add<UNIT>(timestamp, value);              \
+    }                                                              \
+                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
-#define DEFINE_TIME_SUB_FN(FN, UNIT)                                                                                \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, -value); } \
-                                                                                                                    \
+#define DEFINE_TIME_SUB_FN(FN, UNIT)                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+        return timestamp_add<UNIT>(timestamp, -value);             \
+    }                                                              \
+                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
 #define DEFINE_TIME_ADD_AND_SUB_FN(FN_PREFIX, UNIT) \
@@ -1717,6 +1721,7 @@ Status TimeFunctions::str_to_date_prepare(FunctionContext* context, FunctionCont
 // try to transfer content to date format based on "%Y-%m-%d",
 // if successful, return result TimestampValue
 // else take a uncommon approach to process this content.
+template <bool isYYYYMMDD>
 StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext* context,
                                                                 const starrocks::Columns& columns,
                                                                 const char* str_format) {
@@ -1726,72 +1731,18 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
     TimestampValue ts;
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto fmt_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
-    if (!columns[0]->has_null()) {
-        for (size_t i = 0; i < size; ++i) {
+    for (size_t i = 0; i < size; ++i) {
+        if (str_viewer.is_null(i)) {
+            result.append_null();
+        } else {
             const Slice& str = str_viewer.value(i);
-            bool r = ts.from_date_format_str(str.get_data(), str.get_size(), str_format);
+            bool r = isYYYYMMDD ? ts.from_date_format_str(str.get_data(), str.get_size(), str_format)
+                                : ts.from_datetime_format_str(str.get_data(), str.get_size(), str_format);
             if (r) {
                 result.append(ts);
             } else {
                 const Slice& fmt = fmt_viewer.value(i);
                 str_to_date_internal(&ts, fmt, str, &result);
-            }
-        }
-    } else {
-        for (size_t i = 0; i < size; ++i) {
-            if (str_viewer.is_null(i)) {
-                result.append_null();
-            } else {
-                const Slice& str = str_viewer.value(i);
-                bool r = ts.from_date_format_str(str.get_data(), str.get_size(), str_format);
-                if (r) {
-                    result.append(ts);
-                } else {
-                    const Slice& fmt = fmt_viewer.value(i);
-                    str_to_date_internal(&ts, fmt, str, &result);
-                }
-            }
-        }
-    }
-    return result.build(ColumnHelper::is_all_const(columns));
-}
-
-// try to transfer content to date format based on "%Y-%m-%d %H:%i:%s",
-// if successful, return result TimestampValue
-// else take a uncommon approach to process this content.
-StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_datetime_format(FunctionContext* context,
-                                                                    const starrocks::Columns& columns,
-                                                                    const char* str_format) {
-    size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_DATETIME> result(size);
-
-    TimestampValue ts;
-    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
-    auto fmt_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
-    if (!columns[0]->has_null()) {
-        for (size_t i = 0; i < size; ++i) {
-            const Slice& str = str_viewer.value(i);
-            bool r = ts.from_datetime_format_str(str.get_data(), str.get_size(), str_format);
-            if (r) {
-                result.append(ts);
-            } else {
-                const Slice& fmt = fmt_viewer.value(i);
-                str_to_date_internal(&ts, fmt, str, &result);
-            }
-        }
-    } else {
-        for (size_t i = 0; i < size; ++i) {
-            if (str_viewer.is_null(i)) {
-                result.append_null();
-            } else {
-                const Slice& str = str_viewer.value(i);
-                bool r = ts.from_datetime_format_str(str.get_data(), str.get_size(), str_format);
-                if (r) {
-                    result.append(ts);
-                } else {
-                    const Slice& fmt = fmt_viewer.value(i);
-                    str_to_date_internal(&ts, fmt, str, &result);
-                }
             }
         }
     }
@@ -1838,9 +1789,9 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date(FunctionContext* context, const C
     if (ctx == nullptr) {
         return str_to_date_uncommon(context, columns);
     } else if (ctx->fmt_type == yyyycMMcdd) { // for string format like "%Y-%m-%d"
-        return str_to_date_from_date_format(context, columns, ctx->fmt);
+        return str_to_date_from_date_format<true>(context, columns, ctx->fmt);
     } else { // for string format like "%Y-%m-%d %H:%i:%s"
-        return str_to_date_from_datetime_format(context, columns, ctx->fmt);
+        return str_to_date_from_date_format<false>(context, columns, ctx->fmt);
     }
 }
 
