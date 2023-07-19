@@ -86,7 +86,7 @@ public class MysqlServerTest {
         int port = socket.getLocalPort();
         socket.close();
 
-        MysqlServer server = new MysqlServer(port, scheduler);
+        MysqlServer server = new MysqlServer(port, scheduler, null);
         Assert.assertTrue(server.start());
 
         // submit
