@@ -1834,8 +1834,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return runtimeProfileReportInterval;
     }
 
+    public void setProfileLimitFold(boolean profileLimitFold) {
+        this.profileLimitFold = profileLimitFold;
+    }
+
     public boolean isProfileLimitFold() {
         return profileLimitFold;
+    }
+
+    public void setPipelineProfileLevel(int pipelineProfileLevel) {
+        this.pipelineProfileLevel = pipelineProfileLevel;
     }
 
     public int getPipelineProfileLevel() {

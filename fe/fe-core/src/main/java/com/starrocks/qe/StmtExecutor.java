@@ -102,6 +102,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -568,6 +569,10 @@ public class StmtExecutor {
                         if (!needRetry) {
                             if (context.getSessionVariable().isEnableProfile()) {
                                 writeProfile(beginTimeInNanoSecond);
+                                if (parsedStmt.isExplain() &&
+                                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                    handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile));
+                                }
                             }
 
                             if (!isStatisticsJob) {
@@ -842,7 +847,14 @@ public class StmtExecutor {
         // Every time set no send flag and clean all data in buffer
         context.getMysqlChannel().reset();
 
-        if (parsedStmt.isExplain()) {
+        boolean isExplainAnalyze = parsedStmt.isExplain()
+                && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
+
+        if (isExplainAnalyze) {
+            context.getSessionVariable().setEnableProfile(true);
+            context.getSessionVariable().setPipelineProfileLevel(1);
+            context.getSessionVariable().setProfileLimitFold(false);
+        } else if (parsedStmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
             return;
         }
@@ -883,7 +895,7 @@ public class StmtExecutor {
         while (true) {
             batch = coord.getNext();
             // for outfile query, there will be only one empty batch send back with eos flag
-            if (batch.getBatch() != null && !isOutfileQuery) {
+            if (batch.getBatch() != null && !isOutfileQuery && !isExplainAnalyze) {
                 // For some language driver, getting error packet after fields packet will be recognized as a success result
                 // so We need to send fields after first batch arrived
                 if (!isSendFields) {
@@ -912,7 +924,7 @@ public class StmtExecutor {
                 break;
             }
         }
-        if (!isSendFields && !isOutfileQuery) {
+        if (!isSendFields && !isOutfileQuery && !isExplainAnalyze) {
             sendFields(colNames, outputExprs);
         }
 
