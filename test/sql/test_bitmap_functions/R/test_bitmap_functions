@@ -71,6 +71,26 @@ SELECT bitmap_to_string(bitmap_subset_limit(bitmap_from_string(group_concat(cast
 -- result:
 10,11,12
 -- !result
+select bitmap_to_string(bitmap_subset_limit(bitmap_from_string('1,0,1,2,3,1,5'), 0, -3));
+-- result:
+0
+-- !result
+select bitmap_to_string(bitmap_subset_limit(bitmap_from_string('1,0,1,2,3,1,5'), 0, -1));
+-- result:
+0
+-- !result
+select bitmap_to_string(bitmap_subset_limit(bitmap_from_string('1,0,1,2,3,1,5'), 3, -6));
+-- result:
+0,1,2,3
+-- !result
+SELECT bitmap_to_string(bitmap_subset_limit(bitmap_from_string(group_concat(cast(x as string), ',')), 0, -3)) FROM TABLE(generate_series(1, 64, 1)) t(x);
+-- result:
+None
+-- !result
+SELECT bitmap_to_string(bitmap_subset_limit(bitmap_from_string(group_concat(cast(x as string), ',')), 10, -3)) FROM TABLE(generate_series(1, 64, 1)) t(x);
+-- result:
+8,9,10
+-- !result
 select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string(''), 0, 3));
 -- result:
 None
@@ -104,6 +124,18 @@ SELECT bitmap_to_string(bitmap_subset_in_range(bitmap_from_string(group_concat(c
 1,2
 -- !result
 SELECT bitmap_to_string(bitmap_subset_in_range(bitmap_from_string(group_concat(cast(x as string), ',')), 10, 3)) FROM TABLE(generate_series(1, 64, 1)) t(x);
+-- result:
+None
+-- !result
+select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string(''), 3, 0));
+-- result:
+None
+-- !result
+select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,0,1,2,3,1,5'), 3, 0));
+-- result:
+None
+-- !result
+SELECT bitmap_to_string(bitmap_subset_in_range(bitmap_from_string(group_concat(cast(x as string), ',')), 3, 0)) FROM TABLE(generate_series(1, 64, 1)) t(x);
 -- result:
 None
 -- !result

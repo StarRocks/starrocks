@@ -997,8 +997,8 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
         int64_t count = 0;
         if (limit < 0) {
             int64_t abs_limit = -limit;
-            auto it = std::lower_bound(values.begin(), values.end(), range_start);
-            for (; it != values.rend() && count < abs_limit; --it, ++count) {
+            auto it = std::upper_bound(values.rbegin(), values.rend(), range_start);
+            for (; it != values.rend() && count < abs_limit; ++it, ++count) {
                 ret_bitmap->add(*it);
             }
         } else {
