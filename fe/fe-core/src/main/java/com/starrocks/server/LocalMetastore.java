@@ -2177,6 +2177,14 @@ public class LocalMetastore implements ConnectorMetadata {
                         colocateGrpIdInOtherDb == null ? null :
                                 new ColocateTableIndex.GroupId(db.getId(), colocateGrpIdInOtherDb.grpId));
                 olapTable.setColocateGroup(colocateGroup);
+                if (olapTable instanceof ExternalOlapTable == false) {
+                    // Colocate table should keep the same bucket number accross the partitions
+                    DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
+                    if (defaultDistributionInfo.getBucketNum() == 0) {
+                        int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                        defaultDistributionInfo.setBucketNum(bucketNum);
+                    }
+                }
             }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
