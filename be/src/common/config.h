@@ -786,13 +786,6 @@ CONF_Int32(connector_io_tasks_slow_io_latency_ms, "50");
 CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
 
-// hdfs hedged read
-CONF_mBool(hdfs_client_enable_hedged_read, "true");
-// dfs.client.hedged.read.threadpool.size
-CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
-// dfs.client.hedged.read.threshold.millis
-CONF_Int32(hdfs_client_hedged_read_threshold_millis, "2500");
-
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
 // following the default naming pattern of aws_sdk_<date>.log.

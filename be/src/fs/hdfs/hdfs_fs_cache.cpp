@@ -16,7 +16,6 @@
 
 #include <memory>
 
-#include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "util/hdfs_util.h"
 
@@ -69,17 +68,6 @@ static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr
             hdfsBuilderConfSetStr(hdfs_builder, cloud_property.first.data(), cloud_property.second.data());
         }
     }
-
-    // Set for hdfs client hedged read
-    std::string hedged_read_threadpool_size = std::to_string(config::hdfs_client_hedged_read_threadpool_size);
-    std::string hedged_read_threshold_millis = std::to_string(config::hdfs_client_hedged_read_threshold_millis);
-    if (config::hdfs_client_enable_hedged_read) {
-        hdfsBuilderConfSetStr(hdfs_builder, "dfs.client.hedged.read.threadpool.size",
-                              hedged_read_threadpool_size.data());
-        hdfsBuilderConfSetStr(hdfs_builder, "dfs.client.hedged.read.threshold.millis",
-                              hedged_read_threshold_millis.data());
-    }
-
     hdfs_client->hdfs_fs = hdfsBuilderConnect(hdfs_builder);
     if (hdfs_client->hdfs_fs == nullptr) {
         return Status::InternalError(strings::Substitute("fail to connect hdfs namenode, namenode=$0, err=$1", namenode,
@@ -109,12 +97,12 @@ Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<
     for (size_t idx = 0; idx < _cur_client_idx; idx++) {
         if (_cache_key[idx] == cache_key) {
             hdfs_client = _cache_clients[idx];
-            // Found a cache client, return directly
+            // Found cache client, return directly
             return Status::OK();
         }
     }
 
-    // Not found a cached client, create a new one
+    // Not found cached client, create a new one
     hdfs_client = std::make_shared<HdfsFsClient>();
     hdfs_client->namenode = namenode;
     RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, hdfs_client, options));
