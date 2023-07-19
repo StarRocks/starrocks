@@ -2,7 +2,7 @@ name: SCAN PENDING PRS
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 
