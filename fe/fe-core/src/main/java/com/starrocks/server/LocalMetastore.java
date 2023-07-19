@@ -2008,6 +2008,11 @@ public class LocalMetastore implements ConnectorMetadata {
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
+            if (GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .checkFeExistByRPCPort(((ExternalOlapTable) olapTable).getSourceTableHost(),
+                            ((ExternalOlapTable) olapTable).getSourceTablePort())) {
+                throw new DdlException("can not create OLAP external table of self cluster");
+            }
         } else {
             if (stmt.isLakeEngine()) {
                 olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
