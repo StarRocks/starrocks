@@ -273,8 +273,14 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // IS_NULLABLE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
-                const char* str = "NO";
-                Slice value(str, strlen(str));
+                bool allowNull = _desc_result.columns[_column_index].columnDesc.allowNull;
+                string str;
+                if (allowNull) {
+                    str = "YES";
+                } else {
+                    str = "NO";
+                }
+                Slice value(str.c_str(), str.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
