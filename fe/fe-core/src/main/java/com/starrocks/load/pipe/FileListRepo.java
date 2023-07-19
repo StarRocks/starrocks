@@ -26,19 +26,48 @@ public abstract class FileListRepo {
 
     protected PipeId pipeId;
 
-    public abstract List<PipeFile> listFiles();
+    public void setPipeId(PipeId pipeId) {
+        this.pipeId = pipeId;
+    }
 
+    public static FileListTableRepo createTableBasedRepo() {
+        return new FileListTableRepo();
+    }
+
+    /**
+     * List unloaded files, then put them into loading
+     */
     public abstract List<PipeFile> listUnloadedFiles();
 
+    /**
+     * Add files into the list, as unloaded state
+     */
     public abstract void addFiles(List<TBrokerFileStatus> files);
 
+    /**
+     * Update state in different scenarios
+     * 0. LOADING: start loading task
+     * 1. FINISHED: successfully finish the loading
+     * 2. ERROR: load failed
+     * 3. SKIPPED: manually skip the file
+     */
     public abstract void updateFileState(List<PipeFile> files, PipeFileState state);
+
+    /**
+     * Cleanup expired file records
+     */
+    public abstract void cleanup();
+
+    /**
+     * Destroy the repo after dropping the pipe
+     */
+    public abstract void destroy();
 
     public enum PipeFileState {
         UNLOADED,
         LOADING,
         LOADED,
         SKIPPED,
-        FAILED;
+        ERROR;
     }
 }

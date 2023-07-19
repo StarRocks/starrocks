@@ -90,7 +90,6 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.pipe.Pipe;
-import com.starrocks.load.pipe.PipeFile;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -200,7 +199,6 @@ import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
-import com.starrocks.thrift.TListPipeFilesInfo;
 import com.starrocks.thrift.TListPipeFilesParams;
 import com.starrocks.thrift.TListPipeFilesResult;
 import com.starrocks.thrift.TListPipesInfo;
@@ -545,6 +543,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String databaseName = GlobalStateMgr.getCurrentState().mayGetDb(pipe.getPipeId().getDbId())
                     .map(Database::getOriginName)
                     .orElse(null);
+            // FIXME
+            /*
             for (PipeFile pipeFile : pipe.getPipeSource().getFileListRepo().listFiles()) {
                 TListPipeFilesInfo file = new TListPipeFilesInfo();
                 file.setPipe_id(pipe.getId());
@@ -555,6 +555,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 file.setFile_size(pipeFile.getSize());
                 result.addToPipe_files(file);
             }
+            */
         }
 
         return result;

@@ -30,6 +30,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.logging.log4j.LogManager;
@@ -40,7 +41,7 @@ import java.util.List;
 /**
  * Persist the file-list in an OLAP table
  */
-public class FileListTableRepo {
+public class FileListTableRepo extends FileListRepo {
 
     private static final Logger LOG = LogManager.getLogger(FileListTableRepo.class);
 
@@ -48,8 +49,8 @@ public class FileListTableRepo {
     private static final String FILE_LIST_TABLE_NAME = "pipe_file_list";
 
     private static final String FILE_LIST_TABLE_CREATE =
-            "CREATE TABLE IF NOT EXISTS %s" +
-                    "(" +
+            // TODO: add md5/etag into the file list
+            "CREATE TABLE IF NOT EXISTS %s (" +
                     "pipe_id bigint, " +
                     "filename string, " +
                     "file_version int, " +
@@ -59,23 +60,35 @@ public class FileListTableRepo {
                     "staged_time datetime, " +
                     "start_load datetime, " +
                     "finish_load datetime" +
-                    ")" +
-                    "PRIMARY KEY(pipe_id, filename, file_version) " +
+                    " ) PRIMARY KEY(pipe_id, filename, file_version) " +
                     "DISTRIBUTED BY HASH(pipe_id, filename) BUCKETS 8 " +
                     "properties('replication_num' = '%d') ";
 
     private static final String CORRECT_FILE_LIST_REPLICATION_NUM =
             "ALTER TABLE %s SET ('replication_num'='3')";
 
-    public void insertFiles(List<PipeFile> files) {
+    @Override
+    public List<PipeFile> listUnloadedFiles() {
+        return null;
+    }
+
+    @Override
+    public void addFiles(List<TBrokerFileStatus> files) {
 
     }
 
-    public void deleteFiles(List<PipeFile> files) {
+    @Override
+    public void updateFileState(List<PipeFile> files, PipeFileState state) {
 
     }
 
-    public void updateFiles(List<PipeFile> files, FileListRepo.PipeFileState fileState) {
+    @Override
+    public void cleanup() {
+
+    }
+
+    @Override
+    public void destroy() {
 
     }
 
@@ -191,8 +204,8 @@ public class FileListTableRepo {
             StringBuilder sb = new StringBuilder();
             sb.append(String.format("INSERT INTO %s VALUES ", tableName));
             for (PipeFile file : files) {
-                sb.append(String.format("(%d,'%s',%d,%d,'%s', '%s','%s','%s','%s' )",
-                        ));
+                // FIXME
+                sb.append(String.format("(%d,'%s',%d,%d,'%s', '%s','%s','%s','%s' )", null));
             }
             return sb.toString();
         }

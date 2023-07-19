@@ -51,23 +51,23 @@ public class FilePipeSource implements GsonPostProcessable {
     @SerializedName(value = "eos")
     private boolean eos = false;
 
-    private FileListRepoInMemory fileListRepo;
+    private FileListRepo fileListRepo;
 
     public FilePipeSource(String path, String format, Map<String, String> sourceProperties) {
         this.path = Preconditions.checkNotNull(path);
         this.format = Preconditions.checkNotNull(format);
         this.tableProperties = Preconditions.checkNotNull(sourceProperties);
-        this.fileListRepo = new FileListRepoInMemory();
+        this.fileListRepo = FileListRepo.createTableBasedRepo();
     }
 
     public void initPipeId(PipeId pipeId) {
         this.pipeId = pipeId;
-        this.fileListRepo.set
+        this.fileListRepo.setPipeId(pipeId);
     }
 
     public void poll() {
         // TODO: poll it seriously
-        if (fileListRepo.size() == 0) {
+        if (CollectionUtils.isEmpty(fileListRepo.listUnloadedFiles())) {
             BrokerDesc brokerDesc = new BrokerDesc(tableProperties);
             List<TBrokerFileStatus> fileList = Lists.newArrayList();
             try {
@@ -80,7 +80,7 @@ public class FilePipeSource implements GsonPostProcessable {
                 throw e;
             }
 
-            fileListRepo.addBrokerFiles(fileList);
+            fileListRepo.addFiles(fileList);
         }
         if (!autoIngest) {
             // TODO: persist state
@@ -95,7 +95,7 @@ public class FilePipeSource implements GsonPostProcessable {
     public FilePipePiece pullPiece() {
         Preconditions.checkArgument(batchSize > 0, "not support batch_size=0");
 
-        List<PipeFile> unloadFiles = fileListRepo.getUnloadedFiles();
+        List<PipeFile> unloadFiles = fileListRepo.listUnloadedFiles();
         if (CollectionUtils.isEmpty(unloadFiles)) {
             return null;
         }
@@ -108,7 +108,7 @@ public class FilePipeSource implements GsonPostProcessable {
                 break;
             }
         }
-        fileListRepo.updateFiles(piece.getFiles(), FileListRepo.PipeFileState.LOADING);
+        fileListRepo.updateFileState(piece.getFiles(), FileListRepo.PipeFileState.LOADING);
 
         return piece;
     }
@@ -116,8 +116,8 @@ public class FilePipeSource implements GsonPostProcessable {
     public void finishPiece(FilePipePiece piece, PipeTaskDesc.PipeTaskState taskState) {
         FileListRepo.PipeFileState state =
                 taskState == PipeTaskDesc.PipeTaskState.ERROR ?
-                        FileListRepo.PipeFileState.FAILED : FileListRepo.PipeFileState.LOADED;
-        fileListRepo.updateFiles(piece.getFiles(), state);
+                        FileListRepo.PipeFileState.ERROR : FileListRepo.PipeFileState.LOADED;
+        fileListRepo.updateFileState(piece.getFiles(), state);
     }
 
     public void setAutoIngest(boolean autoIngest) {
@@ -152,13 +152,13 @@ public class FilePipeSource implements GsonPostProcessable {
         return tableProperties;
     }
 
-    public FileListRepoInMemory getFileListRepo() {
+    public FileListRepo getFileListRepo() {
         return fileListRepo;
     }
 
     @Override
     public void gsonPostProcess() throws IOException {
-        this.fileListRepo = new FileListRepoInMemory();
+        this.fileListRepo = FileListRepo.createTableBasedRepo();
     }
 
     @Override

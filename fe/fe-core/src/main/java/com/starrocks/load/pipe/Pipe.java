@@ -108,7 +108,7 @@ public class Pipe implements GsonPostProcessable {
         PipeId pipeId = new PipeId(dbId, id);
         Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
                 stmt.getInsertSql());
-        stmt.getDataSource().setPipeId(pipeId);
+        stmt.getDataSource().initPipeId(pipeId);
         res.properties = stmt.getProperties();
         res.processProperties();
         return res;
@@ -460,10 +460,6 @@ public class Pipe implements GsonPostProcessable {
 
     public FilePipeSource getPipeSource() {
         return pipeSource;
-    }
-
-    public void setDataSource(FilePipeSource dataSource) {
-        this.pipeSource = dataSource;
     }
 
     public String getOriginSql() {
