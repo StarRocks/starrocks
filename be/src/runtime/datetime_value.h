@@ -194,6 +194,9 @@ public:
         return from_date_format_str(format, format_len, value, value_len, nullptr);
     }
 
+    bool from_joda_format_str(const char* format, int format_len, const char* value, int value_len,
+                              const char** sub_val_end);
+
     operator int64_t() const { return to_int64(); }
 
     // Given days since 0000-01-01, construct the datetime value.

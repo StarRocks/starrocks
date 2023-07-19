@@ -1362,6 +1362,260 @@ static int check_word(const char* lib[], const char* str, const char* end, const
     return pos;
 }
 
+bool DateTimeValue::from_joda_format_str(const char* format, int format_len, const char* value, int value_len,
+                                         const char** sub_val_end) {
+    const char* ptr = format;
+    const char* end = format + format_len;
+    const char* val = value;
+    const char* val_end = value + value_len;
+
+    bool date_part_used = false;
+    bool time_part_used = false;
+    bool frac_part_used = false;
+
+    int day_part = 0;
+    int weekday = -1;
+    int yearday = -1;
+    int week_num = -1;
+
+    bool strict_week_number = false;
+    bool sunday_first = false;
+    bool strict_week_number_year_type = false;
+    int strict_week_number_year = -1;
+    bool usa_time = false;
+
+    while (ptr < end && val < val_end) {
+        // Skip space character
+        while (val < val_end && isspace(*val)) {
+            val++;
+        }
+        if (val >= val_end) {
+            break;
+        }
+
+        // compute the size of same char, this will determine if additional prefixes are required,
+        // eg. format 'yyyyyy' need to display '002023'
+        const char* next_ch_ptr = ptr;
+        uint32_t same_ch_size = 0;
+        char ch = *ptr;
+        for (; ch == *next_ch_ptr && next_ch_ptr < end; ++next_ch_ptr) {
+            ++same_ch_size;
+        }
+
+        if (!isspace(*ptr)) {
+            if (*ptr != *val) {
+                return false;
+            }
+            ptr++;
+            val++;
+        } else if (ptr + 1 < end) {
+            const char* tmp = nullptr;
+            int64_t int_value = 0;
+            switch (*ptr++) {
+            case 'G':
+                return false;
+            case 'C':
+                return false;
+            case 'Y':
+                return false;
+            case 'x':
+                return false;
+            case 'w':
+                return false;
+            case 'e':
+                return false;
+            case 'E':
+                return false;
+            case 'y': {
+                // year
+                tmp = val + min(same_ch_size, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                int_value += int_value >= 70 ? 1900 : 2000;
+                _year = int_value;
+                val = tmp;
+                date_part_used = true;
+                break;
+            }
+            case 'D': {
+                tmp = val + min(same_ch_size, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                yearday = int_value;
+                val = tmp;
+                date_part_used = true;
+                break;
+            }
+            case 'M':
+                // month of year
+                if (same_ch_size == 2) {
+                    tmp = val + min(2, val_end - val);
+                    if (!str_to_int64(val, &tmp, &int_value)) {
+                        return false;
+                    }
+                    _month = int_value;
+                    val = tmp;
+                    date_part_used = true;
+                    break;
+                } else if (same_ch_size == 3) {
+                    int_value = check_word(s_ab_month_name, val, val_end, &val);
+                    if (int_value < 0) {
+                        return false;
+                    }
+                    _month = int_value;
+                    break;
+
+                } else if (same_ch_size == 4) {
+                    int_value = check_word(s_month_name, val, val_end, &val);
+                    if (int_value < 0) {
+                        return false;
+                    }
+                    _month = int_value;
+                    break;
+                } else {
+                    return false;
+                }
+            case 'd': {
+                tmp = val + min(2, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                _day = int_value;
+                val = tmp;
+                date_part_used = true;
+                break;
+            }
+            case 'a': {
+                if ((val_end - val) < 2 || toupper(*(val + 1)) != 'M' || !usa_time) {
+                    return false;
+                }
+                if (toupper(*val) == 'P') {
+                    // PM
+                    day_part = 12;
+                }
+                time_part_used = true;
+                val += 2;
+                break;
+            }
+            case 'h':
+                usa_time = true;
+            case 'K':
+            case 'H':
+                tmp = val + min(same_ch_size, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                _hour = int_value;
+                val = tmp;
+                time_part_used = true;
+                break;
+            case 'k':
+                tmp = val + min(same_ch_size, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                _hour = int_value + 1;
+                val = tmp;
+                time_part_used = true;
+                break;
+            case 'm':
+                tmp = val + min(same_ch_size, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                _minute = int_value;
+                val = tmp;
+                time_part_used = true;
+                break;
+            case 's':
+                tmp = val + min(2, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                _second = int_value;
+                val = tmp;
+                time_part_used = true;
+                break;
+            case 'S':
+            case 'z':
+            case 'Z':
+            case '\'':
+
+            default:
+                return false;
+            }
+
+        } else {
+            ptr++;
+        }
+    }
+
+    if (usa_time) {
+        if (_hour > 12 || _hour < 1) {
+            return false;
+        }
+        _hour = (_hour % 12) + day_part;
+    }
+    if (sub_val_end) {
+        *sub_val_end = val;
+        return false;
+    }
+    // Year day
+    if (yearday > 0) {
+        uint64_t days = calc_daynr(_year, 1, 1) + yearday - 1;
+        if (!get_date_from_daynr(days)) {
+            return false;
+        }
+    }
+    // weekday
+    if (week_num >= 0 && weekday > 0) {
+        // Check
+        if ((strict_week_number && (strict_week_number_year < 0 || strict_week_number_year_type != sunday_first)) ||
+            (!strict_week_number && strict_week_number_year >= 0)) {
+            return false;
+        }
+        uint64_t days = calc_daynr(strict_week_number ? strict_week_number_year : _year, 1, 1);
+
+        uint8_t weekday_b = calc_weekday(days, sunday_first);
+
+        if (sunday_first) {
+            days += ((weekday_b == 0) ? 0 : 7) - weekday_b + (week_num - 1) * 7 + weekday % 7;
+        } else {
+            days += ((weekday_b <= 3) ? 0 : 7) - weekday_b + (week_num - 1) * 7 + weekday - 1;
+        }
+        if (!get_date_from_daynr(days)) {
+            return false;
+        }
+    }
+
+    // Compute timestamp type
+    if (frac_part_used) {
+        if (date_part_used) {
+            _type = TIME_DATETIME;
+        } else {
+            _type = TIME_TIME;
+        }
+    } else {
+        if (date_part_used) {
+            if (time_part_used) {
+                _type = TIME_DATETIME;
+            } else {
+                _type = TIME_DATE;
+            }
+        } else {
+            _type = TIME_TIME;
+        }
+    }
+
+    if (check_range() || check_date()) {
+        return false;
+    }
+    _neg = false;
+    return true;
+}
+
 bool DateTimeValue::from_date_format_str(const char* format, int format_len, const char* value, int value_len,
                                          const char** sub_val_end) {
     const char* ptr = format;
