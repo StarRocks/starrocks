@@ -24,6 +24,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
@@ -33,9 +34,15 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -47,6 +54,7 @@ public class FileListTableRepo extends FileListRepo {
 
     private static final String FILE_LIST_DB_NAME = StatsConstants.STATISTICS_DB_NAME;
     private static final String FILE_LIST_TABLE_NAME = "pipe_file_list";
+    private static final String FILE_LIST_FULL_NAME = FILE_LIST_DB_NAME + "." + FILE_LIST_TABLE_NAME;
 
     private static final String FILE_LIST_TABLE_CREATE =
             // TODO: add md5/etag into the file list
@@ -66,6 +74,11 @@ public class FileListTableRepo extends FileListRepo {
 
     private static final String CORRECT_FILE_LIST_REPLICATION_NUM =
             "ALTER TABLE %s SET ('replication_num'='3')";
+
+    private static final String SELECT_FILES =
+            "SELECT pipe_id, filename, file_version, file_size, state, last_modified, staged_time," +
+                    " start_load, finish_load" +
+                    " FROM " + FILE_LIST_FULL_NAME;
 
     @Override
     public List<PipeFile> listUnloadedFiles() {
@@ -93,6 +106,32 @@ public class FileListTableRepo extends FileListRepo {
     }
 
     /**
+     * Query the repo
+     */
+    public static class RepoAccessor {
+
+        private final static RepoAccessor INSTANCE = new RepoAccessor();
+
+        public static RepoAccessor getInstance() {
+            return INSTANCE;
+        }
+
+        public List<PipeFile> listAllFiles() {
+            ConnectContext connect = StatisticUtils.buildConnectContext();
+            List<TResultBatch> batch = RepoExecutor.executeDQL(connect, SELECT_FILES);
+            List<PipeFile> res = new ArrayList<>();
+            for (TResultBatch rows : ListUtils.emptyIfNull(batch)) {
+                for (ByteBuffer buffer : rows.getRows()) {
+                    ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                    String jsonString = copied.toString(Charset.defaultCharset());
+                    res.add(PipeFile.fromJson(jsonString));
+                }
+            }
+            return res;
+        }
+    }
+
+    /**
      * Execute SQL
      */
     static class RepoExecutor {
@@ -101,7 +140,7 @@ public class FileListTableRepo extends FileListRepo {
             try {
                 // TODO: use json sink protocol, instead of statistic protocol
                 StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-                ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
+                ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.HTTP_PROTOCAL);
                 StmtExecutor executor = new StmtExecutor(context, parsedStmt);
                 context.setExecutor(executor);
                 context.setQueryId(UUIDUtil.genUUID());
@@ -116,10 +155,12 @@ public class FileListTableRepo extends FileListRepo {
         }
 
         public static void executeDDL(ConnectContext context, String sql) {
-            StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             try {
+                StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+                Analyzer.analyze(parsedStmt, context);
                 DDLStmtExecutor.execute(parsedStmt, context);
             } catch (Exception e) {
+                LOG.error("execute DDL error: {}", sql, e);
                 throw new RuntimeException(e);
             }
         }

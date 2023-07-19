@@ -15,6 +15,8 @@
 
 package com.starrocks.load.pipe;
 
+import com.starrocks.persist.gson.GsonUtils;
+
 import java.util.Objects;
 
 public class PipeFile {
@@ -39,6 +41,10 @@ public class PipeFile {
 
     public FileListRepo.PipeFileState getState() {
         return state;
+    }
+
+    public static PipeFile fromJson(String json) {
+        return GsonUtils.GSON.fromJson(json, PipeFile.class);
     }
 
     @Override
