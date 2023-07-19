@@ -3306,5 +3306,212 @@ StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context, const s
 
     return parse_url_general(context, columns);
 }
+static bool seek_param_key_in_query_params(const StringValue& query_params, const StringValue& param_key,
+                                           Slice* param_value) {
+    const StringSearch param_search(&param_key);
+    auto pos = param_search.search(&query_params);
+    auto* begin = query_params.ptr;
+    auto* end = query_params.ptr + query_params.len;
+    auto* p_prev_char = begin + pos - 1;
+    auto* p_next_char = begin + pos + param_key.len;
+    // NOT FOUND
+    // case 1: just not found
+    // case 2: suffix found, seek "k1" in "abck1=2", prev char must be '&' if it exists
+    // case 3: prefix found, seek "k1" in "k1abc=2", next char must be '=' or '&' if it exists
+    if (pos < 0 || (p_prev_char >= begin && *p_prev_char != '&') ||
+        (p_next_char < end && *p_next_char != '=' && *p_next_char != '&')) {
+        return false;
+    }
+    // no value; return empty string
+    if (p_next_char >= end || *p_next_char == '&') {
+        param_value->data = nullptr;
+        param_value->size = 0;
+        return true;
+    }
+    // skip '='
+    ++p_next_char;
+    auto* p = p_next_char;
+    // seek '&', the value is string between '=' and '&' if '&' exists, otherwise is remaining string following '='
+    while (p < end && *p != '&') ++p;
+    param_value->data = p_next_char;
+    param_value->size = p - p_next_char;
+    return true;
+}
+
+static bool seek_param_key_in_url(const Slice& url, const Slice& param_key, Slice* param_value) {
+    StringValue query_params;
+    if (!UrlParser::parse_url(StringValue::from_slice(url), UrlParser::UrlPart::QUERY, &query_params)) {
+        return false;
+    }
+    return seek_param_key_in_query_params(query_params, StringValue::from_slice(param_key), param_value);
+}
+
+static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(const starrocks::Columns& columns,
+                                                                 const std::string& param_key) {
+    auto url_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto num_rows = columns[0]->size();
+    Slice param_key_str(param_key);
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    for (auto i = 0; i < num_rows; ++i) {
+        if (url_viewer.is_null(i)) {
+            result.append_null();
+            continue;
+        }
+        auto url = url_viewer.value(i);
+        Slice param_value;
+        auto found = seek_param_key_in_url(url, param_key_str, &param_value);
+        if (!found) {
+            result.append_null();
+        } else {
+            result.append(param_value);
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+    return Status::OK();
+}
+
+static StatusOr<ColumnPtr> url_extract_parameter_general(const starrocks::Columns& columns) {
+    auto url_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto param_key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto num_rows = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    for (auto i = 0; i < num_rows; ++i) {
+        if (url_viewer.is_null(i) || param_key_viewer.is_null(i)) {
+            result.append_null();
+            continue;
+        }
+        auto url = url_viewer.value(i);
+        auto param_key = param_key_viewer.value(i);
+        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+        if (ill_formed) {
+            result.append_null();
+            continue;
+        }
+        Slice param_value;
+        auto found = seek_param_key_in_url(url, param_key, &param_value);
+        if (!found) {
+            result.append_null();
+        } else {
+            result.append(param_value);
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starrocks::Columns& columns,
+                                                                    const std::string& query_params) {
+    auto param_key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto num_rows = columns[1]->size();
+    StringValue query_params_str(query_params);
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    for (auto i = 0; i < num_rows; ++i) {
+        if (param_key_viewer.is_null(i)) {
+            result.append_null();
+            continue;
+        }
+        auto param_key = param_key_viewer.value(i);
+        bool ill_formed = param_key.size == 0 || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+        if (ill_formed) {
+            result.append_null();
+            continue;
+        }
+        Slice param_value;
+        auto found = seek_param_key_in_query_params(query_params_str, StringValue::from_slice(param_key), &param_value);
+        if (!found) {
+            result.append_null();
+        } else {
+            result.append(param_value);
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext* context,
+                                                      FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new UrlExtractParameterState();
+    context->set_function_state(scope, state);
+    auto url_is_const = context->is_constant_column(0);
+    auto param_is_const = context->is_constant_column(1);
+    auto url_is_null = url_is_const && !context->is_notnull_constant_column(0);
+    auto param_is_null = param_is_const && !context->is_notnull_constant_column(1);
+
+    if (url_is_null || param_is_null) {
+        state->opt_const_result = "";
+        state->result_is_null = true;
+        return Status::OK();
+    }
+
+    if (!url_is_const && !param_is_const) {
+        return Status::OK();
+    }
+
+    bool ill_formed = false;
+    if (param_is_const) {
+        auto param_key_column = context->get_constant_column(1);
+        auto param_key = ColumnHelper::get_const_value<TYPE_VARCHAR>(param_key_column);
+        state->opt_const_param_key = param_key.to_string();
+        ill_formed |= param_key.empty() || std::any_of(param_key.data, param_key.data + param_key.size, isspace);
+    }
+
+    if (url_is_const) {
+        auto url_column = context->get_constant_column(0);
+        auto url = ColumnHelper::get_const_value<TYPE_VARCHAR>(url_column);
+        StringValue query_params;
+        auto parse_success =
+                UrlParser::parse_url(StringValue::from_slice(url), UrlParser::UrlPart::QUERY, &query_params);
+        state->opt_const_query_params = query_params.to_string();
+        ill_formed |= !parse_success || query_params.len == 0;
+    }
+
+    // result is const null is either url or param_key is ill-formed
+    if (ill_formed) {
+        state->opt_const_result = "";
+        state->result_is_null = true;
+        return Status::OK();
+    }
+
+    if (state->opt_const_query_params.has_value() && state->opt_const_param_key.has_value()) {
+        StringValue query_params(state->opt_const_query_params.value());
+        StringValue param_key(state->opt_const_param_key.value());
+        Slice result;
+        state->result_is_null = !seek_param_key_in_query_params(query_params, param_key, &result);
+        state->opt_const_result = result.to_string();
+    }
+    return Status::OK();
+}
+
+Status StringFunctions::url_extract_parameter_close(starrocks::FunctionContext* context,
+                                                    FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<UrlExtractParameterState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+StatusOr<ColumnPtr> StringFunctions::url_extract_parameter(starrocks::FunctionContext* context,
+                                                           const starrocks::Columns& columns) {
+    DCHECK_EQ(columns.size(), 2);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto* state =
+            reinterpret_cast<UrlExtractParameterState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto num_rows = columns[0]->size();
+    if (state->opt_const_result.has_value()) {
+        if (state->result_is_null) {
+            return ColumnHelper::create_const_null_column(num_rows);
+        } else {
+            return ColumnHelper::create_const_column<TYPE_VARCHAR>(state->opt_const_result.value(), num_rows);
+        }
+    } else if (state->opt_const_param_key.has_value()) {
+        return url_extract_parameter_const_param_key(columns, state->opt_const_param_key.value());
+    } else if (state->opt_const_query_params.has_value()) {
+        return url_extract_parameter_const_query_params(columns, state->opt_const_query_params.value());
+    } else {
+        return url_extract_parameter_general(columns);
+    }
+}
 
 } // namespace starrocks
