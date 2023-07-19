@@ -537,6 +537,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!params.isSetUser_ident()) {
             throw new TException("missed user_identity");
         }
+        LOG.info("listPipeFiles params={}", params);
         // TODO: check privilege
         UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
         TListPipeFilesResult result = new TListPipeFilesResult();
@@ -549,10 +550,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TListPipeFilesInfo file = new TListPipeFilesInfo();
             file.setPipe_id(10);
             file.setDatabase_name("fake");
-            file.setFilename(fileRecord.path);
+            file.setFilename(fileRecord.getPath());
             file.setFile_version(0);
-            file.setState("test");
-            file.setFile_size(1024);
+            file.setState(fileRecord.getState().toString());
+            file.setFile_size(fileRecord.getSize());
             result.addToPipe_files(file);
         }
         /*

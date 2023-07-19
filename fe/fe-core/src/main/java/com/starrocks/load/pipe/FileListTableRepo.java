@@ -16,6 +16,7 @@
 package com.starrocks.load.pipe;
 
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.UUIDUtil;
@@ -118,14 +119,21 @@ public class FileListTableRepo extends FileListRepo {
 
         public List<PipeFile> listAllFiles() {
             ConnectContext connect = StatisticUtils.buildConnectContext();
-            List<TResultBatch> batch = RepoExecutor.executeDQL(connect, SELECT_FILES);
+            connect.setThreadLocalInfo();
             List<PipeFile> res = new ArrayList<>();
-            for (TResultBatch rows : ListUtils.emptyIfNull(batch)) {
-                for (ByteBuffer buffer : rows.getRows()) {
-                    ByteBuf copied = Unpooled.copiedBuffer(buffer);
-                    String jsonString = copied.toString(Charset.defaultCharset());
-                    res.add(PipeFile.fromJson(jsonString));
+            try {
+                List<TResultBatch> batch = RepoExecutor.executeDQL(connect, SELECT_FILES);
+                for (TResultBatch rows : ListUtils.emptyIfNull(batch)) {
+                    for (ByteBuffer buffer : rows.getRows()) {
+                        ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                        String jsonString = copied.toString(Charset.defaultCharset());
+                        res.add(PipeFile.fromJson(jsonString));
+                    }
                 }
+            } catch (Exception e) {
+                LOG.error("listAllFiles failed", e);
+            } finally {
+                ConnectContext.remove();
             }
             return res;
         }
@@ -150,6 +158,7 @@ public class FileListTableRepo extends FileListRepo {
                 }
                 return sqlResult.first;
             } catch (Exception e) {
+                LOG.error("Repo execute SQL failed {}", sql, e);
                 throw new SemanticException("execute sql failed with exception", e);
             }
         }
@@ -217,9 +226,20 @@ public class FileListTableRepo extends FileListRepo {
         }
 
         public static void correctTable() {
-            String sql = SQLBuilder.buildAlterTableSql();
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            RepoExecutor.executeDDL(context, sql);
+            int numBackends = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
+            int replica = GlobalStateMgr.getCurrentState()
+                    .mayGetDb(FILE_LIST_DB_NAME)
+                    .flatMap(db -> db.mayGetTable(FILE_LIST_TABLE_NAME))
+                    .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
+                    .orElse((short) 1);
+            if (numBackends >= 3 && replica < 3) {
+                String sql = SQLBuilder.buildAlterTableSql();
+                ConnectContext context = StatisticUtils.buildConnectContext();
+                RepoExecutor.executeDDL(context, sql);
+            } else {
+                LOG.info("table {} already has {} replicas, no need to alter replication_num",
+                        FILE_LIST_FULL_NAME, replica);
+            }
         }
 
     }
