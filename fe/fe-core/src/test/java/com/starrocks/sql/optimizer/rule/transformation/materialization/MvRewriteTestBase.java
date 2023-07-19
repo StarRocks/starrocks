@@ -285,9 +285,15 @@ public class MvRewriteTestBase {
 
     protected void refreshMaterializedView(String dbName, String mvName) throws SQLException {
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
+        cluster.runSql(dbName, String.format("analyze table %s with sync mode", mvName));
     }
 
     protected void createAndRefreshMv(String dbName, String mvName, String sql) throws Exception {
+        starRocksAssert.withMaterializedView(sql);
+        cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
+    }
+
+    protected void createMv(String dbName, String mvName, String sql) throws Exception {
         starRocksAssert.withMaterializedView(sql);
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
