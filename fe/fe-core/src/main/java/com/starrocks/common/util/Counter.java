@@ -56,6 +56,10 @@ public class Counter {
         value = newValue;
     }
 
+    public void update(long increment) {
+        value += increment;
+    }
+
     public TUnit getType() {
         return TUnit.findByValue(type);
     }
