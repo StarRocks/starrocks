@@ -14,12 +14,14 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -181,7 +183,7 @@ public class MvRewritePreprocessor {
                     .collect(Collectors.toSet());
         }
         if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext,  "No Related MVs for the query plan");
+            logMVPrepare(connectContext, "No Related MVs for the query plan");
             return;
         }
 
@@ -195,7 +197,7 @@ public class MvRewritePreprocessor {
             }
         }
         if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext,  "No Related MVs after process");
+            logMVPrepare(connectContext, "No Related MVs after process");
             return;
         }
         // all base table related mvs
@@ -241,16 +243,26 @@ public class MvRewritePreprocessor {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             if (!partitionNamesToRefresh.isEmpty()) {
-                logMVPrepare(connectContext, mv, "MV %s is outdated, partitionNamesToRefresh:%s",
-                        mv.getName(), partitionNamesToRefresh);
+                StringBuilder sb = new StringBuilder();
+                for (BaseTableInfo base : mv.getBaseTableInfos()) {
+                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                    sb.append(String.format("base table %s version: %s; ", base, versionInfo));
+                }
+                LOG.info("[MV PREPARE] MV {} is outdated, stale partitions {}, detailed version info: {}",
+                        mv.getName(), partitionNamesToRefresh, sb.toString());
                 return;
             }
-        } else if (!mv.getPartitionNames().isEmpty() &&
-                partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+        } else if (!mv.getPartitionNames().isEmpty() && partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
             // if the mv is partitioned, and all partitions need refresh,
             // then it can not be a candidate
-            logMVPrepare(connectContext, mv, "Partitioned MV %s is outdated and all its partitions need to be " +
-                    "refreshed: %s", mv.getName(), partitionNamesToRefresh);
+
+            StringBuilder sb = new StringBuilder();
+            for (BaseTableInfo base : mv.getBaseTableInfos()) {
+                String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                sb.append(String.format("base table %s version: %s; ", base, versionInfo));
+            }
+            LOG.info("[MV PREPARE] MV {} is outdated and all its partitions need to be " +
+                    "refreshed: {}, detailed info: {}", mv.getName(), partitionNamesToRefresh, sb.toString());
             return;
         }
 
@@ -323,7 +335,7 @@ public class MvRewritePreprocessor {
         int relationId = columnRefFactory.getNextRelationId();
 
         // first add base schema to avoid replaced in full schema.
-        Set<String>  columnNames = Sets.newHashSet();
+        Set<String> columnNames = Sets.newHashSet();
         for (Column column : mv.getBaseSchema()) {
             ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                     column.getType(),
