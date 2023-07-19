@@ -288,7 +288,7 @@ Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
 
 #### Prepare a dataset
 
-**Avro schema**
+##### Avro schema
 
 1. Create the following  Avro schema file `avro_schema.avsc`:
 
@@ -308,7 +308,7 @@ Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
 
 2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/cloud/current/get-started/schema-registry.html#create-a-schema).
 
-**Avro data**
+##### Avro data
 
 Prepare the Avro data and send it to the Kafka topic `topic_0`.
 
@@ -381,7 +381,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 The data type mapping between the Avro data fields you want to load and the StarRocks table columns is as follows:
 
-**Primitive types**
+##### Primitive types
 
 | Avro    | StarRocks |
 | ------- | --------- |
@@ -394,7 +394,7 @@ The data type mapping between the Avro data fields you want to load and the Star
 | bytes   | STRING    |
 | string  | STRING    |
 
-**Complex types**
+##### Complex types
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |

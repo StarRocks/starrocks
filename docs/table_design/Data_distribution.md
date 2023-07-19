@@ -150,7 +150,7 @@ For data in a partition, StarRocks distributes the data randomly across all buck
 
 However, note that the query performance provided by random bucketing may not be ideal when you query massive amounts of data and frequently use certain columns as conditional columns. In this scenario, it is recommended to use [hash bucketing](#hash-bucketing). Because only a small number of buckets need to be scanned and computed, significantly improving query performance.
 
-**Precautions**
+##### Precautions
 
 - You can only use random bucketing to create Duplicate Key tables.
 - You can not specify a [Colocation Group](../using_starrocks/Colocate_join.md) for a table bucketed randomly.
@@ -187,12 +187,12 @@ DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
 
 Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. In hash bucketing, the value of the bucketing column is used as input to calculate a hash value by using the hash function, and then the data is assigned to the corresponding bucket based on that hash value.
 
-**Advantages**
+##### Advantages
 
 - Improved query performance: Rows with the same bucketing key value are assigned to the same bucket, which reduces the amount of data scanned during queries.
 - Even data distribution: By using the high-cardinality column (with a large number of unique values) as the bucketing key, data can be more evenly distributed across buckets.
 
-**Choose the bucketing key**
+##### Choose the bucketing key
 
 We recommend that you choose the column or columns that satisfy the following two requirements as the bucketing key.
 
@@ -209,13 +209,13 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 - One bucketing column: This method can reduce data transmission between nodes. It improves the performance of short-running query because short-running query only runs on one server and scan a small amount of data.
 - Multiple bucketing columns: This method makes the most of the concurrency performance of a distributed cluster. It improves the performance of long-running query because long-running query runs across multiple servers and scan a large amount of data by using multiple servers in parallel. We recommend that you choose three bucketing columns at most.
 
-**Precautions**
+##### Precautions
 
 - **When a table is created, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
 - Bucketing columns cannot be modified after they are specified.
 
-**Examples**
+##### Examples
 
 In the following example, the `site_access` table uses `site_id` as the bucketing key because `site_id` is a high-cardinality column and is always used as a filter in queries. By using site_id as the bucketing key, StarRocks only needs to scan the relevant buckets during querying.
 
