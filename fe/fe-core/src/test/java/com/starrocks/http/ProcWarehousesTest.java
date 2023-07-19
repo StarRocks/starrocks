@@ -66,7 +66,7 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
         // list all warehouses
         sendHttpAndValidateResponse("/warehouses",
                 "[{\"Id\":\"0\",\"Warehouse\":\"default_warehouse\"," +
-                        "\"State\":\"INITIALIZING\",\"ClusterCount\":\"1\"," +
+                        "\"State\":\"AVAILABLE\",\"ClusterCount\":\"1\"," +
                         "\"Comment\":\"An internal warehouse contains all compute nodes in this system\"}]"
         );
         // list cluster in warehouse:0
@@ -103,7 +103,7 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
         // list all warehouses
         sendHttpAndValidateResponse("/warehouses",
                 "[{\"Id\":\"0\",\"Warehouse\":\"default_warehouse\"," +
-                        "\"State\":\"INITIALIZING\",\"ClusterCount\":\"1\"," +
+                        "\"State\":\"AVAILABLE\",\"ClusterCount\":\"1\"," +
                         "\"Comment\":\"An internal warehouse contains all compute nodes in this system\"}]"
         );
         // list cluster in warehouse:0

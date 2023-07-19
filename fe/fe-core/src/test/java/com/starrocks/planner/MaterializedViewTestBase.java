@@ -91,6 +91,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
             }
         };
 
+
+
         if (!starRocksAssert.databaseExist("_statistics_")) {
             starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
                     .useDatabase(StatsConstants.STATISTICS_DB_NAME);

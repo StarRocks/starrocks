@@ -74,7 +74,7 @@ public class PseudoCluster {
 
     private static volatile PseudoCluster instance;
 
-    public static boolean logToConsole = false;
+    public static boolean logToConsole = true;
 
     ClusterConfig config = new ClusterConfig();
 
@@ -191,6 +191,15 @@ public class PseudoCluster {
         @Override
         public void removeWorker(String hostAndPort) throws DdlException {
             workers.removeIf(w -> Objects.equals(w.hostAndPort, hostAndPort));
+        }
+
+        @Override
+        public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            List<Long> nodeIds = new ArrayList<>();
+            for (Worker worker : workers) {
+                nodeIds.add(worker.backendId);
+            }
+            return nodeIds;
         }
 
         @Override
