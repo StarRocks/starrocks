@@ -34,12 +34,7 @@ public class JDBCScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJDBCScanOperator logical = (LogicalJDBCScanOperator) input.getOp();
-        PhysicalJDBCScanOperator physical = new PhysicalJDBCScanOperator(logical.getTable(),
-                logical.getColRefToColumnMetaMap(),
-                logical.getLimit(),
-                logical.getPredicate(),
-                logical.getProjection());
-
+        PhysicalJDBCScanOperator physical = new PhysicalJDBCScanOperator(logical);
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);
     }

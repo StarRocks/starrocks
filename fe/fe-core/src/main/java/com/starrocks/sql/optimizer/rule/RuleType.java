@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule;
 
 public enum RuleType {
@@ -128,6 +127,7 @@ public enum RuleType {
     TF_REMOVE_AGGREGATION_BY_AGG_TABLE,
     TF_REWRITE_GROUPING_SET,
     TF_REWRITE_SIMPLE_AGG,
+    TF_REWRITE_MIN_MAX_COUNT_AGG,
     TF_REWRITE_SUM_BY_ASSOCIATIVE_RULE,
 
     TF_INTERSECT_REORDER,

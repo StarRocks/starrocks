@@ -449,6 +449,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
 
+    public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -662,7 +664,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final int PIPELINE_BATCH_SIZE = 4096;
 
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
-    private String streamingPreaggregationMode = "auto"; // auto, force_streaming, force_preaggregation
+    private String streamingPreaggregationMode = SessionVariableConstants.AUTO; // auto, force_streaming, force_preaggregation
 
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
@@ -1177,6 +1179,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SIMPLIFY_CASE_WHEN, flag = VariableMgr.INVISIBLE)
     private boolean enableSimplifyCaseWhen = true;
+
+    @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
+    private boolean enableCountStarOptimization = true;
 
     private int exprChildrenLimit = -1;
 
@@ -2281,6 +2286,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableSimplifyCaseWhen(boolean enableSimplifyCaseWhen) {
         this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
+    }
+
+    public boolean isEnableCountStarOptimization() {
+        return enableCountStarOptimization;
+    }
+
+    public void setEnableCountStarOptimization(boolean v) {
+        enableCountStarOptimization = v;
     }
 
     // Serialize to thrift object

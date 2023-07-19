@@ -1,0 +1,83 @@
+-- name: testQueryExternalFile
+shell: ossutil64 mkdir oss://${oss_bucket}/test_external_file/dict_two_page >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_two_page.parquet oss://${oss_bucket}/test_external_file/dict_two_page/dict_two_page.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 24,270. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE dict_two_page
+(
+    seq bigint,
+    f00 string,
+    f01 string,
+    id string,
+    f03 string,
+    f04 string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_external_file/dict_two_page/", 
+    "format" = "parquet"
+);
+-- result:
+-- !result
+set enable_count_star_optimization = true;
+-- result:
+-- !result
+select count(*) from dict_two_page;
+-- result:
+200
+-- !result
+select min(seq), max(seq), min(f00), max(f00), min(f01), max(f01), min(id), max(id) from dict_two_page;
+-- result:
+0	99	abcdefghijklmnopqrst	zabcdefghijklmnopqrs	abcdefghijklmnopqrst	zabcdefghijklmnopqrs	ysq01	ysq03
+-- !result
+select min(seq), max(seq), min(f00), max(f00), min(f01), max(f01), min(id), max(id) from dict_two_page where seq = 99;
+-- result:
+99	99	vwxyzabcdefghijklmno	vwxyzabcdefghijklmno	wxyzabcdefghijklmnop	wxyzabcdefghijklmnop	None	None
+-- !result
+select min(seq), max(seq) from dict_two_page where f00 >= 'a';
+-- result:
+0	99
+-- !result
+select count(distinct seq) from dict_two_page;
+-- result:
+100
+-- !result
+select count(*), min(f00), max(f00) from dict_two_page group by seq having seq = 99;
+-- result:
+2	vwxyzabcdefghijklmno	vwxyzabcdefghijklmno
+-- !result
+set enable_count_star_optimization = false;
+-- result:
+-- !result
+select count(*) from dict_two_page;
+-- result:
+200
+-- !result
+select min(seq), max(seq), min(f00), max(f00), min(f01), max(f01), min(id), max(id) from dict_two_page;
+-- result:
+0	99	abcdefghijklmnopqrst	zabcdefghijklmnopqrs	abcdefghijklmnopqrst	zabcdefghijklmnopqrs	ysq01	ysq03
+-- !result
+select min(seq), max(seq), min(f00), max(f00), min(f01), max(f01), min(id), max(id) from dict_two_page where seq = 99;
+-- result:
+99	99	vwxyzabcdefghijklmno	vwxyzabcdefghijklmno	wxyzabcdefghijklmnop	wxyzabcdefghijklmnop	None	None
+-- !result
+select min(seq), max(seq) from dict_two_page where f00 >= 'a';
+-- result:
+0	99
+-- !result
+select count(distinct seq) from dict_two_page;
+-- result:
+100
+-- !result
+select count(*), min(f00), max(f00) from dict_two_page group by seq having seq = 99;
+-- result:
+2	vwxyzabcdefghijklmno	vwxyzabcdefghijklmno
+-- !result

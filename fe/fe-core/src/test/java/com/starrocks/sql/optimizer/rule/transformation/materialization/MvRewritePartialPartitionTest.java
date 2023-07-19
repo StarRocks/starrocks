@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import autovalue.shaded.com.google.common.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
@@ -320,6 +323,165 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testHivePartialPartition() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        createAndRefreshMv("test", "hive_parttbl_mv",
+                "CREATE MATERIALIZED VIEW `hive_parttbl_mv`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+        String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par`";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv");
+
+        MockedHiveMetadata mockedHiveMetadata =
+                (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+        mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
+                ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
+
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "where l_shipdate > '1998-01-04'";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv");
+
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "where l_shipdate > '1998-01-04' and l_shipdate < '1998-01-06'";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv");
+
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv", "UNION",
+                "PARTITION PREDICATES: ((22: l_shipdate < '1998-01-01')" +
+                        " OR (22: l_shipdate >= '1998-01-06')) OR (22: l_shipdate IS NULL)");
+        dropMv("test", "hive_parttbl_mv");
+
+        createAndRefreshMv("test", "hive_parttbl_mv_2",
+                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_2`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                        "where l_orderkey > 100;");
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "where l_orderkey > 100;";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_2");
+
+        mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
+                ImmutableList.of("l_shipdate=1998-01-02"));
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "l_orderkey > 100", "lineitem_par",
+                "PARTITION PREDICATES: ((23: l_shipdate >= '1998-01-02') AND ((23: l_shipdate < '1998-01-03')" +
+                        " OR (23: l_shipdate >= '1998-01-06'))) OR (23: l_shipdate IS NULL)",
+                "NON-PARTITION PREDICATES: 21: l_orderkey > 100");
+
+        dropMv("test", "hive_parttbl_mv_2");
+
+        // test partition prune
+        createAndRefreshMv("test", "hive_parttbl_mv_3",
+                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_3`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                        "where l_shipdate > '1998-01-02';");
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_3", "partitions=3/6", "lineitem_par");
+        PlanTestBase.assertNotContains(plan, "partitions=2/6");
+        dropMv("test", "hive_parttbl_mv_3");
+
+        createAndRefreshMv("test", "hive_parttbl_mv_4",
+                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_4`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                        "where l_shipdate < '1998-01-02' and l_orderkey = 100;");
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=1/6", "lineitem_par",
+                "NON-PARTITION PREDICATES: (((22: l_shipdate < '1998-01-01') OR (22: l_shipdate >= '1998-01-02')) " +
+                        "OR (20: l_orderkey != 100)) OR (22: l_shipdate IS NULL)");
+        dropMv("test", "hive_parttbl_mv_4");
+
+        createAndRefreshMv("test", "hive_parttbl_mv_5",
+                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY date_trunc('month', o_orderdate)\n" +
+                        "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders`");
+        query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders`";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "360/360");
+
+        query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` " +
+                "where o_orderdate >= '1991-01-01' and o_orderdate < '1991-02-1'";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "partitions=1/36");
+
+        mockedHiveMetadata.updatePartitions("partitioned_db", "orders",
+                ImmutableList.of("o_orderdate=1991-02-02"));
+
+        query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` ";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "orders",
+                "PARTITION PREDICATES: (((15: o_orderdate < '1991-01-01') OR (15: o_orderdate >= '1991-02-01')) AND" +
+                        " ((15: o_orderdate < '1991-03-01') OR (15: o_orderdate >= '1993-12-31')))" +
+                        " OR (15: o_orderdate IS NULL)");
+
+        // TODO(Ken Huang): This should support query rewrite
+        query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` " +
+                "where o_orderdate >= '1992-05-01' and o_orderdate < '1992-05-31'";
+        plan = getFragmentPlan(query);
+
+        refreshMaterializedView("test", "hive_parttbl_mv_5");
+        mockedHiveMetadata.updatePartitions("partitioned_db", "orders",
+                ImmutableList.of("o_orderdate=1991-01-02"));
+        query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` " +
+                "where o_orderdate >= '1992-05-01' and o_orderdate < '1992-05-31'";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "PREDICATES: 12: o_orderdate < '1992-05-31'",
+                "partitions=1/36");
+
+        dropMv("test", "hive_parttbl_mv_5");
+    }
+
+    @Test
     public void testNullPartitionRewriteWithLoad() throws Exception {
         {
             cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
@@ -379,5 +541,78 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             PlanTestBase.assertNotContains(plan, "partial_mv_13");
             starRocksAssert.dropMaterializedView("partial_mv_13");
         }
+    }
+
+    @Test
+    public void testHivePartitionQueryRewrite() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        String mvName = "hive_query_rewrite";
+
+        // Disable
+        createAndRefreshMv("test", mvName,
+                "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "'olap_table_query_rewrite_consistency' = 'checked', " +
+                        "\"force_external_table_query_rewrite\" = \"disable\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+        MaterializedView ttlMv = getMv("test", mvName);
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
+        Assert.assertEquals(1, ttlMv.getPartitions().size());
+
+        String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "where l_shipdate >= '1998-01-04'";
+        PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+        dropMv("test", mvName);
+
+        // Checked
+        createMv("test", mvName,
+                "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(`l_shipdate`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"checked\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                        "GROUP BY l_shipdate");
+
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "where l_shipdate >= '1998-01-04'";
+        PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+        // refresh mv
+        refreshMaterializedView("test", mvName);
+        query =
+                "SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` GROUP BY l_shipdate";
+        PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+        dropMv("test", mvName);
+
+        // Loose
+        createAndRefreshMv("test", mvName,
+                "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"loose\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "where l_shipdate >= '1998-01-04'";
+        PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+        // refresh mv
+        refreshMaterializedView("test", mvName);
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "where l_shipdate >= '1998-01-04'";
+        PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+        dropMv("test", mvName);
     }
 }

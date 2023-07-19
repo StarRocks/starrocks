@@ -127,6 +127,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | insert_load_default_timeout_second      | s    | 3600                                            | The timeout duration for the INSERT INTO statement that is used to load data, in seconds. |
 | broker_load_default_timeout_second      | s    | 14400                                           | The timeout duration for a Broker Load job, in seconds.      |
 | min_bytes_per_broker_scanner            | Byte | 67108864                                        | The minimum allowed amount of data that can be processed by a Broker Load instance, in bytes. |
+| max_broker_concurrency                  | -    | 100                                             | The maximum number of concurrent instances for a Broker Load task. This parameter is deprecated from v3.1 onwards. |
 | export_max_bytes_per_be_per_task        | Byte | 268435456                                       | The maximum amount of data that can be exported from a single BE by a single data unload task, in bytes. |
 | export_running_job_num_limit            | -    | 5                                               | The maximum number of data exporting tasks that can run in parallel. |
 | export_task_default_timeout_second      | s    | 7200                                            | The timeout duration for a data exporting task, in seconds.  |
