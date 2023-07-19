@@ -36,8 +36,7 @@ public:
                                                  const std::vector<SlotDescriptor*>& slots) const = 0;
 
     virtual void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                      std::vector<GroupReaderParam::Column>& read_cols,
-                                      bool& _is_only_partition_scan) const = 0;
+                                      std::vector<GroupReaderParam::Column>& read_cols) const = 0;
 
     virtual const ParquetField* get_parquet_field(const std::string& col_name) const = 0;
 
@@ -92,8 +91,7 @@ public:
                                          const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                              std::vector<GroupReaderParam::Column>& read_cols,
-                              bool& _is_only_partition_scan) const override;
+                              std::vector<GroupReaderParam::Column>& read_cols) const override;
 
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
 };
@@ -116,8 +114,7 @@ public:
                                          const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                              std::vector<GroupReaderParam::Column>& read_cols,
-                              bool& _is_only_partition_scan) const override;
+                              std::vector<GroupReaderParam::Column>& read_cols) const override;
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
 
 private:

@@ -41,11 +41,7 @@ public class StreamScanImplementationRule extends StreamImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator logical = (LogicalScanOperator) input.getOp();
-        PhysicalStreamScanOperator physical = new PhysicalStreamScanOperator(
-                logical.getTable(),
-                logical.getColRefToColumnMetaMap(),
-                logical.getPredicate(),
-                logical.getProjection());
+        PhysicalStreamScanOperator physical = new PhysicalStreamScanOperator(logical);
         return Lists.newArrayList(OptExpression.create(physical, input.getInputs()));
     }
 }
