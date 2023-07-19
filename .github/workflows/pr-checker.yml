@@ -33,7 +33,7 @@ jobs:
           pass_on_octokit_error: false
           configuration_path: ".github/pr-title-checker-config.json"
 
-  branch-info-check:
+  backport-check:
     needs: title-check
     runs-on: ubuntu-latest
     if: >
