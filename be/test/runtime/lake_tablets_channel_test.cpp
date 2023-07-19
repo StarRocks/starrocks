@@ -264,8 +264,8 @@ protected:
 TEST_F(LakeTabletsChannelTest, test_simple_write) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
-
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    TabletsChannelOpenTimeStat open_time_stat;
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false, &open_time_stat));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -365,8 +365,8 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
 TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
-
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    TabletsChannelOpenTimeStat open_time_stat;
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false, &open_time_stat));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 2;
@@ -422,7 +422,8 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
 }
 
 TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
-    ASSERT_OK(_tablets_channel->open(_open_request, _schema_param, false));
+    TabletsChannelOpenTimeStat open_time_stat;
+    ASSERT_OK(_tablets_channel->open(_open_request, _schema_param, false, &open_time_stat));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -488,8 +489,8 @@ TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
 TEST_F(LakeTabletsChannelTest, DISABLED_test_abort) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
-
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    TabletsChannelOpenTimeStat open_time_stat;
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false, &open_time_stat));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -552,8 +553,8 @@ TEST_F(LakeTabletsChannelTest, DISABLED_test_abort) {
 TEST_F(LakeTabletsChannelTest, test_write_failed) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
-
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    TabletsChannelOpenTimeStat open_time_stat;
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false, &open_time_stat));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -589,8 +590,8 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
 TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
-
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    TabletsChannelOpenTimeStat open_time_stat;
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false, &open_time_stat));
 
     constexpr int kChunkSize = 12;
     auto chunk = generate_data(kChunkSize);
@@ -654,8 +655,8 @@ TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
 TEST_F(LakeTabletsChannelTest, test_finish_failed) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
-
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    TabletsChannelOpenTimeStat open_time_stat;
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false, &open_time_stat));
 
     constexpr int kChunkSize = 12;
     auto chunk = generate_data(kChunkSize);
@@ -698,8 +699,8 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
 TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
     auto open_request = _open_request;
     open_request.set_num_senders(2);
-
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    TabletsChannelOpenTimeStat open_time_stat;
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false, &open_time_stat));
 
     {
         constexpr int kChunkSize = 128;
