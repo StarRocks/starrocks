@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -134,7 +133,8 @@ public class StructTypePlanTest extends PlanTestBase {
     public void testSubQuery() throws Exception {
         String sql = "select c2.a from (select c1, c2 from test) t";
         assertVerbosePlanContains(sql, "[/c2/a]");
-        sql = "select t1.a, rn from (select c3.c as t1, row_number() over (partition by c0 order by c2.a) as rn from test) as t";
+        sql = "select t1.a, rn from (select c3.c as t1, row_number() over" +
+                " (partition by c0 order by c2.a) as rn from test) as t";
         assertVerbosePlanContains(sql, "[/c2/a, /c3/c/a]");
     }
 
