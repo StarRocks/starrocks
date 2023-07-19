@@ -812,7 +812,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, mv only supports one expression
-<<<<<<< HEAD
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
         // for Partition slot ref, the SlotDescriptor is not serialized, so should recover it here.
         // the SlotDescriptor is used by toThrift, which influences the execution process.
@@ -826,25 +825,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     SlotDescriptor slotDescriptor =
                             new SlotDescriptor(new SlotId(i), column.getName(), column.getType(), column.isAllowNull());
                     slotRefs.get(0).setDesc(slotDescriptor);
-=======
-        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
-            // for Partition slot ref, the SlotDescriptor is not serialized, so should recover it here.
-            // the SlotDescriptor is used by toThrift, which influences the execution process.
-            List<SlotRef> slotRefs = Lists.newArrayList();
-            partitionExpr.collect(SlotRef.class, slotRefs);
-            Preconditions.checkState(slotRefs.size() == 1);
-            if (slotRefs.get(0).getSlotDescriptorWithoutCheck() == null) {
-                for (int i = 0; i < fullSchema.size(); i++) {
-                    Column column = fullSchema.get(i);
-                    if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                        SlotDescriptor slotDescriptor =
-                                new SlotDescriptor(new SlotId(i), column.getName(), column.getType(),
-                                        column.isAllowNull());
-                        slotRefs.get(0).setDesc(slotDescriptor);
-                    }
->>>>>>> 4277d9435 ([Enhancement] introduce loose query rewrite mode (#27280))
                 }
             }
         }

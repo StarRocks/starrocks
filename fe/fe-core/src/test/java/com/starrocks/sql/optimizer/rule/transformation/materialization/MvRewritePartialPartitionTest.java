@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import autovalue.shaded.com.google.common.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
@@ -320,8 +323,6 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testHivePartialPartition() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("test", "hive_parttbl_mv",
@@ -481,7 +482,6 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     }
 
     @Test
->>>>>>> 4277d9435 ([Enhancement] introduce loose query rewrite mode (#27280))
     public void testNullPartitionRewriteWithLoad() throws Exception {
         {
             cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
