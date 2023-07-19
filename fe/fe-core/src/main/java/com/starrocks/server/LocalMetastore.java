@@ -384,7 +384,6 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 id = getNextId();
                 Database db = new Database(id, dbName);
-                String storageVolumeId = "";
                 String volume = StorageVolumeMgr.DEFAULT;
                 if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
                     volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
@@ -393,6 +392,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     throw new DdlException(String.format("Storage volume %s not exists", volume));
                 }
                 unprotectCreateDb(db);
+                String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeIdOfDb(id);
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db, storageVolumeId);
             }
         } finally {
