@@ -503,13 +503,11 @@ WHERE LABEL = "label";
 
 - `min_bytes_per_broker_scanner`：单个实例处理的最小数据量，默认为 64 MB。
 
-- `max_broker_concurrency`：单个子任务允许的最大并发实例数，默认为 100 个。
-
 - `load_parallel_instance_num`：单个 BE 上每个作业允许的并发实例数，默认为 1 个。
 
-    可以使用如下公式计算单个子任务的实例总数：
+   可以使用如下公式计算单个子任务的实例总数：
 
-    单个子任务的实例总数 = min（单个子任务待导入数据量的总大小/`min_bytes_per_broker_scanner`，`max_broker_concurrency`，`load_parallel_instance_num` x BE 总数）
+   单个子任务的实例总数 = min（单个子任务待导入数据量的总大小/`min_bytes_per_broker_scanner`，`load_parallel_instance_num` x BE 总数）
 
 一般情况下，一个导入作业只有一个 `data_desc`，只会拆分成一个子任务，子任务会拆分成与 BE 总数相等的实例。
 
