@@ -124,7 +124,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |insert_load_default_timeout_second|3600|Insert Into 语句的超时时间，单位为秒。|
 |broker_load_default_timeout_second|14400|Broker Load 的超时时间，单位为秒。|
 |min_bytes_per_broker_scanner|67108864|单个 Broker Load 任务最大并发实例数，单位为 Byte。|
-|max_broker_concurrency|100|单个 Broker Load 任务最大并发实例数。|
+|max_broker_concurrency|100|单个 Broker Load 任务最大并发实例数。从 3.1 版本起，StarRocks 不再支持该参数。|
 |export_max_bytes_per_be_per_task|268435456|单个导出任务在单个 BE 上导出的最大数据量，单位为 Byte。|
 |export_running_job_num_limit|5|导出作业最大的运行数目。|
 |export_task_default_timeout_second|7200|导出作业的超时时长，单位为秒。|
