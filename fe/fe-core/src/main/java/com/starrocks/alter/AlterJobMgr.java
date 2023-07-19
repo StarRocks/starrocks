@@ -98,6 +98,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -914,6 +915,12 @@ public class AlterJobMgr {
             }
         }
 
+        // inactive the related MVs
+        LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
+                String.format("based table %s swapped", origTblName));
+        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
+                String.format("based table %s swapped", newTblName));
+
         swapTableInternal(db, origTable, olapNewTbl);
 
         // write edit log
@@ -1011,11 +1018,11 @@ public class AlterJobMgr {
                 }
                 view.setNewFullSchema(newFullSchema);
 
+                LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
                 db.dropTable(viewName);
                 db.registerTableUnlocked(view);
 
-                AlterViewInfo alterViewInfo =
-                        new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
+                AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
                 LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
             } else {
@@ -1045,6 +1052,7 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
 
+            LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 

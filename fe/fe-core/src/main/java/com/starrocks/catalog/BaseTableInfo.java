@@ -18,6 +18,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.TableName;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -61,6 +62,15 @@ public class BaseTableInfo {
         this.dbName = dbName;
         this.tableIdentifier = tableIdentifier;
         this.tableName = tableIdentifier.split(":")[0];
+    }
+
+    public static BaseTableInfo fromTableName(TableName name, Table table) {
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(name.getCatalog(), name.getDb());
+        if (isInternalCatalog(name.getCatalog())) {
+            return new BaseTableInfo(database.getId(), database.getFullName(), table.getId());
+        } else {
+            return new BaseTableInfo(name.getCatalog(), name.getDb(), table.getTableIdentifier());
+        }
     }
 
     public String getTableInfoStr() {

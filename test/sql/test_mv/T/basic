@@ -12,5 +12,3 @@ SELECT * FROM mv1;
 SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
 DROP TABLE ss;
 SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
-
-REFRESH MATERIALIZED VIEW mv1;
