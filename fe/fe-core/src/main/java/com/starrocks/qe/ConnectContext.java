@@ -30,6 +30,8 @@ import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.ssl.SSLChannel;
+import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -38,10 +40,12 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connect context for it.
 // We store session information here. Meanwhile ConnectScheduler all
@@ -138,6 +142,8 @@ public class ConnectContext {
     // The related db ids for current sql
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
+    protected SSLContext sslContext;
+
     public static ConnectContext get() {
         return threadLocalInfo.get();
     }
@@ -155,6 +161,14 @@ public class ConnectContext {
     }
 
     public ConnectContext() {
+        this(null, null);
+    }
+
+    public ConnectContext(SocketChannel channel) {
+        this(channel, null);
+    }
+
+    public ConnectContext(SocketChannel channel, SSLContext sslContext) {
         closed = false;
         state = new QueryState();
         returnRows = 0;
@@ -163,23 +177,14 @@ public class ConnectContext {
         serializer = MysqlSerializer.newInstance();
         sessionVariable = VariableMgr.newSessionVariable();
         command = MysqlCommand.COM_SLEEP;
+        queryDetail = null;
         dumpInfo = new QueryDumpInfo(sessionVariable);
-    }
-
-    public ConnectContext(SocketChannel channel) {
-        state = new QueryState();
-        returnRows = 0;
-        serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
-        isKilled = false;
         mysqlChannel = new MysqlChannel(channel);
-        serializer = MysqlSerializer.newInstance();
-        sessionVariable = VariableMgr.newSessionVariable();
-        command = MysqlCommand.COM_SLEEP;
         if (channel != null) {
             remoteIP = mysqlChannel.getRemoteIp();
         }
-        queryDetail = null;
-        dumpInfo = new QueryDumpInfo(sessionVariable);
+
+        this.sslContext = sslContext;
     }
 
     public long getStmtId() {
@@ -516,6 +521,32 @@ public class ConnectContext {
             threadInfo = new ThreadInfo();
         }
         return threadInfo;
+    }
+
+    public boolean supportSSL() {
+        return sslContext != null;
+    }
+
+    public boolean enableSSL() throws IOException {
+        Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
+        if (clazz == null) {
+            LOG.warn("load SSLChannelImp class failed");
+            throw new IOException("load SSLChannelImp class failed");
+        }
+
+        try {
+            SSLChannel sslChannel = (SSLChannel) clazz.getConstructors()[0]
+                    .newInstance(sslContext.createSSLEngine(), mysqlChannel);
+            if (!sslChannel.init()) {
+                return false;
+            } else {
+                mysqlChannel.setSSLChannel(sslChannel);
+                return true;
+            }
+        } catch (Exception e) {
+            LOG.warn("construct SSLChannelImp class failed");
+            throw new IOException("construct SSLChannelImp class failed");
+        }
     }
 
     public class ThreadInfo {
