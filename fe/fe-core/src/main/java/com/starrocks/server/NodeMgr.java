@@ -551,7 +551,7 @@ public class NodeMgr {
         if (helpers != null) {
             String[] splittedHelpers = helpers.split(",");
             for (String helper : splittedHelpers) {
-                Pair<String, Integer> helperHostPort = SystemInfoService.validateHostAndPort(helper);
+                Pair<String, Integer> helperHostPort = SystemInfoService.validateHostAndPort(helper, false);
                 if (helperHostPort.equals(selfNode)) {
                     /*
                      * If user specified the helper node to this FE itself,
