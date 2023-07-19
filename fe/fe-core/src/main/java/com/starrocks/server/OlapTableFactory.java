@@ -374,6 +374,11 @@ public class OlapTableFactory implements AbstractTableFactory {
 
                 boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
                         colocateGroup, false /* expectLakeTable */);
+                if (!(table instanceof ExternalOlapTable) && addedToColocateGroup) {
+                    // Colocate table should keep the same bucket number across the partitions
+                    DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
+                    table.inferDistribution(defaultDistributionInfo);
+                }
             }
 
             // get base index storage type. default is COLUMN
