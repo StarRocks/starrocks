@@ -16,85 +16,89 @@
 
 {% macro starrocks__olap_table(is_create_table_as) -%}
 
-  {% set is_create_table = is_create_table_as is none or not is_create_table_as %}
+  {%- set is_create_table = is_create_table_as is none or not is_create_table_as -%}
 
-  {% set table_type = config.get('table_type', 'DUPLICATE') %}
-  {% set keys = config.get('keys') %}
-  {% set partition_by = config.get('partition_by') %}
-  {% set partition_by_init = config.get('partition_by_init') %}
-  {% set buckets = config.get('buckets', 10) %}
-  {% set distributed_by = config.get('distributed_by') %}
-  {% if is_create_table %}
-    {% set properties = config.get('properties', {"replication_num":"1"}) %}
-  {% else %}
-    {% set properties = config.get('properties') %}
-  {% endif %}
+  {%- set table_type = config.get('table_type', 'DUPLICATE') -%}
+  {%- set keys = config.get('keys') -%}
+  {%- set partition_by = config.get('partition_by') -%}
+  {%- set partition_by_init = config.get('partition_by_init') -%}
+  {%- set buckets = config.get('buckets', 10) -%}
+  {%- set distributed_by = config.get('distributed_by') -%}
+  {%- set properties = config.get('properties') -%}
+
+  {%- if properties is none -%}
+        {%- set properties = config.get('properties', {"replication_num":"1"}) -%}
+  {%- else -%}
+        {%- set properties = fromjson(config.get('properties')) -%}
+  {%- endif -%}
 
   {# 1. SET ENGINE #}
-  {% if is_create_table %}
-    ENGINE = OLAP
-  {% endif %}
+  {%- if is_create_table %} ENGINE = OLAP {% endif -%}
 
   {# 2. SET KEYS #}
-  {% if keys is not none %}
-    {% if table_type == "DUPLICATE" %}
+  {%- if keys is not none -%}
+    {%- if table_type == "DUPLICATE" %}
       DUPLICATE KEY (
-        {% for item in keys %}
-          {{ item }}{% if not loop.last %},{% endif %}
-        {% endfor %}
+        {%- for item in keys -%}
+          {{ item }} {%- if not loop.last -%}, {%- endif -%}
+        {%- endfor -%}
       )
-    {% elif table_type == "PRIMARY" %}
+    {%- elif table_type == "PRIMARY" %}
       PRIMARY KEY (
-        {% for item in keys %}
-          {{ item }}{% if not loop.last %},{% endif %}
-        {% endfor %}
+        {%- for item in keys -%}
+          {{ item }} {%- if not loop.last -%}, {%- endif -%}
+        {%- endfor -%}
       )
-    {% elif table_type == "UNIQUE" %}
+    {%- elif table_type == "UNIQUE" %}
       UNIQUE KEY (
-        {% for item in keys %}
-          {{ item }}{% if not loop.last %},{% endif %}
-        {% endfor %}
+        {%- for item in keys -%}
+          {{ item }} {%- if not loop.last -%}, {%- endif -%}
+        {%- endfor -%}
       )
-    {% else %}
-      {% set msg -%}
+    {%- else -%}
+      {%- set msg -%}
         "{{ table_type }}" is not support
-      {%- endset %}
+      {%- endset -%}
       {{ exceptions.raise_compiler_error(msg) }}
-    {% endif %}
-  {% else %}
-    {% if table_type != "DUPLICATE" %}
-      {% set msg -%}
+    {%- endif -%}
+  {%- else -%}
+    {%- if table_type != "DUPLICATE" -%}
+      {%- set msg -%}
         "{{ table_type }}" is must set "keys"
-      {%- endset %}
+      {%- endset -%}
       {{ exceptions.raise_compiler_error(msg) }}
-    {% endif %}
-  {% endif %}
+    {%- endif -%}
+  {% endif -%}
 
   {# 3. SET PARTITION #}
-  {{ starrocks__partition_by(partition_by, partition_by_init) }}
+  {%- if partition_by is not none -%}
+    {{ starrocks__partition_by(partition_by, partition_by_init) }}
+  {%- endif -%}
 
   {# 4. SET DISTRIBUTED #}
-  {% if distributed_by is not none %}
+  {%- if distributed_by is not none %}
     DISTRIBUTED BY HASH (
-      {% for item in distributed_by %}
-        {{ item }}{% if not loop.last %},{% endif %}
-      {% endfor %}
+      {%- for item in distributed_by -%}
+        {{ item }} {%- if not loop.last -%}, {%- endif -%}
+      {%- endfor -%}
     ) BUCKETS {{ buckets }}
-  {% else %}
-    {% set msg -%}
-      [distributed_by] is not set
-    {%- endset %}
+  {%- elif adapter.is_before_version("3.1.0") -%}
+    {%- set msg -%}
+      [distributed_by] must set before version 3.1, current version is {{ adapter.current_version() }}
+    {%- endset -%}
     {{ exceptions.raise_compiler_error(msg) }}
-  {% endif %}
+  {% endif -%}
 
   {# 4. SET PROPERTIES #}
-  {% if properties is not none %}
+  {%- if properties is not none %}
     PROPERTIES (
-      {% for key, value in properties.items() %}
-        "{{ key }}" = "{{ value }}"{% if not loop.last %},{% endif %}
-      {% endfor %}
+      {% for key, value in properties.items() -%}
+        "{{ key }}" = "{{ value }}"
+        {%- if not loop.last -%},
+        {% endif -%}
+      {%- endfor %}
     )
-  {% endif %}
+  {% endif -%}
 {%- endmacro %}
 
 {% macro starrocks__other_table() -%}
@@ -111,18 +115,18 @@
   {% endif %}
 {%- endmacro %}
 
-{% macro starrocks__partition_by(cols, init) -%}
-  {% if cols is not none %}
+{%- macro starrocks__partition_by(cols, init) -%}
+  {%- if cols is not none %}
     PARTITION BY RANGE (
-      {% for col in cols %}
-        {{ col }}{% if not loop.last %},{% endif %}
-      {% endfor %}
+      {%- for col in cols -%}
+        {{ col }} {%- if not loop.last -%}, {%- endif -%}
+      {%- endfor -%}
     )(
-      {% if init is not none %}
-        {% for row in init %}
-          {{ row }}{% if not loop.last %},{% endif %}
-        {% endfor %}
-      {% endif %}
+      {%- if init is not none -%}
+        {%- for row in init -%}
+          {{ row }} {%- if not loop.last -%}, {%- endif -%}
+        {%- endfor -%}
+      {%- endif -%}
     )
-  {% endif %}
-{%- endmacro %}
+  {% endif -%}
+{%- endmacro -%}

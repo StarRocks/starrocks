@@ -17,7 +17,7 @@ from setuptools import find_namespace_packages, setup
 
 package_name = "dbt-starrocks"
 # make sure this always matches dbt/adapters/starrocks/__version__.py
-package_version = "1.0.0"
+package_version = "1.1.0"
 description = """The starrocks adapter plugin for dbt"""
 
 setup(
@@ -25,13 +25,13 @@ setup(
     version=package_version,
     description=description,
     long_description=description,
-    author="fujianhj, long2ice",
-    author_email="fujianhj@gmail.com, long2ice@gmail.com",
+    author="fujianhj, long2ice, astralidea",
+    author_email="fujianhj@gmail.com, long2ice@gmail.com, astralidea@163.com",
     url="",
     packages=find_namespace_packages(include=['dbt', 'dbt.*']),
     include_package_data=True,
     install_requires=[
-        "dbt-core==1.1.0",
+        "dbt-core==1.5.2",
         "mysql-connector-python>=8.0.0,<8.1",
     ],
     zip_safe=False,
