@@ -33,6 +33,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.sql.SQLException;
+
 public class InsertOverwriteJobRunnerTest {
 
     private static ConnectContext connectContext;
@@ -128,5 +130,12 @@ public class InsertOverwriteJobRunnerTest {
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId());
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
         Assert.assertFalse(runner.isFinished());
+    }
+
+    @Test
+    public void testInsertOverwriteWithDuplicatePartitions() throws SQLException {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String sql = "insert overwrite t3 partitions(p1, p1) select * from t4";
+        cluster.runSql("insert_overwrite_test", sql);
     }
 }

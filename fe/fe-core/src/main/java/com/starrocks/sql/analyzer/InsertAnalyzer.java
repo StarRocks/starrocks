@@ -117,7 +117,7 @@ public class InsertAnalyzer {
                     "You need to use iceberg catalog.");
         }
 
-        List<Long> targetPartitionIds = Lists.newArrayList();
+        Set<Long> targetPartitionIds = Sets.newHashSet();
         PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
@@ -250,7 +250,7 @@ public class InsertAnalyzer {
         }
 
         insertStmt.setTargetTable(table);
-        insertStmt.setTargetPartitionIds(targetPartitionIds);
+        insertStmt.setTargetPartitionIds(Lists.newArrayList(targetPartitionIds));
         insertStmt.setTargetColumns(targetColumns);
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(database.getFullName(), table);
