@@ -167,13 +167,10 @@ struct HdfsScannerParams {
 
     bool use_block_cache = false;
     bool enable_populate_block_cache = false;
-<<<<<<< HEAD
-=======
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
->>>>>>> f373d57b3 ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
 };
 
 struct HdfsScannerContext {
@@ -227,13 +224,9 @@ struct HdfsScannerContext {
 
     HdfsScanStats* stats = nullptr;
 
-<<<<<<< HEAD
-    // set column names from file.
-=======
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
     // update materialized column against data file.
->>>>>>> f373d57b3 ([Enhancement] Optimize `select count(1)` query pattern for external table (#27299))
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
     void update_materialized_columns(const std::unordered_set<std::string>& names);
