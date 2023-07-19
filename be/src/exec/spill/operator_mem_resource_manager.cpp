@@ -35,9 +35,6 @@ void OperatorMemoryResourceManager::to_low_memory_mode() {
         if (_spillable) {
             _query_spill_manager->increase_spilling_operators();
         }
-        if (_op->releaseable()) {
-            set_releasing();
-        }
     }
 }
 
