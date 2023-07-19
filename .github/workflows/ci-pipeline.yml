@@ -70,6 +70,8 @@ jobs:
     runs-on: ubuntu-latest
     name: ADD DOC LABEL
     if: ${{ needs.doc-checker.outputs.output1 == 'true' }}
+    permissions:
+      issues: write
     steps:
       - name: add document label
         uses: actions-ecosystem/action-add-labels@v1
