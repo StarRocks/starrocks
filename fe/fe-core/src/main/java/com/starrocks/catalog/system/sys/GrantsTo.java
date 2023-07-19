@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.catalog.system.starrocks;
+package com.starrocks.catalog.system.sys;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
@@ -100,7 +100,7 @@ public class GrantsTo {
                 }
 
                 Map<ObjectType, List<PrivilegeEntry>> privileges =
-                        authorizationManager.getMergedTypeToPrivilegeEntryListByUser(userIdentity);
+                        authorizationManager.getTypeToPrivilegeEntryListByUser(userIdentity);
                 Set<TGetGrantsToRolesOrUserItem> items =
                         getGrantItems(authorizationManager, userIdentity.toString(), privileges);
                 items.forEach(tGetGrantsToRolesOrUserResponse::addToGrants_to);
