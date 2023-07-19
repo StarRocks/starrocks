@@ -252,6 +252,7 @@ public class LakeTable extends OlapTable {
         }
         return true;
     }
+<<<<<<< HEAD
 
     @Override
     public void inferDistribution(DistributionInfo info) throws DdlException {
@@ -259,4 +260,6 @@ public class LakeTable extends OlapTable {
             throw new DdlException("You must specify 'BUCKETS' in shared_data mode");
         }
     }
+=======
+>>>>>>> 4cd0521e7 ([BugFix]Update auto infer bucket num for cloudnative table, same with olap table (#27421))
 }
