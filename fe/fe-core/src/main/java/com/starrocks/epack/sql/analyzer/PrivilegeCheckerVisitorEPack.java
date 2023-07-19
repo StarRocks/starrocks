@@ -2,10 +2,8 @@
 
 package com.starrocks.epack.sql.analyzer;
 
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.epack.privilege.PrivilegeActionsEPack;
 import com.starrocks.epack.privilege.PrivilegeTypeEPack;
+import com.starrocks.epack.privilege.SystemAccessControlEPack;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
@@ -26,8 +24,8 @@ import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.privilege.SystemAccessControl;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.PrivilegeCheckerVisitor;
 import com.starrocks.sql.ast.AlterClause;
@@ -43,6 +41,9 @@ import java.util.Collections;
 import java.util.List;
 
 public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
+    public PrivilegeCheckerVisitorEPack(SystemAccessControl systemAccessControl) {
+        super(systemAccessControl);
+    }
 
     // ---------------------------------------- Table Statement ---------------------------------------
 
@@ -104,6 +105,71 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
         return null;
     }
 
+    // ---------------------------------------- Security Policy Statement ---------------------------------------------------
+
+    @Override
+    public Void visitCreatePolicyStatement(CreatePolicyStmt statement, ConnectContext context) {
+        PrivilegeType privilegeType = statement.getPolicyType().equals(PolicyType.MASKING) ?
+                PrivilegeTypeEPack.CREATE_MASKING_POLICY : PrivilegeTypeEPack.CREATE_ROW_ACCESS_POLICY;
+        systemAccessControl.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
+                privilegeType);
+        return null;
+    }
+
+    @Override
+    public Void visitDropPolicyStatement(DropPolicyStmt statement, ConnectContext context) {
+        ((SystemAccessControlEPack) systemAccessControl).checkPolicyAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getPolicyType(), statement.getPolicyName().getCatalog(),
+                statement.getPolicyName().getDbName(), statement.getPolicyName().getName(), PrivilegeType.DROP);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterPolicyStatement(AlterPolicyStmt statement, ConnectContext context) {
+        ((SystemAccessControlEPack) systemAccessControl).checkPolicyAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getPolicyType(),
+                statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
+                statement.getPolicyName().getName(), PrivilegeType.ALTER);
+        return null;
+    }
+
+    @Override
+    public Void visitShowPolicyStatement(ShowPolicyStmt statement, ConnectContext context) {
+        return visitShowStatement(statement, context);
+    }
+
+    @Override
+    public Void visitShowCreatePolicyStatement(ShowCreatePolicyStmt statement, ConnectContext context) {
+        ((SystemAccessControlEPack) systemAccessControl).checkAnyActionOnPolicy(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getPolicyType(),
+                statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
+                statement.getPolicyName().getName());
+        return null;
+    }
+
+    private void checkPolicyApply(List<WithColumnMaskingPolicy> withColumnMaskingPolicyMap,
+                                  List<WithRowAccessPolicy> withRowAccessPolicyList,
+                                  ConnectContext context) {
+        if (withColumnMaskingPolicyMap != null) {
+            for (WithColumnMaskingPolicy withColumnMaskingPolicy : withColumnMaskingPolicyMap) {
+                PolicyName policyName = withColumnMaskingPolicy.getPolicyName();
+                ((SystemAccessControlEPack) systemAccessControl).checkPolicyAction(context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(), PolicyType.MASKING, policyName.getCatalog(), policyName.getDbName(),
+                        policyName.getName(), PrivilegeTypeEPack.APPLY);
+            }
+        }
+
+        if (withRowAccessPolicyList != null) {
+            for (WithRowAccessPolicy withRowAccessPolicy : withRowAccessPolicyList) {
+                PolicyName policyName = withRowAccessPolicy.getPolicyName();
+                ((SystemAccessControlEPack) systemAccessControl).checkPolicyAction(context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(), PolicyType.ROW_ACCESS, policyName.getCatalog(), policyName.getDbName(),
+                        policyName.getName(), PrivilegeTypeEPack.APPLY);
+            }
+        }
+    }
+
     private void checkAlterClausePolicyApply(AlterClause alterClause, ConnectContext context) {
         if (alterClause instanceof ApplyMaskingPolicyClause) {
             ApplyMaskingPolicyClause applyMaskingPolicyClause = (ApplyMaskingPolicyClause) alterClause;
@@ -116,122 +182,40 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
         }
     }
 
-    private void checkPolicyApply(List<WithColumnMaskingPolicy> withColumnMaskingPolicyMap,
-                                  List<WithRowAccessPolicy> withRowAccessPolicyList,
-                                  ConnectContext context) {
-        if (withColumnMaskingPolicyMap != null) {
-            for (WithColumnMaskingPolicy withColumnMaskingPolicy : withColumnMaskingPolicyMap) {
-                PolicyName policyName = withColumnMaskingPolicy.getPolicyName();
-                if (!PrivilegeActionsEPack.checkPolicyAction(context, PolicyType.MASKING,
-                        policyName.getCatalog(), policyName.getDbName(), policyName.getName(),
-                        PrivilegeTypeEPack.APPLY)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "APPLY");
-                }
-            }
-        }
-
-        if (withRowAccessPolicyList != null) {
-            for (WithRowAccessPolicy withRowAccessPolicy : withRowAccessPolicyList) {
-                PolicyName policyName = withRowAccessPolicy.getPolicyName();
-                if (!PrivilegeActionsEPack.checkPolicyAction(context, PolicyType.ROW_ACCESS,
-                        policyName.getCatalog(), policyName.getDbName(), policyName.getName(),
-                        PrivilegeTypeEPack.APPLY)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "APPLY");
-                }
-            }
-        }
-    }
-
-    // ---------------------------------------- Security Policy Statement ---------------------------------------------------
-
-    @Override
-    public Void visitCreatePolicyStatement(CreatePolicyStmt statement, ConnectContext context) {
-        PrivilegeType privilegeType = statement.getPolicyType().equals(PolicyType.MASKING) ?
-                PrivilegeTypeEPack.CREATE_MASKING_POLICY : PrivilegeTypeEPack.CREATE_ROW_ACCESS_POLICY;
-        if (!PrivilegeActions.checkDbAction(context,
-                statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
-                privilegeType)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, privilegeType.name());
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitDropPolicyStatement(DropPolicyStmt statement, ConnectContext context) {
-        if (!PrivilegeActionsEPack.checkPolicyAction(context, statement.getPolicyType(),
-                statement.getPolicyName().getCatalog(),
-                statement.getPolicyName().getDbName(), statement.getPolicyName().getName(), PrivilegeType.DROP)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitAlterPolicyStatement(AlterPolicyStmt statement, ConnectContext context) {
-        if (!PrivilegeActionsEPack.checkPolicyAction(context, statement.getPolicyType(),
-                statement.getPolicyName().getCatalog(),
-                statement.getPolicyName().getDbName(), statement.getPolicyName().getName(), PrivilegeType.ALTER)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitShowPolicyStatement(ShowPolicyStmt statement, ConnectContext context) {
-        return visitShowStatement(statement, context);
-    }
-
-    @Override
-    public Void visitShowCreatePolicyStatement(ShowCreatePolicyStmt statement, ConnectContext context) {
-        if (!PrivilegeActionsEPack.checkAnyActionOnPolicy(context, statement.getPolicyType(),
-                statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
-                statement.getPolicyName().getName())) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ANY");
-        }
-        return null;
-    }
-
     // --------------------------------- Warehouse Statement ---------------------------------
     @Override
     public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
-        if (!PrivilegeActionsEPack.checkSystemAction(context, PrivilegeTypeEPack.CREATE_WAREHOUSE)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                    "CREATE WAREHOUSE");
-        }
+        systemAccessControl.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                PrivilegeTypeEPack.CREATE_WAREHOUSE);
         return null;
     }
 
     @Override
     public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
-        if (!PrivilegeActionsEPack.checkWarehouseAction(
-                context, statement.getWarehouseName(), PrivilegeType.ALTER)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
-        }
+        ((SystemAccessControlEPack) systemAccessControl).checkWarehouseAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getWarehouseName(),
+                PrivilegeType.ALTER);
         return null;
     }
 
     @Override
     public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
-        if (!PrivilegeActionsEPack.checkWarehouseAction(
-                context, statement.getWarehouseName(), PrivilegeType.ALTER)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
-        }
+        ((SystemAccessControlEPack) systemAccessControl).checkWarehouseAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getWarehouseName(),
+                PrivilegeType.ALTER);
         return null;
     }
 
     public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
-        if (!PrivilegeActionsEPack.checkWarehouseAction(
-                context, statement.getWarehouseName(), PrivilegeType.DROP)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
-        }
+        ((SystemAccessControlEPack) systemAccessControl).checkWarehouseAction(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getWarehouseName(),
+                PrivilegeType.DROP);
         return null;
     }
 
     public Void visitSetWarehouseStatement(SetWarehouseStmt statement, ConnectContext context) {
-        if (!PrivilegeActionsEPack.checkWarehouseAction(
-                context, statement.getWarehouseName(), PrivilegeType.USAGE)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USAGE");
-        }
+        ((SystemAccessControlEPack) systemAccessControl).checkWarehouseAction(
+                context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.USAGE);
         return null;
     }
 
@@ -242,9 +226,8 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
     }
 
     public Void visitShowClusterStatement(ShowClustersStmt statement, ConnectContext context) {
-        if (!PrivilegeActionsEPack.checkAnyActionOnWarehouse(context, statement.getWarehouseName())) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ANY");
-        }
+        ((SystemAccessControlEPack) systemAccessControl).checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getWarehouseName());
         return null;
     }
 

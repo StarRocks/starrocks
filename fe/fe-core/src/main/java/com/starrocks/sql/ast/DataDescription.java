@@ -38,10 +38,11 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
@@ -642,20 +643,18 @@ public class DataDescription implements ParseNode {
             throw new AnalysisException("No table name in load statement.");
         }
 
-        if (!PrivilegeActions.checkTableAction(ConnectContext.get(), fullDbName,
-                tableName, PrivilegeType.INSERT)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "INSERT",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(), tableName);
-        }
-        // check hive table auth
-        if (isLoadFromTable()) {
-            if (!PrivilegeActions.checkTableAction(ConnectContext.get(), fullDbName,
-                    srcTableName, PrivilegeType.SELECT)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(), srcTableName);
+        try {
+            PrivilegeChecker.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
+                    ConnectContext.get().getCurrentRoleIds(), fullDbName, tableName, PrivilegeType.INSERT);
+
+            if (isLoadFromTable()) {
+                PrivilegeChecker.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
+                        ConnectContext.get().getCurrentRoleIds(), fullDbName, srcTableName, PrivilegeType.SELECT);
             }
+        } catch (AccessDeniedException e) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT/INSERT",
+                    ConnectContext.get().getQualifiedUser(),
+                    ConnectContext.get().getRemoteIP(), srcTableName);
         }
     }
 
