@@ -24,7 +24,6 @@ import com.starrocks.common.InvalidConfException;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -48,7 +47,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public abstract class StorageVolumeMgr implements GsonPostProcessable {
+public abstract class StorageVolumeMgr {
     private static final String ENABLED = "enabled";
 
     public static final String DEFAULT = "default";
@@ -263,16 +262,12 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         this.storageVolumeToDbs = data.storageVolumeToDbs;
         this.storageVolumeToTables = data.storageVolumeToTables;
         this.defaultStorageVolumeId = data.defaultStorageVolumeId;
-    }
 
-    @Override
-    public void gsonPostProcess() throws IOException {
         for (Map.Entry<String, Set<Long>> entry : storageVolumeToDbs.entrySet()) {
             for (Long dbId : entry.getValue()) {
                 dbToStorageVolume.put(dbId, entry.getKey());
             }
         }
-
         for (Map.Entry<String, Set<Long>> entry : storageVolumeToTables.entrySet()) {
             for (Long tableId : entry.getValue()) {
                 tableToStorageVolume.put(tableId, entry.getKey());

@@ -25,6 +25,9 @@ import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.storagevolume.StorageVolume;
 import mockit.Expectations;
 import mockit.Mock;
@@ -36,11 +39,18 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
@@ -605,5 +615,41 @@ public class SharedDataStorageVolumeMgrTest {
         Config.azure_blob_path = "blob";
         Config.azure_blob_endpoint = "";
         Assert.assertThrows(InvalidConfException.class, () -> sdsvm.validateStorageVolumeConfig());
+    }
+
+    @Test
+    public void testSerialization() throws IOException, SRMetaBlockException,
+            SRMetaBlockEOFException, DdlException, AlreadyExistsException {
+        String svName = "test";
+        // create
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        String svId = svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        svm.setDefaultStorageVolume("test");
+        svm.bindDbToStorageVolume(svName, 1L);
+        svm.bindTableToStorageVolume(svName, 1L, 1L);
+        Map<String, Set<Long>> storageVolumeToDbs = svm.storageVolumeToDbs;
+        Map<String, Set<Long>> storageVolumeToTables = svm.storageVolumeToTables;
+        Map<Long, String> dbToStorageVolume = svm.dbToStorageVolume;
+        Map<Long, String> tableToStorageVolume = svm.tableToStorageVolume;
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(out);
+        svm.save(dos);
+
+        InputStream in = new ByteArrayInputStream(out.toByteArray());
+        DataInputStream dis = new DataInputStream(in);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        SharedDataStorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
+        svm1.load(reader);
+        Assert.assertEquals(svId, svm1.getDefaultStorageVolumeId());
+        Assert.assertEquals(storageVolumeToDbs, svm1.storageVolumeToDbs);
+        Assert.assertEquals(storageVolumeToTables, svm1.storageVolumeToTables);
+        Assert.assertEquals(dbToStorageVolume, svm1.dbToStorageVolume);
+        Assert.assertEquals(tableToStorageVolume, svm1.tableToStorageVolume);
     }
 }
