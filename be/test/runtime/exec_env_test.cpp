@@ -18,11 +18,11 @@
 
 namespace starrocks {
 
-TEST(ExecEnvTest, calc_query_mem_limit) {
-    ASSERT_EQ(ExecEnv::calc_max_query_memory(-1, 80), -1);
-    ASSERT_EQ(ExecEnv::calc_max_query_memory(1000000000, -2), 900000000);
-    ASSERT_EQ(ExecEnv::calc_max_query_memory(1000000000, 102), 900000000);
-    ASSERT_EQ(ExecEnv::calc_max_query_memory(1000000000, 70), 700000000);
+TEST(GlobalEnvTest, calc_query_mem_limit) {
+    ASSERT_EQ(GlobalEnv::calc_max_query_memory(-1, 80), -1);
+    ASSERT_EQ(GlobalEnv::calc_max_query_memory(1000000000, -2), 900000000);
+    ASSERT_EQ(GlobalEnv::calc_max_query_memory(1000000000, 102), 900000000);
+    ASSERT_EQ(GlobalEnv::calc_max_query_memory(1000000000, 70), 700000000);
 }
 
 } // namespace starrocks

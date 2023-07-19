@@ -249,15 +249,17 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
+    auto* global_env = starrocks::GlobalEnv::GetInstance();
+    EXIT_IF_ERROR(global_env->init());
+
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    EXIT_IF_ERROR(exec_env->init_mem_tracker());
 
     // Init and open storage engine.
     starrocks::EngineOptions options;
     options.store_paths = paths;
     options.backend_uid = starrocks::UniqueId::gen_uid();
-    options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
-    options.update_mem_tracker = exec_env->update_mem_tracker();
+    options.compaction_mem_tracker = global_env->compaction_mem_tracker();
+    options.update_mem_tracker = global_env->update_mem_tracker();
     options.need_write_cluster_id = !as_cn;
     starrocks::StorageEngine* engine = nullptr;
 

@@ -224,7 +224,7 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
         }                                                                                                \
     } while (0)
 #define SET_EXCEED_MEM_TRACKER() \
-    starrocks::tls_exceed_mem_tracker = starrocks::ExecEnv::GetInstance()->process_mem_tracker()
+    starrocks::tls_exceed_mem_tracker = starrocks::GlobalEnv::GetInstance()->process_mem_tracker()
 #define IS_BAD_ALLOC_CATCHED() starrocks::tls_thread_status.is_catched()
 #else
 std::atomic<int64_t> g_mem_usage(0);
