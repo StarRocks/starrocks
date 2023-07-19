@@ -6,13 +6,13 @@ Release date: July 18, 2023
 
 ### New Feature
 
-Queries can be rewritten even when the queries contain a different type of join compared with the materialized view of the base tables you want to query. [#25099](https://github.com/StarRocks/starrocks/pull/25099)
+Queries can be rewritten even when the queries contain a different type of join than the materialized view. [#25099](https://github.com/StarRocks/starrocks/pull/25099)
 
 ### Improvements
 
 - If the queried fields are not included in the output columns of a materialized view but are included in the predicate of the materialized view, the query can still be rewritten to benefit from the materialized view. [#23028](https://github.com/StarRocks/starrocks/issues/23028)
 - [When the SQL dialect (`sql_dialect`) is set to `trino`](../reference/System_variable.md), table aliases are not case-sensitive, and the json_array function is supported in queries. [#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
-- The table `Information_schema.tables_config` includes a new field `table_id`. You can join the table `tables_config` with the table `be_tablets` on the column `table_id` in the database `Information_schema` to query the names of the database and table to which a tablet belongs. [#24061](https://github.com/StarRocks/starrocks/pull/24061)
+- Added a new field `table_id` to the table `Information_schema.tables_config.` You can join the table `tables_config` with the table `be_tablets` on the column `table_id` in the database `Information_schema` to query the names of the database and table to which a tablet belongs. [#24061](https://github.com/StarRocks/starrocks/pull/24061)
 
 ### Bug Fixes
 
@@ -20,7 +20,7 @@ Fixed the following issues:
 
 - If a query that contains the sum aggregate function is rewritten to directly obtain query results from a single-table materialized view, the values in sum() field may be incorrect due to type inference issues. [#25512](https://github.com/StarRocks/starrocks/pull/25512)
 - An error occurs when SHOW PROC is used to view information about tablets in a StarRocks shared-data cluster.
-- The insert operation hangs when the length of CHAR data in a STRUCT to be inserted exceeds the maximum length. [#25942](https://github.com/StarRocks/starrocks/pull/25942)
+- The INSERT operation hangs when the length of CHAR data in a STRUCT to be inserted exceeds the maximum length. [#25942](https://github.com/StarRocks/starrocks/pull/25942)
 - Some data rows queried fail to be returned for INSERT INTO SELECT with FULL JOIN. [#26603](https://github.com/StarRocks/starrocks/pull/26603)
 - An error `ERROR xxx: Unknown table property xxx` occurs when the ALTER TABLE statement is used to modify the table's property `default.storage_medium`. [#25870](https://github.com/StarRocks/starrocks/issues/25870)
 - An error occurs when Broker Load is used to load empty files. [#26212](https://github.com/StarRocks/starrocks/pull/26212)
