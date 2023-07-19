@@ -21,13 +21,10 @@
 
 package com.starrocks.catalog;
 
-<<<<<<< HEAD
-import com.clearspring.analytics.util.Lists;
-=======
 import com.google.common.base.Joiner;
->>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
@@ -68,11 +65,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
     public static final int INVALID = -1;
 
-<<<<<<< HEAD
-=======
-    public static final String BINLOG_PROPERTY_PREFIX = "binlog";
-    public static final String BINLOG_PARTITION = "binlog_partition_";
-
     public enum QueryRewriteConsistencyMode {
         DISABLE,    // 0: disable query rewrite
         LOOSE,      // 1: enable query rewrite, and skip the partition version check
@@ -95,7 +87,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
->>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
@@ -246,20 +237,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-<<<<<<< HEAD
-=======
-    public TableProperty buildBinlogAvailableVersion() {
-        binlogAvailabeVersions = new HashMap<>();
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            if (entry.getKey().startsWith(BINLOG_PARTITION)) {
-                long partitionId = Long.parseLong(entry.getKey().split("_")[2]);
-                binlogAvailabeVersions.put(partitionId, Long.parseLong(entry.getValue()));
-            }
-        }
-        return this;
-    }
-
->>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
     public TableProperty buildReplicationNum() {
         replicationNum = Short.parseShort(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM,
                 String.valueOf(FeConstants.default_replication_num)));
@@ -348,15 +325,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-<<<<<<< HEAD
     public TableProperty buildStorageFormat() {
         storageFormat = TStorageFormat.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT,
                 TStorageFormat.DEFAULT.name()));
-=======
-    public TableProperty buildStorageVolume() {
-        storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
-                RunMode.allowCreateLakeTable() ? "default" : "local");
->>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
         return this;
     }
 
@@ -530,27 +501,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.foreignKeyConstraints = foreignKeyConstraints;
     }
 
-<<<<<<< HEAD
-=======
-    public Map<Long, Long> getBinlogAvailaberVersions() {
-        return binlogAvailabeVersions;
-    }
-
-    public PeriodDuration getDataCachePartitionDuration() {
-        return dataCachePartitionDuration;
-    }
-
-    public void clearBinlogAvailableVersion() {
-        binlogAvailabeVersions.clear();
-        for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext(); ) {
-            Map.Entry<String, String> entry = it.next();
-            if (entry.getKey().startsWith(BINLOG_PARTITION)) {
-                it.remove();
-            }
-        }
-    }
-
->>>>>>> 4277d9435f ([Enhancement] introduce loose query rewrite mode (#27280))
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));

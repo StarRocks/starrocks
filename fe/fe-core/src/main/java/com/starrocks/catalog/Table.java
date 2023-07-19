@@ -232,6 +232,10 @@ public class Table extends MetaObject implements Writable {
         return isOlapTable() || isLakeTable();
     }
 
+    public boolean isNativeTableOrMaterializedView() {
+        return isOlapOrLakeTable() || isMaterializedView();
+    }
+
     public List<Column> getFullSchema() {
         return fullSchema;
     }
