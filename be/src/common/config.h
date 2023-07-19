@@ -394,7 +394,7 @@ CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 CONF_mInt32(olap_table_sink_send_interval_ms, "10");
 
 CONF_mInt32(olap_table_sink_slow_rpc_threshold_us, "25000000");
-CONF_mInt32(olap_table_sink_slow_rpc_log_interval_ms, "1000")
+CONF_mInt32(olap_table_sink_slow_rpc_log_interval_ms, "1000");
 
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");

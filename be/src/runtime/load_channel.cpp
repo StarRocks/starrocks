@@ -59,7 +59,7 @@
 namespace starrocks {
 
 LoadChannelOpenTimeStat::LoadChannelOpenTimeStat()
-        : _tablets_channel_stat(std::make_shared<LocalTabletsChannelOpenTimeStat>()) {}
+        : _tablets_channel_stat(std::make_shared<TabletsChannelOpenTimeStat>()) {}
 
 std::string LoadChannelOpenTimeStat::to_string() {
     std::stringstream ss;
