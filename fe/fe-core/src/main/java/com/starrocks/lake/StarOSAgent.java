@@ -720,4 +720,16 @@ public class StarOSAgent {
             throw new DdlException("Failed to delete worker group. error: " + e.getMessage());
         }
     }
+
+    // dump all starmgr meta, for DEBUG purpose
+    public String dump() {
+        prepare();
+
+        try {
+            return client.dump();
+        } catch (StarClientException e) {
+            String str = "Fail to dump starmgr meta, " + e.getMessage();
+            return str;
+        }
+    }
 }

@@ -51,6 +51,7 @@ import com.starrocks.http.meta.ColocateMetaService;
 import com.starrocks.http.meta.GlobalDictMetaService;
 import com.starrocks.http.meta.MetaService.CheckAction;
 import com.starrocks.http.meta.MetaService.DumpAction;
+import com.starrocks.http.meta.MetaService.DumpStarMgrAction;
 import com.starrocks.http.meta.MetaService.ImageAction;
 import com.starrocks.http.meta.MetaService.InfoAction;
 import com.starrocks.http.meta.MetaService.JournalIdAction;
@@ -193,6 +194,7 @@ public class HttpServer {
         JournalIdAction.registerAction(controller, imageDir);
         CheckAction.registerAction(controller, imageDir);
         DumpAction.registerAction(controller, imageDir);
+        DumpStarMgrAction.registerAction(controller, imageDir);
         RoleAction.registerAction(controller, imageDir);
 
         // external usage
