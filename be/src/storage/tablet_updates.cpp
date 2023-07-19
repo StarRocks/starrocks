@@ -987,15 +987,14 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
 
-    auto failure_handler =
-            [&](const std::string& msg, bool remove_update_state) {
-                if (remove_update_state) {
-                    manager->update_state_cache().remove(state_entry);
-                }
-                manager->index_cache().remove(index_entry);
-                LOG(ERROR) << msg;
-                _set_error(msg);
-            }
+    auto failure_handler = [&](const std::string& msg, bool remove_update_state) {
+        if (remove_update_state) {
+            manager->update_state_cache().remove(state_entry);
+        }
+        manager->index_cache().remove(index_entry);
+        LOG(ERROR) << msg;
+        _set_error(msg);
+    };
     // empty rowset does not need to load in-memory primary index, so skip it
     if (rowset->has_data_files() || _tablet.get_enable_persistent_index()) {
         auto st = index.load(&_tablet);
