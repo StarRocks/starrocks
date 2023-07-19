@@ -377,7 +377,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | tablet_meta_checkpoint_min_new_rowsets_num            | 10          | N/A    | 自上次 TabletMeta Checkpoint 至今新创建的 rowset 数量。        |
 | tablet_meta_checkpoint_min_interval_secs              | 600         | second | TabletMeta Checkpoint 线程轮询的时间间隔。         |
 | max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个分区内部同时运行的最大事务数量。            |
-| tablet_max_pending_versions                           | 1000        | N/A    | PrimaryKey 表允许 committed 未 apply 的最大版本数。                 |
+| tablet_max_pending_versions                           | 1000        | N/A    | Primary Key 表每个 tablet 上允许已提交 (committed) 但是未 apply 的最大版本数。    |
+| tablet_max_versions                           | 1000        | N/A    | 每个 tablet 上允许的最大版本数。如果超过该值，新的写入请求会失败。     |
 | max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的 HDFS 文件句柄数量。                             |
 | parquet_buffer_stream_reserve_size                    | 1048576     | Byte   | Parquet reader在读取时为每个列预留的内存空间。                             |
 | internal_service_async_thread_num                     | 10          | N/A    | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。                             |
