@@ -262,11 +262,6 @@ public class LogicalJoinOperator extends LogicalOperator {
             return this;
         }
 
-        public Builder setRowOutputInfo(RowOutputInfo rowOutputInfo) {
-            builder.rowOutputInfo = rowOutputInfo;
-            return this;
-        }
-
         public Builder setOriginalOnPredicate(ScalarOperator originalOnPredicate) {
             builder.originalOnPredicate = originalOnPredicate;
             return this;
