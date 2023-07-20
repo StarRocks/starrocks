@@ -484,10 +484,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     .stream().map(Task::getId).collect(Collectors.toList());
             taskManager.dropTasks(dropTaskIdList, false);
 
-            // 5. unbind db from storage volume
-            StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-            storageVolumeMgr.unbindDbToStorageVolume(db.getId());
-
             DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
             GlobalStateMgr.getCurrentState().getEditLog().logDropDb(info);
 
@@ -538,8 +534,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.remove(dbName);
             idToDb.remove(db.getId());
-
-            stateMgr.getStorageVolumeMgr().unbindDbToStorageVolume(db.getId());
 
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
@@ -4472,6 +4466,8 @@ public class LocalMetastore implements ConnectorMetadata {
     public void onEraseDatabase(long dbId) {
         // remove database transaction manager
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
+        // unbind db to storage volume
+        stateMgr.getStorageVolumeMgr().unbindDbToStorageVolume(dbId);
     }
 
     public void onErasePartition(Partition partition) {
