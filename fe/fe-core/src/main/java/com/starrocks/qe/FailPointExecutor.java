@@ -93,7 +93,6 @@ public class FailPointExecutor {
         List<Pair<TNetworkAddress, Future<PUpdateFailPointStatusResponse>>> futures = Lists.newArrayList();
         for (TNetworkAddress address : backends) {
             try {
-                LOG.info("send request to " + address.getHostname() + ":" + address.getPort());
                 futures.add(Pair.create(address,
                         BackendServiceClient.getInstance().updateFailPointStatusAsync(address, request)));
             } catch (RpcException e) {
