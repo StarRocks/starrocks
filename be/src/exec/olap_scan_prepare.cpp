@@ -385,7 +385,7 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
     }
 
     // bloom runtime filter
-    for (const auto it : runtime_filters->descriptors()) {
+    for (const auto& it : runtime_filters->descriptors()) {
         const RuntimeFilterProbeDescriptor* desc = it.second;
         const JoinRuntimeFilter* rf = desc->runtime_filter();
         using RangeType = ColumnValueRange<RangeValueType>;
