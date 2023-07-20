@@ -285,11 +285,6 @@ public class LogicalJoinOperator extends LogicalOperator {
             return this;
         }
 
-        public Builder setRowOutputInfo(RowOutputInfo rowOutputInfo) {
-            this.rowOutputInfo = rowOutputInfo;
-            return this;
-        }
-
         public Builder setOriginalOnPredicate(ScalarOperator originalOnPredicate) {
             this.originalOnPredicate = originalOnPredicate;
             return this;
