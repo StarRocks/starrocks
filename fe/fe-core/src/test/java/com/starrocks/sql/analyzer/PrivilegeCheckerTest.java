@@ -2868,14 +2868,18 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testWarehouse() throws Exception {
-        Config.run_mode = "shared_data";
-        RunMode.detectRunMode();
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
 
         verifyGrantRevoke(
                 "create warehouse wbb",
                 "grant create warehouse on system to test",
                 "revoke create warehouse on system from test",
-                "Access denied; you need (at least one of) the CREATE WAREHOUSE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the CREATE WAREHOUSE privilege(s) on SYSTEM for this operation");
 
         new MockUp<WarehouseManager>() {
             @Mock
@@ -2888,35 +2892,32 @@ public class PrivilegeCheckerTest {
                 "suspend warehouse waa",
                 "grant alter on warehouse waa to test",
                 "revoke alter on warehouse waa from test",
-                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE waa for this operation");
 
         verifyGrantRevoke(
                 "resume warehouse waa",
                 "grant alter on warehouse waa to test",
                 "revoke alter on warehouse waa from test",
-                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+                "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE waa for this operation");
 
         verifyGrantRevoke(
                 "drop warehouse waa",
                 "grant drop on warehouse waa to test",
                 "revoke drop on warehouse waa from test",
-                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+                "Access denied; you need (at least one of) the DROP privilege(s) on WAREHOUSE waa for this operation");
 
         verifyGrantRevoke(
                 "set warehouse waa",
                 "grant USAGE on warehouse waa to test",
                 "revoke USAGE on warehouse waa from test",
-                "Access denied; you need (at least one of) the USAGE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the USAGE privilege(s) on WAREHOUSE waa for this operation");
 
         // test all warehouses
         verifyGrantRevoke(
                 "drop warehouse waa",
                 "grant drop on all warehouses to test",
                 "revoke drop on all warehouses from test",
-                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
-
-        Config.run_mode = "shared_nothing";
-        RunMode.detectRunMode();
+                "Access denied; you need (at least one of) the DROP privilege(s) on WAREHOUSE waa for this operation");
     }
 
     @Test
