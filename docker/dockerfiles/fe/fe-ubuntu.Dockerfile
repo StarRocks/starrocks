@@ -43,3 +43,12 @@ COPY docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
 
 # Create directory for FE metadata
 RUN touch /.dockerenv && mkdir -p /opt/starrocks/fe/meta
+
+# Run as starrocks user
+ARG USER=starrocks
+ARG GROUP=starrocks
+RUN groupadd --gid 1000 $GROUP && useradd --home-dir /nonexistent --uid 1000 --gid 1000 \
+             --shell /usr/sbin/nologin $USER  \
+    && chown -R $USER:$GROUP /opt/starrocks
+USER $USER
+ENV USER $USER
