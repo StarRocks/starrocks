@@ -3,27 +3,59 @@
 This project is **under development**.
 
 
-The `dbt-starrocks` package contains all of the code enabling dbt to work with a StarRocks database. For
-more information on using dbt with StarRocks.
+The `dbt-starrocks` package contains all the code enabling [dbt](https://getdbt.com) to work with [StarRocks](https://www.starrocks.io).
 
-## Getting started
-Configuration your envs:
+This is an experimental plugin:
+- We have not tested it extensively
+- Requirements at least StarRocks version 2.5.0+  
+  - version 3.1.x is recommended
+  - Previous versions will no longer support
 
-- Python: 3.7.4+
-- StarRocks: 2.5.0+ (Previous versions will no longer support)
-- DBT: 1.5.2
 
-Install the `dbt-starrocks` into the `plugin` directory, and
-```
-  pip install .
-```
+## Installation
 
-Create your project:
-```
-  dbt init
+This plugin can be installed via pip:
+
+```shell
+$ pip install dbt-starrocks
 ```
 
-## Basic Example
+## Supported features
+### Notice
+1. When StarRocks Version < 2.5, `Create table as` can only set engine='OLAP' and table_type='DUPLICATE'
+2. When StarRocks Version >= 2.5, `Create table as` support table_type='PRIMARY'
+3. When StarRocks Version < 3.1 distributed_by is must
+
+## Profile Configuration
+
+**Example entry for profiles.yml:**
+
+```
+starrocks:
+  target: dev
+  outputs:
+    dev:
+      type: starrocks
+      host: localhost
+      port: 9030
+      schema: analytics
+      username: your_starrocks_username
+      password: your_starrocks_password
+```
+
+| Option   | Description                                            | Required? | Example                        |
+|----------|--------------------------------------------------------|-----------|--------------------------------|
+| type     | The specific adapter to use                            | Required  | `starrocks`                    |
+| host     | The hostname to connect to                             | Required  | `192.168.100.28`               |
+| port     | The port to use                                        | Required  | `9030`                         |
+| schema   | Specify the schema (database) to build models into     | Required  | `analytics`                    |
+| username | The username to use to connect to the server           | Required  | `dbt_admin`                    |
+| password | The password to use for authenticating to the server   | Required  | `correct-horse-battery-staple` |
+| version  | Let Plugin try to go to a compatible starrocks version | Optional  | `3.1.0`                        |
+
+
+## Example
+
 ### dbt seed properties(yml):
 #### Complete configuration:
 ```
@@ -54,7 +86,5 @@ config:
 ## Test Adapter
 consult [the project](https://github.com/dbt-labs/dbt-adapter-tests)
 
-## Notice
-1. When StarRocks Version < 2.5, `Create table as` can only set engine='OLAP' and table_type='DUPLICATE'
-2. When StarRocks Version >= 2.5, `Create table as` support table_type='PRIMARY'
-3. When StarRocks Version < 3.1 distributed_by is must
+## Contributing
+Welcome to contribute for dbt-starrocks. See [Contributing Guide](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) for more information.

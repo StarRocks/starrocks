@@ -13,21 +13,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import sys
+
+if sys.version_info < (3, 7) or sys.version_info >= (3, 11):
+    print("Error: dbt-starrocks does not support this version of Python.")
+    print("Please install Python 3.7 or higher but less than 3.11.")
+    sys.exit(1)
+
 from setuptools import find_namespace_packages, setup
+
+try:
+    from setuptools import find_namespace_packages
+except ImportError:
+    # the user has a downlevel version of setuptools.
+    print("Error: dbt requires setuptools v40.1.0 or higher.")
+    print(
+        'Please upgrade setuptools with "pip install --upgrade setuptools" '
+        "and try again"
+    )
+    sys.exit(1)
+
+# pull long description from README
+this_directory = os.path.abspath(os.path.dirname(__file__))
+with open(os.path.join(this_directory, "README.md")) as f:
+    long_description = f.read()
 
 package_name = "dbt-starrocks"
 # make sure this always matches dbt/adapters/starrocks/__version__.py
-package_version = "1.1.0"
-description = """The starrocks adapter plugin for dbt"""
+package_version = "1.1.1"
+description = """The Starrocks adapter plugin for dbt"""
+
 
 setup(
     name=package_name,
     version=package_version,
     description=description,
-    long_description=description,
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     author="fujianhj, long2ice, astralidea",
     author_email="fujianhj@gmail.com, long2ice@gmail.com, astralidea@163.com",
-    url="",
+    url="https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector",
     packages=find_namespace_packages(include=['dbt', 'dbt.*']),
     include_package_data=True,
     install_requires=[
@@ -47,6 +73,7 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        "Programming Language :: Python :: 3.10",
     ],
-    python_requires=">=3.7,<3.10",
+    python_requires=">=3.7,<=3.10",
 )
