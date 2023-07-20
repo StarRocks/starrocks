@@ -38,7 +38,6 @@ public class ShowCreateRoutineLoadStmt extends ShowStmt {
         this.labelName = labelName;
     }
 
-    // 返回的是jobName
     public String getName() {
         return labelName.getLabelName();
     }
