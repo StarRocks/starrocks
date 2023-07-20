@@ -23,13 +23,16 @@
 #include "util/cpu_info.h"
 
 namespace starrocks {
+const int MIN_FINISH_PUBLISH_WORKER_COUNT = 8;
 
 Status PublishVersionManager::init() {
     int max_thread_count = config::transaction_publish_version_worker_count;
     if (max_thread_count <= 0) {
         max_thread_count = CpuInfo::num_cores();
     }
+    max_thread_count = std::max(max_thread_count, MIN_FINISH_PUBLISH_WORKER_COUNT);
     RETURN_IF_ERROR(ThreadPoolBuilder("finish_publish_version")
+                            .set_min_threads(MIN_FINISH_PUBLISH_WORKER_COUNT)
                             .set_max_threads(max_thread_count)
                             .build(&_finish_publish_version_thread_pool));
     return Status::OK();
@@ -131,7 +134,6 @@ void PublishVersionManager::update_tablet_version(TFinishTaskRequest& finish_tas
 }
 
 Status PublishVersionManager::submit_finish_task() {
-    auto token = _finish_publish_version_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     std::vector<int64_t> erase_finish_task_signature;
     std::vector<int64_t> erase_waitting_finish_task_signature;
     {
@@ -139,26 +141,28 @@ Status PublishVersionManager::submit_finish_task() {
         Status st;
         for (auto& [signature, finish_task_request] : _finish_task_requests) {
             // submit finish task
-            st = token->submit_func([this, finish_request = std::move(finish_task_request)]() mutable {
-                update_tablet_version(finish_request);
+            st = _finish_publish_version_thread_pool->submit_func(
+                    [this, finish_request = std::move(finish_task_request)]() mutable {
+                        update_tablet_version(finish_request);
 #ifndef BE_TEST
-                finish_task(finish_request);
+                        finish_task(finish_request);
 #endif
-                remove_task_info(finish_request.task_type, finish_request.signature);
-            });
+                        remove_task_info(finish_request.task_type, finish_request.signature);
+                    });
             erase_finish_task_signature.emplace_back(signature);
         }
 
         std::vector<int64_t> clear_txn;
         for (auto& [signature, finish_task_request] : _waitting_finish_task_requests) {
             if (_left_task_applied(finish_task_request)) {
-                st = token->submit_func([this, finish_request = std::move(finish_task_request)]() mutable {
-                    update_tablet_version(finish_request);
+                st = _finish_publish_version_thread_pool->submit_func(
+                        [this, finish_request = std::move(finish_task_request)]() mutable {
+                            update_tablet_version(finish_request);
 #ifndef BE_TEST
-                    finish_task(finish_request);
+                            finish_task(finish_request);
 #endif
-                    remove_task_info(finish_request.task_type, finish_request.signature);
-                });
+                            remove_task_info(finish_request.task_type, finish_request.signature);
+                        });
                 erase_waitting_finish_task_signature.emplace_back(signature);
             }
         }
