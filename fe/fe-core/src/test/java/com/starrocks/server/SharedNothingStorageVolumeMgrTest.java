@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.persist.DropStorageVolumeLog;
@@ -45,7 +46,7 @@ public class SharedNothingStorageVolumeMgrTest {
     private EditLog editLog;
 
     @Test
-    public void testStorageVolumeCRUD() throws AlreadyExistsException, DdlException {
+    public void testStorageVolumeCRUD() throws AlreadyExistsException, DdlException, MetaNotFoundException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public EditLog getEditLog() {
@@ -143,12 +144,8 @@ public class SharedNothingStorageVolumeMgrTest {
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("default storage volume can not be removed"));
         }
-        try {
-            svm.removeStorageVolume(svName1);
-            Assert.fail();
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
-        }
+        Throwable ex = Assert.assertThrows(MetaNotFoundException.class, () -> svm.removeStorageVolume(svName1));
+        Assert.assertEquals("Storage volume 'test1' does not exist", ex.getMessage());
 
         svm.createStorageVolume(svName1, "S3", locations, storageParams, Optional.empty(), "");
         svm.updateStorageVolume(svName1, storageParams, Optional.empty(), "test update");

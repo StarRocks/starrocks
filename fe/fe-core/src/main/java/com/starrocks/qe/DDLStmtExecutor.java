@@ -890,9 +890,17 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitDropStorageVolumeStatement(DropStorageVolumeStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getStorageVolumeMgr().removeStorageVolume(stmt)
-            );
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getStorageVolumeMgr().removeStorageVolume(stmt);
+                } catch (MetaNotFoundException e) {
+                    if (stmt.isSetIfExists()) {
+                        LOG.info("drop storage volume[{}] which does not exist", stmt.getName());
+                    } else {
+                        throw e;
+                    }
+                }
+            });
             return null;
         }
 
