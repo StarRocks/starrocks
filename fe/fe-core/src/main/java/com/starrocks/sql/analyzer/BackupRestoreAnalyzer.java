@@ -307,19 +307,19 @@ public class BackupRestoreAnalyzer {
             }
         }
 
-        OlapTable olapTbl = null;
+
         if (tbl instanceof OlapTable) {
-            olapTbl = (OlapTable) tbl;
-            PartitionInfo partitionInfo = olapTbl.getPartitionInfo();
+            PartitionInfo partitionInfo = ((OlapTable) tbl).getPartitionInfo();
             if (partitionInfo instanceof ListPartitionInfo) {
                 throw new SemanticException("List partition table does not support backup/restore job");
             }
         }
 
-        if (olapTbl != null && partitionNames != null) {
+        if (partitionNames != null) {
             if (!tbl.isOlapOrCloudNativeTable()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
             }
+            OlapTable olapTbl = (OlapTable) tbl;
             for (String partName : tableRef.getPartitionNames().getPartitionNames()) {
                 Partition partition = olapTbl.getPartition(partName);
                 if (partition == null) {
