@@ -221,7 +221,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
     | Parameter                       | Description                                                  |
     | ------------------------------- | ------------------------------------------------------------ |
-    | hadoop.security.authentication  | The authentication method. Valid values: `simple` and `kerberos`. Default value: `simple`. `simple` represents simple authentication, meaning no authentication, and `kerberos` represents Kerberos authentication. |
+    | hadoop.security.authentication  | The authentication method. Valid values: `simple` and `kerberos`. Default value: `simple`. `simple` represents simple authentication, meaning no authentication, and `kerberos` represents Kerberos authentication. Note that from v2.5 onwards, StarRocks uses broker-free loading, and do not specify `"hadoop.security.authentication" = "simple"` if you choose the simple authentication method. |
     | username                        | The username of the account that you want to use to access the NameNode of the HDFS cluster. |
     | password                        | The password of the account that you want to use to access the NameNode of the HDFS cluster. |
 
