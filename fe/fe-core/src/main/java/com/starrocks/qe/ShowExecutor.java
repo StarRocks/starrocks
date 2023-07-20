@@ -142,6 +142,7 @@ import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.HelpStmt;
+import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -160,6 +161,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -291,6 +293,8 @@ public class ShowExecutor {
             handleShowLoad();
         } else if (stmt instanceof ShowRoutineLoadStmt) {
             handleShowRoutineLoad();
+        } else if (stmt instanceof ShowCreateRoutineLoadStmt) {
+            handleShowCreateRoutineLoad();
         } else if (stmt instanceof ShowRoutineLoadTaskStmt) {
             handleShowRoutineLoadTask();
         } else if (stmt instanceof ShowStreamLoadStmt) {
@@ -1379,6 +1383,71 @@ public class ShowExecutor {
         }
 
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
+    }
+
+    private void handleShowCreateRoutineLoad() throws AnalysisException {
+        ShowCreateRoutineLoadStmt showCreateRoutineLoadStmt = (ShowCreateRoutineLoadStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+        List<RoutineLoadJob> routineLoadJobList;
+        try {
+            routineLoadJobList = GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
+                    .getJob(showCreateRoutineLoadStmt.getDbFullName(),
+                            showCreateRoutineLoadStmt.getName(),
+                            false);
+        } catch (MetaNotFoundException e) {
+            LOG.warn(e.getMessage(), e);
+            throw new AnalysisException(e.getMessage());
+        }
+        if (routineLoadJobList == null || routineLoadJobList.size() == 0) {
+            resultSet = new ShowResultSet(showCreateRoutineLoadStmt.getMetaData(), rows);
+            return;
+        }
+        RoutineLoadJob routineLoadJob = routineLoadJobList.get(0);
+        if (routineLoadJob.getDataSourceTypeName().equals("PULSAR")) {
+            throw new AnalysisException("not support pulsar datasource");
+        }
+        StringBuilder createRoutineLoadSql = new StringBuilder();
+        try {
+            createRoutineLoadSql.append("CREATE ROUTINE LOAD ").append(showCreateRoutineLoadStmt.getName())
+                    .append(" on ").append(routineLoadJob.getTableName());
+        } catch (MetaNotFoundException e) {
+            LOG.warn(e.getMessage(), e);
+            throw new AnalysisException(e.getMessage());
+        }
+
+        if (routineLoadJob.getColumnSeparator() != null) {
+            createRoutineLoadSql.append("\n COLUMNS TERMINATED BY ")
+                    .append(routineLoadJob.getColumnSeparator().toSql(true));
+        }
+
+        if (routineLoadJob.getColumnDescs() != null) {
+            createRoutineLoadSql.append("\nCOLUMNS (");
+            List<ImportColumnDesc> descs = routineLoadJob.getColumnDescs();
+            for (int i = 0; i < descs.size(); i++) {
+                ImportColumnDesc desc = descs.get(i);
+                createRoutineLoadSql.append(desc.toString());
+                if (descs.size() == 1 || i == descs.size() - 1) {
+                    createRoutineLoadSql.append(")\n");
+                } else {
+                    createRoutineLoadSql.append(", ");
+                }
+            }
+        }
+        if (routineLoadJob.getPartitions() != null) {
+            createRoutineLoadSql.append("\n")
+                            .append(routineLoadJob.getPartitions().toString()).append("\n");
+        }
+        if (routineLoadJob.getWhereExpr() != null) {
+            createRoutineLoadSql.append("\n")
+                    .append(routineLoadJob.getWhereExpr().toSql()).append("\n");
+        }
+
+        createRoutineLoadSql.append("\nPROPERTIES\n").append(routineLoadJob.jobPropertiesToSql());
+        createRoutineLoadSql.append("FROM ").append(routineLoadJob.getDataSourceTypeName()).append("\n");
+        createRoutineLoadSql.append(routineLoadJob.dataSourcePropertiesToSql());
+        createRoutineLoadSql.append(";");
+        rows.add(Lists.newArrayList(showCreateRoutineLoadStmt.getName(), createRoutineLoadSql.toString()));
+        resultSet = new ShowResultSet(showCreateRoutineLoadStmt.getMetaData(), rows);
     }
 
     private void handleShowRoutineLoad() throws AnalysisException {

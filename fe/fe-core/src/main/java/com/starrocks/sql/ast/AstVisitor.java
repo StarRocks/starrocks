@@ -343,6 +343,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitShowCreateRoutineLoadStatement(ShowCreateRoutineLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, C context) {
         return visitShowStatement(statement, context);
     }

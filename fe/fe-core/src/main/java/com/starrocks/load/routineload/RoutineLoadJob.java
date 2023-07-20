@@ -95,6 +95,7 @@ import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1536,6 +1537,73 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         return gson.toJson(jobProperties);
     }
 
+    public String jobPropertiesToSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("(\n");
+        sb.append("\"").append(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY).append("\"=\"");
+        sb.append(String.valueOf(desireTaskConcurrentNum)).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY).append("\"=\"");
+        sb.append(String.valueOf(maxErrorNum)).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY).append("\"=\"");
+        sb.append(String.valueOf(maxFilterRatio)).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY).append("\"=\"");
+        sb.append(String.valueOf(taskSchedIntervalS)).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY).append("\"=\"");
+        sb.append(String.valueOf(maxBatchRows)).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.TASK_CONSUME_SECOND).append("\"=\"");
+        sb.append(String.valueOf(taskConsumeSecond)).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND).append("\"=\"");
+        sb.append(String.valueOf(taskTimeoutSecond)).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.FORMAT).append("\"=\"");
+        sb.append(getFormat()).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.JSONPATHS).append("\"=\"");
+        sb.append(getJsonPaths()).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY).append("\"=\"");
+        sb.append(Boolean.toString(isStripOuterArray())).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
+        sb.append(getJsonRoot()).append("\",\n");
+
+        sb.append("\"").append(LoadStmt.STRICT_MODE).append("\"=\"");
+        sb.append(Boolean.toString(isStrictMode())).append("\",\n");
+
+        sb.append("\"").append(LoadStmt.TIMEZONE).append("\"=\"");
+        sb.append(getTimezone()).append("\",\n");
+
+        sb.append("\"").append(LoadStmt.PARTIAL_UPDATE).append("\"=\"");
+        sb.append(Boolean.toString(isPartialUpdate())).append("\",\n");
+
+        if (getMergeCondition() != null) {
+            sb.append("\"").append(LoadStmt.MERGE_CONDITION).append("\"=\"");
+            sb.append(getMergeCondition()).append("\",\n");
+        }
+
+        sb.append("\"").append(CreateRoutineLoadStmt.TRIMSPACE).append("\"=\"");
+        sb.append(Boolean.toString(isTrimspace())).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.ENCLOSE).append("\"=\"");
+        sb.append(StringEscapeUtils.escapeJava(String.valueOf(enclose))).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.ESCAPE).append("\"=\"");
+        sb.append(StringEscapeUtils.escapeJava(String.valueOf(escape))).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.LOG_REJECTED_RECORD_NUM_PROPERTY).append("\"=\"");
+        sb.append(String.valueOf(getLogRejectedRecordNum())).append("\"\n");
+
+        sb.append(")\n");
+        return sb.toString();
+    }
+
+    public abstract String dataSourcePropertiesToSql();
     abstract String dataSourcePropertiesJsonToString();
 
     abstract String customPropertiesJsonToString();
