@@ -560,7 +560,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
             std::unique_ptr<Column> new_write_column =
                     _partial_update_states[segment_id].write_columns[col_idx]->clone_empty();
             new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
-            RETURN_IF_ERROR(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
+            RETURN_IF_EXCEPTION(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
                     *new_write_column, conflict_idxes.data()));
         }
     }
