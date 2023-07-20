@@ -140,7 +140,8 @@ public class ColumnStatistic {
         String typeString = endIndex == columnStatistic.length() - 1 ? "" : columnStatistic.substring(endIndex + 2);
 
         String[] valueArray = valueString.split(",");
-        Preconditions.checkState(valueArray.length == 5);
+        Preconditions.checkState(valueArray.length == 5,
+                "statistic value: %s is illegal", valueString);
 
         Builder builder = new Builder(Double.parseDouble(valueArray[0]), Double.parseDouble(valueArray[1]),
                 Double.parseDouble(valueArray[2]), Double.parseDouble(valueArray[3]),
