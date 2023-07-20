@@ -673,19 +673,17 @@ public class SharedDataStorageVolumeMgrTest {
     public void testGetTableBindingsOfBuiltinStorageVolume() {
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public List<Long> getDbIds() {
+            public List<Long> getDbIdsIncludeRecycleBin() {
                 return Arrays.asList(1L);
             }
 
             @Mock
-            public Database getDb(long dbId) {
+            public Database getDbIncludeRecycleBin(long dbId) {
                 return new Database(dbId, "");
             }
-        };
 
-        new MockUp<Database>() {
             @Mock
-            public List<Table> getTables() {
+            public List<Table> getTablesIncludeRecycleBin(Database db) {
                 long dbId = 1L;
                 long tableId = 2L;
                 long partitionId = 3L;
