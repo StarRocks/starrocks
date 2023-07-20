@@ -2092,7 +2092,7 @@ TEST_F(OrcChunkReaderTest, get_file_schema) {
               {"col_char", TYPE_CHAR},
               {"col_varchar", TYPE_VARCHAR},
               {"col_binary", TYPE_VARBINARY},
-              {"col_decimal", TYPE_DECIMAL64},
+              {"col_decimal", TYPE_DECIMAL128},
               {"col_timestamp", TYPE_DATETIME},
               {"col_date", TYPE_DATE}}}};
 
