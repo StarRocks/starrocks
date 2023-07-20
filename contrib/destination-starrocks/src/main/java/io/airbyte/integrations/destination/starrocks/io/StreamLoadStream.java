@@ -1,6 +1,4 @@
 /*
- * Copyright 2021-present StarRocks, Inc. All rights reserved.
- * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -10,8 +8,6 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
@@ -139,9 +135,9 @@ public class StreamLoadStream extends InputStream {
         if (recordIter.hasNext()) {
             AirbyteRecordMessage record = recordIter.next();
             return String.format(CsvFormat.LINE_PATTERN,
-                    UUID.randomUUID(),
                     record.getEmittedAt(),
-                Jsons.serialize(record.getData())).getBytes(StandardCharsets.UTF_8);
+                    UUID.randomUUID(),
+                    Jsons.serialize(record.getData())).getBytes(StandardCharsets.UTF_8);
         } else {
             endStream = true;
             return CsvFormat.LINE_DELIMITER_BYTE;
