@@ -16,6 +16,8 @@ package com.starrocks.server;
 
 import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -304,6 +306,25 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                         "The configuration item \"cloud_native_storage_type = %s\" is invalid, must be HDFS or S3 or AZBLOB.",
                         Config.cloud_native_storage_type));
         }
+    }
+
+    @Override
+    protected Set<Long> getTableBindingsOfBuiltinStorageVolume() {
+        Set<Long> tableIds = new HashSet<>();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            db.readLock();
+            List<Table> tables = db.getTables();
+            for (Table table : tables) {
+                Long tableId = table.getId();
+                if (!tableToStorageVolume.containsKey(tableId) && table.isCloudNativeTableOrMaterializedView()) {
+                    tableIds.add(tableId);
+                }
+            }
+            db.readUnlock();
+        }
+        return tableIds;
     }
 
     private String[] getBucketAndPrefix() {
