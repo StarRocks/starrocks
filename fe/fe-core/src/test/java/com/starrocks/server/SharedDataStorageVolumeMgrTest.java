@@ -19,6 +19,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
@@ -133,7 +134,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testStorageVolumeCRUD() throws AlreadyExistsException, DdlException {
+    public void testStorageVolumeCRUD() throws AlreadyExistsException, DdlException, MetaNotFoundException {
         new Expectations() {
             {
                 editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
@@ -217,12 +218,9 @@ public class SharedDataStorageVolumeMgrTest {
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("default storage volume can not be removed"));
         }
-        try {
-            svm.removeStorageVolume(svName1);
-            Assert.fail();
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
-        }
+
+        ex = Assert.assertThrows(MetaNotFoundException.class, () -> svm.removeStorageVolume(svName1));
+        Assert.assertEquals("Storage volume 'test1' does not exist", ex.getMessage());
 
         svm.createStorageVolume(svName1, "S3", locations, storageParams, Optional.of(false), "");
         svm.updateStorageVolume(svName1, storageParams, Optional.of(true), "test update");
@@ -234,7 +232,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testBindAndUnbind() throws DdlException, AlreadyExistsException {
+    public void testBindAndUnbind() throws DdlException, AlreadyExistsException, MetaNotFoundException {
         String svName = "test";
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         List<String> locations = Arrays.asList("s3://abc");
@@ -294,7 +292,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testCreateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
+    public void testCreateBuiltinStorageVolume() throws DdlException, AlreadyExistsException, MetaNotFoundException {
         new Expectations() {
             {
                 editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
