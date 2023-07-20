@@ -194,6 +194,15 @@ public class PseudoCluster {
         }
 
         @Override
+        public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+            List<Long> nodeIds = new ArrayList<>();
+            for (Worker worker : workers) {
+                nodeIds.add(worker.backendId);
+            }
+            return nodeIds;
+        }
+
+        @Override
         public long getWorkerIdByBackendId(long backendId) {
             Optional<Worker> worker = workers.stream().filter(w -> w.backendId == backendId).findFirst();
             return worker.map(value -> value.workerId).orElse(-1L);

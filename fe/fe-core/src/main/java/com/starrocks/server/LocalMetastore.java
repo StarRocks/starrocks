@@ -1638,11 +1638,26 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-        int numAliveBackends = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            numAliveBackends += GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+        int numAliveNodes = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        // TODO: need pass warehouse after, mayhe route the request to wrong warehouse
+        String currentWarehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (ConnectContext.get() != null) {
+            currentWarehouseName = ConnectContext.get().getCurrentWarehouse();
         }
-        if (numAliveBackends == 0) {
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            numAliveNodes = 0;
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWarehouseName);
+            if (warehouse == null) {
+                throw new DdlException("Warehouse " + currentWarehouseName + " not exist！");
+            }
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                if (GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId).isAlive()) {
+                    ++numAliveNodes;
+                }
+            }
+        }
+        if (numAliveNodes == 0) {
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 throw new DdlException("no alive compute nodes");
             } else {
@@ -1655,10 +1670,17 @@ public class LocalMetastore implements ConnectorMetadata {
             numReplicas += partition.getReplicaCount();
         }
 
-        if (numReplicas > Config.create_table_max_serial_replicas) {
-            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
+        if (partitions.size() >= 3 && numAliveNodes >= 3 && numReplicas >= numAliveNodes * 500) {
+            LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
+            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveNodes, currentWarehouseName);
+        } else if (numAliveNodes > 0) {
+            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveNodes, currentWarehouseName);
         } else {
-            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                throw new DdlException("no alive compute nodes");
+            } else {
+                throw new DdlException("no alive backends");
+            }
         }
     }
 
@@ -1671,7 +1693,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void buildPartitionsSequentially(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
-                                             int numBackends) throws DdlException {
+                                             int numBackends, String warehouseName) throws DdlException {
         // Try to bundle at least 200 CreateReplicaTask's in a single AgentBatchTask.
         // The number 200 is just an experiment value that seems to work without obvious problems, feel free to
         // change it if you have a better choice.
@@ -1679,7 +1701,7 @@ public class LocalMetastore implements ConnectorMetadata {
         int partitionGroupSize = Math.max(1, numBackends * 200 / Math.max(1, avgReplicasPerPartition));
         for (int i = 0; i < partitions.size(); i += partitionGroupSize) {
             int endIndex = Math.min(partitions.size(), i + partitionGroupSize);
-            List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partitions.subList(i, endIndex));
+            List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partitions.subList(i, endIndex), warehouseName);
             int partitionCount = endIndex - i;
             int indexCountPerPartition = partitions.get(i).getVisibleMaterializedIndicesCount();
             int timeout = Config.tablet_create_timeout_second * countMaxTasksPerBackend(tasks);
@@ -1698,7 +1720,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void buildPartitionsConcurrently(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
-                                             int numBackends) throws DdlException {
+                                             int numBackends, String warehouseName) throws DdlException {
         int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(Partition::getVisibleMaterializedIndicesCount).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
@@ -1712,7 +1734,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     if (!countDownLatch.getStatus().ok()) {
                         break;
                     }
-                    List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
+                    List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition, warehouseName);
                     for (CreateReplicaTask task : tasks) {
                         List<Long> signatures =
                                 taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
@@ -1756,33 +1778,38 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<Partition> partitions)
-            throws DdlException {
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId,
+                                                            OlapTable table,
+                                                            List<Partition> partitions,
+                                                            String warehouseName) throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>();
         for (Partition partition : partitions) {
-            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition));
+            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, warehouseName));
         }
         return tasks;
     }
 
-    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, Partition partition)
-            throws DdlException {
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
+                                                            Partition partition, String warehouseName) throws DdlException {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) partition.getReplicaCount());
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, index));
+            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, index, warehouseName));
         }
         return tasks;
     }
 
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, Partition partition,
-                                                            MaterializedIndex index) throws DdlException {
+                                                            MaterializedIndex index, String warehouseName) throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
             if (table.isCloudNativeTableOrMaterializedView()) {
                 long primaryComputeNodeId = -1;
                 try {
-                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+                    if (warehouse == null) {
+                        throw new UserException("Warehouse " + warehouseName + "not exist!");
+                    }
                     primaryComputeNodeId = ((LakeTablet) tablet).
                             getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
                 } catch (UserException e) {

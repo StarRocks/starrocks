@@ -70,6 +70,6 @@ public class ShowWarehousesStmtTest {
         Assert.assertEquals("Warehouse", metaData.getColumn(1).getName());
         Assert.assertEquals("State", metaData.getColumn(2).getName());
         Assert.assertEquals("ClusterCount", metaData.getColumn(3).getName());
-        Assert.assertEquals("INITIALIZING", resultSet.getResultRows().get(0).get(2).toString());
+        Assert.assertEquals("AVAILABLE", resultSet.getResultRows().get(0).get(2).toString());
     }
 }

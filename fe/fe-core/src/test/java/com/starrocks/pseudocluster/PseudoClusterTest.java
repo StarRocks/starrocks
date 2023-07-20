@@ -35,6 +35,7 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.Statement;
+import java.util.List;
 
 public class PseudoClusterTest {
     @BeforeClass
@@ -96,6 +97,11 @@ public class PseudoClusterTest {
         FilePathInfo pathInfo = builder.build();
 
         new MockUp<StarOSAgent>() {
+            @Mock
+            public List getWorkersByWorkerGroup(long workerGroupId) {
+                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+            }
+
             @Mock
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
                 return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);

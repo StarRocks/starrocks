@@ -549,7 +549,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, String> partitionProperties = getPartitionProperties(materializedView);
         DistributionDesc distributionDesc = getDistributionDesc(materializedView);
         Map<String, Range<PartitionKey>> adds = rangePartitionDiff.getAdds();
-
+        mvContext.getCtx().setThreadLocalInfo();
         addRangePartitions(database, materializedView, adds, partitionProperties, distributionDesc);
         for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
             String mvPartitionName = addEntry.getKey();

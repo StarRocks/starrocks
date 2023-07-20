@@ -103,6 +103,7 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PlannerProfile;
@@ -1237,6 +1238,10 @@ public class StmtExecutor {
 
     // Process use warehouse statement
     private void handleSetWarehouseStmt() throws AnalysisException {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            throw new RuntimeException(new DdlException("unsupported statement in shared_nothing mode"));
+        }
+
         SetWarehouseStmt setWarehouseStmt = (SetWarehouseStmt) parsedStmt;
         try {
             context.getGlobalStateMgr().changeWarehouse(context, setWarehouseStmt.getWarehouseName());

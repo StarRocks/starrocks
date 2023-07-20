@@ -90,7 +90,7 @@ public class WarehouseMgrTest {
         warehouse.initCluster();
         warehouseMgr.replayCreateWarehouse(warehouse);
         Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
-        Assert.assertEquals(Warehouse.WarehouseState.INITIALIZING,
+        Assert.assertEquals(Warehouse.WarehouseState.AVAILABLE,
                 warehouseMgr.getWarehouse("warehouse_1").getState());
 
         Deencapsulation.setField(warehouse, "state", Warehouse.WarehouseState.SUSPENDED);
@@ -146,11 +146,11 @@ public class WarehouseMgrTest {
 
         warehouseMgr.createWarehouse(new CreateWarehouseStmt(false, "aaa", null, null));
 
-        Assert.assertEquals(Warehouse.WarehouseState.INITIALIZING, warehouseMgr.getWarehouse("aaa").getState());
+        Assert.assertEquals(Warehouse.WarehouseState.AVAILABLE, warehouseMgr.getWarehouse("aaa").getState());
         warehouseMgr.suspendWarehouse(new SuspendWarehouseStmt("aaa"));
         Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED, warehouseMgr.getWarehouse("aaa").getState());
         warehouseMgr.resumeWarehouse(new ResumeWarehouseStmt("aaa"));
-        Assert.assertEquals(Warehouse.WarehouseState.RUNNING, warehouseMgr.getWarehouse("aaa").getState());
+        Assert.assertEquals(Warehouse.WarehouseState.AVAILABLE, warehouseMgr.getWarehouse("aaa").getState());
 
         warehouseMgr.dropWarehouse(new DropWarehouseStmt(false, "aaa"));
         Assert.assertFalse(warehouseMgr.warehouseExists("aaa"));

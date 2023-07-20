@@ -92,6 +92,11 @@ public class LakeMaterializedViewTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
+            public List getWorkersByWorkerGroup(long workerGroupId) {
+                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+            }
+
+            @Mock
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
                 return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }

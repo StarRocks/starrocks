@@ -1199,6 +1199,7 @@ public class OlapTable extends Table {
                 return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
             }
         });
+
         return partitions.subList(0, recentPartitionNum);
     }
 

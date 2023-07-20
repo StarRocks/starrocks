@@ -1039,6 +1039,9 @@ public class AlterTest {
                         Lists.newArrayList(20007L, 20008L, 20009L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+
+                agent.getWorkersByWorkerGroup(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
             }
         };
 
@@ -1149,6 +1152,9 @@ public class AlterTest {
                         Lists.newArrayList(30016L, 30017L, 30018L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+
+                agent.getWorkersByWorkerGroup(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
             }
         };
 
@@ -2115,6 +2121,9 @@ public class AlterTest {
                         Lists.newArrayList(30004L, 30005L, 30006L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+
+                agent.getWorkersByWorkerGroup(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
             }
         };
 

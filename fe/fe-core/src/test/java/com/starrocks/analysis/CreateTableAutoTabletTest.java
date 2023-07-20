@@ -21,12 +21,12 @@ import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
-import java.util.ArrayList;
-import java.util.List;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 public class CreateTableAutoTabletTest {
     @BeforeClass

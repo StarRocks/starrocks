@@ -101,7 +101,7 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public void resumeSelf() {
-        this.state = WarehouseState.RUNNING;
+        this.state = WarehouseState.AVAILABLE;
     }
 
     private void deleteWorkerFromStarMgr() throws DdlException {
