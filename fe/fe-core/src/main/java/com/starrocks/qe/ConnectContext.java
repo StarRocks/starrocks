@@ -163,7 +163,7 @@ public class ConnectContext {
 
     // GlobalStateMgr: put globalStateMgr here is convenient for unit test,
     // because globalStateMgr is singleton, hard to mock
-    protected GlobalStateMgr globalStateMgr;
+    protected GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
     protected boolean isSend;
 
     protected AuditEventBuilder auditEventBuilder = new AuditEventBuilder();
