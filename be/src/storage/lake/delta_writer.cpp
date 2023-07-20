@@ -400,6 +400,11 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
             for (auto i = 0; i < _tablet_schema->num_columns(); ++i) {
                 auto col = _tablet_schema->column(i);
                 if (col.is_auto_increment()) {
+                    /*
+                        The auto increment id set here is inconsistent with the id in
+                        full tablet schema. The id here is indicate the offset id of
+                        auto increment column in partial segment file.
+                    */
                     op_write->mutable_txn_meta()->set_auto_increment_partial_update_column_id(i);
                     break;
                 }
