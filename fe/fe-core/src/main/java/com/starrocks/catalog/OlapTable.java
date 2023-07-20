@@ -2573,6 +2573,7 @@ public class OlapTable extends Table {
         }
 
         GlobalStateMgr.getCurrentState().getColocateTableIndex().removeTable(getId(), this, isReplay);
+        GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(getId());
     }
 
     @Override
