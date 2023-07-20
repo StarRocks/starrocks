@@ -182,7 +182,6 @@ public class MaterializedViewRewriter {
         LogicalOperator queryOp = (LogicalOperator) queryExpr.getOp();
         LogicalOperator mvOp = (LogicalOperator) mvExpr.getOp();
         if (!queryOp.getOpType().equals(mvOp.getOpType())) {
-            logMVRewrite(mvRewriteContext, "join type is different {} != {}", queryOp.getOpType(), mvOp.getOpType());
             return false;
         }
         if (queryOp instanceof LogicalJoinOperator) {
@@ -199,8 +198,6 @@ public class MaterializedViewRewriter {
             JoinOperator mvJoinType = mvJoin.getJoinType();
 
             if (!ScalarOperator.isEquivalent(queryJoin.getOnPredicate(), (mvJoin.getOnPredicate()))) {
-                logMVRewrite(mvRewriteContext, "join predicate is different {} != {}", queryJoin.getOnPredicate(),
-                        mvJoin.getOnPredicate());
                 return false;
             }
             if (queryJoinType.equals(mvJoinType)) {
@@ -209,8 +206,6 @@ public class MaterializedViewRewriter {
             }
 
             if (!JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
-                logMVRewrite(mvRewriteContext, "join type is not compatible {} not contains {}", mvJoinType,
-                        queryJoinType);
                 return false;
             }
 
@@ -222,7 +217,6 @@ public class MaterializedViewRewriter {
             boolean isSupported =
                     isSupportedPredicate(queryOnPredicate, materializationContext.getQueryRefFactory(), joinColumns);
             if (!isSupported) {
-                logMVRewrite(mvRewriteContext, "join predicate is not supported {}", queryOnPredicate);
                 return false;
             }
             // use join columns from query
@@ -237,7 +231,6 @@ public class MaterializedViewRewriter {
             boolean isCompatible =
                     isJoinCompatible(usedColumnsToTable, queryJoinType, mvJoinType, leftColumns, rightColumns, joinColumnRefs);
             if (!isCompatible) {
-                logMVRewrite(mvRewriteContext, "join columns not compatible {} != {}", leftColumns, rightColumns);
                 return false;
             }
             JoinDeriveContext joinDeriveContext = new JoinDeriveContext(queryJoinType, mvJoinType, joinColumnRefs);
