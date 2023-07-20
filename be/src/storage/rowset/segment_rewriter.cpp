@@ -78,7 +78,13 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
 
-    uint32_t auto_increment_column_id = auto_increment_partial_update_state.id;
+    uint32_t auto_increment_column_id = 0;
+    for (const auto& col : tschema.columns()) {
+        if (col.is_auto_increment()) {
+            break;
+        }
+        ++auto_increment_column_id;
+    }
     uint32_t segment_id = auto_increment_partial_update_state.segment_id;
     Rowset* rowset = auto_increment_partial_update_state.rowset;
     rowset->load();
@@ -161,7 +167,13 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
 
-    uint32_t auto_increment_column_id = auto_increment_partial_update_state.id;
+    uint32_t auto_increment_column_id = 0;
+    for (const auto& col : tschema.columns()) {
+        if (col.is_auto_increment()) {
+            break;
+        }
+        ++auto_increment_column_id;
+    }
     uint32_t segment_id = auto_increment_partial_update_state.segment_id;
 
     std::vector<uint32_t> src_column_ids;
