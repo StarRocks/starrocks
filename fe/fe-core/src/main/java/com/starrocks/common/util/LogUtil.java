@@ -23,4 +23,70 @@ public class LogUtil {
                 .map(stack -> "        " + stack.toString())
                 .collect(Collectors.joining(System.lineSeparator(), System.lineSeparator(), ""));
     }
+
+    public static String removeCommentAndLineSeparator(String origStmt) {
+        char inStringStart = '-';
+
+        StringBuilder sb = new StringBuilder();
+
+        int idx = 0;
+        int length = origStmt.length();
+        while (idx < length) {
+            char character = origStmt.charAt(idx);
+
+            if (character == '\"' || character == '\'' || character == '`') {
+                // process quote string
+                inStringStart = character;
+                appendChar(sb, inStringStart);
+                idx++;
+                while (idx < length && ((origStmt.charAt(idx) != inStringStart) || origStmt.charAt(idx - 1) == '\\')) {
+                    sb.append(origStmt.charAt(idx));
+                    ++idx;
+                }
+                sb.append(inStringStart);
+            } else if ((character == '-' && idx != length - 1 && origStmt.charAt(idx + 1) == '-') ||
+                    character == '#') {
+                // process comment style like '-- comment' or '# comment'
+                while (idx < length - 1 && origStmt.charAt(idx) != '\n') {
+                    ++idx;
+                }
+                appendChar(sb, ' ');
+            } else if (character == '/' && idx != length - 2 &&
+                    origStmt.charAt(idx + 1) == '*' && origStmt.charAt(idx + 2) != '+') {
+                //  process comment style like '/* comment */'
+                while (idx < length - 1 && (origStmt.charAt(idx) != '*' || origStmt.charAt(idx + 1) != '/')) {
+                    ++idx;
+                }
+                ++idx;
+                appendChar(sb, ' ');
+            } else if (character == '/' && idx != origStmt.length() - 2 &&
+                    origStmt.charAt(idx + 1) == '*' && origStmt.charAt(idx + 2) == '+') {
+                //  process hint
+                while (idx < length - 1 && (origStmt.charAt(idx) != '*' || origStmt.charAt(idx + 1) != '/')) {
+                    appendChar(sb, origStmt.charAt(idx));
+                    idx++;
+                }
+                appendChar(sb, '*');
+                appendChar(sb, '/');
+                idx++;
+            } else if (character == '\t' || character == '\r' || character == '\n') {
+                // replace line separator
+                appendChar(sb, ' ');
+            } else {
+                // append normal character
+                appendChar(sb, character);
+            }
+
+            idx++;
+        }
+        return sb.toString();
+    }
+
+    private static void appendChar(StringBuilder sb, char character) {
+        if (character != ' ') {
+            sb.append(character);
+        } else if (sb.length() > 0 && sb.charAt(sb.length() - 1) != ' ') {
+            sb.append(" ");
+        }
+    }
 }
