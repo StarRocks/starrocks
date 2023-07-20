@@ -1114,7 +1114,7 @@ public class NodeMgr {
         }
     }
 
-    public List<WarehouseInfo> getWarehouseInfos() {
+    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
         List<WarehouseInfo> warehouseInfos = Lists.newArrayList();
         TGetWarehousesRequest request = new TGetWarehousesRequest();
 

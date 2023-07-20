@@ -14,7 +14,6 @@
 
 package com.starrocks.http.rest;
 
-import com.google.gson.Gson;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -24,6 +23,7 @@ import com.starrocks.warehouse.WarehouseInfo;
 import com.starrocks.warehouse.WarehouseInfosBuilder;
 import io.netty.handler.codec.http.HttpMethod;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -46,10 +46,26 @@ public class WarehouseAction extends RestBaseAction {
         infosFromOtherFEs.forEach(warehouseInfoBuilder::withWarehouseInfo);
 
         Map<String, WarehouseInfo> warehouseInfo = warehouseInfoBuilder.build();
+        RestSuccessBaseResult<Result> res = new RestSuccessBaseResult<>(new Result(warehouseInfo.values()));
 
-        Gson gson = new Gson();
         response.setContentType("application/json");
-        response.getContent().append(gson.toJson(warehouseInfo.values()));
+        response.getContent().append(res.toJson());
         sendResult(request, response);
+    }
+
+    public static class Result {
+        private Collection<WarehouseInfo> warehouses;
+
+        public Result(Collection<WarehouseInfo> warehouses) {
+            this.warehouses = warehouses;
+        }
+
+        public Collection<WarehouseInfo> getWarehouses() {
+            return warehouses;
+        }
+
+        public void setWarehouses(Collection<WarehouseInfo> warehouses) {
+            this.warehouses = warehouses;
+        }
     }
 }

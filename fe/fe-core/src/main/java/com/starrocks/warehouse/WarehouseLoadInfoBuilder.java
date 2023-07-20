@@ -53,7 +53,7 @@ public class WarehouseLoadInfoBuilder {
     }
 
     public void withRemovedJob(LoadJobWithWarehouse job) {
-        if (!job.isFinal()) {
+        if (!job.isFinal() || job.isInternalJob()) {
             return;
         }
         warehouseToRemovedJobLastFinishedTimeMs.compute(job.getCurrentWarehouse(), (k, lastFinishedTimeMs) -> {

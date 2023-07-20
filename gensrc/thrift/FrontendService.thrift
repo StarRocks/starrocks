@@ -1280,11 +1280,12 @@ struct TGetWarehousesRequest {
 
 struct TWarehouseInfo {
     1: optional string warehouse
-    2: optional i64 num_unfinished_query_jobs
-    3: optional i64 num_unfinished_load_jobs
-    4: optional i64 num_unfinished_backup_jobs
-    5: optional i64 num_unfinished_restore_jobs
-    6: optional i64 last_finished_job_timestamp_ms
+    2: optional i64 id
+    3: optional i64 num_unfinished_query_jobs
+    4: optional i64 num_unfinished_load_jobs
+    5: optional i64 num_unfinished_backup_jobs
+    6: optional i64 num_unfinished_restore_jobs
+    7: optional i64 last_finished_job_timestamp_ms
 }
 
 struct TGetWarehousesResponse {

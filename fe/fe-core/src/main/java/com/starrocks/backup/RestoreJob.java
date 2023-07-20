@@ -83,7 +83,6 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -1214,12 +1213,6 @@ public class RestoreJob extends AbstractJob {
             unfinishedSignatureToId.put(signature, beId);
         }
     }
-
-    public String getCurrentWarehouse() {
-        // TODO(lzh): pass the current warehouse.
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-    }
-
     protected void sendDownloadTasks() {
         for (AgentTask task : batchTask.getAllTasks()) {
             AgentTaskQueue.addTask(task);

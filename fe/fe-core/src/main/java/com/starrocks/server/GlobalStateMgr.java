@@ -996,7 +996,7 @@ public class GlobalStateMgr {
     }
 
     public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
-        return nodeMgr.getWarehouseInfos();
+        return nodeMgr.getWarehouseInfosFromOtherFEs();
     }
 
     public StorageVolumeMgr getStorageVolumeMgr() {

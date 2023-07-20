@@ -68,7 +68,7 @@ public class RestBaseAction extends BaseAction {
     }
 
     @Override
-    public void handleRequest(BaseRequest request) throws Exception {
+    public void handleRequest(BaseRequest request) {
         LOG.info("receive http request. url={}", request.getRequest().uri());
         BaseResponse response = new BaseResponse();
         try {
@@ -81,6 +81,14 @@ public class RestBaseAction extends BaseAction {
         } catch (DdlException e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
             sendResult(request, response, new RestBaseResult(e.getMessage()));
+        } catch (Exception e) {
+            LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
+            String msg = e.getMessage();
+            if (msg == null) {
+                msg = e.toString();
+            }
+            response.appendContent(new RestBaseResult(msg).toJson());
+            writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

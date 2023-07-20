@@ -66,7 +66,6 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -383,11 +382,6 @@ public class BackupJob extends AbstractJob {
         return false;
     }
 
-    public String getCurrentWarehouse() {
-        // TODO(lzh): pass the current warehouse.
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-    }
-
     protected void checkBackupTables(Database db) {
         for (TableRef tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
@@ -615,7 +609,7 @@ public class BackupJob extends AbstractJob {
                     HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
                 } catch (UserException e) {
                     status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
-                    return;    
+                    return;
                 }
             }
 

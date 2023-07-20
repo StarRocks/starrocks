@@ -20,11 +20,13 @@ import com.starrocks.thrift.TWarehouseInfo;
 import java.util.Objects;
 
 public class WarehouseInfo {
+    public static final long ABSENT_ID = -1L;
+
     @SerializedName(value = "warehouse")
     String warehouse;
 
     @SerializedName(value = "id")
-    private long id = -1L;
+    private long id = ABSENT_ID;
 
     @SerializedName(value = "num_unfinished_query_jobs")
     private long numUnfinishedQueryJobs = 0L;
@@ -47,6 +49,17 @@ public class WarehouseInfo {
     public WarehouseInfo(String warehouse, long id) {
         this.warehouse = warehouse;
         this.id = id;
+    }
+
+    public WarehouseInfo(String warehouse, long id, long numUnfinishedQueryJobs, long numUnfinishedLoadJobs,
+                         long numUnfinishedBackupJobs, long numUnfinishedRestoreJobs, long lastFinishedJobTimestampMs) {
+        this.warehouse = warehouse;
+        this.id = id;
+        this.numUnfinishedQueryJobs = numUnfinishedQueryJobs;
+        this.numUnfinishedLoadJobs = numUnfinishedLoadJobs;
+        this.numUnfinishedBackupJobs = numUnfinishedBackupJobs;
+        this.numUnfinishedRestoreJobs = numUnfinishedRestoreJobs;
+        this.lastFinishedJobTimestampMs = lastFinishedJobTimestampMs;
     }
 
     public void increaseNumUnfinishedQueryJobs(long delta) {
@@ -73,6 +86,14 @@ public class WarehouseInfo {
         return warehouse;
     }
 
+    public void setId(long id) {
+        this.id = id;
+    }
+
+    public long getId() {
+        return id;
+    }
+
     public long getNumUnfinishedQueryJobs() {
         return numUnfinishedQueryJobs;
     }
@@ -96,6 +117,7 @@ public class WarehouseInfo {
     public TWarehouseInfo toThrift() {
         return new TWarehouseInfo()
                 .setWarehouse(warehouse)
+                .setId(id)
                 .setNum_unfinished_query_jobs(numUnfinishedQueryJobs)
                 .setNum_unfinished_load_jobs(numUnfinishedLoadJobs)
                 .setNum_unfinished_backup_jobs(numUnfinishedBackupJobs)
@@ -105,10 +127,11 @@ public class WarehouseInfo {
 
     public static WarehouseInfo fromThrift(TWarehouseInfo tinfo) {
         WarehouseInfo info = new WarehouseInfo(tinfo.getWarehouse());
+        info.id = tinfo.getId();
         info.numUnfinishedQueryJobs = tinfo.getNum_unfinished_query_jobs();
         info.numUnfinishedLoadJobs = tinfo.getNum_unfinished_load_jobs();
-        info.numUnfinishedRestoreJobs = tinfo.getNum_unfinished_backup_jobs();
-        info.numUnfinishedBackupJobs = tinfo.getNum_unfinished_restore_jobs();
+        info.numUnfinishedBackupJobs = tinfo.getNum_unfinished_backup_jobs();
+        info.numUnfinishedRestoreJobs = tinfo.getNum_unfinished_restore_jobs();
         info.lastFinishedJobTimestampMs = tinfo.getLast_finished_job_timestamp_ms();
         return info;
     }
