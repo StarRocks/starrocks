@@ -175,6 +175,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | authentication_ldap_simple_server_host   |  -  | Empty string |  The host on which the LDAP server runs.                               |
 | authentication_ldap_simple_server_port   |  -  | 389     | The port of the LDAP server.                                       |
 | authentication_ldap_simple_user_search_attr|  -  | uid     | The name of the attribute that identifies users in LDAP objects.|
+|max_upload_task_per_be                    |  -  | 0       | In each BACKUP operation, the maximum number of upload tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.1.0 onwards.     |
+|max_download_task_per_be                  |  -  | 0       | In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.1.0 onwards.     |
 
 ### Configure FE static parameters
 
@@ -375,6 +377,7 @@ BE dynamic parameters are as follows.
 | cumulative_compaction_check_interval_seconds | 1 | Second | The time interval of thread polling for a Cumulative Compaction. |
 | update_compaction_check_interval_seconds | 60 | Second | The time interval at which to check the Update Compaction of the Primary Key table. |
 | min_compaction_failure_interval_sec | 120 | Second | The minimum time interval that a Tablet Compaction can be scheduled since the last compaction failure. |
+| max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | periodic_counter_update_period_ms | 500 | ms | The time interval at which to collect the Counter statistics. |
 | load_error_log_reserve_hours | 48 | Hour | The time for which data loading logs are reserved. |
 | streaming_load_max_mb | 10240 | MB | The maximum size of a file that can be streamed into StarRocks. |
@@ -455,7 +458,6 @@ BE static parameters are as follows.
 | disable_storage_page_cache | FALSE | N/A | The boolean value to control if to disable PageCache. When PageCache is enabled, StarRocks caches the query results. PageCache can significantly improve the query performance when similar queries are repeated frequently. `true` indicates to disable PageCache. The value of this item has been changed from `true` to `false` since StarRocks v2.4.|
 | base_compaction_num_threads_per_disk | 1 | N/A | The number of threads used for Base Compaction on each storage volume. |
 | base_cumulative_delta_ratio | 0.3 | N/A | The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction. |
-| max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | compaction_trace_threshold | 60 | Second | The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace. |
 | be_http_port | 8040 | N/A | The HTTP server port. |
 | be_http_num_workers | 48 | N/A | The number of threads used by the HTTP server. |
