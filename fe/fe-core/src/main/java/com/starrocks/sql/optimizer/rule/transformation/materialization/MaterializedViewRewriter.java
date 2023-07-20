@@ -145,16 +145,22 @@ public class MaterializedViewRewriter {
         // because optimizer will match MV's pattern which is subset of query opt tree
         // from top-down iteration.
         if (matchMode == MatchMode.COMPLETE) {
-            if (!isJoinMatch(queryExpression, mvExpression)) {
+            if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
+                logMVRewrite(mvRewriteContext, "MV is not Applicable in complete mode: join type are not matched");
                 return false;
             }
         } else if (matchMode == MatchMode.VIEW_DELTA) {
+            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewViewDeltaRewrite()) {
+                return false;
+            }
             // only consider query with most common tables to optimize performance
             if (!queryTables.containsAll(materializationContext.getIntersectingTables())) {
                 return false;
             }
             if (!MvUtils.getAllJoinOperators(queryExpression).stream().allMatch(joinOperator ->
                     joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin())) {
+                logMVRewrite(mvRewriteContext, "MV is not Applicable in view delta mode: " +
+                        "only support inner/left outer join type for now");
                 return false;
             }
             List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
@@ -166,6 +172,8 @@ public class MaterializedViewRewriter {
             for (TableScanDesc queryScanDesc : queryTableScanDescs) {
                 if (queryScanDesc.getParentJoinType() != null
                         && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isMatch(queryScanDesc))) {
+                    logMVRewrite(mvRewriteContext, "MV is not Applicable in view delta mode: " +
+                            "at least one same join type should be existed");
                     return false;
                 }
             }
@@ -174,11 +182,13 @@ public class MaterializedViewRewriter {
         }
 
         if (!isValidPlan(mvExpression)) {
+            logMVRewrite(mvRewriteContext, "MV is not Applicable in complete mode: mv expression is not valid");
             return false;
         }
 
         // If table lists do not intersect, can not be rewritten
         if (Collections.disjoint(queryTables, mvTables)) {
+            logMVRewrite(mvRewriteContext, "MV is not Applicable in complete mode: query tables are disjoint with mvs' tables");
             return false;
         }
         return true;
@@ -924,23 +934,26 @@ public class MaterializedViewRewriter {
     }
 
     private boolean isJoinMatch(OptExpression queryExpression,
-                                OptExpression mvExpression) {
-        boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
-        boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
-        if (isQueryAllEqualInnerJoin && isMVAllEqualInnerJoin) {
+                                OptExpression mvExpression,
+                                List<Table> queryTables,
+                                List<Table> mvTables) {
+        // If exact match (all join types are the same), return true directly.
+        List<JoinOperator> queryJoinOperators = MvUtils.getAllJoinOperators(queryExpression);
+        List<JoinOperator> mvJoinOperators = MvUtils.getAllJoinOperators(mvExpression);
+        if (queryTables.equals(mvTables) && queryJoinOperators.equals(mvJoinOperators)) {
             return true;
-        } else {
-            // If not all join types are InnerJoin, need to check whether MV's join tables' order
-            // matches Query's join tables' order.
-            // eg. MV   : a left join b inner join c
-            //     Query: b left join a inner join c (cannot rewrite)
-            //     Query: a left join b inner join c (can rewrite)
-            //     Query: c inner join a left join b (can rewrite)
-            // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
-            // order for now.
-            // Use traverse order to check whether all joins' order and operator are exactly matched.
-            return computeCompatibility(queryExpression, mvExpression);
         }
+
+        // If not all join types are InnerJoin, need to check whether MV's join tables' order
+        // matches Query's join tables' order.
+        // eg. MV   : a left join b inner join c
+        //     Query: b left join a inner join c (cannot rewrite)
+        //     Query: a left join b inner join c (can rewrite)
+        //     Query: c inner join a left join b (can rewrite)
+        // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
+        // order for now.
+        // Use traverse order to check whether all joins' order and operator are exactly matched.
+        return computeCompatibility(queryExpression, mvExpression);
     }
 
     private ScalarOperator collectMvPrunePredicate(MaterializationContext mvContext) {
