@@ -2021,10 +2021,10 @@ public class Config extends ConfigBase {
     public static long shard_group_clean_threshold_sec = 3600L;
 
     /**
-     * ShardDeleter run interval in seconds
+     * fe sync with star mgr meta interval in seconds
      */
     @ConfField
-    public static long shard_deleter_run_interval_sec = 600L;
+    public static long star_mgr_meta_sync_interval_sec = 600L;
 
     // ***********************************************************
     // * BEGIN: Cloud native meta server related configurations
