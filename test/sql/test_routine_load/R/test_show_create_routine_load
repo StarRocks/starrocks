@@ -1,0 +1,69 @@
+-- name: test_show_create_routine_load
+create database test_show_create_routine_load;
+-- result:
+-- !result
+use test_show_create_routine_load;
+-- result:
+-- !result
+create table herbavro (
+	advertiser_id int not null,
+    advertiser_ad_type int not null,
+    advertiser_ad_width int not null,
+    advertiser_currency_type varchar(60) not null
+)
+DUPLICATE KEY(advertiser_id) COMMENT "OLAP"
+DISTRIBUTED BY HASH(advertiser_id) BUCKETS 3
+PROPERTIES ( "replication_num" = "1", "storage_format" = "v2" );
+-- result:
+-- !result
+-- name: test_show_create_routine_load_basic
+CREATE ROUTINE LOAD herb.testherbavro on herbavro COLUMNS TERMINATED BY '\t'
+PROPERTIES (
+"desired_concurrent_number"="1",
+"max_error_number"="1000",
+"max_batch_interval"="5",
+"format"="avro")
+FROM KAFKA (
+"confluent.schema.registry.url"="http://172.26.194.240:8081",
+"kafka_broker_list"="172.26.194.239:9092",
+"kafka_topic"="herb-avro",
+"kafka_partitions"="0",
+"kafka_offsets"="OFFSET_BEGINNING"
+);
+-- result:
+E: (1064, 'Unexpected exception: Name testherbavro already used in db herb')
+-- !result
+SHOW CREATE ROUTINE LOAD FOR testherbavro;
+-- result:
+testherbavro	CREATE ROUTINE LOAD testherbavro on herbavro
+ COLUMNS TERMINATED BY '\t'
+PROPERTIES
+(
+"desired_concurrent_number"="1",
+"max_error_number"="1000",
+"max_filter_ratio"="1.0",
+"max_batch_interval"="5",
+"max_batch_rows"="200000",
+"task_consume_second"="15",
+"task_timeout_second"="60",
+"format"="avro",
+"jsonpaths"="",
+"strip_outer_array"="false",
+"json_root"="",
+"strict_mode"="false",
+"timezone"="Asia/Shanghai",
+"partial_update"="false",
+"trim_space"="false",
+"enclose"="0",
+"escape"="0",
+"log_rejected_record_num"="0"
+)
+FROM KAFKA
+(
+"kafka_broker_list"="172.26.194.239:9092",
+"kafka_topic"="herb-avro",
+"kafka_partitions"="0",
+"kafka_offsets"="OFFSET_BEGINNING",
+"confluent.schema.registry.url"="http://172.26.194.240:8081"
+);
+-- !result
