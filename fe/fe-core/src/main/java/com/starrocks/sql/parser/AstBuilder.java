@@ -322,6 +322,7 @@ import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowEventsStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.ShowFailPointStatement;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -3361,6 +3362,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new UpdateFailPointStatusStatement(failpointName, true, backendList, createPos(ctx));
         }
         return new UpdateFailPointStatusStatement(failpointName, false, backendList, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitShowFailPointStatement(StarRocksParser.ShowFailPointStatementContext ctx) {
+        String pattern = null;
+        List<String> backendList = null;
+        int idx = 0;
+        if (ctx.LIKE() != null) {
+            pattern = ((StringLiteral) visit(ctx.string(idx++))).getStringValue();
+        }
+        if (ctx.BACKEND() != null) {
+            String tmp = ((StringLiteral) visit(ctx.string(idx++))).getStringValue();
+            backendList = Lists.newArrayList(tmp.split(","));
+        }
+        return new ShowFailPointStatement(pattern, backendList, createPos(ctx));
     }
 
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------

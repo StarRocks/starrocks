@@ -864,6 +864,7 @@ endif ()
 if (${MAKE_TEST} STREQUAL "ON")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTEST_USE_OWN_TR1_TUPLE=0")
     add_definitions(-DBE_TEST)
+    add_definitions(-DFIU_ENABLE)
 else()
     # output *.a, *.so, *.dylib to output/tmp
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})

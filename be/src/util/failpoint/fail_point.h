@@ -24,9 +24,11 @@ public:
 
     std::string name() const { return _name; }
 
+    PFailPointInfo to_pb() const;
+
 protected:
     std::string _name;
-    std::shared_mutex _mu;
+    mutable std::shared_mutex _mu;
     PFailPointTriggerMode _trigger_mode;
     std::atomic_int _n_times = 0;
 };
@@ -61,6 +63,8 @@ public:
 
     Status add(FailPoint* fp);
     FailPoint* get(const std::string& name);
+
+    void iterate(std::function<void(FailPoint*)> callback);
 
 private:
     FailPointRegistry();

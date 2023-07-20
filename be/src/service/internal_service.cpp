@@ -1117,6 +1117,20 @@ void PInternalServiceImplBase<T>::update_fail_point_status(google::protobuf::Rpc
 #endif
 }
 
+template <typename T>
+void PInternalServiceImplBase<T>::list_fail_point(google::protobuf::RpcController* controller,
+                                                  const PListFailPointRequest* request,
+                                                  PListFailPointResponse* response, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+#ifdef FIU_ENABLE
+    starrocks::failpoint::FailPointRegistry::GetInstance()->iterate([&](starrocks::failpoint::FailPoint* fp) {
+        auto fp_info = response->add_fail_points();
+        *fp_info = fp->to_pb();
+    });
+#endif
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
 template class PInternalServiceImplBase<PInternalService>;
 template class PInternalServiceImplBase<doris::PBackendService>;
 

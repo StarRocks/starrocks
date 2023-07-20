@@ -160,6 +160,9 @@ public:
                                   const PUpdateFailPointStatusRequest* request,
                                   PUpdateFailPointStatusResponse* response, google::protobuf::Closure* done) override;
 
+    void list_fail_point(google::protobuf::RpcController* controller, const PListFailPointRequest* request,
+                         PListFailPointResponse* response, google::protobuf::Closure* done) override;
+
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,

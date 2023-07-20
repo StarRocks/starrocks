@@ -47,6 +47,7 @@ import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -84,6 +85,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
+import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
@@ -1034,6 +1036,11 @@ public class PseudoBackend {
 
         @Override
         public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
             return null;
         }
     }

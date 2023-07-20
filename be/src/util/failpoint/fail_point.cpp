@@ -60,6 +60,14 @@ void FailPoint::setMode(const PFailPointTriggerMode& p_trigger_mode) {
     }
 }
 
+PFailPointInfo FailPoint::to_pb() const {
+    std::shared_lock l(_mu);
+    PFailPointInfo result;
+    result.set_name(_name);
+    result.mutable_trigger_mode()->CopyFrom(_trigger_mode);
+    return result;
+}
+
 inline thread_local std::unordered_set<FailPoint*> scoped_fail_point_set;
 
 bool ScopedFailPoint::shouldFail() {
@@ -109,6 +117,12 @@ FailPoint* FailPointRegistry::get(const std::string& name) {
         return nullptr;
     }
     return iter->second;
+}
+
+void FailPointRegistry::iterate(std::function<void(FailPoint*)> callback) {
+    for (const auto& [_, fp] : _fps) {
+        callback(fp);
+    }
 }
 
 bool init_failpoint_from_conf(const std::string& conf_file) {

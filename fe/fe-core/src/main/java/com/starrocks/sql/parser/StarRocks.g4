@@ -292,6 +292,7 @@ statement
 
     // FailPoint Statement
     | updateFailPointStatusStatement
+    | showFailPointStatement
 
     // Unsupported Statement
     | unsupportedStatement
@@ -791,6 +792,10 @@ updateFailPointStatusStatement
     : ADMIN DISABLE FAILPOINT string (ON BACKEND string)?
     | ADMIN ENABLE FAILPOINT string (WITH INTEGER_VALUE TIMES)? (ON BACKEND string)?
     | ADMIN ENABLE FAILPOINT string (WITH DECIMAL_VALUE PROBABILITY)? (ON BACKEND string)?
+    ;
+
+showFailPointStatement
+    : SHOW FAILPOINTS ((LIKE pattern=string))? (ON BACKEND string)?
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
@@ -2549,7 +2554,7 @@ nonReserved
     | CONFIG | COMPACT
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
-    | FAILPOINT | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
+    | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB

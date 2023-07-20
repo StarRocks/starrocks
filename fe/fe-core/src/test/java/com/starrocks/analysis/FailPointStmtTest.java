@@ -32,7 +32,6 @@ public class FailPointStmtTest {
 
     public void testNormalCase(String sql) {
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
-        Assert.assertTrue(stmt instanceof UpdateFailPointStatusStatement);
         Assert.assertEquals(sql, stmt.toSql());
     }
 
@@ -44,6 +43,18 @@ public class FailPointStmtTest {
                 "ADMIN ENABLE FAILPOINT 'test' WITH 0.5 PROBABILITY",
                 "ADMIN ENABLE FAILPOINT 'test' ON BACKEND '127.0.0.1:9000,127.0.0.2:9002'",
                 "ADMIN DISABLE FAILPOINT 'test'"
+        );
+        for (String sql : sqls) {
+            testNormalCase(sql);
+        }
+    }
+    @Test
+    public void testShowFailPoints() {
+        List<String> sqls = Arrays.asList(
+                "SHOW FAILPOINTS",
+                "SHOW FAILPOINTS LIKE '%a%'",
+                "SHOW FAILPOINTS ON BACKEND '127.0.0.1:9000,127.0.0.1:9002'",
+                "SHOW FAILPOINTS LIKE '%a%' ON BACKEND '127.0.0.1:9000,127.0.0.1:9002'"
         );
         for (String sql : sqls) {
             testNormalCase(sql);

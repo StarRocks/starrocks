@@ -24,6 +24,7 @@ import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -80,5 +81,9 @@ public interface PBackendService {
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "update_fail_point_status", onceTalkTimeout = 60000)
     Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "list_fail_point",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request);
 }
 
