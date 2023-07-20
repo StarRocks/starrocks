@@ -130,17 +130,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         private long numStreamLoadJobs = 0;
     }
 
-    private class JobExecutingInfo {
 
-    }
-
-    private void prepareJobExecutingInfo(long numUnfinishedQueryJobs,) {
-
-        WarehouseInfo expectedInfo = new WarehouseInfo(WarehouseManager.DEFAULT_WAREHOUSE_NAME, 0L);
-        expectedInfo.increaseNumUnfinishedQueryJobs(1L);
-        expectedInfo.increaseNumUnfinishedBackupJobs(2L);
-        expectedInfo.increaseNumUnfinishedRestoreJobs(3L);
-    }
 
     private LoadMgr mockLoadMgr() {
         LoadMgr loadMgr = new LoadMgr(null);
