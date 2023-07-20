@@ -449,7 +449,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
 #if defined(USE_STAROS) && !defined(BE_TEST)
     _lake_location_provider = new lake::StarletLocationProvider();
-    _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
+    _lake_update_manager =
+            new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
     if (config::starlet_cache_dir.empty()) {
