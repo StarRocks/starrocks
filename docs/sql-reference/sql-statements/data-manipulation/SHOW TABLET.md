@@ -2,11 +2,11 @@
 
 ## Description
 
-Displays tablet related information.
+Displays tablet-related information.
 
 > **NOTE**
 >
-> This operation requires the SELECT_PRIV privilege.
+> This operation requires the ADMIN_PRIV privilege.
 
 ## Syntax
 

@@ -4,6 +4,8 @@
 
 Returns the current version of the MySQL database.
 
+You can use [current_version](current_version.md) to query StarRocks version.
+
 ## Syntax
 
 ```Haskell
