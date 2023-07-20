@@ -43,63 +43,6 @@ void convert_to_new_version(TColumn* tcolumn) {
         tcolumn->__isset.type_desc = true;
     }
 }
-
-LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive_type) {
-    switch (primitive_type) {
-    case TPrimitiveType::INVALID_TYPE:
-    case TPrimitiveType::NULL_TYPE:
-    case TPrimitiveType::BINARY:
-    case TPrimitiveType::TIME:
-        return TYPE_UNKNOWN;
-    case TPrimitiveType::BOOLEAN:
-        return TYPE_BOOLEAN;
-    case TPrimitiveType::TINYINT:
-        return TYPE_TINYINT;
-    case TPrimitiveType::SMALLINT:
-        return TYPE_SMALLINT;
-    case TPrimitiveType::INT:
-        return TYPE_INT;
-    case TPrimitiveType::BIGINT:
-        return TYPE_BIGINT;
-    case TPrimitiveType::FLOAT:
-        return TYPE_FLOAT;
-    case TPrimitiveType::DOUBLE:
-        return TYPE_DOUBLE;
-    case TPrimitiveType::DATE:
-        return TYPE_DATE;
-    case TPrimitiveType::DATETIME:
-        return TYPE_DATETIME;
-    case TPrimitiveType::CHAR:
-        return TYPE_CHAR;
-    case TPrimitiveType::LARGEINT:
-        return TYPE_LARGEINT;
-    case TPrimitiveType::VARCHAR:
-        return TYPE_VARCHAR;
-    case TPrimitiveType::HLL:
-        return TYPE_HLL;
-    case TPrimitiveType::DECIMAL:
-    case TPrimitiveType::DECIMALV2:
-        return TYPE_DECIMALV2;
-    case TPrimitiveType::DECIMAL32:
-        return TYPE_DECIMAL32;
-    case TPrimitiveType::DECIMAL64:
-        return TYPE_DECIMAL64;
-    case TPrimitiveType::DECIMAL128:
-        return TYPE_DECIMAL128;
-    case TPrimitiveType::OBJECT:
-        return TYPE_OBJECT;
-    case TPrimitiveType::PERCENTILE:
-        return TYPE_PERCENTILE;
-    case TPrimitiveType::JSON:
-        return TYPE_JSON;
-    case TPrimitiveType::VARBINARY:
-        return TYPE_VARBINARY;
-    case TPrimitiveType::FUNCTION:
-        return TYPE_UNKNOWN;
-    }
-    return TYPE_UNKNOWN;
-}
-
 static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggregationType::type agg_type) {
     switch (agg_type) {
     case TAggregationType::NONE:
@@ -208,26 +151,20 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
     return Status::InternalError("Unreachable path");
 }
 
-Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb, size_t depth) {
-    const int32_t kFakeUniqueId = -1;
-
+Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb) {
+    DCHECK(t_column.__isset.type_desc);
     const std::vector<TTypeNode>& types = t_column.type_desc.types;
-    if (depth == types.size()) {
-        return Status::InvalidArgument("type nodes must ended with scalar type");
+    int index = 0;
+    RETURN_IF_ERROR(type_desc_to_pb(types, &index, column_pb));
+    if (index != types.size()) {
+        LOG(WARNING) << "Schema not match, size:" << types.size() << ", index=" << index;
+        return Status::InternalError("Failed to parse type, number of schema elements not match");
     }
-
-    // No names provided for child columns, assign them a fake name.
-    auto c_name = depth == 0 ? t_column.column_name : strings::Substitute("_$0_$1", t_column.column_name, depth);
-
-    // A child column cannot be a key column.
-    auto is_key = depth == 0 && t_column.is_key;
-    bool is_nullable = depth > 0 || t_column.is_allow_null;
-
     column_pb->set_unique_id(unique_id);
-    column_pb->set_name(c_name);
-    column_pb->set_is_key(is_key);
-    column_pb->set_is_nullable(is_nullable);
-    if (depth > 0 || is_key) {
+    column_pb->set_name(t_column.column_name);
+    column_pb->set_is_key(t_column.is_key);
+    column_pb->set_is_nullable(t_column.is_allow_null);
+    if (t_column.is_key) {
         auto agg_method = STORAGE_AGGREGATE_NONE;
         column_pb->set_aggregation(get_string_by_aggregation_type(agg_method));
     } else {
@@ -235,43 +172,19 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
         column_pb->set_aggregation(get_string_by_aggregation_type(agg_method));
     }
 
-    const TTypeNode& curr_type_node = types[depth];
-    switch (curr_type_node.type) {
-    case TTypeNodeType::SCALAR: {
-        if (depth + 1 != types.size()) {
-            return Status::InvalidArgument("scalar type cannot have child node");
-        }
-        TScalarType scalar = curr_type_node.scalar_type;
+    if (types[0].type == TTypeNodeType::SCALAR && types[0].scalar_type.type == TPrimitiveType::VARCHAR) {
+        int32_t index_len = t_column.__isset.index_len ? t_column.index_len : 10;
+        column_pb->set_index_length(index_len);
+    }
+    // Default value
+    if (t_column.__isset.default_value) {
+        column_pb->set_default_value(t_column.default_value);
+    }
+    if (t_column.__isset.is_bloom_filter_column) {
+        column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
+    }
 
-        LogicalType field_type = t_primitive_type_to_field_type(scalar.type);
-        column_pb->set_type(logical_type_to_string(field_type));
-        column_pb->set_length(TabletColumn::get_field_length_by_type(field_type, scalar.len));
-        column_pb->set_index_length(column_pb->length());
-        column_pb->set_frac(curr_type_node.scalar_type.scale);
-        column_pb->set_precision(curr_type_node.scalar_type.precision);
-        if (field_type == TYPE_VARCHAR) {
-            int32_t index_len = depth == 0 && t_column.__isset.index_len ? t_column.index_len : 10;
-            column_pb->set_index_length(index_len);
-        }
-        if (depth == 0 && t_column.__isset.default_value) {
-            column_pb->set_default_value(t_column.default_value);
-        }
-        if (depth == 0 && t_column.__isset.is_bloom_filter_column) {
-            column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
-        }
-        return Status::OK();
-    }
-    case TTypeNodeType::ARRAY:
-        column_pb->set_type(logical_type_to_string(TYPE_ARRAY));
-        column_pb->set_length(TabletColumn::get_field_length_by_type(TYPE_ARRAY, sizeof(Collection)));
-        column_pb->set_index_length(column_pb->length());
-        return t_column_to_pb_column(kFakeUniqueId, t_column, column_pb->add_children_columns(), depth + 1);
-    case TTypeNodeType::STRUCT:
-        return Status::NotSupported("struct not supported yet");
-    case TTypeNodeType::MAP:
-        return Status::NotSupported("map not supported yet");
-    }
-    return Status::InternalError("Unreachable path");
+    return Status::OK();
 }
 
 Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_t next_unique_id,
