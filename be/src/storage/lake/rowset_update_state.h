@@ -32,6 +32,29 @@ struct PartialUpdateState {
     std::vector<std::unique_ptr<Column>> write_columns;
 };
 
+<<<<<<< HEAD
+=======
+struct AutoIncrementPartialUpdateState {
+    std::vector<uint64_t> src_rss_rowids;
+    std::unique_ptr<Column> write_column;
+    std::shared_ptr<TabletSchema> schema;
+    // auto increment column id in partial segment file
+    // but not in full tablet schema
+    uint32_t id;
+    uint32_t segment_id;
+    std::vector<uint32_t> rowids;
+    bool skip_rewrite;
+
+    AutoIncrementPartialUpdateState() : schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+
+    void init(std::shared_ptr<TabletSchema>& schema, uint32_t id, uint32_t segment_id) {
+        this->schema = schema;
+        this->id = id;
+        this->segment_id = segment_id;
+    }
+};
+
+>>>>>>> 389094f76c ([BugFix] crash when apply in table with AUTO_INCREMENT column (#27176) (#27199))
 class RowsetUpdateState {
 public:
     using ColumnUniquePtr = std::unique_ptr<Column>;

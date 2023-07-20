@@ -249,6 +249,133 @@ static std::vector<uint32_t> get_read_columns_ids(const TxnLogPB_OpWrite& op_wri
     return read_column_ids;
 }
 
+<<<<<<< HEAD
+=======
+Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const TxnLogPB_OpWrite& op_write,
+                                                                        const TabletMetadata& metadata, Tablet* tablet,
+                                                                        const TabletSchema& tablet_schema) {
+    const auto& txn_meta = op_write.txn_meta();
+    size_t num_segments = op_write.rowset().segments_size();
+    _auto_increment_partial_update_states.resize(num_segments);
+    _auto_increment_delete_pks.resize(num_segments);
+
+    uint32_t auto_increment_column_id = 0;
+    for (int i = 0; i < tablet_schema.num_columns(); ++i) {
+        if (tablet_schema.column(i).is_auto_increment()) {
+            auto_increment_column_id = i;
+            break;
+        }
+    }
+    std::vector<uint32_t> column_id{auto_increment_column_id};
+    auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, column_id);
+    auto column = ChunkHelper::column_from_field(*read_column_schema.field(0).get());
+    std::vector<std::vector<std::unique_ptr<Column>>> read_column(num_segments);
+
+    std::shared_ptr<TabletSchema> schema = nullptr;
+    if (!txn_meta.partial_update_column_ids().empty()) {
+        std::vector<int32_t> update_column_ids(txn_meta.partial_update_column_ids().begin(),
+                                               txn_meta.partial_update_column_ids().end());
+        schema = TabletSchema::create(tablet_schema, update_column_ids);
+    } else {
+        std::vector<int32_t> all_column_ids;
+        all_column_ids.resize(tablet_schema.num_columns());
+        std::iota(all_column_ids.begin(), all_column_ids.end(), 0);
+        schema = TabletSchema::create(tablet_schema, all_column_ids);
+    }
+
+    for (size_t i = 0; i < num_segments; i++) {
+        _auto_increment_partial_update_states[i].init(schema, txn_meta.auto_increment_partial_update_column_id(), i);
+        _auto_increment_partial_update_states[i].src_rss_rowids.resize(_upserts[i]->size());
+        read_column[i].resize(1);
+        read_column[i][0] = column->clone_empty();
+        _auto_increment_partial_update_states[i].write_column = column->clone_empty();
+    }
+
+    // segment id -> [rowids list]
+    std::vector<std::vector<uint64_t>*> rss_rowids;
+    rss_rowids.resize(num_segments);
+    for (size_t i = 0; i < num_segments; ++i) {
+        rss_rowids[i] = &(_auto_increment_partial_update_states[i].src_rss_rowids);
+    }
+    DCHECK_EQ(_upserts.size(), num_segments);
+    // use upserts to get rowids in each segment
+    RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, _base_version, _upserts, &rss_rowids));
+
+    for (size_t i = 0; i < num_segments; i++) {
+        std::vector<uint32_t> rowids;
+        uint32_t n = _auto_increment_partial_update_states[i].src_rss_rowids.size();
+        for (uint32_t j = 0; j < n; j++) {
+            uint64_t v = _auto_increment_partial_update_states[i].src_rss_rowids[j];
+            uint32_t rssid = v >> 32;
+            if (rssid == (uint32_t)-1) {
+                rowids.emplace_back(j);
+            }
+        }
+        std::swap(_auto_increment_partial_update_states[i].rowids, rowids);
+
+        size_t new_rows = 0;
+        std::vector<uint32_t> idxes;
+        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+        plan_read_by_rssid(_auto_increment_partial_update_states[i].src_rss_rowids, &new_rows, &rowids_by_rssid,
+                           &idxes);
+
+        if (new_rows == n) {
+            _auto_increment_partial_update_states[i].skip_rewrite = true;
+        }
+
+        if (new_rows > 0) {
+            uint32_t last = idxes.size() - new_rows;
+            for (unsigned int& idx : idxes) {
+                if (idx != 0) {
+                    --idx;
+                } else {
+                    idx = last;
+                    ++last;
+                }
+            }
+        }
+
+        RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, op_write, tablet_schema, column_id,
+                                                                new_rows > 0, rowids_by_rssid, &read_column[i],
+                                                                &_auto_increment_partial_update_states[i]));
+
+        _auto_increment_partial_update_states[i].write_column->append_selective(*read_column[i][0], idxes.data(), 0,
+                                                                                idxes.size());
+
+        /*
+        * Suppose we have auto increment ids for the rows which are not exist in the previous version.
+        * The ids are allocated by system for partial update in this case. It is impossible that the ids
+        * contain 0 in the normal case. But if the delete-partial update conflict happen with the previous transaction,
+        * it is possible that the ids contain 0 in current transaction. So if we detect the 0, we should handle
+        * this conflict case with deleting the row directly. This mechanism will cause some potential side effects as follow:
+        *
+        * 1. If the delete-partial update conflict happen, partial update operation maybe lost.
+        * 2. If it is the streamload combine with the delete and partial update ops and manipulate on a row which has existed
+        *    in the previous version, all the partial update ops after delete ops maybe lost for this row if they contained in
+        *    different segment file.
+        */
+        _auto_increment_delete_pks[i].reset();
+        _auto_increment_delete_pks[i] = _upserts[i]->clone_empty();
+        std::vector<uint32_t> delete_idxes;
+        const int64* data =
+                reinterpret_cast<const int64*>(_auto_increment_partial_update_states[i].write_column->raw_data());
+
+        // just check the rows which are not exist in the previous version
+        // because the rows exist in the previous version may contain 0 which are specified by the user
+        for (unsigned int row_idx : _auto_increment_partial_update_states[i].rowids) {
+            if (data[row_idx] == 0) {
+                delete_idxes.emplace_back(row_idx);
+            }
+        }
+
+        if (delete_idxes.size() != 0) {
+            _auto_increment_delete_pks[i]->append_selective(*_upserts[i], delete_idxes.data(), 0, delete_idxes.size());
+        }
+    }
+    return Status::OK();
+}
+
+>>>>>>> 389094f76c ([BugFix] crash when apply in table with AUTO_INCREMENT column (#27176) (#27199))
 Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite& op_write,
                                                          const TabletMetadata& metadata, Tablet* tablet,
                                                          const TabletSchema& tablet_schema) {
@@ -455,6 +582,159 @@ Status RowsetUpdateState::_resolve_conflict(const TxnLogPB_OpWrite& op_write, co
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status RowsetUpdateState::_resolve_conflict_partial_update(const TxnLogPB_OpWrite& op_write,
+                                                           const TabletMetadata& metadata, Tablet* tablet,
+                                                           const std::vector<uint64_t>& new_rss_rowids,
+                                                           std::vector<uint32_t>& read_column_ids, uint32_t segment_id,
+                                                           size_t& total_conflicts, TabletSchema* tablet_schema) {
+    uint32_t num_rows = new_rss_rowids.size();
+    std::vector<uint32_t> conflict_idxes;
+    std::vector<uint64_t> conflict_rowids;
+    DCHECK_EQ(num_rows, _partial_update_states[segment_id].src_rss_rowids.size());
+    for (size_t i = 0; i < new_rss_rowids.size(); ++i) {
+        uint64_t new_rss_rowid = new_rss_rowids[i];
+        uint32_t new_rssid = new_rss_rowid >> 32;
+        uint64_t rss_rowid = _partial_update_states[segment_id].src_rss_rowids[i];
+        uint32_t rssid = rss_rowid >> 32;
+
+        if (rssid != new_rssid) {
+            conflict_idxes.emplace_back(i);
+            conflict_rowids.emplace_back(new_rss_rowid);
+        }
+    }
+    if (!conflict_idxes.empty()) {
+        total_conflicts += conflict_idxes.size();
+        std::vector<std::unique_ptr<Column>> read_columns;
+        read_columns.resize(_partial_update_states[segment_id].write_columns.size());
+        for (uint32_t i = 0; i < read_columns.size(); ++i) {
+            read_columns[i] = _partial_update_states[segment_id].write_columns[i]->clone_empty();
+        }
+        size_t num_default = 0;
+        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+        std::vector<uint32_t> read_idxes;
+        plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
+        DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
+        RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, op_write, *tablet_schema,
+                                                                read_column_ids, num_default > 0, rowids_by_rssid,
+                                                                &read_columns));
+
+        for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
+            std::unique_ptr<Column> new_write_column =
+                    _partial_update_states[segment_id].write_columns[col_idx]->clone_empty();
+            new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
+            RETURN_IF_ERROR(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
+                    *new_write_column, conflict_idxes.data()));
+        }
+    }
+
+    return Status::OK();
+}
+
+Status RowsetUpdateState::_resolve_conflict_auto_increment(const TxnLogPB_OpWrite& op_write,
+                                                           const TabletMetadata& metadata, Tablet* tablet,
+                                                           const std::vector<uint64_t>& new_rss_rowids,
+                                                           uint32_t segment_id, size_t& total_conflicts,
+                                                           TabletSchema* tablet_schema) {
+    uint32_t num_rows = new_rss_rowids.size();
+    std::vector<uint32_t> conflict_idxes;
+    std::vector<uint64_t> conflict_rowids;
+    DCHECK_EQ(num_rows, _auto_increment_partial_update_states[segment_id].src_rss_rowids.size());
+    for (size_t i = 0; i < new_rss_rowids.size(); ++i) {
+        uint64_t new_rss_rowid = new_rss_rowids[i];
+        uint32_t new_rssid = new_rss_rowid >> 32;
+        uint64_t rss_rowid = _auto_increment_partial_update_states[segment_id].src_rss_rowids[i];
+        uint32_t rssid = rss_rowid >> 32;
+
+        if (rssid != new_rssid) {
+            conflict_idxes.emplace_back(i);
+            conflict_rowids.emplace_back(new_rss_rowid);
+        }
+    }
+    if (!conflict_idxes.empty()) {
+        total_conflicts += conflict_idxes.size();
+        // in conflict case, rewrite segment must be needed
+        _auto_increment_partial_update_states[segment_id].skip_rewrite = false;
+        _auto_increment_partial_update_states[segment_id].src_rss_rowids = new_rss_rowids;
+
+        std::vector<uint32_t> rowids;
+        uint32_t n = _auto_increment_partial_update_states[segment_id].src_rss_rowids.size();
+        for (uint32_t j = 0; j < n; j++) {
+            uint64_t v = _auto_increment_partial_update_states[segment_id].src_rss_rowids[j];
+            uint32_t rssid = v >> 32;
+            if (rssid == (uint32_t)-1) {
+                rowids.emplace_back(j);
+            }
+        }
+        std::swap(_auto_increment_partial_update_states[segment_id].rowids, rowids);
+
+        size_t new_rows = 0;
+        std::vector<uint32_t> idxes;
+        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+        plan_read_by_rssid(conflict_rowids, &new_rows, &rowids_by_rssid, &idxes);
+
+        if (new_rows > 0) {
+            uint32_t last = idxes.size() - new_rows;
+            for (unsigned int& idx : idxes) {
+                if (idx != 0) {
+                    --idx;
+                } else {
+                    idx = last;
+                    ++last;
+                }
+            }
+        }
+
+        uint32_t auto_increment_column_id = 0;
+        for (int i = 0; i < tablet_schema->num_columns(); ++i) {
+            if (tablet_schema->column(i).is_auto_increment()) {
+                auto_increment_column_id = i;
+                break;
+            }
+        }
+        std::vector<uint32_t> column_id{auto_increment_column_id};
+        std::vector<std::unique_ptr<Column>> auto_increment_read_column;
+        auto_increment_read_column.resize(1);
+        auto_increment_read_column[0] = _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
+        RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(
+                tablet, metadata, op_write, *tablet_schema, column_id, new_rows > 0, rowids_by_rssid,
+                &auto_increment_read_column, &_auto_increment_partial_update_states[segment_id]));
+
+        std::unique_ptr<Column> new_write_column =
+                _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
+        new_write_column->append_selective(*auto_increment_read_column[0], idxes.data(), 0, idxes.size());
+        RETURN_IF_ERROR(_auto_increment_partial_update_states[segment_id].write_column->update_rows(
+                *new_write_column, conflict_idxes.data()));
+
+        // reslove delete-partial update conflict base on latest column values
+        _auto_increment_delete_pks[segment_id].reset();
+        _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->clone_empty();
+        std::vector<uint32_t> delete_idxes;
+        const int64* data = reinterpret_cast<const int64*>(
+                _auto_increment_partial_update_states[segment_id].write_column->raw_data());
+
+        // just check the rows which are not exist in the previous version
+        // because the rows exist in the previous version may contain 0 which are specified by the user
+        for (unsigned int row_idx : _auto_increment_partial_update_states[segment_id].rowids) {
+            if (data[row_idx] == 0) {
+                delete_idxes.emplace_back(row_idx);
+            }
+        }
+
+        if (delete_idxes.size() != 0) {
+            _auto_increment_delete_pks[segment_id]->append_selective(*_upserts[segment_id], delete_idxes.data(), 0,
+                                                                     delete_idxes.size());
+        }
+    }
+    return Status::OK();
+}
+
+const std::vector<std::unique_ptr<Column>>& RowsetUpdateState::auto_increment_deletes() const {
+    return _auto_increment_delete_pks;
+}
+
+>>>>>>> 389094f76c ([BugFix] crash when apply in table with AUTO_INCREMENT column (#27176) (#27199))
 std::string RowsetUpdateState::to_string() const {
     return strings::Substitute("RowsetUpdateState tablet:$0", _tablet_id);
 }

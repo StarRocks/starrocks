@@ -379,7 +379,12 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
 }
 
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
+<<<<<<< HEAD
                                                                         std::vector<uint32_t> column_id) {
+=======
+                                                                        EditVersion latest_applied_version,
+                                                                        const std::vector<uint32_t>& column_id) {
+>>>>>>> 389094f76c ([BugFix] crash when apply in table with AUTO_INCREMENT column (#27176) (#27199))
     if (_auto_increment_partial_update_states.size() == 0) {
         _auto_increment_partial_update_states.resize(rowset->num_segments());
     }
@@ -398,7 +403,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
 
     _auto_increment_partial_update_states[idx].init(
             rowset, schema != nullptr ? schema.get() : const_cast<TabletSchema*>(&tablet->tablet_schema()),
-            column_id[0], idx);
+            rowset_meta_pb.txn_meta().auto_increment_partial_update_column_id(), idx);
     _auto_increment_partial_update_states[idx].src_rss_rowids.resize(_upserts[idx]->size());
 
     auto column = ChunkHelper::column_from_field(*read_column_schema.field(0).get());
@@ -601,9 +606,22 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
 
     if (txn_meta.has_auto_increment_partial_update_column_id()) {
+<<<<<<< HEAD
         uint32_t id = txn_meta.auto_increment_partial_update_column_id();
         RETURN_IF_ERROR(_prepare_auto_increment_partial_update_states(tablet, rowset, segment_id,
                                                                       std::vector<uint32_t>(1, id)));
+=======
+        uint32_t id = 0;
+        for (int i = 0; i < tablet->tablet_schema().num_columns(); ++i) {
+            if (tablet->tablet_schema().column(i).is_auto_increment()) {
+                id = i;
+                break;
+            }
+        }
+        std::vector<uint32_t> column_id(1, id);
+        RETURN_IF_ERROR(_prepare_auto_increment_partial_update_states(tablet, rowset, segment_id,
+                                                                      latest_applied_version, column_id));
+>>>>>>> 389094f76c ([BugFix] crash when apply in table with AUTO_INCREMENT column (#27176) (#27199))
     }
 
     auto src_path = Rowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), segment_id);

@@ -77,7 +77,13 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
 
-    uint32_t auto_increment_column_id = auto_increment_partial_update_state.id;
+    uint32_t auto_increment_column_id = 0;
+    for (const auto& col : tschema.columns()) {
+        if (col.is_auto_increment()) {
+            break;
+        }
+        ++auto_increment_column_id;
+    }
     uint32_t segment_id = auto_increment_partial_update_state.segment_id;
     Rowset* rowset = auto_increment_partial_update_state.rowset;
     rowset->load();
@@ -147,6 +153,100 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+// This function is used when the auto-increment column is not specified in partial update.
+// In this function, we use the segment iterator to read the old data, replace the old auto
+// increment column, and rewrite the full segment file through SegmentWriter.
+Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
+                                starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
+                                std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns,
+                                const starrocks::lake::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet) {
+    if (column_ids.size() == 0) {
+        DCHECK_EQ(columns, nullptr);
+    }
+
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
+
+    uint32_t auto_increment_column_id = 0;
+    for (const auto& col : tschema.columns()) {
+        if (col.is_auto_increment()) {
+            break;
+        }
+        ++auto_increment_column_id;
+    }
+    uint32_t segment_id = auto_increment_partial_update_state.segment_id;
+
+    std::vector<uint32_t> src_column_ids;
+    std::set<uint32_t> update_columns_set(column_ids.begin(), column_ids.end());
+
+    for (auto i = 0; i < tschema.num_columns(); ++i) {
+        if (i != auto_increment_column_id && update_columns_set.find(i) == update_columns_set.end()) {
+            src_column_ids.emplace_back(i);
+        }
+    }
+    Schema src_schema = ChunkHelper::convert_schema(tschema, src_column_ids);
+
+    std::unique_ptr<starrocks::lake::Rowset> rowset = std::make_unique<starrocks::lake::Rowset>(
+            tablet, std::make_shared<starrocks::lake::RowsetMetadataPB>(op_write.rowset()));
+    std::vector<starrocks::lake::SegmentPtr> segments;
+    RETURN_IF_ERROR(rowset->load_segments(&segments, false));
+    uint32_t num_rows = segments[segment_id]->num_rows();
+
+    auto chunk_shared_ptr = ChunkHelper::new_chunk(src_schema, num_rows);
+    auto read_chunk = chunk_shared_ptr.get();
+
+    SegmentReadOptions seg_options;
+    OlapReaderStatistics stats;
+    seg_options.fs = fs;
+    seg_options.stats = &stats;
+    seg_options.chunk_size = num_rows;
+
+    auto res = segments[segment_id]->new_iterator(src_schema, seg_options);
+    auto& itr = res.value();
+
+    if (itr) {
+        auto st = itr->get_next(read_chunk);
+        DCHECK_EQ(read_chunk->num_rows(), num_rows);
+    }
+    itr->close();
+
+    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path));
+
+    std::vector<uint32_t> full_column_ids(tschema.num_columns());
+    std::iota(full_column_ids.begin(), full_column_ids.end(), 0);
+    auto schema = ChunkHelper::convert_schema(tschema, full_column_ids);
+    auto chunk = ChunkHelper::new_chunk(schema, full_column_ids.size());
+
+    size_t update_columns_index = 0;
+    size_t read_columns_index = 0;
+    for (int i = 0; i < tschema.num_columns(); ++i) {
+        if (i == auto_increment_column_id) {
+            chunk->get_column_by_index(i).reset(auto_increment_partial_update_state.write_column.release());
+        } else if (update_columns_set.find(i) != update_columns_set.end()) {
+            chunk->get_column_by_index(i).reset((*columns)[update_columns_index].release());
+            ++update_columns_index;
+        } else {
+            chunk->get_column_by_index(i).swap(read_chunk->get_column_by_index(read_columns_index));
+            read_columns_index++;
+        }
+    }
+
+    SegmentWriterOptions opts;
+    SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
+    RETURN_IF_ERROR(writer.init(full_column_ids, true));
+
+    uint64_t index_size = 0;
+    uint64_t segment_file_size;
+    RETURN_IF_ERROR(writer.append_chunk(*chunk));
+    RETURN_IF_ERROR(writer.finalize_columns(&index_size));
+    RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
+
+    return Status::OK();
+}
+
+>>>>>>> 389094f76c ([BugFix] crash when apply in table with AUTO_INCREMENT column (#27176) (#27199))
 Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema& tschema,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>& columns,
                                 uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {

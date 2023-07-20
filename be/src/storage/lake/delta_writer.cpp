@@ -344,6 +344,30 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
         if (_merge_condition != "") {
             op_write->mutable_txn_meta()->set_merge_condition(_merge_condition);
         }
+<<<<<<< HEAD
+=======
+        // handle auto increment
+        if (_miss_auto_increment_column) {
+            for (auto i = 0; i < _tablet_schema->num_columns(); ++i) {
+                auto col = _tablet_schema->column(i);
+                if (col.is_auto_increment()) {
+                    /*
+                        The auto increment id set here is inconsistent with the id in
+                        full tablet schema. The id here is indicate the offset id of
+                        auto increment column in partial segment file.
+                    */
+                    op_write->mutable_txn_meta()->set_auto_increment_partial_update_column_id(i);
+                    break;
+                }
+            }
+
+            if (op_write->rewrite_segments_size() == 0) {
+                for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
+                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
+                }
+            }
+        }
+>>>>>>> 389094f76c ([BugFix] crash when apply in table with AUTO_INCREMENT column (#27176) (#27199))
     }
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload update state here to minimaze the cost when publishing.
