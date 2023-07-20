@@ -1811,11 +1811,14 @@ public class MaterializedViewRewriter {
             ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
             Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
             ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
-            ColumnRefOperator leftTarget = columnRewriter.rewriteViewToQuery(left).cast();
-            ColumnRefOperator rightTarget = columnRewriter.rewriteViewToQuery(right).cast();
-            if (leftTarget == null || rightTarget == null) {
-                return null;
+            ScalarOperator leftScalar = columnRewriter.rewriteViewToQuery(left);
+            ScalarOperator rightScalar = columnRewriter.rewriteViewToQuery(right);
+            if (leftScalar == null || rightScalar == null) {
+                return ec;
             }
+
+            ColumnRefOperator leftTarget = leftScalar.cast();
+            ColumnRefOperator rightTarget = rightScalar.cast();
             ec.addEquivalence(leftTarget, rightTarget);
         }
         return ec;
