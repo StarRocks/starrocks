@@ -523,8 +523,6 @@ public class OlapTableSink extends DataSink {
                                 selectedBackedIds.add(replicas.get(0).getBackendId());
                             } else {
                                 LOG.warn("Tablet {} replicas {} all has write fail flag", tablet.getId(), replicas);
-                                throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
-                                        String.format("Tablet %d replicas %s all has write fail flag", tablet.getId(), replicas));
                             }
                         }
                         locationParam
