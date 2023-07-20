@@ -30,6 +30,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -302,9 +303,22 @@ public class TabletInvertedIndex {
                 tabletMigrationMap.size(), transactionsToClear.size(), transactionsToPublish.size(), (end - start));
     }
 
-    private void deleteTabletByConsistencyChecker(long tabletId, long backendId,
+    private void deleteTabletByConsistencyChecker(TabletMeta tabletMeta, long tabletId, long backendId,
                                                   String reason, Set<Long> invalidTablets) {
-        LOG.info("delete tablet {} on backend {} from inverted index by consistency checker, because: {}",
+        if (tabletMeta != null) {
+            Long toBeCleanedTime = tabletMeta.getToBeCleanedTime();
+            if (toBeCleanedTime == null) {
+                // init `toBeCleanedTime` and delay the actual deletion to next round of check
+                tabletMeta.setToBeCleanedTime(System.currentTimeMillis() +
+                        Config.consistency_tablet_meta_check_interval_ms / 2);
+                return;
+            } else if (System.currentTimeMillis() < toBeCleanedTime) {
+                return;
+            }
+        }
+
+        LOG.info("TabletMetaChecker: delete tablet {} on backend {} from inverted index by" +
+                        " consistency checker, because: {}",
                 tabletId, backendId, reason);
         deleteTablet(tabletId);
         invalidTablets.add(tabletId);
@@ -330,8 +344,11 @@ public class TabletInvertedIndex {
 
         long startTime = System.currentTimeMillis();
         long scannedTabletCount = 0;
+        long numIgnoredTabletCausedByAbnormalState = 0;
+        List<Long> ignoreTablets = new ArrayList<>();
 
         for (Long backendId : backendIds) {
+            LOG.info("TabletMetaChecker: start to check tablet meta consistency for backend {}", backendId);
             List<Long> tabletIds = getTabletIdsByBackendId(backendId);
             backendTabletNumReport.put(backendId, new Pair<>(0L, 0L));
 
@@ -341,7 +358,7 @@ public class TabletInvertedIndex {
 
                 TabletMeta tabletMeta = getTabletMeta(tabletId);
                 if (tabletMeta == null) {
-                    deleteTabletByConsistencyChecker(tabletId, backendId, "tablet meta is null", invalidTablets);
+                    deleteTabletByConsistencyChecker(null, tabletId, backendId, "tablet meta is null", invalidTablets);
                     continue;
                 }
 
@@ -353,7 +370,7 @@ public class TabletInvertedIndex {
                     if (database != null) {
                         isInRecycleBin = true;
                     } else {
-                        deleteTabletByConsistencyChecker(tabletId, backendId,
+                        deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                 "database " + dbId + " doesn't exist", invalidTablets);
                         continue;
                     }
@@ -370,10 +387,20 @@ public class TabletInvertedIndex {
                         if (table != null) {
                             isInRecycleBin = true;
                         } else {
-                            deleteTabletByConsistencyChecker(tabletId, backendId,
+                            deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                     "table " + dbId + "." + tableId + " doesn't exist", invalidTablets);
                             continue;
                         }
+                    }
+
+                    // To avoid delete tablet using by restore job, rollup job, schema change job etc.
+                    if (table instanceof OlapTable &&
+                            ((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
+                        if (ignoreTablets.size() < 20) {
+                            ignoreTablets.add(tabletId);
+                        }
+                        numIgnoredTabletCausedByAbnormalState++;
+                        continue;
                     }
 
                     // validate partition
@@ -384,7 +411,7 @@ public class TabletInvertedIndex {
                         if (partition != null) {
                             isInRecycleBin = true;
                         } else {
-                            deleteTabletByConsistencyChecker(tabletId, backendId,
+                            deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                     "partition " + dbId + "." + tableId + "." + partitionId + " doesn't exist",
                                     invalidTablets);
                             continue;
@@ -395,7 +422,7 @@ public class TabletInvertedIndex {
                     long indexId = tabletMeta.getIndexId();
                     MaterializedIndex index = partition.getIndex(indexId);
                     if (index == null) {
-                        deleteTabletByConsistencyChecker(tabletId, backendId,
+                        deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                 "materialized index " + dbId + "." + tableId + "." +
                                         partitionId + "." + indexId + " doesn't exist",
                                 invalidTablets);
@@ -405,7 +432,7 @@ public class TabletInvertedIndex {
                     // validate tablet
                     Tablet tablet = index.getTablet(tabletId);
                     if (tablet == null) {
-                        deleteTabletByConsistencyChecker(tabletId, backendId,
+                        deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                 "tablet " + dbId + "." + tableId + "." +
                                         partitionId + "." + indexId + "." + tabletId + " doesn't exist",
                                 invalidTablets);
@@ -425,9 +452,13 @@ public class TabletInvertedIndex {
 
         // logging report
         LOG.info("TabletMetaChecker has cleaned {} invalid tablet(s), scanned {} tablet(s) on {} backend(s) in {}ms," +
-                " backend tablet count info(format: backend_id=curr_tablet_count:recycle_tablet_count): {}",
+                " total tablets in recycle bin: {}, total ignored tablets: {}, up to 20 of ignored tablets: {}, " +
+                        "backend tablet count info(format: backend_id=curr_tablet_count:recycle_tablet_count): {}",
                 invalidTablets.size(), scannedTabletCount, backendIds.size(),
-                System.currentTimeMillis() - startTime, backendTabletNumReport);
+                System.currentTimeMillis() - startTime,
+                backendTabletNumReport.values().stream().mapToLong(p -> p.second).sum(),
+                numIgnoredTabletCausedByAbnormalState, ignoreTablets,
+                backendTabletNumReport);
     }
 
     public Long getTabletIdByReplica(long replicaId) {

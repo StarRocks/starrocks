@@ -57,9 +57,6 @@ public class ConsistencyChecker extends MasterDaemon {
     private static final Logger LOG = LogManager.getLogger(ConsistencyChecker.class);
 
     private static final int MAX_JOB_NUM = 100;
-
-    private static final long DEFAULT_TABLET_META_CHECK_INTERVAL_MS = 2 * 3600 * 1000L; // every 2 hours
-
     private static final Comparator<MetaObject> COMPARATOR =
             (first, second) -> Long.signum(first.getLastCheckTime() - second.getLastCheckTime());
 
@@ -117,7 +114,7 @@ public class ConsistencyChecker extends MasterDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        if (System.currentTimeMillis() - lastTabletMetaCheckTime > DEFAULT_TABLET_META_CHECK_INTERVAL_MS) {
+        if (System.currentTimeMillis() - lastTabletMetaCheckTime > Config.consistency_tablet_meta_check_interval_ms) {
             checkTabletMetaConsistency();
             lastTabletMetaCheckTime = System.currentTimeMillis();
         }

@@ -41,6 +41,11 @@ public class TabletMeta {
 
     private TStorageMedium storageMedium;
 
+    /**
+     * If currentTimeMs is ahead of `toBeCleanedTimeMs`, the tablet meta will be cleaned from TabletInvertedIndex.
+     */
+    private Long toBeCleanedTimeMs = null;
+
     private ReentrantReadWriteLock lock;
 
     public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
@@ -136,6 +141,14 @@ public class TabletMeta {
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    public Long getToBeCleanedTime() {
+        return toBeCleanedTimeMs;
+    }
+
+    public void setToBeCleanedTime(Long time) {
+        toBeCleanedTimeMs = time;
     }
 
     public boolean containsSchemaHash(int schemaHash) {
