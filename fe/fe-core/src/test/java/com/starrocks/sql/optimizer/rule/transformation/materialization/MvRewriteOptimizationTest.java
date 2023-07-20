@@ -53,10 +53,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/optimizer/rule/transformation/materialization/MvRewriteOptimizationTest.java
 import org.junit.BeforeClass;
-=======
->>>>>>> 656e543e84 ([BugFix] fix mv rewrite for join predicate pushdown (#27632)):fe/fe-core/src/test/java/com/starrocks/sql/optimizer/rule/transformation/materialization/MvRewriteTest.java
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -2640,7 +2637,6 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/optimizer/rule/transformation/materialization/MvRewriteOptimizationTest.java
     public void testNullPartitionRewriteWithLoad() throws Exception {
         {
             cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
@@ -2700,7 +2696,9 @@ public class MvRewriteOptimizationTest {
             PlanTestBase.assertNotContains(plan, "partial_mv_13");
             starRocksAssert.dropMaterializedView("partial_mv_13");
         }
-=======
+    }
+
+    @Test
     public void testJoinPredicatePushdown() throws Exception {
         cluster.runSql("test", "CREATE TABLE pushdown_t1 (\n" +
                 "    `c0` string,\n" +
@@ -2826,6 +2824,5 @@ public class MvRewriteOptimizationTest {
 
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv2");
->>>>>>> 656e543e84 ([BugFix] fix mv rewrite for join predicate pushdown (#27632)):fe/fe-core/src/test/java/com/starrocks/sql/optimizer/rule/transformation/materialization/MvRewriteTest.java
     }
 }
