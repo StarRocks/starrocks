@@ -128,6 +128,10 @@ public class TabletMeta {
         toBeCleanedTimeMs = time;
     }
 
+    public void resetToBeCleanedTime() {
+        toBeCleanedTimeMs = null;
+    }
+
     public boolean containsSchemaHash(int schemaHash) {
         lock.readLock().lock();
         try {
