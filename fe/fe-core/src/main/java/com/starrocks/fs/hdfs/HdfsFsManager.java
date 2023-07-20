@@ -428,8 +428,8 @@ public class HdfsFsManager {
                 host = loadProperties.get(FS_DEFAULTFS_KEY);
                 LOG.info("no schema and authority in path. use fs.defaultFs");
             } else {
-                LOG.warn("invalid hdfs path. authority is null,path:" + path);
-                throw new UserException("invalid hdfs path. authority is null");
+                LOG.warn("invalid hdfs path. failed to parse authority, path:" + path);
+                throw new UserException("invalid hdfs path. failed to parse authority");
             }
         }
         String username = loadProperties.getOrDefault(USER_NAME_KEY, "");
