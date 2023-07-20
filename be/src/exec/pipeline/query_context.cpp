@@ -571,6 +571,8 @@ void QueryContextManager::report_fragments(
                     LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
                     rpc_status = fe_connection.reopen();
                     if (!rpc_status.ok()) {
+                        LOG(WARNING) << "ReportExecStatus() to " << fe_addr << " failed after reopening connection:\n"
+                                     << rpc_status.get_error_msg();
                         continue;
                     }
                     fe_connection->batchReportExecStatus(res, report_batch);
