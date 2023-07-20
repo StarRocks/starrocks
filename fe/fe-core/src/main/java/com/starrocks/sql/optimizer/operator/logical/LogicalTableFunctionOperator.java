@@ -108,7 +108,7 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
         for (ColumnRefOperator col : outerColRefs) {
             outputInfoList.add(new ColumnOutputInfo(col, col));
         }
-        return new RowOutputInfo(outputInfoList, outerColRefs);
+        return new RowOutputInfo(outputInfoList, fnResultColRefs);
     }
 
     @Override

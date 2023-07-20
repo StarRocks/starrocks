@@ -1457,4 +1457,38 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "  1:AGGREGATE (update finalize)");
         assertContains(plan, "  0:OlapScanNode");
     }
+
+    @Test
+    public void testValidateJoinReorderPlan() throws Exception {
+        String sql = "select  \n" +
+                "  ref_0.N_NAME as c0, \n" +
+                "  case when ref_3.C_NATIONKEY > ref_3.C_ACCTBAL then ref_1.O_ORDERPRIORITY else " +
+                "ref_1.O_SHIPPRIORITY end as c1\n" +
+                "from \n" +
+                "  nation as ref_0 inner join nation n1 on ref_0.N_NAME = n1.N_NAME" +
+                "  join nation n2 on ref_0.N_NAME = n2.N_NAME join nation n3 on ref_0.N_NAME = n3.N_NAME" +
+                "  join nation n4 on ref_0.N_NAME = n4.N_NAME" +
+                "            inner join orders as ref_1\n" +
+                "            on (ref_0.N_REGIONKEY = ref_1.O_CUSTKEY )\n" +
+                "          left join t2 as ref_2\n" +
+                "          on (ref_0.N_NATIONKEY = ref_2.v8 )\n" +
+                "        inner join customer as ref_3\n" +
+                "        on (ref_1.O_ORDERPRIORITY = ref_3.C_NAME )\n" +
+                "      inner join supplier as ref_4\n" +
+                "      on (ref_1.O_CLERK = ref_4.S_PHONE )\n" +
+                "    left join supplier as ref_5\n" +
+                "    on (ref_2.v9 = ref_5.S_SUPPKEY )\n" +
+                "where cast(coalesce(ref_3.C_MKTSEGMENT, ref_0.N_NAME) as VARCHAR) = ref_5.S_ADDRESS";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "39:Project\n" +
+                "  |  <slot 2> : 2: N_NAME\n" +
+                "  |  <slot 64> : if(CAST(42: C_NATIONKEY AS DOUBLE) > 44: C_ACCTBAL, 31: O_ORDERPRIORITY, " +
+                "CAST(33: O_SHIPPRIORITY AS VARCHAR(15)))\n" +
+                "  |  \n" +
+                "  38:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 65: cast = 38: v9\n" +
+                "  |  equal join conjunct: 58: S_ADDRESS = 66: coalesce");
+    }
 }

@@ -134,12 +134,11 @@ public abstract class Operator {
     }
 
     public RowOutputInfo getRowOutputInfo(List<OptExpression> inputs) {
-        if (rowOutputInfo != null) {
-            return rowOutputInfo;
+        if (rowOutputInfo == null) {
+            rowOutputInfo = deriveRowOutputInfo(inputs);
         }
 
-
-        rowOutputInfo = deriveRowOutputInfo(inputs);
+        // transformation may update the projection, so update the rowOutputInfo at the same time
         if (projection != null) {
             rowOutputInfo = new RowOutputInfo(projection.getColumnRefMap(), projection.getCommonSubOperatorMap(),
                     rowOutputInfo.getOriginalColOutputInfo(), rowOutputInfo.getEndogenousCols());
