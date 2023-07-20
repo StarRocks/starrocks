@@ -1031,7 +1031,7 @@ PARALLEL_TEST(MapColumnTest, test_update_rows) {
     c1->append_datum(map4);
 
     std::vector<uint32_t> replace_idxes = {1, 3};
-    ASSERT_TRUE(c0->update_rows(*c1.get(), replace_idxes.data()).ok());
+    c0->update_rows(*c1.get(), replace_idxes.data());
 
     ASSERT_EQ(4, c0->size());
     ASSERT_EQ("{1:11,2:22,3:33}", c0->debug_item(0));
@@ -1055,7 +1055,7 @@ PARALLEL_TEST(MapColumnTest, test_update_rows) {
     c2->append_datum(map6);
 
     std::vector<uint32_t> replace_idxes_new = {1, 2};
-    ASSERT_TRUE(c0->update_rows(*c2.get(), replace_idxes_new.data()).ok());
+    c0->update_rows(*c2.get(), replace_idxes_new.data());
 
     ASSERT_EQ(4, c0->size());
     ASSERT_EQ("{1:11,2:22,3:33}", c0->debug_item(0));

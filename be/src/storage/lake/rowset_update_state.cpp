@@ -613,7 +613,7 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const TxnLogPB_OpWrit
             std::unique_ptr<Column> new_write_column =
                     _partial_update_states[segment_id].write_columns[col_idx]->clone_empty();
             new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
-            RETURN_IF_ERROR(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
+            RETURN_IF_EXCEPTION(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
                     *new_write_column, conflict_idxes.data()));
         }
     }
@@ -693,7 +693,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const TxnLogPB_OpWrit
         std::unique_ptr<Column> new_write_column =
                 _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
         new_write_column->append_selective(*auto_increment_read_column[0], idxes.data(), 0, idxes.size());
-        RETURN_IF_ERROR(_auto_increment_partial_update_states[segment_id].write_column->update_rows(
+        RETURN_IF_EXCEPTION(_auto_increment_partial_update_states[segment_id].write_column->update_rows(
                 *new_write_column, conflict_idxes.data()));
 
         // reslove delete-partial update conflict base on latest column values

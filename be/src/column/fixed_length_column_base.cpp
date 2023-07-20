@@ -105,14 +105,13 @@ Status FixedLengthColumnBase<T>::fill_range(const Buffer<T>& ids, const std::vec
 }
 
 template <typename T>
-Status FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
+void FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
     size_t replace_num = src.size();
     for (uint32_t i = 0; i < replace_num; ++i) {
         DCHECK_LT(indexes[i], _data.size());
         _data[indexes[i]] = src_data[i];
     }
-    return Status::OK();
 }
 
 template <typename T>

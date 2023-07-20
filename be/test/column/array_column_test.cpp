@@ -998,7 +998,7 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     offset_col1->append(4);
 
     std::vector<uint32_t> replace_idxes = {1, 3};
-    ASSERT_TRUE(column->update_rows(*replace_col1.get(), replace_idxes.data()).ok());
+    column->update_rows(*replace_col1.get(), replace_idxes.data());
 
     ASSERT_EQ(4, column->size());
     ASSERT_EQ("[1,2,3]", column->debug_item(0));
@@ -1019,7 +1019,7 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     element_col2->append_datum(204);
     offset_col2->append(4);
 
-    ASSERT_TRUE(column->update_rows(*replace_col2.get(), replace_idxes.data()).ok());
+    column->update_rows(*replace_col2.get(), replace_idxes.data());
 
     ASSERT_EQ(4, column->size());
     ASSERT_EQ("[1,2,3]", column->debug_item(0));

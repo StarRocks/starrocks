@@ -450,3 +450,12 @@ struct StatusInstance {
             return ret;               \
         }                             \
     } while (0)
+
+#define RETURN_IF_EXCEPTION(stmt)                   \
+    do {                                            \
+        try {                                       \
+            { stmt; }                               \
+        } catch (const std::exception& e) {         \
+            return Status::InternalError(e.what()); \
+        }                                           \
+    } while (0)
