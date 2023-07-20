@@ -18,9 +18,9 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
@@ -109,15 +109,16 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void removeStorageVolume(DropStorageVolumeStmt stmt) throws DdlException, AnalysisException {
+    public void removeStorageVolume(DropStorageVolumeStmt stmt) throws DdlException, MetaNotFoundException {
         removeStorageVolume(stmt.getName());
     }
 
-    public void removeStorageVolume(String name) throws DdlException {
+    public void removeStorageVolume(String name) throws DdlException, MetaNotFoundException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(name);
-            Preconditions.checkState(sv != null,
-                    "Storage volume '%s' does not exist", name);
+            if (sv == null) {
+                throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
+            }
             Preconditions.checkState(!defaultStorageVolumeId.equals(sv.getId()),
                     "default storage volume can not be removed");
             Set<Long> dbs = storageVolumeToDbs.get(sv.getId());
@@ -164,7 +165,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) throws AnalysisException {
+    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) {
         setDefaultStorageVolume(stmt.getName());
     }
 
