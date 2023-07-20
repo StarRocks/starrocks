@@ -196,6 +196,9 @@ public:
 
     bool from_joda_format_str(const char* format, int format_len, const char* value, int value_len,
                               const char** sub_val_end);
+    bool from_joda_format(const std::string& format, const std::string& value, const char** sub_val_end) {
+        return from_joda_format_str(format.data(), format.length(), value.data(), value.length(), sub_val_end);
+    }
 
     operator int64_t() const { return to_int64(); }
 

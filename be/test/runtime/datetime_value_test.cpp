@@ -34,6 +34,7 @@
 
 #include "runtime/datetime_value.h"
 
+#include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
 #include <string>
@@ -1414,5 +1415,33 @@ TEST_F(DateTimeValueTest, packed_time) {
         ASSERT_EQ(1830650338932162560L, packed_time);
     }
 }
+
+using TestParseDatetimeParam = std::tuple<std::string, std::string, std::string>;
+
+class ParseDateTimeTestFixture : public ::testing::TestWithParam<TestParseDatetimeParam> {};
+
+TEST_P(ParseDateTimeTestFixture, parse_datetime) {
+    auto& [datetime_str, format, parsed] = GetParam();
+    const char* sub_val;
+    DateTimeValue datetime;
+    bool res = datetime.from_joda_format(format, datetime_str, &sub_val);
+    EXPECT_TRUE(res);
+    char str[20];
+    datetime.to_string(str);
+    EXPECT_EQ(parsed, str);
+
+    // to joda format
+    datetime.to_joda_format_string(format.data(), format.length(), str);
+    EXPECT_EQ(datetime_str, str);
+}
+
+INSTANTIATE_TEST_SUITE_P(ParseDateTimeTest, ParseDateTimeTestFixture,
+                         ::testing::Values(
+                                 // clang-format: off
+                                 TestParseDatetimeParam("1994-09-09", "yyyy-MM-dd", "1994-09-09"),
+                                 TestParseDatetimeParam("1994-09-09 01:02:03", "yyyy-MM-dd HH:mm:ss",
+                                                        "1994-09-09 01:02:03")
+                                 // clang-format: on
+                                 ));
 
 } // namespace starrocks

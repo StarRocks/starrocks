@@ -1385,171 +1385,160 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
     bool usa_time = false;
 
     while (ptr < end && val < val_end) {
-        // Skip space character
-        while (val < val_end && isspace(*val)) {
-            val++;
-        }
-        if (val >= val_end) {
-            break;
-        }
-
         // compute the size of same char, this will determine if additional prefixes are required,
         // eg. format 'yyyyyy' need to display '002023'
         const char* next_ch_ptr = ptr;
         uint32_t same_ch_size = 0;
-        char ch = *ptr;
-        for (; ch == *next_ch_ptr && next_ch_ptr < end; ++next_ch_ptr) {
+        for (char ch = *ptr; ch == *next_ch_ptr && next_ch_ptr < end; ++next_ch_ptr) {
             ++same_ch_size;
         }
 
-        if (!isspace(*ptr)) {
+        const char* tmp = nullptr;
+        int64_t int_value = 0;
+        switch (*ptr) {
+        case 'G':
+            return false;
+        case 'C':
+            return false;
+        case 'Y':
+            return false;
+        case 'x':
+            return false;
+        case 'w':
+            return false;
+        case 'e':
+            return false;
+        case 'E':
+            return false;
+        case 'y': {
+            // year
+            tmp = val + min(4, val_end - val);
+            if (!str_to_int64(val, &tmp, &int_value)) {
+                return false;
+            }
+            if (tmp - val <= 2) {
+                int_value += int_value >= 70 ? 1900 : 2000;
+            }
+            _year = int_value;
+            val = tmp;
+            date_part_used = true;
+            break;
+        }
+        case 'D': {
+            tmp = val + min(same_ch_size, val_end - val);
+            if (!str_to_int64(val, &tmp, &int_value)) {
+                return false;
+            }
+            yearday = int_value;
+            val = tmp;
+            date_part_used = true;
+            break;
+        }
+        case 'M':
+            // month of year
+            if (same_ch_size == 2) {
+                tmp = val + min(2, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                _month = int_value;
+                val = tmp;
+                date_part_used = true;
+                break;
+            } else if (same_ch_size == 3) {
+                int_value = check_word(s_ab_month_name, val, val_end, &val);
+                if (int_value < 0) {
+                    return false;
+                }
+                _month = int_value;
+                break;
+
+            } else if (same_ch_size == 4) {
+                int_value = check_word(s_month_name, val, val_end, &val);
+                if (int_value < 0) {
+                    return false;
+                }
+                _month = int_value;
+                break;
+            } else {
+                return false;
+            }
+        case 'd': {
+            tmp = val + min(2, val_end - val);
+            if (!str_to_int64(val, &tmp, &int_value)) {
+                return false;
+            }
+            _day = int_value;
+            val = tmp;
+            date_part_used = true;
+            break;
+        }
+        case 'a': {
+            if ((val_end - val) < 2 || toupper(*(val + 1)) != 'M' || !usa_time) {
+                return false;
+            }
+            if (toupper(*val) == 'P') {
+                // PM
+                day_part = 12;
+            }
+            time_part_used = true;
+            val += 2;
+            break;
+        }
+        case 'h':
+            usa_time = true;
+        case 'K':
+        case 'H':
+            tmp = val + min(same_ch_size, val_end - val);
+            if (!str_to_int64(val, &tmp, &int_value)) {
+                return false;
+            }
+            _hour = int_value;
+            val = tmp;
+            time_part_used = true;
+            break;
+        case 'k':
+            tmp = val + min(same_ch_size, val_end - val);
+            if (!str_to_int64(val, &tmp, &int_value)) {
+                return false;
+            }
+            _hour = int_value + 1;
+            val = tmp;
+            time_part_used = true;
+            break;
+        case 'm':
+            tmp = val + min(same_ch_size, val_end - val);
+            if (!str_to_int64(val, &tmp, &int_value)) {
+                return false;
+            }
+            _minute = int_value;
+            val = tmp;
+            time_part_used = true;
+            break;
+        case 's':
+            tmp = val + min(2, val_end - val);
+            if (!str_to_int64(val, &tmp, &int_value)) {
+                return false;
+            }
+            _second = int_value;
+            val = tmp;
+            time_part_used = true;
+            break;
+        case 'S':
+        case 'z':
+        case 'Z':
+        case '\'':
+            return false;
+        default: {
             if (*ptr != *val) {
                 return false;
             }
-            ptr++;
             val++;
-        } else if (ptr + 1 < end) {
-            const char* tmp = nullptr;
-            int64_t int_value = 0;
-            switch (*ptr++) {
-            case 'G':
-                return false;
-            case 'C':
-                return false;
-            case 'Y':
-                return false;
-            case 'x':
-                return false;
-            case 'w':
-                return false;
-            case 'e':
-                return false;
-            case 'E':
-                return false;
-            case 'y': {
-                // year
-                tmp = val + min(same_ch_size, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
-                    return false;
-                }
-                int_value += int_value >= 70 ? 1900 : 2000;
-                _year = int_value;
-                val = tmp;
-                date_part_used = true;
-                break;
-            }
-            case 'D': {
-                tmp = val + min(same_ch_size, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
-                    return false;
-                }
-                yearday = int_value;
-                val = tmp;
-                date_part_used = true;
-                break;
-            }
-            case 'M':
-                // month of year
-                if (same_ch_size == 2) {
-                    tmp = val + min(2, val_end - val);
-                    if (!str_to_int64(val, &tmp, &int_value)) {
-                        return false;
-                    }
-                    _month = int_value;
-                    val = tmp;
-                    date_part_used = true;
-                    break;
-                } else if (same_ch_size == 3) {
-                    int_value = check_word(s_ab_month_name, val, val_end, &val);
-                    if (int_value < 0) {
-                        return false;
-                    }
-                    _month = int_value;
-                    break;
-
-                } else if (same_ch_size == 4) {
-                    int_value = check_word(s_month_name, val, val_end, &val);
-                    if (int_value < 0) {
-                        return false;
-                    }
-                    _month = int_value;
-                    break;
-                } else {
-                    return false;
-                }
-            case 'd': {
-                tmp = val + min(2, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
-                    return false;
-                }
-                _day = int_value;
-                val = tmp;
-                date_part_used = true;
-                break;
-            }
-            case 'a': {
-                if ((val_end - val) < 2 || toupper(*(val + 1)) != 'M' || !usa_time) {
-                    return false;
-                }
-                if (toupper(*val) == 'P') {
-                    // PM
-                    day_part = 12;
-                }
-                time_part_used = true;
-                val += 2;
-                break;
-            }
-            case 'h':
-                usa_time = true;
-            case 'K':
-            case 'H':
-                tmp = val + min(same_ch_size, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
-                    return false;
-                }
-                _hour = int_value;
-                val = tmp;
-                time_part_used = true;
-                break;
-            case 'k':
-                tmp = val + min(same_ch_size, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
-                    return false;
-                }
-                _hour = int_value + 1;
-                val = tmp;
-                time_part_used = true;
-                break;
-            case 'm':
-                tmp = val + min(same_ch_size, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
-                    return false;
-                }
-                _minute = int_value;
-                val = tmp;
-                time_part_used = true;
-                break;
-            case 's':
-                tmp = val + min(2, val_end - val);
-                if (!str_to_int64(val, &tmp, &int_value)) {
-                    return false;
-                }
-                _second = int_value;
-                val = tmp;
-                time_part_used = true;
-                break;
-            case 'S':
-            case 'z':
-            case 'Z':
-            case '\'':
-
-            default:
-                return false;
-            }
-
-        } else {
-            ptr++;
+            break;
         }
+        }
+
+        ptr += same_ch_size;
     }
 
     if (usa_time) {
@@ -1558,10 +1547,10 @@ bool DateTimeValue::from_joda_format_str(const char* format, int format_len, con
         }
         _hour = (_hour % 12) + day_part;
     }
-    if (sub_val_end) {
-        *sub_val_end = val;
-        return false;
-    }
+    // if (sub_val_end) {
+    //     *sub_val_end = val;
+    //     return false;
+    // }
     // Year day
     if (yearday > 0) {
         uint64_t days = calc_daynr(_year, 1, 1) + yearday - 1;
