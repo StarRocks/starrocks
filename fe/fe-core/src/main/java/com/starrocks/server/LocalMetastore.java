@@ -1657,7 +1657,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         }
-        if (numAliveBackends == 0) {
+        if (numAliveNodes == 0) {
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 throw new DdlException("no alive compute nodes");
             } else {
