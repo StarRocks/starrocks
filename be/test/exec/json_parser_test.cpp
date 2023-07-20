@@ -486,7 +486,6 @@ PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
     {"key4": 4}])");
 }
 
-
 PARALLEL_TEST(JsonParserTest, test_big_illegal_json_array) {
     // json array with ' ', '/t', '\n'
     std::string input = R"( [  {"key1": 1}, "key2": "123456789012345678901234567890"},    {"key3": 3},
@@ -518,7 +517,6 @@ PARALLEL_TEST(JsonParserTest, test_big_illegal_json_array) {
     ASSERT_TRUE(st.is_data_quality_error());
     ASSERT_STREQ(parser->left_bytes_string(10).data(), R"("key2": "1)");
 }
-
 
 PARALLEL_TEST(JsonParserTest, test_big_value) {
     simdjson::ondemand::parser simdjson_parser;
