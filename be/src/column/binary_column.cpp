@@ -322,7 +322,7 @@ void BinaryColumnBase<T>::fill_default(const Filter& filter) {
 }
 
 template <typename T>
-Status BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
+void BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     size_t replace_num = src.size();
     bool need_resize = false;
@@ -360,8 +360,6 @@ Status BinaryColumnBase<T>::update_rows(const Column& src, const uint32_t* index
         }
         swap_column(*new_binary_column);
     }
-
-    return Status::OK();
 }
 
 template <typename T>

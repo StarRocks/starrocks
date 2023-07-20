@@ -128,13 +128,12 @@ void Chunk::set_num_rows(size_t count) {
     }
 }
 
-Status Chunk::update_rows(const Chunk& src, const uint32_t* indexes) {
+void Chunk::update_rows(const Chunk& src, const uint32_t* indexes) {
     DCHECK(_columns.size() == src.num_columns());
     for (int i = 0; i < _columns.size(); i++) {
         ColumnPtr& c = _columns[i];
-        RETURN_IF_ERROR(c->update_rows(*src.columns()[i], indexes));
+        c->update_rows(*src.columns()[i], indexes);
     }
-    return Status::OK();
 }
 
 std::string_view Chunk::get_column_name(size_t idx) const {
