@@ -84,6 +84,7 @@ import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
@@ -195,6 +196,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.OPTIMIZER;
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.REWRITE;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 // Do one COM_QUERY process.
 // first: Parse receive byte array to statement struct.
@@ -468,6 +470,10 @@ public class StmtExecutor {
 
             if (parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
+                final boolean isStatisticsJob = isStatisticsJob(parsedStmt);
+                if (!isStatisticsJob) {
+                    WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), 1L);
+                }
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
@@ -573,11 +579,16 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
-                        if (!needRetry && context.getSessionVariable().isEnableProfile()) {
-                            writeProfile(beginTimeInNanoSecond);
-                            if (parsedStmt.isExplain() &&
-                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile));
+                        if (!needRetry) {
+                            if (context.getSessionVariable().isEnableProfile()) {
+                                writeProfile(beginTimeInNanoSecond);
+                                if (parsedStmt.isExplain() &&
+                                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                    handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile));
+                                }
+                            }
+                            if (!isStatisticsJob) {
+                                WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), -1L);
                             }
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -673,6 +684,11 @@ public class StmtExecutor {
 
             context.setSessionVariable(sessionVariableBackup);
         }
+    }
+
+    private boolean isStatisticsJob(StatementBase stmt) {
+        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(context, stmt);
+        return dbs.values().stream().anyMatch(db -> STATISTICS_DB_NAME.equals(db.getFullName()));
     }
 
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
@@ -810,6 +826,7 @@ public class StmtExecutor {
         if (killCtx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
         }
+        Preconditions.checkNotNull(killCtx);
         if (context == killCtx) {
             // Suicide
             context.setKilled();
@@ -1639,7 +1656,9 @@ public class StmtExecutor {
                         createTime,
                         estimateScanRows,
                         type,
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
+                        context.getCurrentWarehouse(),
+                        isStatisticsJob(parsedStmt));
             }
 
             coord.setJobId(jobId);

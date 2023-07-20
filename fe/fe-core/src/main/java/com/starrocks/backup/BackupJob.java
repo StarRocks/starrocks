@@ -64,7 +64,9 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -369,6 +371,7 @@ public class BackupJob extends AbstractJob {
         status = new Status(ErrCode.COMMON_ERROR, "user cancelled");
         cancelInternal();
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(-1L);
+        WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouse(), -1L);
         return Status.OK;
     }
 
@@ -378,6 +381,11 @@ public class BackupJob extends AbstractJob {
             return true;
         }
         return false;
+    }
+
+    public String getCurrentWarehouse() {
+        // TODO(lzh): pass the current warehouse.
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     }
 
     protected void checkBackupTables(Database db) {
@@ -439,6 +447,7 @@ public class BackupJob extends AbstractJob {
 
     private void prepareAndSendSnapshotTask() {
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
+        WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouse(), 1L);
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -743,6 +752,7 @@ public class BackupJob extends AbstractJob {
         LOG.info("job is finished. {}", this);
 
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(-1L);
+        WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouse(), -1L);
     }
 
     private boolean uploadFile(String localFilePath, String remoteFilePath) {
