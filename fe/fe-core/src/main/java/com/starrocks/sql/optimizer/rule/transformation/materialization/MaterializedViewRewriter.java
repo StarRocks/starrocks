@@ -1034,8 +1034,8 @@ public class MaterializedViewRewriter {
             final ScalarOperator compensationPredicate = getMVCompensationPredicate(rewriteContext,
                     columnRewriter, mvColumnRefToScalarOp, equalPredicates, otherPredicates);
             if (compensationPredicate == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite query failed: get compensation predicates from MV but " +
-                        "rewrite compensation failed");
+                logMVRewrite(mvRewriteContext, "Rewrite query failed: success to convert query compensation predicates to MV " +
+                        "but rewrite compensation failed");
                 return null;
             }
 
@@ -1142,24 +1142,31 @@ public class MaterializedViewRewriter {
                                                       Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
                                                       ScalarOperator equalPredicates,
                                                       ScalarOperator otherPredicates) {
+        ScalarOperator newEqualPredicates = ConstantOperator.TRUE;
         if (!ConstantOperator.TRUE.equals(equalPredicates)) {
-            equalPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
+            newEqualPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
                     mvColumnRefToScalarOp, equalPredicates, true);
-            if (equalPredicates == null) {
+            if (newEqualPredicates == null) {
+                logMVRewrite(mvRewriteContext, "Rewrite equal predicates compensation failed: %s", equalPredicates);
                 return null;
             }
         }
 
+        ScalarOperator newOtherPredicates = ConstantOperator.TRUE;
         if (!ConstantOperator.TRUE.equals(otherPredicates)) {
-            otherPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
+            newOtherPredicates = rewriteMVCompensationExpression(rewriteContext, rewriter,
                     mvColumnRefToScalarOp, otherPredicates, false);
-            if (otherPredicates == null) {
+            if (newOtherPredicates == null) {
+                logMVRewrite(mvRewriteContext, "Rewrite other predicates compensation failed: %s", otherPredicates);
                 return null;
             }
         }
 
-        ScalarOperator compensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(equalPredicates, otherPredicates));
+        ScalarOperator compensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(newEqualPredicates,
+                newOtherPredicates));
         if (compensationPredicate == null) {
+            logMVRewrite(mvRewriteContext, "Canonize compensate predicates failed: %s , %s",
+                    equalPredicates, otherPredicates);
             return null;
         }
         return addJoinDerivePredicate(rewriteContext, rewriter, mvColumnRefToScalarOp, compensationPredicate);

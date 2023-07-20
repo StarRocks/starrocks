@@ -106,8 +106,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTest {
 
     @Test
     public void testMV_AggWithHaving1() throws Exception {
-        connectContext.getSessionVariable().setEnableMaterializedViewViewDeltaRewrite(false);
-        connectContext.getSessionVariable().setEnableOuterJoinReorder(false);
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having1"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
@@ -117,11 +115,19 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTest {
 
     @Test
     public void testMV_AggWithHaving2() throws Exception {
-
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
+    }
+
+    @Test
+    public void testMV_AggWithHaving3() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having3"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("TEST_MV_3"));
     }
 }
