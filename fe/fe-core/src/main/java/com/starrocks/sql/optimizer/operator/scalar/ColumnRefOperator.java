@@ -161,6 +161,23 @@ public final class ColumnRefOperator extends ScalarOperator {
         return id == column.id;
     }
 
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!(obj instanceof ColumnRefOperator)) {
+            return false;
+        }
+
+        if (obj == this) {
+            return true;
+        }
+
+        ColumnRefOperator leftColumn = (ColumnRefOperator) this;
+        ColumnRefOperator rightColumn = (ColumnRefOperator) obj;
+        return leftColumn.getName().equals(rightColumn.getName())
+                && leftColumn.getType().equals(rightColumn.getType())
+                && leftColumn.isNullable() == rightColumn.isNullable();
+    }
+
     /**
      * return default value "col" to eliminate the influence of
      * column ref id on UT, make ut code can be fuzzy matching
