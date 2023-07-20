@@ -83,6 +83,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 /*
@@ -189,6 +190,7 @@ public class MaterializedViewRewriter {
         LogicalOperator queryOp = (LogicalOperator) queryExpr.getOp();
         LogicalOperator mvOp = (LogicalOperator) mvExpr.getOp();
         if (!queryOp.getOpType().equals(mvOp.getOpType())) {
+            logMVPrepare("join type is different {} != {}", queryOp.getOpType(), mvOp.getOpType());
             return false;
         }
         if (queryOp instanceof LogicalJoinOperator) {
@@ -204,7 +206,9 @@ public class MaterializedViewRewriter {
             LogicalJoinOperator mvJoin = (LogicalJoinOperator) mvExpr.getOp();
             JoinOperator mvJoinType = mvJoin.getJoinType();
 
-            if (!ScalarOperator.isEqual(queryJoin.getOnPredicate(), mvJoin.getOnPredicate())) {
+            if (!ScalarOperator.isEquivalent(queryJoin.getOnPredicate(), (mvJoin.getOnPredicate()))) {
+                logMVPrepare("join predicate is different {} != {}", queryJoin.getOnPredicate(),
+                        mvJoin.getOnPredicate());
                 return false;
             }
             if (queryJoinType.equals(mvJoinType)) {
@@ -213,6 +217,7 @@ public class MaterializedViewRewriter {
             }
 
             if (!JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
+                logMVPrepare("join type is not compatible {} not contains {}", mvJoinType, queryJoinType);
                 return false;
             }
 
@@ -224,6 +229,7 @@ public class MaterializedViewRewriter {
             boolean isSupported =
                     isSupportedPredicate(queryOnPredicate, materializationContext.getQueryRefFactory(), joinColumns);
             if (!isSupported) {
+                logMVPrepare("join predicate is not supported {}", queryOnPredicate);
                 return false;
             }
             // use join columns from query
@@ -238,6 +244,7 @@ public class MaterializedViewRewriter {
             boolean isCompatible =
                     isJoinCompatible(usedColumnsToTable, queryJoinType, mvJoinType, leftColumns, rightColumns, joinColumnRefs);
             if (!isCompatible) {
+                logMVPrepare("join columns not compatible {} != {}", leftColumns, rightColumns);
                 return false;
             }
             JoinDeriveContext joinDeriveContext = new JoinDeriveContext(queryJoinType, mvJoinType, joinColumnRefs);
@@ -257,8 +264,7 @@ public class MaterializedViewRewriter {
     }
 
     private boolean isJoinCompatible(
-            Map<ColumnRefSet, Table> usedColumnsToTable,
-            JoinOperator queryJoinType,
+            Map<ColumnRefSet, Table> usedColumnsToTable, JoinOperator queryJoinType,
             JoinOperator mvJoinType,
             ColumnRefSet leftColumns,
             ColumnRefSet rightColumns,
