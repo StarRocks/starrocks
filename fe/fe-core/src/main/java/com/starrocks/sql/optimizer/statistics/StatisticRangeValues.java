@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import java.util.Objects;
-
 import javax.validation.constraints.NotNull;
 
 import static java.lang.Double.NaN;
