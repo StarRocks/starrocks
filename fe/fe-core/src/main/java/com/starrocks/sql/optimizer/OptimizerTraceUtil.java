@@ -120,8 +120,6 @@ public class OptimizerTraceUtil {
         }
     }
 
-<<<<<<< HEAD
-=======
     public static void logMVPrepare(String format, Object... object) {
         logMVPrepare(ConnectContext.get(), null, format, object);
     }
@@ -130,51 +128,6 @@ public class OptimizerTraceUtil {
         logMVPrepare(ctx, null, format, object);
     }
 
-    public static void logMVPrepare(ConnectContext ctx, MaterializedView mv,
-                                    String format, Object... object) {
-        if (ctx.getSessionVariable().isEnableMVOptimizerTraceLog()) {
-            LOG.info("[MV TRACE] [PREPARE {}] {}", ctx.getQueryId(), String.format(format, object));
-        }
-        // Only record trace when mv is not null.
-        if (mv != null) {
-            PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer(mv.getName());
-            if (tracer != null) {
-                tracer.log(String.format(format, object));
-            }
-        }
-    }
-
-    public static void logMVRewrite(MvRewriteContext mvRewriteContext, String format, Object... object) {
-        MaterializationContext mvContext = mvRewriteContext.getMaterializationContext();
-        if (mvContext.getOptimizerContext().getSessionVariable().isEnableMVOptimizerTraceLog()) {
-            // QueryID-Rule-MVName log
-            LOG.info("[MV TRACE] [REWRITE {} {} {}] {}",
-                    mvContext.getOptimizerContext().getTraceInfo().getQueryId(),
-                    mvRewriteContext.getRule().type().name(),
-                    mvContext.getMv().getName(),
-                    String.format(format, object));
-        }
-
-        // Trace log if needed.
-        PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer(mvContext.getMv().getName());
-        if (tracer != null) {
-            tracer.log(String.format("[%s] %s",   mvRewriteContext.getRule().type().name(),
-                    String.format(format, object)));
-        }
-    }
-
-    public static void logMVRewrite(OptimizerContext optimizerContext, Rule rule,
-                                     String format, Object... object) {
-        if (optimizerContext.getSessionVariable().isEnableMVOptimizerTraceLog()) {
-            // QueryID-Rule log
-            LOG.info("[MV TRACE] [REWRITE {} {}] {}",
-                    optimizerContext.getTraceInfo().getQueryId(),
-                    rule.type().name(),
-                    String.format(format, object));
-        }
-    }
-
->>>>>>> 656e543e84 ([BugFix] fix mv rewrite for join predicate pushdown (#27632))
     private static void log(ConnectContext ctx, String message) {
         Preconditions.checkState(ctx.getSessionVariable().isEnableOptimizerTraceLog());
         LOG.info("[TRACE QUERY {}] {}", ctx.getQueryId(), message);
