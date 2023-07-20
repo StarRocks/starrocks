@@ -35,7 +35,7 @@ E: (1064, 'Unexpected exception: Name testherbavro already used in db herb')
 -- !result
 SHOW CREATE ROUTINE LOAD FOR testherbavro;
 -- result:
-testherbavro	CREATE ROUTINE LOAD testherbavro on herbavro
+testherbavro	CREATE ROUTINE LOAD herb.testherbavro on herbavro
  COLUMNS TERMINATED BY '\t'
 PROPERTIES
 (
@@ -63,7 +63,6 @@ FROM KAFKA
 "kafka_broker_list"="172.26.194.239:9092",
 "kafka_topic"="herb-avro",
 "kafka_partitions"="0",
-"kafka_offsets"="OFFSET_BEGINNING",
-"confluent.schema.registry.url"="http://172.26.194.240:8081"
+"kafka_offsets"="OFFSET_BEGINNING"
 );
 -- !result

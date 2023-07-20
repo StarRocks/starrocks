@@ -1408,7 +1408,9 @@ public class ShowExecutor {
         }
         StringBuilder createRoutineLoadSql = new StringBuilder();
         try {
-            createRoutineLoadSql.append("CREATE ROUTINE LOAD ").append(showCreateRoutineLoadStmt.getName())
+            String dbName = routineLoadJob.getDbFullName();
+            createRoutineLoadSql.append("CREATE ROUTINE LOAD ").append(dbName).append(".")
+                    .append(showCreateRoutineLoadStmt.getName())
                     .append(" on ").append(routineLoadJob.getTableName());
         } catch (MetaNotFoundException e) {
             LOG.warn(e.getMessage(), e);
