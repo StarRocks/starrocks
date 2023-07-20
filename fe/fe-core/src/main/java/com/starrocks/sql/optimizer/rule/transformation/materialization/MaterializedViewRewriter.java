@@ -189,6 +189,7 @@ public class MaterializedViewRewriter {
         LogicalOperator queryOp = (LogicalOperator) queryExpr.getOp();
         LogicalOperator mvOp = (LogicalOperator) mvExpr.getOp();
         if (!queryOp.getOpType().equals(mvOp.getOpType())) {
+            logMVRewrite(mvRewriteContext, "join type is different {} != {}", queryOp.getOpType(), mvOp.getOpType());
             return false;
         }
         if (queryOp instanceof LogicalJoinOperator) {
@@ -204,7 +205,9 @@ public class MaterializedViewRewriter {
             LogicalJoinOperator mvJoin = (LogicalJoinOperator) mvExpr.getOp();
             JoinOperator mvJoinType = mvJoin.getJoinType();
 
-            if (!ScalarOperator.isEqual(queryJoin.getOnPredicate(), mvJoin.getOnPredicate())) {
+            if (!ScalarOperator.isEquivalent(queryJoin.getOnPredicate(), (mvJoin.getOnPredicate()))) {
+                logMVRewrite(mvRewriteContext, "join predicate is different {} != {}", queryJoin.getOnPredicate(),
+                        mvJoin.getOnPredicate());
                 return false;
             }
             if (queryJoinType.equals(mvJoinType)) {
@@ -213,6 +216,8 @@ public class MaterializedViewRewriter {
             }
 
             if (!JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
+                logMVRewrite(mvRewriteContext, "join type is not compatible {} not contains {}", mvJoinType,
+                        queryJoinType);
                 return false;
             }
 
@@ -224,6 +229,7 @@ public class MaterializedViewRewriter {
             boolean isSupported =
                     isSupportedPredicate(queryOnPredicate, materializationContext.getQueryRefFactory(), joinColumns);
             if (!isSupported) {
+                logMVRewrite(mvRewriteContext, "join predicate is not supported {}", queryOnPredicate);
                 return false;
             }
             // use join columns from query
@@ -238,6 +244,7 @@ public class MaterializedViewRewriter {
             boolean isCompatible =
                     isJoinCompatible(usedColumnsToTable, queryJoinType, mvJoinType, leftColumns, rightColumns, joinColumnRefs);
             if (!isCompatible) {
+                logMVRewrite(mvRewriteContext, "join columns not compatible {} != {}", leftColumns, rightColumns);
                 return false;
             }
             JoinDeriveContext joinDeriveContext = new JoinDeriveContext(queryJoinType, mvJoinType, joinColumnRefs);
@@ -257,8 +264,7 @@ public class MaterializedViewRewriter {
     }
 
     private boolean isJoinCompatible(
-            Map<ColumnRefSet, Table> usedColumnsToTable,
-            JoinOperator queryJoinType,
+            Map<ColumnRefSet, Table> usedColumnsToTable, JoinOperator queryJoinType,
             JoinOperator mvJoinType,
             ColumnRefSet leftColumns,
             ColumnRefSet rightColumns,
@@ -1805,11 +1811,14 @@ public class MaterializedViewRewriter {
             ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
             Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
             ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
-            ColumnRefOperator leftTarget = columnRewriter.rewriteViewToQuery(left).cast();
-            ColumnRefOperator rightTarget = columnRewriter.rewriteViewToQuery(right).cast();
-            if (leftTarget == null || rightTarget == null) {
-                return null;
+            ScalarOperator leftScalar = columnRewriter.rewriteViewToQuery(left);
+            ScalarOperator rightScalar = columnRewriter.rewriteViewToQuery(right);
+            if (leftScalar == null || rightScalar == null) {
+                return ec;
             }
+
+            ColumnRefOperator leftTarget = leftScalar.cast();
+            ColumnRefOperator rightTarget = rightScalar.cast();
             ec.addEquivalence(leftTarget, rightTarget);
         }
         return ec;

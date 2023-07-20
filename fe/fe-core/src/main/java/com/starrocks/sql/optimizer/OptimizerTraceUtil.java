@@ -133,6 +133,10 @@ public class OptimizerTraceUtil {
         }
     }
 
+    public static void logMVPrepare(String format, Object... object) {
+        logMVPrepare(ConnectContext.get(), null, format, object);
+    }
+
     public static void logMVPrepare(ConnectContext ctx, String format, Object... object) {
         logMVPrepare(ctx, null, format, object);
     }
