@@ -118,6 +118,7 @@ This section describes privileges that are available on different objects.
 ### FUNCTION (Database-level UDFs)
 
 | Privilege | Description                             |
+| ------- | ------------------------------------------|
 | USAGE | Uses a function.                            |
 | DROP  | Deletes a function.                         |
 | ALL   | Has all the above privileges on a function. |
