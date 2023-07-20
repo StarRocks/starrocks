@@ -2109,31 +2109,48 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(url_decodeImpl, str) {
     return StringFunctions::url_decode_func(str.to_string());
 }
 
-std::string StringFunctions::url_decode_func(const std::string& value) {
-    std::string ret;
-    char ch;
-    int ii;
-    char l, r;
-    size_t length = value.length();
-    for (size_t i = 0; i < length; i++) {
+static Status url_decode_slice(const char* value, size_t len, std::string* to) {
+    to->clear();
+    to->reserve(len);
+    for (size_t i = 0; i < len; i++) {
         if (value[i] == '%') {
-            l = value[i + 1];
-            r = value[i + 2];
+            char l = value[i + 1];
+            char r = value[i + 2];
             if ((l < 'A' || l > 'F') && (l < '0' || l > '9')) {
-                throw std::runtime_error("decode string contains illegal hex chars: " + value.substr(i + 1, 2));
+                return Status::RuntimeError(
+                        strings::Substitute("decode string contains illegal hex chars: $0$1", l, r));
             }
             if ((r < 'A' || r > 'F') && (r < '0' || r > '9')) {
-                throw std::runtime_error("decode string contains illegal hex chars: " + value.substr(i + 1, 2));
+                return Status::RuntimeError(
+                        strings::Substitute("decode string contains illegal hex chars: $0$1", l, r));
             }
-            sscanf(value.substr(i + 1, 2).c_str(), "%x", &ii);
-            ch = static_cast<char>(ii);
-            ret += ch;
+            // if l in 'A'..'F', then l-'A' > 0; otherwise l-'A' < 0; we arithmetic shift right 8 bit
+            // yields mask, so all bits of mask are 0 if l in 'A'..'F', all bits are 1 if l in '0'..'9'
+            auto mask = (l - 'A') >> 8;
+            // so mask is all zeros, we choose l - '0'; otherwise we choose l - 'A' + 10; the result is the
+            // just the value that '0..9','A'..'F' represent in hexadecimal.
+            auto ch = ((l - 'A' + 10) & (~mask)) + ((l - '0') & mask);
+            // use the same way get the value of r in hexadecimal
+            mask = (r - 'A') >> 8;
+            // finally, high*16 + low is the value the string represent.
+            ch = (ch << 4) + ((r - 'A' + 10) & (~mask)) + ((r - '0') & mask);
+            to->push_back(ch);
             i = i + 2;
         } else {
-            ret += value[i];
+            to->push_back(value[i]);
         }
     }
-    return (ret);
+    return Status::OK();
+}
+
+std::string StringFunctions::url_decode_func(const std::string& value) {
+    std::string ret;
+    auto status = url_decode_slice(value.data(), value.size(), &ret);
+    if (status.ok()) {
+        return ret;
+    } else {
+        throw std::runtime_error(status.get_error_msg());
+    }
 }
 
 StatusOr<ColumnPtr> StringFunctions::url_decode(FunctionContext* context, const starrocks::Columns& columns) {
@@ -3307,7 +3324,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context, const s
     return parse_url_general(context, columns);
 }
 static bool seek_param_key_in_query_params(const StringValue& query_params, const StringValue& param_key,
-                                           Slice* param_value) {
+                                           std::string* param_value) {
     const StringSearch param_search(&param_key);
     auto pos = param_search.search(&query_params);
     auto* begin = query_params.ptr;
@@ -3324,8 +3341,7 @@ static bool seek_param_key_in_query_params(const StringValue& query_params, cons
     }
     // no value; return empty string
     if (p_next_char >= end || *p_next_char == '&') {
-        param_value->data = nullptr;
-        param_value->size = 0;
+        *param_value = "";
         return true;
     }
     // skip '='
@@ -3333,12 +3349,11 @@ static bool seek_param_key_in_query_params(const StringValue& query_params, cons
     auto* p = p_next_char;
     // seek '&', the value is string between '=' and '&' if '&' exists, otherwise is remaining string following '='
     while (p < end && *p != '&') ++p;
-    param_value->data = p_next_char;
-    param_value->size = p - p_next_char;
-    return true;
+    auto status = url_decode_slice(p_next_char, p - p_next_char, param_value);
+    return status.ok();
 }
 
-static bool seek_param_key_in_url(const Slice& url, const Slice& param_key, Slice* param_value) {
+static bool seek_param_key_in_url(const Slice& url, const Slice& param_key, std::string* param_value) {
     StringValue query_params;
     if (!UrlParser::parse_url(StringValue::from_slice(url), UrlParser::UrlPart::QUERY, &query_params)) {
         return false;
@@ -3352,13 +3367,13 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(const starrocks
     auto num_rows = columns[0]->size();
     Slice param_key_str(param_key);
     ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    std::string param_value;
     for (auto i = 0; i < num_rows; ++i) {
         if (url_viewer.is_null(i)) {
             result.append_null();
             continue;
         }
         auto url = url_viewer.value(i);
-        Slice param_value;
         auto found = seek_param_key_in_url(url, param_key_str, &param_value);
         if (!found) {
             result.append_null();
@@ -3375,6 +3390,7 @@ static StatusOr<ColumnPtr> url_extract_parameter_general(const starrocks::Column
     auto param_key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto num_rows = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    std::string param_value;
     for (auto i = 0; i < num_rows; ++i) {
         if (url_viewer.is_null(i) || param_key_viewer.is_null(i)) {
             result.append_null();
@@ -3387,7 +3403,6 @@ static StatusOr<ColumnPtr> url_extract_parameter_general(const starrocks::Column
             result.append_null();
             continue;
         }
-        Slice param_value;
         auto found = seek_param_key_in_url(url, param_key, &param_value);
         if (!found) {
             result.append_null();
@@ -3404,6 +3419,7 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starro
     auto num_rows = columns[1]->size();
     StringValue query_params_str(query_params);
     ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    std::string param_value;
     for (auto i = 0; i < num_rows; ++i) {
         if (param_key_viewer.is_null(i)) {
             result.append_null();
@@ -3415,7 +3431,6 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starro
             result.append_null();
             continue;
         }
-        Slice param_value;
         auto found = seek_param_key_in_query_params(query_params_str, StringValue::from_slice(param_key), &param_value);
         if (!found) {
             result.append_null();
@@ -3477,9 +3492,9 @@ Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext
     if (state->opt_const_query_params.has_value() && state->opt_const_param_key.has_value()) {
         StringValue query_params(state->opt_const_query_params.value());
         StringValue param_key(state->opt_const_param_key.value());
-        Slice result;
+        std::string result;
         state->result_is_null = !seek_param_key_in_query_params(query_params, param_key, &result);
-        state->opt_const_result = result.to_string();
+        state->opt_const_result = std::move(result);
     }
     return Status::OK();
 }

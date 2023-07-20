@@ -43,6 +43,9 @@ struct UrlExtractParameterTest : public ::testing::Test {
             {"https://starrocks.com/doc?k0=1000&k1: 200=100&k1=200", "k1: 200", "", true},
             {"", "k1", "", true},
             {"https://starrocks.com/doc", "k1", "", true},
+            {"https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A"
+             "%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2",
+             "k1", "!#$&'()*+,/:;=?@[] \"%-.<>\\^_`{|}~", false},
     };
 };
 

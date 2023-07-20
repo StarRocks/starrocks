@@ -1,4 +1,7 @@
 -- name: test_url_extract_parameter
+DROP TABLE if exists t0;
+-- result:
+-- !result
 CREATE TABLE if not exists t0
 (
 id INT NOT NULL,
@@ -37,7 +40,7 @@ VALUES
   ('14', 'https://starrocks.com/doc?k0=1000&k1:200=100&k1=200', 'k1:200', '100', 'false'),
   ('15', 'https://starrocks.com/doc?k0=1000&k1: 200=100&k1=200', 'k1: 200', '', 'true'),
   ('16', '', 'k1', '', 'true'),
-  ('17', 'https://starrocks.com/doc', 'k1', '', 'true');
+  ('17', 'https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', 'k1', '!#$&\'()*+,/:;=?@[] "%-.<>\\^_`{|}~', 'false');
 -- result:
 -- !result
 select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 0;
@@ -316,7 +319,7 @@ select (case only_null when true then url_extract_parameter(url, param_key) is N
 -- result:
 1
 -- !result
-select (case only_null when true then url_extract_parameter('https://starrocks.com/doc', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc', param_key) = expect end) as result from t0 where id = 17;
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', param_key) = expect end) as result from t0 where id = 17;
 -- result:
 1
 -- !result
@@ -324,7 +327,7 @@ select (case only_null when true then url_extract_parameter(url, 'k1') is NULL e
 -- result:
 1
 -- !result
-select (case only_null when true then url_extract_parameter('https://starrocks.com/doc', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc', 'k1') = expect end) as result from t0 where id = 17;
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', 'k1') = expect end) as result from t0 where id = 17;
 -- result:
 1
 -- !result
