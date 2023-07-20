@@ -261,12 +261,4 @@ public class LakeTable extends OlapTable {
         }
         return true;
     }
-
-    @Override
-    public void inferDistribution(DistributionInfo info) throws DdlException {
-        if (info.getBucketNum() == 0) {
-            throw new DdlException("You must specify 'BUCKETS' in shared_data mode");
-        }
-    }
-
 }

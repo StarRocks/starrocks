@@ -503,9 +503,11 @@ Status ChunkChanger::fill_materialized_columns(ChunkPtr& new_chunk) {
             new_chunk->get_column_by_index(it.first).swap(tmp);
         } else {
             // materialized column must be a nullable column. If tmp is not nullable column,
-            // new_chunk can not swap it directly
+            // it maybe a constant column or some other column type.
+            // Unpack normal const column
+            ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(new_chunk->num_rows(), tmp);
             std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))
-                    ->swap_by_data_column(tmp);
+                    ->swap_by_data_column(output_column);
         }
     }
 
@@ -568,9 +570,11 @@ Status ChunkChanger::append_materialized_columns(ChunkPtr& read_chunk, ChunkPtr&
             tmp_new_chunk->get_column_by_index(cid).swap(tmp);
         } else {
             // materialized column must be a nullable column. If tmp is not nullable column,
-            // read_chunk can not swap it directly
+            // it maybe a constant column or some other column type
+            // Unpack normal const column
+            ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(read_chunk->num_rows(), tmp);
             std::dynamic_pointer_cast<NullableColumn>(tmp_new_chunk->get_column_by_index(cid))
-                    ->swap_by_data_column(tmp);
+                    ->swap_by_data_column(output_column);
         }
     }
 

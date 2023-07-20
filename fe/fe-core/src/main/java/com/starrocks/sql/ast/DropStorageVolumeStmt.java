@@ -31,6 +31,10 @@ public class DropStorageVolumeStmt extends DdlStmt {
         return storageVolumeName;
     }
 
+    public boolean isSetIfExists() {
+        return ifExists;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropStorageVolumeStatement(this, context);

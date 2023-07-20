@@ -18,13 +18,12 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -48,7 +47,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public abstract class StorageVolumeMgr implements GsonPostProcessable {
+public abstract class StorageVolumeMgr {
     private static final String ENABLED = "enabled";
 
     public static final String DEFAULT = "default";
@@ -109,15 +108,16 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void removeStorageVolume(DropStorageVolumeStmt stmt) throws DdlException, AnalysisException {
+    public void removeStorageVolume(DropStorageVolumeStmt stmt) throws DdlException, MetaNotFoundException {
         removeStorageVolume(stmt.getName());
     }
 
-    public void removeStorageVolume(String name) throws DdlException {
+    public void removeStorageVolume(String name) throws DdlException, MetaNotFoundException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(name);
-            Preconditions.checkState(sv != null,
-                    "Storage volume '%s' does not exist", name);
+            if (sv == null) {
+                throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
+            }
             Preconditions.checkState(!defaultStorageVolumeId.equals(sv.getId()),
                     "default storage volume can not be removed");
             Set<Long> dbs = storageVolumeToDbs.get(sv.getId());
@@ -164,7 +164,7 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         }
     }
 
-    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) throws AnalysisException {
+    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) {
         setDefaultStorageVolume(stmt.getName());
     }
 
@@ -263,16 +263,12 @@ public abstract class StorageVolumeMgr implements GsonPostProcessable {
         this.storageVolumeToDbs = data.storageVolumeToDbs;
         this.storageVolumeToTables = data.storageVolumeToTables;
         this.defaultStorageVolumeId = data.defaultStorageVolumeId;
-    }
 
-    @Override
-    public void gsonPostProcess() throws IOException {
         for (Map.Entry<String, Set<Long>> entry : storageVolumeToDbs.entrySet()) {
             for (Long dbId : entry.getValue()) {
                 dbToStorageVolume.put(dbId, entry.getKey());
             }
         }
-
         for (Map.Entry<String, Set<Long>> entry : storageVolumeToTables.entrySet()) {
             for (Long tableId : entry.getValue()) {
                 tableToStorageVolume.put(tableId, entry.getKey());

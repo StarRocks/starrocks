@@ -265,7 +265,13 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const Tx
     _auto_increment_partial_update_states.resize(num_segments);
     _auto_increment_delete_pks.resize(num_segments);
 
-    uint32_t auto_increment_column_id = txn_meta.auto_increment_partial_update_column_id();
+    uint32_t auto_increment_column_id = 0;
+    for (int i = 0; i < tablet_schema.num_columns(); ++i) {
+        if (tablet_schema.column(i).is_auto_increment()) {
+            auto_increment_column_id = i;
+            break;
+        }
+    }
     std::vector<uint32_t> column_id{auto_increment_column_id};
     auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, column_id);
     auto column = ChunkHelper::column_from_field(*read_column_schema.field(0).get());
@@ -284,7 +290,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const Tx
     }
 
     for (size_t i = 0; i < num_segments; i++) {
-        _auto_increment_partial_update_states[i].init(schema, column_id[0], i);
+        _auto_increment_partial_update_states[i].init(schema, txn_meta.auto_increment_partial_update_column_id(), i);
         _auto_increment_partial_update_states[i].src_rss_rowids.resize(_upserts[i]->size());
         read_column[i].resize(1);
         read_column[i][0] = column->clone_empty();
@@ -607,7 +613,7 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const TxnLogPB_OpWrit
             std::unique_ptr<Column> new_write_column =
                     _partial_update_states[segment_id].write_columns[col_idx]->clone_empty();
             new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
-            RETURN_IF_ERROR(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
+            RETURN_IF_EXCEPTION(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
                     *new_write_column, conflict_idxes.data()));
         }
     }
@@ -669,8 +675,14 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const TxnLogPB_OpWrit
             }
         }
 
-        std::vector<uint32_t> column_id{
-                static_cast<uint32_t>(op_write.txn_meta().auto_increment_partial_update_column_id())};
+        uint32_t auto_increment_column_id = 0;
+        for (int i = 0; i < tablet_schema->num_columns(); ++i) {
+            if (tablet_schema->column(i).is_auto_increment()) {
+                auto_increment_column_id = i;
+                break;
+            }
+        }
+        std::vector<uint32_t> column_id{auto_increment_column_id};
         std::vector<std::unique_ptr<Column>> auto_increment_read_column;
         auto_increment_read_column.resize(1);
         auto_increment_read_column[0] = _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
@@ -681,7 +693,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const TxnLogPB_OpWrit
         std::unique_ptr<Column> new_write_column =
                 _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
         new_write_column->append_selective(*auto_increment_read_column[0], idxes.data(), 0, idxes.size());
-        RETURN_IF_ERROR(_auto_increment_partial_update_states[segment_id].write_column->update_rows(
+        RETURN_IF_EXCEPTION(_auto_increment_partial_update_states[segment_id].write_column->update_rows(
                 *new_write_column, conflict_idxes.data()));
 
         // reslove delete-partial update conflict base on latest column values

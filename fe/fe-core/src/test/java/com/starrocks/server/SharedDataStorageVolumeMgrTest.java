@@ -19,12 +19,16 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.storagevolume.StorageVolume;
 import mockit.Expectations;
 import mockit.Mock;
@@ -36,11 +40,18 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
@@ -76,7 +87,9 @@ public class SharedDataStorageVolumeMgrTest {
             private long id = 1;
             @Mock
             public String addFileStore(FileStoreInfo fsInfo) {
-                fsInfo = fsInfo.toBuilder().setFsKey(String.valueOf(id++)).build();
+                if (fsInfo.getFsKey().isEmpty()) {
+                    fsInfo = fsInfo.toBuilder().setFsKey(String.valueOf(id++)).build();
+                }
                 fileStores.put(fsInfo.getFsKey(), fsInfo);
                 return fsInfo.getFsKey();
             }
@@ -131,7 +144,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testStorageVolumeCRUD() throws AlreadyExistsException, DdlException {
+    public void testStorageVolumeCRUD() throws AlreadyExistsException, DdlException, MetaNotFoundException {
         new Expectations() {
             {
                 editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
@@ -215,12 +228,9 @@ public class SharedDataStorageVolumeMgrTest {
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("default storage volume can not be removed"));
         }
-        try {
-            svm.removeStorageVolume(svName1);
-            Assert.fail();
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
-        }
+
+        ex = Assert.assertThrows(MetaNotFoundException.class, () -> svm.removeStorageVolume(svName1));
+        Assert.assertEquals("Storage volume 'test1' does not exist", ex.getMessage());
 
         svm.createStorageVolume(svName1, "S3", locations, storageParams, Optional.of(false), "");
         svm.updateStorageVolume(svName1, storageParams, Optional.of(true), "test update");
@@ -232,7 +242,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testBindAndUnbind() throws DdlException, AlreadyExistsException {
+    public void testBindAndUnbind() throws DdlException, AlreadyExistsException, MetaNotFoundException {
         String svName = "test";
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         List<String> locations = Arrays.asList("s3://abc");
@@ -292,7 +302,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testCreateBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
+    public void testCreateBuiltinStorageVolume() throws DdlException, AlreadyExistsException, MetaNotFoundException {
         new Expectations() {
             {
                 editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
@@ -308,6 +318,8 @@ public class SharedDataStorageVolumeMgrTest {
 
         Config.enable_load_volume_from_conf = true;
         String id = sdsvm.createBuiltinStorageVolume();
+        String[] bucketAndPrefix = Deencapsulation.invoke(sdsvm, "getBucketAndPrefix");
+        Assert.assertEquals(bucketAndPrefix[0], id);
         Assert.assertTrue(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
         StorageVolume sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         Assert.assertEquals(id, sdsvm.getDefaultStorageVolumeId());
@@ -355,7 +367,8 @@ public class SharedDataStorageVolumeMgrTest {
         Config.cloud_native_storage_type = "hdfs";
         Config.cloud_native_hdfs_url = "hdfs://url";
         sdsvm.removeStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
-        sdsvm.createBuiltinStorageVolume();
+        id = sdsvm.createBuiltinStorageVolume();
+        Assert.assertEquals(Config.cloud_native_hdfs_url, id);
         sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().hasHdfsFsInfo());
 
@@ -600,5 +613,41 @@ public class SharedDataStorageVolumeMgrTest {
         Config.azure_blob_path = "blob";
         Config.azure_blob_endpoint = "";
         Assert.assertThrows(InvalidConfException.class, () -> sdsvm.validateStorageVolumeConfig());
+    }
+
+    @Test
+    public void testSerialization() throws IOException, SRMetaBlockException,
+            SRMetaBlockEOFException, DdlException, AlreadyExistsException {
+        String svName = "test";
+        // create
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        String svId = svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        svm.setDefaultStorageVolume("test");
+        svm.bindDbToStorageVolume(svName, 1L);
+        svm.bindTableToStorageVolume(svName, 1L, 1L);
+        Map<String, Set<Long>> storageVolumeToDbs = svm.storageVolumeToDbs;
+        Map<String, Set<Long>> storageVolumeToTables = svm.storageVolumeToTables;
+        Map<Long, String> dbToStorageVolume = svm.dbToStorageVolume;
+        Map<Long, String> tableToStorageVolume = svm.tableToStorageVolume;
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(out);
+        svm.save(dos);
+
+        InputStream in = new ByteArrayInputStream(out.toByteArray());
+        DataInputStream dis = new DataInputStream(in);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        SharedDataStorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
+        svm1.load(reader);
+        Assert.assertEquals(svId, svm1.getDefaultStorageVolumeId());
+        Assert.assertEquals(storageVolumeToDbs, svm1.storageVolumeToDbs);
+        Assert.assertEquals(storageVolumeToTables, svm1.storageVolumeToTables);
+        Assert.assertEquals(dbToStorageVolume, svm1.dbToStorageVolume);
+        Assert.assertEquals(tableToStorageVolume, svm1.tableToStorageVolume);
     }
 }

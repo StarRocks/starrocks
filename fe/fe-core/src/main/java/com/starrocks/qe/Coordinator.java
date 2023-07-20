@@ -154,6 +154,7 @@ public class Coordinator {
     private boolean returnedAllResults;
     private RuntimeProfile queryProfile;
     private List<RuntimeProfile> fragmentProfiles;
+    private final Map<PlanFragmentId, Integer> fragmentId2fragmentProfileIds = Maps.newHashMap();
 
     private final List<PlanFragment> fragments;
     // backend execute state
@@ -208,7 +209,7 @@ public class Coordinator {
         TExecPlanFragmentParams params = planner.getExecPlanFragmentParams();
         queryId = params.getParams().getFragment_instance_id();
         LOG.info("Execution Profile " + DebugUtil.printId(queryId));
-        queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
+        queryProfile = new RuntimeProfile("Execution");
 
         fragmentProfiles = new ArrayList<>();
         fragmentProfiles.add(new RuntimeProfile("Fragment 0"));
@@ -557,11 +558,12 @@ public class Coordinator {
     }
 
     private void prepareProfile() {
-        queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
+        queryProfile = new RuntimeProfile("Execution");
 
         fragmentProfiles = new ArrayList<>();
         for (int i = 0; i < fragments.size(); i++) {
             fragmentProfiles.add(new RuntimeProfile("Fragment " + i));
+            fragmentId2fragmentProfileIds.put(fragments.get(i).getFragmentId(), i);
             queryProfile.addChild(fragmentProfiles.get(i));
         }
 
@@ -654,10 +656,10 @@ public class Coordinator {
         try {
             // execute all instances from up to bottom
             int backendId = 0;
-            int profileFragmentId = 0;
 
             Set<Long> firstDeliveryWorkerIds = new HashSet<>();
             for (PlanFragment fragment : fragments) {
+                int profileFragmentId = fragmentId2fragmentProfileIds.get(fragment.getFragmentId());
                 CoordinatorPreprocessor.FragmentExecParams params =
                         coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
 
@@ -824,7 +826,6 @@ public class Coordinator {
                     // causing the instances to become stale and only able to be released after a timeout.
                     handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
                 }
-                profileFragmentId += 1;
             }
             attachInstanceProfileToFragmentProfile();
         } finally {
@@ -936,7 +937,6 @@ public class Coordinator {
         try {
             // execute all instances from up to bottom
             int backendNum = 0;
-            int profileFragmentId = 0;
 
             this.descTable.setIs_cached(false);
             TDescriptorTable emptyDescTable = new TDescriptorTable();
@@ -957,6 +957,7 @@ public class Coordinator {
                 List<List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
                         ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
+                    int profileFragmentId = fragmentId2fragmentProfileIds.get(fragment.getFragmentId());
                     CoordinatorPreprocessor.FragmentExecParams params =
                             coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
                     Preconditions.checkState(!params.instanceExecParams.isEmpty());
@@ -1078,8 +1079,6 @@ public class Coordinator {
 
                         inflightRequestsList.get(inflightIndex).add(Pair.create(execStates, tRequest));
                     }
-
-                    profileFragmentId += 1;
                 }
 
                 for (List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>> inflightRequests :
@@ -1817,11 +1816,18 @@ public class Coordinator {
                     RuntimeProfile operatorProfile = operatorProfilePair.first;
                     if (!foundResultSink && (operatorProfile.getName().contains("RESULT_SINK") ||
                             operatorProfile.getName().contains("OLAP_TABLE_SINK"))) {
+                        newQueryProfile.getCounterTotalTime().setValue(0);
+
                         long executionWallTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
                         Counter executionTotalTime =
                                 newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
-                        newQueryProfile.getCounterTotalTime().setValue(0);
                         executionTotalTime.setValue(executionWallTime);
+
+                        long resultDeliverTime = pipelineProfile.getCounter("OutputFullTime").getValue();
+                        Counter resultDeliverTimer =
+                                newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
+                        resultDeliverTimer.setValue(resultDeliverTime);
+
                         foundResultSink = true;
                     }
 

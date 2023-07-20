@@ -96,13 +96,20 @@ jobs:
         env:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
-          mkdir fe && cd fe
           oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Report/${PR_NUMBER}/
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
+            mkdir fe && cd fe
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
             tar zxf fe_ut_report.tar.gz
+          else
+            rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+            export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+            export PATH=$JAVA_HOME/bin:$PATH;
+            timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover /var/local/env/empty_cov_result --github-token ${{ secrets.PAT }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
           fi
 
       - name: Publish UT Report
@@ -161,20 +168,11 @@ jobs:
         if: steps.generate-xml-report.outcome == 'success'
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
-          time_count=0
-          pull_status=1
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
-          while (( $pull_status != 0 )); do
-            if (( $time_count == 3 )); then
-              exit 1
-            fi
-            timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
-              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
-            pull_status=$?
-            time_count=`expr $time_count + 1`
-          done
+          timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+            --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
+            --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
           rm -rf coverchecker
           rm -rf ci-tools
 

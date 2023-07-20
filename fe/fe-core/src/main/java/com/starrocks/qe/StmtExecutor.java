@@ -43,6 +43,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -93,7 +94,6 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.proto.PQueryStatistics;
@@ -103,8 +103,10 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -144,6 +146,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
@@ -572,6 +575,10 @@ public class StmtExecutor {
                     } finally {
                         if (!needRetry && context.getSessionVariable().isEnableProfile()) {
                             writeProfile(beginTimeInNanoSecond);
+                            if (parsedStmt.isExplain() &&
+                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile));
+                            }
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                     }
@@ -807,9 +814,9 @@ public class StmtExecutor {
             // Suicide
             context.setKilled();
         } else {
-            if (!Objects.equals(killCtx.getQualifiedUser(), context.getQualifiedUser()) &&
-                    !PrivilegeActions.checkSystemAction(context, PrivilegeType.OPERATE)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE");
+            if (!Objects.equals(killCtx.getQualifiedUser(), context.getQualifiedUser())) {
+                PrivilegeChecker.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.OPERATE);
             }
             killCtx.kill(killStmt.isConnectionKill());
         }
@@ -835,7 +842,14 @@ public class StmtExecutor {
         // Every time set no send flag and clean all data in buffer
         context.getMysqlChannel().reset();
 
-        if (parsedStmt.isExplain()) {
+        boolean isExplainAnalyze = parsedStmt.isExplain()
+                && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
+
+        if (isExplainAnalyze) {
+            context.getSessionVariable().setEnableProfile(true);
+            context.getSessionVariable().setPipelineProfileLevel(1);
+            context.getSessionVariable().setProfileLimitFold(false);
+        } else if (parsedStmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
             return;
         }
@@ -877,10 +891,10 @@ public class StmtExecutor {
             // 2. If this is a query, send the result expr fields first, and send result data back to client.
             MysqlChannel channel = context.getMysqlChannel();
             boolean isSendFields = false;
-            while (true) {
+            do {
                 batch = coord.getNext();
                 // for outfile query, there will be only one empty batch send back with eos flag
-                if (batch.getBatch() != null && !isOutfileQuery) {
+                if (batch.getBatch() != null && !isOutfileQuery && !isExplainAnalyze) {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
                     // so We need to send fields after first batch arrived
                     if (!isSendFields) {
@@ -905,11 +919,8 @@ public class StmtExecutor {
                     }
                     context.updateReturnRows(batch.getBatch().getRows().size());
                 }
-                if (batch.isEos()) {
-                    break;
-                }
-            }
-            if (!isSendFields && !isOutfileQuery) {
+            } while (!batch.isEos());
+            if (!isSendFields && !isOutfileQuery && !isExplainAnalyze) {
                 sendFields(colNames, outputExprs);
             }
         }
@@ -1102,9 +1113,43 @@ public class StmtExecutor {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
         long analyzeId = killAnalyzeStmt.getAnalyzeId();
         AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
-        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
+        checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
         // Try to kill the job anyway.
         analyzeManager.killConnection(analyzeId);
+    }
+
+    private void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
+                                                            String tableName, long analyzeId) {
+        MetaUtils.getDatabase(catalogName, dbName);
+        MetaUtils.getTable(catalogName, dbName, tableName);
+
+        PrivilegeChecker.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                catalogName, dbName, tableName, PrivilegeType.SELECT);
+        PrivilegeChecker.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                catalogName, dbName, tableName, PrivilegeType.INSERT);
+    }
+
+    public void checkPrivilegeForKillAnalyzeStmt(ConnectContext context, long analyzeId) {
+        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        AnalyzeStatus analyzeStatus = analyzeManager.getAnalyzeStatus(analyzeId);
+        AnalyzeJob analyzeJob = analyzeManager.getAnalyzeJob(analyzeId);
+        if (analyzeStatus != null) {
+            try {
+                String catalogName = analyzeStatus.getCatalogName();
+                String dbName = analyzeStatus.getDbName();
+                String tableName = analyzeStatus.getTableName();
+                checkTblPrivilegeForKillAnalyzeStmt(context, catalogName, dbName, tableName, analyzeId);
+            } catch (MetaNotFoundException ignore) {
+                // If the db or table doesn't exist anymore, we won't check privilege on it
+            }
+        } else if (analyzeJob != null) {
+            Set<TableName> tableNames = AnalyzerUtils.getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
+                    analyzeJob.getTableId());
+            tableNames.forEach(tableName -> {
+                checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
+                        tableName.getTbl(), analyzeId);
+            });
+        }
     }
 
     private void handleAddSqlBlackListStmt() {

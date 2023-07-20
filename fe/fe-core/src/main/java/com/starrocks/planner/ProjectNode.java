@@ -54,6 +54,14 @@ public class ProjectNode extends PlanNode {
         this.commonSlotMap = commonSlotMap;
     }
 
+    public Map<SlotId, Expr> getSlotMap() {
+        return slotMap;
+    }
+
+    public Map<SlotId, Expr> getCommonSlotMap() {
+        return commonSlotMap;
+    }
+
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.PROJECT_NODE;
