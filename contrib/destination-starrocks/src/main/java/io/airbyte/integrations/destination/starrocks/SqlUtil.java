@@ -1,17 +1,17 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Copyright 2021-present StarRocks, Inc. All rights reserved.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
@@ -27,6 +27,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 public class SqlUtil {
+    private SqlUtil() {
+    }
+
     public static Connection createJDBCConnection(JsonNode config) throws ClassNotFoundException, SQLException {
         String dbUrl = String.format(StarRocksConstants.PATTERN_JDBC_URL,
                 config.get(StarRocksConstants.KEY_FE_HOST).asText(),
@@ -78,11 +81,11 @@ public class SqlUtil {
 
     public static void createTableIfNotExist(Connection conn, String tableName) throws SQLException {
         String sql = "CREATE TABLE IF NOT EXISTS " + tableName + " ( \n"
-                + "`" + JavaBaseConstants.COLUMN_NAME_AB_ID + "` varchar(40),\n"
                 + "`" + JavaBaseConstants.COLUMN_NAME_EMITTED_AT + "` BIGINT,\n"
+                + "`" + JavaBaseConstants.COLUMN_NAME_AB_ID + "` varchar(40),\n"
                 + "`" + JavaBaseConstants.COLUMN_NAME_DATA + "` String)\n"
-                + "DUPLICATE KEY(`" + JavaBaseConstants.COLUMN_NAME_AB_ID + "`,`"
-                + JavaBaseConstants.COLUMN_NAME_EMITTED_AT + "`) \n"
+                + "DUPLICATE KEY(`" + JavaBaseConstants.COLUMN_NAME_EMITTED_AT + "`,`"
+                + JavaBaseConstants.COLUMN_NAME_AB_ID + "`) \n"
                 + "DISTRIBUTED BY HASH(`" + JavaBaseConstants.COLUMN_NAME_AB_ID + "`) BUCKETS 16 \n"
                 + "PROPERTIES ( \n"
                 + "\"replication_num\" = \"1\" \n"
