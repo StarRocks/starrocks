@@ -567,9 +567,9 @@ The following parameters are supported:
 
   Suppose that you want to load a 1-GB data file on which two materialized views are created into a StarRocks cluster whose average load speed is 10 MB/s. The amount of time required for the data load is approximately 102 seconds.
 
-  (1 x 1024 x 3)/10 = 370.2 (second)
+  (1 x 1024 x 3)/10 = 307.2 (second)
 
-  For this example, we recommend that you set the timeout period to a value greater than 371 seconds.
+  For this example, we recommend that you set the timeout period to a value greater than 308 seconds.
 
 - `max_filter_ratio`
 
