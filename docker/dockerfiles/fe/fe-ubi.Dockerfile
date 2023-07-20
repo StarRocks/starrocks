@@ -51,4 +51,4 @@ RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000
              --shell /usr/sbin/nologin $USER  \
     && chown -R $USER:$GROUP /opt/starrocks
 USER $USER
-ENV USER $USER
+ENV USER=$USER
