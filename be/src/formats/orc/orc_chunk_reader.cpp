@@ -1328,7 +1328,7 @@ Status OrcChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
                     fmt::format("Unkown supported orc type: {}, column name: {}", subtype->getKind(), name));
 
         case orc::TypeKind::DECIMAL:
-            tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, subtype->getPrecision(), subtype->getScale());
+            tp = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, subtype->getPrecision(), subtype->getScale());
             break;
 
         case orc::TypeKind::DATE:
