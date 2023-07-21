@@ -15,8 +15,7 @@ INSERT { INTO | OVERWRITE } [db_name.]<table_name>
 [ WITH LABEL <label>]
 [ (<column_name>[, ...]) ]
 { VALUES ( { <expression> | DEFAULT }[, ...] )
-  | <query> 
-  | TABLE <file_params> <auth_params> }
+  | <query> }
 ```
 
 ## 参数说明
@@ -33,9 +32,6 @@ INSERT { INTO | OVERWRITE } [db_name.]<table_name>
 | expression  | 表达式，用以为对应列赋值。                                   |
 | DEFAULT     | 为对应列赋予默认值。                                         |
 | query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
-| TABLE       | 导入外部数据源文件中的数据。目前，StarRocks 支持从 HDFS 和 AWS S3 插入 Parquet 和 ORC 文件。该功能自 v3.1 起支持。 |
-| file_params | `"key" = "value"` 形式的参数对，用于定义要导入的数据文件，包括：<ul><li>`path`：用于访问数据文件的 URI。</li><li>`format`：文件的格式。有效值包括 `parquet` 和 `orc`。</li></ul> |
-| auth_params | `"key" = "value"` 形式的参数对，用于指定访问外部数据源所需的认证参数。<br>**AWS S3**：<ul><li>`aws.s3.access_key`：访问 AWS S3 存储空间的 Access Key。</li><li>`aws.s3.secret_key`：访问 AWS S3 存储空间的 Secret Key。</li><li>`aws.s3.region`：需访问的 AWS S3 存储空间的地区，如 us-west-1。</li></ul>**HDFS**:<ul><li>`hadoop.security.authentication`：指定认证方式。取值范围：`simple` 和 `kerberos`。默认值：`simple`。`simple` 表示简单认证，即无认证。`kerberos` 表示 Kerberos 认证。</li><li>`username`：用于访问 HDFS 集群中 NameNode 节点的用户名。</li><li>`password`：用于访问 HDFS 集群中 NameNode 节点的密码。</li><li>`kerberos_principal`：用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：<ul><li>`username` 或 `servicename`：HDFS 集群中用户或服务的名称。</li><li>`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。</li><li>`realm`：域，必须全大写。</li></ul>举例：nn/zelda1@ZELDA.COM。</li><li>`kerberos_keytab`：用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。</li><li>`kerberos_keytab_content`：用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 kerberos_keytab 参数二选一配置。</li></ul> |
 
 ## 注意事项
 
@@ -92,17 +88,17 @@ INSERT OVERWRITE test PARTITION(p1, p2) WITH LABEL `label1` SELECT * FROM test3;
 INSERT OVERWRITE test WITH LABEL `label1` (c1, c2) SELECT * from test3;
 ```
 
-以下示例将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet_file/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
+### 示例六：从 AWS S3 中导入 Parquet 数据文件
+
+以下示例将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
 
 ```Plain
-mysql> INSERT INTO insert_wiki_edit
-    ->     SELECT * FROM TABLE(
-    ->         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
-    ->         "format" = "parquet",
-    ->         "aws.s3.access_key" = "xxxxxxxxxx",
-    ->         "aws.s3.secret_key" = "yyyyyyyyyy",
-    ->         "aws.s3.region" = "aa-bbbb-c"
-    -> );
-Query OK, 2 rows affected (0.03 sec)
-{'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
+INSERT INTO insert_wiki_edit
+    SELECT * FROM TABLE(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "xxxxxxxxxx",
+        "aws.s3.secret_key" = "yyyyyyyyyy",
+        "aws.s3.region" = "aa-bbbb-c"
+);
 ```
