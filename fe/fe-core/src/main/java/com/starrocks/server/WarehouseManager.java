@@ -142,7 +142,9 @@ public class WarehouseManager implements Writable {
 
     @VisibleForTesting
     protected Collection<Warehouse> getWarehouses() {
-        return idToWh.values();
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return idToWh.values();
+        }
     }
 
     @Override

@@ -173,10 +173,14 @@ public class NodeMgr {
         GlobalStateMgr.getCurrentState().unlock();
     }
 
+    public List<Frontend> getAllFrontends() {
+        return Lists.newArrayList(frontends.values());
+    }
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
-            return Lists.newArrayList(frontends.values());
+            return getAllFrontends();
         }
 
         List<Frontend> result = Lists.newArrayList();
@@ -1118,7 +1122,7 @@ public class NodeMgr {
         List<WarehouseInfo> warehouseInfos = Lists.newArrayList();
         TGetWarehousesRequest request = new TGetWarehousesRequest();
 
-        List<Frontend> allFrontends = getFrontends(null);
+        List<Frontend> allFrontends = getAllFrontends();
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(getSelfNode().first)) {
                 continue;
