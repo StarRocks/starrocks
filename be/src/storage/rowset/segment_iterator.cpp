@@ -452,7 +452,32 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
                 _dcg_segments[column_file] = dcg_segment;
             }
             if (col_index != nullptr) {
-                *col_index = idx.second;
+                /*
+                    If the number of cols file columns is less than corresponding dcg meta column_ids vector
+                    size, it means that drop column has been done. We should assign col_index more carefully.
+                    The column offset is not the offset in dcg column_ids vector but it should be the column
+                    offset of the loaded cols file.
+                */
+                DCHECK(_dcg_segments[column_file]->num_columns() <= dcg->column_ids()[idx.first].size());
+                if (_dcg_segments[column_file]->num_columns() < dcg->column_ids()[idx.first].size()) {
+                    const auto& new_schema =
+                            TabletSchema::create_with_uid(_segment->tablet_schema(), dcg->column_ids()[idx.first]);
+
+                    *col_index = INT32_MIN;
+                    for (int i = 0; i < new_schema->columns().size(); ++i) {
+                        const auto& col = new_schema->column(i);
+                        if (col.unique_id() == dcg->column_ids()[idx.first][idx.second]) {
+                            *col_index = i;
+                            break;
+                        }
+                    }
+                    if (*col_index == INT32_MIN) {
+                        return Status::InternalError("Can not find suitable column in cols file, filename: " +
+                                                     _dcg_segments[column_file]->file_name());
+                    }
+                } else {
+                    *col_index = idx.second;
+                }
             }
             return _dcg_segments[column_file];
         }
