@@ -578,6 +578,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
                 extras.add("DEFAULT_GENERATED");
                 return "CURRENT_TIMESTAMP";
+            } else {
+                extras.add("DEFAULT_GENERATED");
+                return defaultExpr.getExpr();
             }
         }
         return FeConstants.NULL_STRING;
