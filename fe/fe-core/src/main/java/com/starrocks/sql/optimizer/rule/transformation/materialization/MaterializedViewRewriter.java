@@ -937,6 +937,13 @@ public class MaterializedViewRewriter {
                                 OptExpression mvExpression,
                                 List<Table> queryTables,
                                 List<Table> mvTables) {
+        // If all join types are inner/cross, no need check join orders: eg a inner join b or b inner join a.
+        boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
+        boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
+        if (isQueryAllEqualInnerJoin && isMVAllEqualInnerJoin) {
+            return true;
+        }
+
         // If exact match (all join types are the same), return true directly.
         List<JoinOperator> queryJoinOperators = MvUtils.getAllJoinOperators(queryExpression);
         List<JoinOperator> mvJoinOperators = MvUtils.getAllJoinOperators(mvExpression);
@@ -1090,18 +1097,12 @@ public class MaterializedViewRewriter {
                     createEquivalenceClasses(srcJoinOnPredicateSplit.getEqualPredicates());
             targetEquivalenceClasses = createQueryBasedEquivalenceClasses(columnRewriter,
                     targetJoinOnPredicateSplit.getEqualPredicates());
-            if (targetEquivalenceClasses == null) {
-                return null;
-            }
         } else {
             sourceEquivalenceClasses =
                     createQueryBasedEquivalenceClasses(columnRewriter,
                             srcJoinOnPredicateSplit.getEqualPredicates());
             targetEquivalenceClasses =
                     createEquivalenceClasses(targetJoinOnPredicateSplit.getEqualPredicates());
-            if (sourceEquivalenceClasses == null) {
-                return null;
-            }
         }
 
         // NOTE: For view-delta mode, we still need add extra join-compensations equal predicates.

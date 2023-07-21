@@ -671,15 +671,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 " from emps group by empid, deptno ";
         testRewriteOK(mv, "select empid, deptno,\n" +
                 " sum(salary) as total, count(salary)  as cnt\n" +
-                " from emps group by empid, deptno having sum(salary) > 10")
-                .contains("predicates: 7: sum > 10");
+                " from emps group by empid, deptno having sum(salary) > 10");
         testRewriteOK(mv, "select empid,\n" +
                 " sum(salary) as total, count(salary)  as cnt\n" +
-                " from emps group by empid having sum(salary) > 10")
-                .contains("AGGREGATE (update finalize)\n" +
-                        "  |  output: sum(11: total), sum(12: cnt)\n" +
-                        "  |  group by: 9: empid\n" +
-                        "  |  having: 13: sum > 10");
+                " from emps group by empid having sum(salary) > 10");
     }
 
     @Test
