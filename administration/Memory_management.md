@@ -121,6 +121,7 @@ StarRocks BE 中的内存分为以下几类。
 | consistency_max_memory_limit_percent | 20 | 一致性校验任务使用的内存上限，取 mem_limit * consistency_max_memory_limit_percent / 100 和 consistency_max_memory_limit 中较小的值。内存使用超限，会导致一致性校验任务失败。 |
 | consistency_max_memory_limit | 10G | 一致性校验任务使用的内存上限，取 mem_limit * consistency_max_memory_limit_percent / 100 和 consistency_max_memory_limit 中较小的值。内存使用超限，会导致一致性校验任务失败。 |
 | memory_limitation_per_thread_for_schema_change | 2 | 单个 Schema Change 任务的内存使用上限，内存使用超限，会导致 Schema Change 任务失败。|
+| max_compaction_concurrency | -1 | Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 -1 代表没有限制。0 表示不允许 compaction。|
 
 ### Session 变量
 
