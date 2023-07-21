@@ -376,6 +376,15 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
         _rs_version_map.erase(rs->version());
 
         // put compaction rowsets in _stale_rs_version_map.
+        // if this version already exist, replace it with new rowset.
+        if (to_replace != nullptr) {
+            auto search = _stale_rs_version_map.find(rs->version());
+            if (search != _stale_rs_version_map.end()) {
+                if (search->second->rowset_id() != rs->rowset_id()) {
+                    to_replace->push_back(search->second);
+                }
+            }
+        }
         _stale_rs_version_map[rs->version()] = rs;
     }
 
