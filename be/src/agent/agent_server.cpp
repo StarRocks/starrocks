@@ -71,7 +71,7 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
     // Both PUSH and REALTIME_PUSH type use _push_workers
     CREATE_AND_START_POOL(PUSH, _push_workers,
                           config::push_worker_count_normal_priority + config::push_worker_count_high_priority);
-    CREATE_AND_START_POOL(PUBLISH_VERSION, _publish_version_workers, config::num_cores);
+    CREATE_AND_START_POOL(PUBLISH_VERSION, _publish_version_workers, CpuInfo::num_cores());
     CREATE_AND_START_POOL(CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers,
                           config::clear_transaction_task_worker_count);
     CREATE_AND_START_POOL(DELETE, _delete_workers, config::delete_worker_count);
