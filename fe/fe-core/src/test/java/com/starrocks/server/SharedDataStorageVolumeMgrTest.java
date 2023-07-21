@@ -14,7 +14,21 @@
 
 package com.starrocks.server;
 
+import com.google.common.collect.Lists;
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -23,6 +37,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
@@ -30,6 +46,7 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -48,6 +65,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -649,5 +667,59 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals(storageVolumeToTables, svm1.storageVolumeToTables);
         Assert.assertEquals(dbToStorageVolume, svm1.dbToStorageVolume);
         Assert.assertEquals(tableToStorageVolume, svm1.tableToStorageVolume);
+    }
+
+    @Test
+    public void testGetTableBindingsOfBuiltinStorageVolume() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public List<Long> getDbIdsIncludeRecycleBin() {
+                return Arrays.asList(1L);
+            }
+
+            @Mock
+            public Database getDbIncludeRecycleBin(long dbId) {
+                return new Database(dbId, "");
+            }
+
+            @Mock
+            public List<Table> getTablesIncludeRecycleBin(Database db) {
+                long dbId = 1L;
+                long tableId = 2L;
+                long partitionId = 3L;
+                long indexId = 4L;
+                long tablet1Id = 10L;
+                long tablet2Id = 11L;
+
+                // Schema
+                List<Column> columns = Lists.newArrayList();
+                Column k1 = new Column("k1", Type.INT, true, null, "", "");
+                columns.add(k1);
+                columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
+                columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+
+                // Tablet
+                Tablet tablet1 = new LakeTablet(tablet1Id);
+                Tablet tablet2 = new LakeTablet(tablet2Id);
+
+                // Index
+                MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+                TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+                index.addTablet(tablet1, tabletMeta);
+                index.addTablet(tablet2, tabletMeta);
+
+                // Partition
+                DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+                PartitionInfo partitionInfo = new SinglePartitionInfo();
+                partitionInfo.setReplicationNum(partitionId, (short) 3);
+
+                // Lake table
+                LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+                return Arrays.asList(table);
+            }
+        };
+
+        SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        Assert.assertEquals(new HashSet<>(Arrays.asList(2L)), sdsvm.getTableBindingsOfBuiltinStorageVolume());
     }
 }
