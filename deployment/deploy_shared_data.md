@@ -1,6 +1,6 @@
 # 部署使用 StarRocks 存算分离集群
 
-本文介绍如何部署和使用 StarRocks 存算分离集群。
+本文介绍如何部署和使用 StarRocks 存算分离集群。该功能从 3.0 版本开始支持。
 
 StarRocks 存算分离集群采用了存储计算分离架构，特别为云存储设计。在存算分离的模式下，StarRocks 将数据存储在兼容 S3 协议的对象存储（例如 AWS S3、OSS 以及 MinIO）或 HDFS 中，而本地盘作为热数据缓存，用以加速查询。通过存储计算分离架构，您可以降低存储成本并且优化资源隔离。除此之外，集群的弹性扩展能力也得以加强。在查询命中缓存的情况下，存算分离集群的查询性能与普通集群性能一致。
 
@@ -15,8 +15,6 @@ StarRocks 存算分离集群架构如下：
 
 ![Shared-data Architecture](../assets/share_data_arch.png)
 
-该功能从 3.0 版本开始支持。
-
 ## 部署 StarRocks 存算分离集群
 
 StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署方式类似。唯一不同的是 FE 和 BE 的配置文件 **fe.conf** 和 **be.conf** 中的配置项。本小节仅列出部署 StarRocks 存算分离集群时需要添加到配置文件中的 FE 和 BE 配置项。有关部署 StarRocks 集群的详细说明，请参阅 [部署 StarRocks](/deployment/deploy_manually.md)。
@@ -29,6 +27,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 | ----------------------------------- | ------------------------------------------------------------ |
 | run_mode                            | StarRocks 集群的运行模式。有效值：`shared_data` 和 `shared_nothing` (默认)。`shared_data` 表示在存算分离模式下运行 StarRocks。`shared_nothing` 表示以普通模式运行 StarRocks。<br />**注意**<br />StarRocks 集群不支持存算分离和普通模式混合部署。<br />请勿在集群部署完成后更改 `run_mode`，否则将导致集群无法再次启动。不支持从普通集群转换为存算分离集群，反之亦然。 |
 | cloud_native_meta_port              | 云原生元数据服务监听端口。默认值：`6090`。                   |
+| enable_load_volume_from_conf | 是否允许 StarRocks 使用 FE 配置文件中指定的存储相关属性创建默认存储卷。有效值：`true`（默认）和 `false`。自 v3.1.0 起支持。<ul><li>如果您在创建新的存算分离集群时指定此项为 `true`，StarRocks 将使用 FE 配置文件中存储相关属性创建内置存储卷 `builtin_storage_volume`，并将其设置为默认存储卷。但如果您没有指定存储相关的属性，StarRocks 将无法启动。</li><li>如果您在创建新的存算分离集群时指定此项为 `false`，StarRocks 将直接启动，不会创建内置存储卷。在 StarRocks 中创建任何对象之前，您必须手动创建一个存储卷并将其设置为默认存储卷。详细信息请参见[创建默认存储卷](#创建默认存储卷)。</li></ul>**注意**<br />建议您在升级现有的 v3.0 存算分离集群时，保留此项的默认配置 `true`。如果将此项修改为 `false`，升级前创建的数据库和表将变为只读，您无法向其中导入数据。 |
 | cloud_native_storage_type           | 您使用的存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS、Azure Blob（公测中，自 v3.1 起支持）、以及兼容 S3 协议的对象存储中（例如 AWS S3、Google GCP、阿里云 OSS 以及 MinIO）。有效值：`S3`（默认）、`AZBLOB` 和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果您将此项指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。 |
 | cloud_native_hdfs_url               | HDFS 存储的 URL，例如 `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。 |
 | aws_s3_path                         | 用于存储数据的 S3 存储空间路径，由 S3 存储桶的名称及其下的子路径（如有）组成，如 `testbucket/subpath`。 |
@@ -44,6 +43,20 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 | azure_blob_endpoint                 | Azure Blob Storage 的链接地址，如 `https://test.blob.core.windows.net`。 |
 | azure_blob_shared_key               | 访问 Azure Blob Storage 的 Shared Key。                     |
 | azure_blob_sas_token                | 访问 Azure Blob Storage 的共享访问签名（SAS）。                |
+
+> **注意**
+>
+> 成功创建存算分离集群后，您只能修改与安全凭证相关的配置项。如果您更改了原有存储路径相关的配置项，则在此之前创建的数据库和表将变为只读，您无法向其中导入数据。
+
+如果您想在集群创建后手动创建默认存储卷，则只需添加以下配置项：
+
+```Properties
+run_mode = shared_data
+cloud_native_meta_port = <meta_port>
+enable_load_volume_from_conf = false
+```
+
+如果您想在 FE 配置文件中指定存储相关的属性，示例如下：
 
 - 如果您使用 HDFS 存储，请添加以下配置项：
 
@@ -181,6 +194,10 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
     azure_blob_sas_token = <sas_token>
     ```
+
+  > **注意**
+  >
+  > 创建 Azure Blob Storage Account 时必须禁用分层命名空间。
 
 - 如果您使用 GCP Cloud Storage：
 
@@ -360,11 +377,45 @@ storage_root_path = <storage_root_path>
 
 ## 使用 StarRocks 存算分离集群
 
-StarRocks 存算分离集群的使用也类似于普通 StarRocks 集群。
+StarRocks 存算分离集群的使用也类似于 StarRocks 存算一体集群，不同之处在于存算分离集群需要使用存储卷和云原生表才能将数据持久化到 HDFS 或对象存储。
 
-### 创建表
+### 创建默认存储卷
 
-连接到 StarRocks 存算分离集群后，您需要创建数据库，并在数据库中创建表。目前，StarRocks 存算分离集群支持以下数据模型：
+您可以使用 StarRocks 自动创建的内置存储卷，也可以手动创建和设置默认存储卷。本节介绍如何手动创建并设置默认存储卷。
+
+> **说明**
+>
+> 如果您的 StarRocks 存算分离集群是由 v3.0 升级，则无需定义默认存储卷。 StarRocks 会根据您在 FE 配置文件 **fe.conf** 中指定的相关配置项自动创建默认存储卷。您仍然可以使用其他远程数据存储资源创建新的存储卷或定义其他存储卷为默认。
+
+为了确保 StarRocks 存算分离集群有权限在远程数据源中存储数据，您必须在创建数据库或云原生表时引用存储卷。存储卷由远程数据存储系统的属性和凭证信息组成。在部署新 StarRocks 存算分离集群时，如果您禁止了 StarRocks 创建内置存储卷 (将 `enable_load_volume_from_conf` 设置为 `false`)，则启动后必须先创建和设置默认存储卷，然后才能在集群中创建数据库和表。
+
+以下示例使用 IAM user-based 认证为 AWS S3 存储空间 `defaultbucket` 创建存储卷 `def_volume`，激活并将其设置为默认存储卷：
+
+```SQL
+CREATE STORAGE VOLUME def_volume
+TYPE = S3
+LOCATIONS = ("s3://defaultbucket/test/")
+PROPERTIES
+(
+    "enabled" = "true",
+    "aws.s3.region" = "us-west-2",
+    "aws.s3.endpoint" = "https://s3.us-west-2.amazonaws.com",
+    "aws.s3.use_aws_sdk_default_behavior" = "false",
+    "aws.s3.use_instance_profile" = "false",
+    "aws.s3.access_key" = "xxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyy"
+);
+
+SET def_volume AS DEFAULT STORAGE VOLUME;
+```
+
+有关如何为其他远程存储创建存储卷和设置默认存储卷的更多信息，请参阅 [CREATE STORAGE VOLUME](../sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md) 和 [SET DEFAULT STORAGE VOLUME](../sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md)。
+
+### 创建数据库和云原生表
+
+创建默认存储卷后，您可以使用该存储卷创建数据库和云原生表。
+
+目前，StarRocks 存算分离集群支持以下数据模型：
 
 - 明细模型（Duplicate Key）
 - 聚合模型（Aggregate Key）
@@ -385,16 +436,20 @@ CREATE TABLE IF NOT EXISTS detail_demo (
     password      LARGEINT       COMMENT "range [-2^127 + 1 ~ 2^127 - 1]",
     name          CHAR(20)       NOT NULL COMMENT "range char(m),m in (1-255) ",
     profile       VARCHAR(500)   NOT NULL COMMENT "upper limit value 65533 bytes",
-    ispass        BOOLEAN        COMMENT "true/false"
-)
+    ispass        BOOLEAN        COMMENT "true/false")
 DUPLICATE KEY(recruit_date, region_num)
 DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
+    "storage_volume" = "def_volume",
     "datacache.enable" = "true",
     "datacache.partition_duration" = "1 MONTH",
     "enable_async_write_back" = "false"
 );
 ```
+
+> **说明**
+>
+> 当您在 StarRocks 存算分离集群中创建数据库或云原生表时，如果未指定存储卷，StarRocks 将使用默认存储卷。
 
 除了常规表 PROPERTIES 之外，您还需要在创建表时指定以下 PROPERTIES：
 
