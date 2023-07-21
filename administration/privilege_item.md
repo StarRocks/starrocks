@@ -21,6 +21,7 @@
 | FILE                    | 创建、删除、查看文件。                                       |
 | OPERATE                 | 管理副本、配置项、变量、transaction等。                      |
 | CREATE GLOBAL FUNCTION  | 创建一个全局 UDF。                                           |
+| CREATE STORAGE VOLUME  | 为远程存储系统创建存储卷 (Storage Volume)。                     |
 
 ### 资源组权限 （RESOURCE GROUP)
 
@@ -117,6 +118,15 @@
 | USAGE | 使用该函数。                 |
 | DROP  | 删除该函数。                 |
 | ALL   | 拥有对该函数的上述所有权限。 |
+
+### 存储卷权限 (STORAGE VOLUME)
+
+| 权限    | 用途                                                         |
+| ------- | ------------------------------------------------------------ |
+| ALTER | 更改存储卷的认证属性、注释或状态（enabled）。      |
+| DROP  | 删除指定存储卷。                 |
+| USAGE | 查看指定存储卷的信息，设置指定存储卷为默认存储卷。   |
+| ALL   | 拥有对该存储卷的上述所有权限。 |
 
 ## 升级注意事项
 
