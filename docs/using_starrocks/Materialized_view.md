@@ -306,7 +306,7 @@ PROPERTIES (
 
 ### Rewrite queries with Derivable Join
 
-From v3.1.0 onwards, StarRocks supports rewriting queries with a join that can be derived from the corresponding asynchronous materialized view, that is, an asynchronous materialized view with a certain pattern of join can rewrite queries with a different pattern of join as long as both joins have the same joined tables and columns and meet some requirements.
+From v3.0.4 onwards, StarRocks supports rewriting queries with a join that can be derived from the corresponding asynchronous materialized view, that is, an asynchronous materialized view with a certain pattern of join can rewrite queries with a different pattern of join as long as both joins have the same joined tables and columns and meet some requirements.
 
 The following table specifies the correspondence of the join pattern in the materialized view and the join pattern in the queries that can be rewritten (`A` and `B` indicate the joined tables, `a1` indicates the joined column in `A`, and `b1` indicates the joined column in `B`):
 
