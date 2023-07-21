@@ -20,9 +20,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections4.MapUtils;
@@ -255,6 +257,14 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     @VisibleForTesting
     static int getNextComputeNodeIndex() {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            String currentWh = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+            if (ConnectContext.get() != null) {
+                currentWh = ConnectContext.get().getCurrentWarehouse();
+            }
+            return GlobalStateMgr.getCurrentWarehouseMgr().
+                    getNextComputeNodeIndexFromWarehouse(currentWh).getAndIncrement();
+        }
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 
@@ -266,7 +276,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                                                         int numUsedComputeNodes) {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
+            String currentWh = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+            if (ConnectContext.get() != null) {
+                currentWh = ConnectContext.get().getCurrentWarehouse();
+            }
+            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse(currentWh);
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode

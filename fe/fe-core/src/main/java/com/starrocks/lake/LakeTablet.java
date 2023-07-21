@@ -97,13 +97,15 @@ public class LakeTablet extends Tablet {
 
     @Override
     public Set<Long> getBackendIds() {
+        return getBackendIds(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+    }
+
+    public Set<Long> getBackendIds(long workerGroupId) {
         if (GlobalStateMgr.isCheckpointThread()) {
             // NOTE: defensive code: don't touch any backend RPC if in checkpoint thread
             return Collections.emptySet();
         }
         try {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             return GlobalStateMgr.getCurrentStarOSAgent().getBackendIdsByShard(getShardId(), workerGroupId);
         } catch (UserException e) {
             LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
@@ -115,7 +117,14 @@ public class LakeTablet extends Tablet {
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
-        for (long backendId : getBackendIds()) {
+        getQueryableReplicas(allQuerableReplicas, localReplicas, visibleVersion, localBeId,
+                schemaHash, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+    }
+
+    @Override
+    public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
+                                     long visibleVersion, long localBeId, int schemaHash, long workerGroupId) {
+        for (long backendId : getBackendIds(workerGroupId)) {
             Replica replica = new Replica(getId(), backendId, visibleVersion, schemaHash, getDataSize(true),
                     getRowCount(visibleVersion), NORMAL, -1, visibleVersion);
             allQuerableReplicas.add(replica);

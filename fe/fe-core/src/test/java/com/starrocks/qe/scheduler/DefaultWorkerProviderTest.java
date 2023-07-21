@@ -177,7 +177,7 @@ public class DefaultWorkerProviderTest {
 
             new MockUp<WarehouseManager>() {
                 @Mock
-                public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
+                public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(String warehouseName) {
                     return id2ComputeNode;
                 }
             };

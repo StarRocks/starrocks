@@ -566,10 +566,13 @@ public class GlobalStateMgr {
     }
 
     public TNodesInfo createNodesInfo(Integer clusterId) {
+        return createNodesInfo(clusterId, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+    }
+
+    public TNodesInfo createNodesInfo(Integer clusterId, String warehouseName) {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
-        // use default warehouse
-        Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
+        Warehouse warehouse = warehouseMgr.getWarehouse(warehouseName);
         // TODO: need to refactor after be split into cn + dn
         if (warehouse != null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();

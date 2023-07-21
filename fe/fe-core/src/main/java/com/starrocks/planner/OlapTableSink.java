@@ -75,6 +75,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
@@ -126,6 +127,7 @@ public class OlapTableSink extends DataSink {
     private int autoIncrementSlotId;
     private boolean enableAutomaticPartition;
     private TPartialUpdateMode partialUpdateMode;
+    private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -158,6 +160,14 @@ public class OlapTableSink extends DataSink {
             }
         }
         this.partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
+    }
+
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
+                         boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
+                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition, String warehouseName) {
+        this(dstTable, tupleDescriptor, partitionIds, enablePipelineLoad, writeQuorum, enableReplicatedStorage,
+                nullExprInAutoIncrement, enableAutomaticPartition);
+        this.warehouseName = warehouseName;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
@@ -236,7 +246,7 @@ public class OlapTableSink extends DataSink {
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable));
         tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
         tSink.setLocation(createLocation(dstTable));
-        tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
+        tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId, warehouseName));
         tSink.setPartial_update_mode(this.partialUpdateMode);
         if (canUseColocateMVIndex()) {
             tSink.setEnable_colocate_mv_index(true);
@@ -493,7 +503,7 @@ public class OlapTableSink extends DataSink {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
                     if (table.isCloudNativeTableOrMaterializedView()) {
-                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
                         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
                         locationParam.addToTablets(new TTabletLocation(tablet.getId(),
                                 Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId(workerGroupId))));

@@ -48,6 +48,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -78,6 +79,10 @@ public class WarehouseManager implements Writable {
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
         }
+    }
+
+    public AtomicInteger getNextComputeNodeIndexFromWarehouse(String warehouseName) {
+        return getWarehouse(warehouseName).getAnyAvailableCluster().getNextComputeNodeHostId();
     }
 
     public Warehouse getDefaultWarehouse() {
@@ -114,13 +119,15 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
+    public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(String warehouseName) {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-        Warehouse warehouse = getDefaultWarehouse();
+        Warehouse warehouse = getWarehouse(warehouseName);
         warehouse.getAnyAvailableCluster().getComputeNodeIds().forEach(
                 nodeId -> builder.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId)));
         return builder.build();
     }
+
+
 
     public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {

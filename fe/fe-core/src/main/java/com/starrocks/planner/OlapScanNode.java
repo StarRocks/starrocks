@@ -74,6 +74,8 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -91,6 +93,7 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -160,10 +163,17 @@ public class OlapScanNode extends ScanNode {
 
     private boolean usePkIndex = false;
 
+    private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         olapTable = (OlapTable) desc.getTable();
+    }
+
+    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, String warehouseName) {
+        this(id, desc, planNodeName);
+        this.warehouseName = warehouseName;
     }
 
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
@@ -369,8 +379,15 @@ public class OlapScanNode extends ScanNode {
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
-            selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                    expectedVersion, -1, schemaHash);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+                selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        expectedVersion, -1, schemaHash, warehouse.getAnyAvailableCluster().getWorkerGroupId());
+            } else {
+                selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        expectedVersion, -1, schemaHash);
+            }
+
             if (allQueryableReplicas.isEmpty()) {
                 String replicaInfos = ((LocalTablet) selectedTablet).getReplicaInfos();
                 LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
@@ -450,8 +467,15 @@ public class OlapScanNode extends ScanNode {
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
-            tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                    visibleVersion, localBeId, schemaHash);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+                tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        visibleVersion, localBeId, schemaHash, warehouse.getAnyAvailableCluster().getWorkerGroupId());
+            } else {
+                tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        visibleVersion, localBeId, schemaHash);
+            }
+
             if (allQueryableReplicas.isEmpty()) {
                 String replicaInfos = "";
                 if (tablet instanceof LocalTablet) {
