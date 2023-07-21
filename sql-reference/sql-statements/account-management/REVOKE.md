@@ -39,11 +39,11 @@ REVOKE
 
 # User 相关
 
-REVOKE IMPERSONATE ON USER <user_identity> FROM USER <user_identity>;
+REVOKE IMPERSONATE ON USER <user_identity> FROM USER <user_identity>
 
 # 全局 UDF 相关
 
-REVOKE { 
+REVOKE
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { GLOBAL FUNCTION <function_name> [, <function_name>,...]    
        | ALL GLOBAL FUNCTIONS }
@@ -77,7 +77,7 @@ REVOKE
 REVOKE  
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
-       | ALL TABLES IN 
+       | ALL TABLES} IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 
@@ -90,7 +90,7 @@ REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
 REVOKE  
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
-       ｜ ALL VIEWS IN 
+       ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
     
@@ -100,10 +100,10 @@ REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
 
 # Materialized view 相关
 
-REVOKE { 
+REVOKE
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
-       ｜ ALL MATERIALIZED VIEWS IN 
+       ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL [DATABASES] }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
     
@@ -113,16 +113,28 @@ REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_ide
 
 # Function 相关
 
-REVOKE { 
+REVOKE
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
-       ｜ ALL FUNCTIONS IN 
+       ｜ ALL FUNCTIONS } IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
     
 * 注意：需要执行 set catalog 之后才能使用。 
 * function 还可以用 db.function 的方式来表示。
-REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
+
+# Storage volume 相关
+
+REVOKE  
+    CREATE STORAGE VOLUME 
+    ON SYSTEM
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+REVOKE
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUME} 
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
 ### 撤销指定角色
