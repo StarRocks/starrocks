@@ -1000,6 +1000,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long check_consistency_default_timeout_second = 600; // 10 min
+    @ConfField(mutable = true)
+    public static long consistency_tablet_meta_check_interval_ms = 2 * 3600 * 1000L; // every 2 hours
 
     // Configurations for query engine
     /**
