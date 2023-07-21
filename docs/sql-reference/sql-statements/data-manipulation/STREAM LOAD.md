@@ -141,6 +141,7 @@ The following table describes the optional parameters.
 | label            | No       | The label of the load job. If you do not specify this parameter, StarRocks automatically generates a label for the load job.<br/>StarRocks does not allow you to use one label to load a data batch multiple times. As such, StarRocks prevents the same data from being repeatedly loaded. For label naming conventions, see [System limits](../../../reference/System_limit.md).<br/>By default, StarRocks retains the labels of load jobs that were successfully completed over the most recent three days. You can use the [FE parameter](../../../administration/Configuration.md) `label_keep_max_second` to change the label retention period. |
 | where            | No       | The conditions based on which StarRocks filters the pre-processed data. StarRocks loads only the pre-processed data that meets the filter conditions specified in the WHERE clause. |
 | max_filter_ratio | No       | The maximum error tolerance of the load job. The error tolerance is the maximum percentage of data records that can be filtered out due to inadequate data quality in all data records requested by the load job. Valid values: `0` to `1`. Default value: `0`.<br/>We recommend that you retain the default value `0`. This way, if unqualified data records are detected, the load job fails, thereby ensuring data correctness.<br/>If you want to ignore unqualified data records, you can set this parameter to a value greater than `0`. This way, the load job can succeed even if the data file contains unqualified data records.<br/>**NOTE**<br/>Unqualified data records do not include data records that are filtered out by the WHERE clause. |
+| log_rejected_record_num | No           | Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.<ul><li>The value `0` specifies that no data rows that are filtered out will be logged.</li><li>The value `-1` specifies that all data rows that are filtered out will be logged.</li><li>A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.</li></ul> |
 | timeout          | No       | The timeout period of the load job. Valid values: `1` to `259200`. Unit: second. Default value: `600`.<br/>**NOTE**In addition to the `timeout` parameter, you can also use the [FE parameter](../../../administration/Configuration.md) `stream_load_default_timeout_second` to centrally control the timeout period for all Stream Load jobs in your StarRocks cluster. If you specify the `timeout` parameter, the timeout period specified by the `timeout` parameter prevails. If you do not specify the `timeout` parameter, the timeout period specified by the `stream_load_default_timeout_second` parameter prevails. |
 | strict_mode      | No       | Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`.  The value `true` specifies to enable the strict mode, and the value `false` specifies to disable the strict mode. |
 | timezone         | No       | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
@@ -200,7 +201,7 @@ After the load job finishes, StarRocks returns the job result in JSON format. Ex
     "LoadBytes": 40888898,
     "LoadTimeMs": 2144,
     "BeginTxnTimeMs": 0,
-    "StreamLoadPutTimeMS": 1,
+    "StreamLoadPlanTimeMs": 1,
     "ReadDataTimeMs": 0,
     "WriteDataTimeMs": 11,
     "CommitAndPublishTimeMs": 16,
@@ -222,7 +223,7 @@ The following table describes the parameters in the returned job result.
 | LoadBytes              | The amount of data that is loaded. Unit: bytes.              |
 | LoadTimeMs             | The amount of time that is taken by the load job. Unit: ms.  |
 | BeginTxnTimeMs         | The amount of time that is taken to run a transaction for the load job. |
-| StreamLoadPutTimeMS    | The amount of time that is taken to generate a execution plan for the load job. |
+| StreamLoadPlanTimeMs   | The amount of time that is taken to generate a execution plan for the load job. |
 | ReadDataTimeMs         | The amount of time that is taken to read data for the load job. |
 | WriteDataTimeMs        | The amount of time that is taken to write data for the load job. |
 | CommitAndPublishTimeMs | The amount of time that is taken to commit and publish data for the load job. |
@@ -233,7 +234,7 @@ If the load job fails, StarRocks also returns `ErrorURL`. Example:
 {"ErrorURL": "http://172.26.195.68:8045/api/_load_error_log?file=error_log_3a4eb8421f0878a6_9a54df29fd9206be"}
 ```
 
-`ErrorURL` provides a URL from which you can obtain details about unqualified data records that have been filtered out. StarRocks retains 1,000 unqualified data records.
+`ErrorURL` provides a URL from which you can obtain details about unqualified data records that have been filtered out. You can specify the maximum number of unqualified data rows that can be logged by using the optional parameter `log_rejected_record_num`, which is set when you submit a load job.
 
 You can run `curl "url"` to directly view details about the filtered-out, unqualified data records. You can also run `wget "url"` to export the details about these data records:
 
