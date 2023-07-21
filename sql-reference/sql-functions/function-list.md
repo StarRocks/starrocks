@@ -279,6 +279,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bitmap_min](/sql-reference/sql-functions/bitmap-functions/bitmap_min.md)| 获取 Bitmap 中的最小值。|
 |  [bitmap_or](/sql-reference/sql-functions/bitmap-functions/bitmap_or.md)| 计算两个 bitmap 的并集，返回新的 bitmap。|
 |  [bitmap_remove](/sql-reference/sql-functions/bitmap-functions/bitmap_remove.md)| 从 Bitmap 中删除指定的数值。 |
+| [bitmap_subset_in_range](/sql-reference/sql-functions/bitmap-functions/bitmap_subset_in_range.md)| 从 Bitmap 中返回取值在指定范围内的元素。|
+| [bitmap_subset_limit](/sql-reference/sql-functions/bitmap-functions/bitmap_subset_limit.md)| 根据指定的起始值，从 BITMAP 中截取指定个数的元素。|
 |  [bitmap_to_array](/sql-reference/sql-functions/bitmap-functions/bitmap_to_array.md)| 将 BITMAP 中的所有值组合成 BIGINT 类型的数组。|
 |  [bitmap_to_base64](/sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md)| 将 bitmap 转换为 Base64 字符串。|
 |  [base64_to_bitmap](/sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)|将 Base64 编码的字符串转化为 Bitmap。 |

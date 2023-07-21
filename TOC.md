@@ -517,6 +517,8 @@
       + [bitmap_min](/sql-reference/sql-functions/bitmap-functions/bitmap_min.md)
       + [bitmap_or](/sql-reference/sql-functions/bitmap-functions/bitmap_or.md)
       + [bitmap_remove](/sql-reference/sql-functions/bitmap-functions/bitmap_remove.md)
+      + [bitmap_subset_in_range](/sql-reference/sql-functions/bitmap-functions/bitmap_subset_in_range.md)
+      + [bitmap_subset_limit](/sql-reference/sql-functions/bitmap-functions/bitmap_subset_limit.md)
       + [bitmap_to_array](/sql-reference/sql-functions/bitmap-functions/bitmap_to_array.md)
       + [bitmap_to_base64](/sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md)
       + [base64_to_bitmap](/sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
