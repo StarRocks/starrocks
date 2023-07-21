@@ -3382,7 +3382,6 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(const starrocks
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
-    return Status::OK();
 }
 
 static StatusOr<ColumnPtr> url_extract_parameter_general(const starrocks::Columns& columns) {
