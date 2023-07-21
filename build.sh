@@ -178,6 +178,10 @@ if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
 
+if [[ -z ${ENABLE_FAULT_INJECTION} ]]; then
+    ENABLE_FAULT_INJECTION=OFF
+fi
+
 HELP=0
 if [ $# == 1 ] ; then
     # default
@@ -247,6 +251,7 @@ echo "Get params:
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     WITH_CACHELIB       -- $WITH_CACHELIB
+    ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
 "
 
 check_tool()
@@ -332,6 +337,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_CACHELIB=${WITH_CACHELIB}                      \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DWITH_STARCACHE=${USE_STAROS}                        \
+                  -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
     time ${BUILD_SYSTEM} -j${PARALLEL}

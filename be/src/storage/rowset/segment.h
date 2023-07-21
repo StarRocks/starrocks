@@ -149,8 +149,6 @@ public:
 
     FileSystem* file_system() const { return _fs.get(); }
 
-    bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
-
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
 
     const std::string& file_name() const { return _fname; }

@@ -121,6 +121,13 @@ import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.TablePEntryObject;
+import com.starrocks.proto.FailPointTriggerModeType;
+import com.starrocks.proto.PFailPointInfo;
+import com.starrocks.proto.PFailPointTriggerMode;
+import com.starrocks.proto.PListFailPointResponse;
+import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.PListFailPointRequest;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
@@ -168,6 +175,7 @@ import com.starrocks.sql.ast.ShowDeleteStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.ShowFailPointStatement;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -208,6 +216,9 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.Warehouse;
@@ -224,6 +235,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -231,6 +243,8 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -380,6 +394,8 @@ public class ShowExecutor {
             handleShowPipes();
         } else if (stmt instanceof DescPipeStmt) {
             handleDescPipe();
+        } else if (stmt instanceof ShowFailPointStatement) {
+            handleShowFailPoint();
         } else {
             handleEmpty();
         }
@@ -2663,6 +2679,92 @@ public class ShowExecutor {
         List<String> row = Lists.newArrayList();
         DescPipeStmt.handleDesc(row, pipe);
         rows.add(row);
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowFailPoint() throws AnalysisException {
+        ShowFailPointStatement showStmt = ((ShowFailPointStatement) stmt);
+        // send request and build resultSet
+        PListFailPointRequest request = new PListFailPointRequest();
+        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        PatternMatcher matcher = null;
+        if (showStmt.getPattern() != null) {
+            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
+                    CaseSensibility.VARIABLES.getCaseSensibility());
+        }
+        List<Backend> backends = new LinkedList<>();
+        if (showStmt.getBackends() == null) {
+            List<Long> backendIds = clusterInfoService.getBackendIds(true);
+            if (backendIds == null) {
+                throw new AnalysisException("No alive backends");
+            }
+            for (long backendId : backendIds) {
+                Backend backend = clusterInfoService.getBackend(backendId);
+                if (backend == null) {
+                    continue;
+                }
+                backends.add(backend);
+            }
+        } else {
+            for (String backendAddr : showStmt.getBackends()) {
+                String[] tmp = backendAddr.split(":");
+                if (tmp.length != 2) {
+                    throw new AnalysisException("invalid backend addr");
+                }
+                Backend backend = clusterInfoService.getBackendWithBePort(tmp[0], Integer.parseInt(tmp[1]));
+                if (backend == null) {
+                    throw new AnalysisException("cannot find backend with addr " + backendAddr);
+                }
+                backends.add(backend);
+            }
+        }
+        // send request
+        List<Pair<Backend, Future<PListFailPointResponse>>> futures = Lists.newArrayList();
+        for (Backend backend : backends) {
+            try {
+                futures.add(Pair.create(backend,
+                        BackendServiceClient.getInstance().listFailPointAsync(backend.getBrpcAddress(), request)));
+            } catch (RpcException e) {
+                throw new AnalysisException("sending list failpoint request fails");
+            }
+        }
+        // handle response
+        List<List<String>> rows = Lists.newArrayList();
+        for (Pair<Backend, Future<PListFailPointResponse>> future : futures) {
+            try {
+                final Backend backend = future.first;
+                final PListFailPointResponse result = future.second.get(10, TimeUnit.SECONDS);
+                if (result != null && result.status.statusCode != TStatusCode.OK.getValue()) {
+                    String errMsg = String.format("list failpoint status failed, backend: %s:%d, error: %s",
+                            backend.getHost(), backend.getBePort(), result.status.errorMsgs.get(0));
+                    LOG.warn(errMsg);
+                    throw new AnalysisException(errMsg);
+                }
+                for (PFailPointInfo failPointInfo : result.failPoints) {
+                    String name = failPointInfo.name;
+                    PFailPointTriggerMode triggerMode = failPointInfo.triggerMode;
+                    if (matcher != null && !matcher.match(name)) {
+                        continue;
+                    }
+                    List<String> row = Lists.newArrayList();
+                    row.add(failPointInfo.name);
+                    row.add(triggerMode.mode.toString());
+                    if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
+                        row.add(Integer.toString(triggerMode.nTimes));
+                    } else if (triggerMode.mode == FailPointTriggerModeType.PROBABILITY_ENABLE) {
+                        row.add(Double.toString(triggerMode.probability));
+                    } else {
+                        row.add("");
+                    }
+                    row.add(String.format("%s:%d", backend.getHost(), backend.getBePort()));
+                    rows.add(row);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Throwable e) {
+                throw new AnalysisException(e.getMessage());
+            }
+        }
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 }

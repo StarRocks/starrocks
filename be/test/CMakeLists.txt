@@ -122,6 +122,7 @@ set(EXEC_FILES
         ./exprs/string_fn_test.cpp
         ./exprs/string_fn_trim_test.cpp
         ./exprs/string_fn_money_format_decimal_test.cpp
+        ./exprs/string_fn_url_extract_parameter_test.cpp
         ./exprs/struct_functions_test.cpp
         ./exprs/time_functions_test.cpp
         ./exprs/es_functions_test.cpp
@@ -336,6 +337,7 @@ set(EXEC_FILES
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp
+        ./util/fail_point_test.cpp
         ./util/faststring_test.cpp
         ./util/file_util_test.cpp
         ./util/filesystem_util_test.cpp

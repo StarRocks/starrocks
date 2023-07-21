@@ -64,6 +64,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/ratelimit.h"
 #include "util/time.h"
 
@@ -783,6 +784,7 @@ void Tablet::list_versions(vector<Version>* versions) const {
 }
 
 Status Tablet::capture_consistent_rowsets(const Version& spec_version, std::vector<RowsetSharedPtr>* rowsets) const {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     if (_updates != nullptr && spec_version.first == 0 && spec_version.second >= spec_version.first) {
         return _updates->get_applied_rowsets(spec_version.second, rowsets);
     } else if (_updates != nullptr) {
@@ -1406,7 +1408,6 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
     tablet_info->__set_partition_id(_tablet_meta->partition_id());
     tablet_info->__set_storage_medium(_data_dir->storage_medium());
     tablet_info->__set_path_hash(_data_dir->path_hash());
-    tablet_info->__set_is_in_memory(_tablet_meta->tablet_schema_ptr()->is_in_memory());
     tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
     if (_tablet_meta->get_binlog_config() != nullptr) {
         tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
