@@ -143,6 +143,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | label            | 否           | 用于指定导入作业的标签。如果您不指定标签，StarRocks 会自动为导入作业生成一个标签。相同标签的数据无法多次成功导入，这样可以避免一份数据重复导入。有关标签的命名规范，请参见[系统限制](../../../reference/System_limit.md)。StarRocks 默认保留最近 3 天内成功的导入作业的标签。您可以通过 [FE 配置参数](../../../administration/Configuration.md#导入和导出相关动态参数) `label_keep_max_second` 设置默认保留时长。 |
 | where            | 否           | 用于指定过滤条件。如果指定该参数，StarRocks 会按照指定的过滤条件对转换后的数据进行过滤。只有符合 WHERE 子句中指定的过滤条件的数据才会导入。 |
 | max_filter_ratio | 否           | 用于指定导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：`0`~`1`。默认值：`0` 。<br>建议您保留默认值 `0`。这样的话，当导入的数据行中有错误时，导入作业会失败，从而保证数据的正确性。<br>如果希望忽略错误的数据行，可以设置该参数的取值大于 `0`。这样的话，即使导入的数据行中有错误，导入作业也能成功。<br>**说明**<br>这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。 |
+| log_rejected_record_num | 否           | 指定最多允许记录多少条因数据质量不合格而过滤掉的数据行数。该参数自 3.1 版本起支持。取值范围：`0`、`-1`、大于 0 的正整数。默认值：`0`。<ul><li>取值为 `0` 表示不记录过滤掉的数据行。</li><li>取值为 `-1` 表示记录所有过滤掉的数据行。</li><li>取值为大于 0 的正整数（比如 `n`）表示每个 BE 节点上最多可以记录 `n` 条过滤掉的数据行。</li></ul> |
 | timeout          | 否           | 用于导入作业的超时时间。取值范围：1 ~ 259200。单位：秒。默认值：`600`。<br>**说明**<br>除了 `timeout` 参数可以控制该导入作业的超时时间外，您还可以通过 [FE 配置参数](../../../administration/Configuration.md#导入和导出相关动态参数) `stream_load_default_timeout_second` 来统一控制 Stream Load 导入作业的超时时间。如果指定了`timeout` 参数，则该导入作业的超时时间以 `timeout` 参数为准；如果没有指定 `timeout` 参数，则该导入作业的超时时间以`stream_load_default_timeout_second` 为准。 |
 | strict_mode      | 否           | 用于指定是否开严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。<br>关于该模式的介绍，参见 [严格模式](../../../loading/load_concept/strict_mode.md)。|
 | timezone         | 否           | 用于指定导入作业所使用的时区。默认为东八区 (Asia/Shanghai)。<br>该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/timezone.md)”中所述的会话级时区。 |
@@ -198,7 +199,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
     "LoadBytes": 40888898,
     "LoadTimeMs": 2144,
     "BeginTxnTimeMs": 0,
-    "StreamLoadPutTimeMS": 1,
+    "StreamLoadPlanTimeMs": 1,
     "ReadDataTimeMs": 0,
     "WriteDataTimeMs": 11,
     "CommitAndPublishTimeMs": 16,
@@ -220,7 +221,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | LoadBytes              | 此次导入的数据量大小。单位：字节 (Bytes)。                   |
 | LoadTimeMs             | 此次导入所用的时间。单位：毫秒 (ms)。                        |
 | BeginTxnTimeMs         | 导入作业开启事务的时长。                                     |
-| StreamLoadPutTimeMS    | 导入作业生成执行计划的时长。                                 |
+| StreamLoadPlanTimeMs   | 导入作业生成执行计划的时长。                                 |
 | ReadDataTimeMs         | 导入作业读取数据的时长。                                     |
 | WriteDataTimeMs        | 导入作业写入数据的时长。                                     |
 | CommitAndPublishTimeMs | 导入作业提交和数据发布的耗时。                               |
@@ -233,7 +234,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 }
 ```
 
-通过 `ErrorURL` 可以查看导入过程中因数据质量不合格而过滤掉的错误数据行的具体信息，当前仅保留前 1000 条。
+通过 `ErrorURL` 可以查看导入过程中因数据质量不合格而过滤掉的错误数据行的具体信息。您可以在提交导入作业时，通过可选参数 `log_rejected_record_num` 来指定最多可以记录多少条错误数据行的信息。
 
 您可以通过  `curl "url"` 命令直接查看错误数据行的信息。也可以通过 `wget "url"` 命令导出错误数据行的信息，如下所示：
 
