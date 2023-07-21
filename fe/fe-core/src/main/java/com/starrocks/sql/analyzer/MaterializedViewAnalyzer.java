@@ -264,7 +264,7 @@ public class MaterializedViewAnalyzer {
             List<Column> mvColumns = genMaterializedViewColumns(statement);
             statement.setMvColumnItems(mvColumns);
 
-            Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+            Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
             for (int i = 0; i < outputExpressions.size(); ++i) {
@@ -426,13 +426,13 @@ public class MaterializedViewAnalyzer {
             List<String> columnNames = statement.getQueryStatement().getQueryRelation()
                     .getRelationFields().getAllFields().stream()
                     .map(Field::getName).collect(Collectors.toList());
-            List<Expr> outputExpressions = statement.getQueryStatement().getQueryRelation().getOutputExpression();
-
+            Scope queryScope = statement.getQueryStatement().getQueryRelation().getScope();
+            List<Field> relationFields = queryScope.getRelationFields().getAllFields();
             List<Column> mvColumns = Lists.newArrayList();
 
-            for (int i = 0; i < outputExpressions.size(); ++i) {
-                Type type = AnalyzerUtils.transformTypeForMv(outputExpressions.get(i).getType());
-                Column column = new Column(columnNames.get(i), type, outputExpressions.get(i).isNullable());
+            for (int i = 0; i < relationFields.size(); ++i) {
+                Type type = AnalyzerUtils.transformTypeForMv(relationFields.get(i).getType());
+                Column column = new Column(columnNames.get(i), type, relationFields.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
                 mvColumns.add(column);

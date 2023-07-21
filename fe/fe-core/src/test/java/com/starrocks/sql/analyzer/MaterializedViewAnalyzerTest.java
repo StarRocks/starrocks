@@ -97,14 +97,14 @@ public class MaterializedViewAnalyzerTest {
     public void testNondeterministicFunction() {
         analyzeFail("create materialized view mv partition by k1 distributed by hash(k2) buckets 3 refresh async " +
                         "as select  k1, k2, rand() from tbl1 group by k1, k2",
-                "Materialized view query statement select item rand() not supported nondeterministic function.");
+                "Materialized view query statement select item rand() not supported nondeterministic function");
 
         analyzeFail("create materialized view mv partition by k1 distributed by hash(k2) buckets 3 refresh async " +
                         "as select k1, k2 from tbl1 group by k1, k2 union select k1, rand() from tbl1",
-                "Materialized view query statement select item rand() not supported nondeterministic function.");
+                "Materialized view query statement select item rand() not supported nondeterministic function");
 
         analyzeFail("create materialized view mv partition by k1 distributed by hash(k2) buckets 3 refresh async " +
                         "as select  k1, k2 from tbl1 where rand() > 0.5",
-                "Materialized view query statement select item rand() not supported nondeterministic function.");
+                "Materialized view query statement select item rand() not supported nondeterministic function");
     }
 }

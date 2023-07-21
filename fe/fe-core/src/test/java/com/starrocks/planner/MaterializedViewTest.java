@@ -3713,17 +3713,18 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                             + "where emps.empid > 10");
         }
     }
+
     @Test
     public void testNestedAggregateBelowJoin2() throws Exception {
         {
             String mv1 = "create materialized view mv1 \n" +
-                    "distributed by random \n" +
+                    "distributed by hash(empid)\n" +
                     "refresh async\n" +
                     "as select empid, deptno, locationid, \n" +
                     " sum(salary) as total, count(salary)  as cnt\n" +
                     " from emps group by empid, deptno, locationid ";
             String mv2 = "create materialized view mv2 \n" +
-                    "distributed by random \n" +
+                    "distributed by hash(sum)\n" +
                     "refresh async\n" +
                     "as select sum(total) as sum, t2.locationid, t2.empid, t2.deptno  from \n" +
                     "(select empid, deptno, t.locationid, total, cnt from mv1 t join locations \n" +
@@ -3743,6 +3744,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             starRocksAssert.dropMaterializedView("mv2");
         }
     }
+
     @Test
     public void testJoinWithTypeCast() throws Exception {
         String sql1 = "create table test.dim_tbl1 (\n" +
