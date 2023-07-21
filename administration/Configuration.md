@@ -172,6 +172,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |authentication_ldap_simple_server_host     | 空字符串 | LDAP 服务器所在主机的主机名。                                |
 |authentication_ldap_simple_server_port     | 389     | LDAP 服务器的端口。                                          |
 |authentication_ldap_simple_user_search_attr| uid     | LDAP 对象中标识用户的属性名称。                              |
+|max_upload_task_per_be                     | 0       | 单次 BACKUP 操作下，系统向单个 BE 节点下发的最大上传任务数。设置为小于或等于 0 时表示不限制任务数。该参数自 v3.0.2 起新增。     |
+|max_download_task_per_be                   | 0       | 单次 RESTORE 操作下，系统向单个 BE 节点下发的最大下载任务数。设置为小于或等于 0 时表示不限制任务数。该参数自 v3.0.2 起新增。     |
 
 ### 配置 FE 静态参数
 
