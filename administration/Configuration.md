@@ -155,7 +155,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |consistency_check_start_time|23|FE 发起副本一致性检测的起始时间。|
 |consistency_check_end_time|4|FE 发起副本一致性检测的终止时间。|
 |check_consistency_default_timeout_second|600|副本一致性检测的超时时间，单位为秒。|
-<!--|tablet_sched_slot_num_per_path|2|一个 BE 存储目录能够同时执行 tablet 相关任务的数目。代码库里2.3没有这个参数了|-->
 |tablet_sched_max_scheduling_tablets|2000|如果正在调度的 tablet 数量超过该值，跳过 tablet 均衡和修复检查。|
 |tablet_sched_disable_balance|FALSE|是否禁用 Tablet 均衡调度。|
 |tablet_sched_disable_colocate_balance|FALSE|禁用 Colocate Table 的副本均衡。|
