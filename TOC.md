@@ -571,6 +571,7 @@
       + [named_struct](/sql-reference/sql-functions/struct-functions/named_struct.md)
       + [row](/sql-reference/sql-functions/struct-functions/row.md)
     + 表函数
+      + [files](/sql-reference/sql-functions/table-functions/files.md)
       + [generate_series](/sql-reference/sql-functions/table-functions/generate_series.md)
     + Bit 函数
       + [bitand](/sql-reference/sql-functions/bit-functions/bitand.md)

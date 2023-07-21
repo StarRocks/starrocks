@@ -2,7 +2,7 @@
 
 本文介绍如何使用 INSERT 语句向 StarRocks 导入数据。
 
-与 MySQL 等数据库系统类似，StarRocks 支持通过 INSERT 语句导入数据。您可以使用 INSERT INTO VALUES 语句直接向表中插入数据，您还可以通过 INSERT INTO SELECT 语句将其他 StarRocks 表中的数据导入到新的 StarRocks 表中，或者将其他数据源的数据通过[外部表功能](../data_source/External_table.md)导入至 StarRocks 内部表中。自 v3.1 起，您可以使用 INSERT 语句和 TABLE 关键字直接导入外部数据源中的文件。
+与 MySQL 等数据库系统类似，StarRocks 支持通过 INSERT 语句导入数据。您可以使用 INSERT INTO VALUES 语句直接向表中插入数据，您还可以通过 INSERT INTO SELECT 语句将其他 StarRocks 表中的数据导入到新的 StarRocks 表中，或者将其他数据源的数据通过[外部表功能](../data_source/External_table.md)导入至 StarRocks 内部表中。自 v3.1 起，您可以使用 INSERT 语句和 [FILES()](../sql-reference/sql-functions/table-functions/files.md) 函数直接导入外部数据源中的文件。
 
 2.4 版本中，StarRocks 进一步支持通过 INSERT OVERWRITE 语句批量**覆盖写入**目标表。INSERT OVERWRITE 语句通过整合以下三部分操作来实现覆盖写入：
 
@@ -130,7 +130,9 @@ VALUES
 
 ## 通过 INSERT INTO SELECT 语句导入数据
 
-您可以通过 INSERT INTO SELECT 语句将源表中的数据导入至目标表中。INSERT INTO SELECT 将源表中的数据进行 ETL 转换之后，导入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统将 SELECT 语句结果导入目标表。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/insert.md#参数说明)。
+您可以通过 INSERT INTO SELECT 语句将源表中的数据导入至目标表中。INSERT INTO SELECT 将源表中的数据进行 ETL 转换之后，导入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表，甚至外部数据源中的数据文件。目标表必须是 StarRocks 的内表。执行该语句之后，系统将 SELECT 语句结果导入目标表。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/insert.md#参数说明)。
+
+### 通过 INSERT INTO SELECT 将内外表数据导入内表
 
 > 说明
 >
@@ -190,6 +192,35 @@ SELECT event_time, channel FROM source_wiki_edit;
 | label       | 导入作业的标识，数据库内唯一。如果未指定，StarRocks 会自动为作业生成一个 Label。建议您指定 Label。否则，如果当前导入作业因网络错误无法返回结果，您将无法得知该导入操作是否成功。如果指定了 Label，可以通过 SQL 命令 `SHOW LOAD WHERE label="label"` 查看作业结果。 |
 | column_name | 导入的目标列，必须是目标表中存在的列。该参数与导入数据的列的名称可以不同，但顺序需一一对应。如果不指定目标列，默认为目标表中的所有列。如果源表中的某个列在目标列不存在，则写入默认值。如果当前列没有默认值，导入作业会失败。如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。 |
 | query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
+
+### 通过 FILES() 函数直接导入外部数据文件
+
+自 v3.1 起，StarRocks 支持使用 INSERT 语句和 [FILES()](../sql-reference/sql-functions/table-functions/files.md) 函数直接导入外部数据源中的文件，避免了需事先创建外部表的麻烦。
+
+目前 FILES() 函数支持以下数据源和文件格式：
+
+- **数据源****：**
+
+  - AWS S3
+  - HDFS
+
+- **文件格式：**
+
+  - Parquet
+  - ORC
+
+以下示例将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
+
+```Plain
+INSERT INTO insert_wiki_edit
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "ap-southeast-1"
+);
+```
 
 ## 通过 INSERT OVERWRITE VALUES 语句覆盖写入数据
 
@@ -284,35 +315,6 @@ WITH LABEL insert_load_wikipedia_ow_3
     channel
 )
 SELECT event_time, channel FROM source_wiki_edit;
-```
-
-## 通过 TABLE 关键字直接导入外部数据文件
-
-自 v3.1 起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接导入外部数据源中的文件，避免了需事先创建外部表的麻烦。
-
-目前 StarRocks 支持以下数据源和文件格式：
-
-- **数据源**：
-  - AWS S3
-  - HDFS
-
-- **文件格式**：
-  - Parquet
-  - ORC
-
-以下示例将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet_file/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中：
-
-```Plain
-mysql> INSERT INTO insert_wiki_edit
-    ->     SELECT * FROM TABLE(
-    ->         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
-    ->         "format" = "parquet",
-    ->         "aws.s3.access_key" = "xxxxxxxxxx",
-    ->         "aws.s3.secret_key" = "yyyyyyyyyy",
-    ->         "aws.s3.region" = "aa-bbbb-c"
-    -> );
-Query OK, 2 rows affected (0.03 sec)
-{'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
 ```
 
 ## 通过 INSERT 语句导入数据至生成列
