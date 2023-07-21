@@ -56,7 +56,7 @@ struct TTabletInfo {
     11: optional bool version_miss
     12: optional bool used
     13: optional Types.TPartitionId partition_id
-    14: optional bool is_in_memory
+    14: optional bool is_in_memory // Deprecated
     15: optional bool enable_persistent_index
     16: optional Types.TVersion min_readable_version
     17: optional i64 binlog_config_version
