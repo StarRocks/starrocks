@@ -384,6 +384,51 @@ PROPERTIES (
 );
 ```
 
+### Rewrite queries with Derivable Join
+
+From v3.1.0 onwards, StarRocks supports rewriting queries with a join that can be derived from the corresponding asynchronous materialized view, that is, an asynchronous materialized view with a certain pattern of join can rewrite queries with a different pattern of join as long as both joins have the same joined tables and columns and meet some requirements.
+
+The following table specifies the correspondence of the join pattern in the materialized view and the join pattern in the queries that can be rewritten (`A` and `B` indicate the joined tables, `a1` indicates the joined column in `A`, and `b1` indicates the joined column in `B`):
+
+| **Join in the asynchronous** **materialized view** | **Join in the rewritable** **query** | **Constraints**                                              |
+| -------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ |
+| LEFT OUTER JOIN ON A.a1 = B.b1                     | INNER JOIN ON A.a1 = B.b1            | None                                                         |
+| LEFT OUTER JOIN ON A.a1 = B.b1                     | LEFT ANTI JOIN ON A.a1 = B.b1        | None                                                         |
+| RIGHT OUTER JOIN ON A.a1 = B.b1                    | INNER JOIN ON A.a1 = B.b1            | None                                                         |
+| RIGHT OUTER JOIN ON A.a1 = B.b1                    | RIGHT ANTI JOIN ON A.a1 = B.b1       | None                                                         |
+| INNER JOIN ON A.a1 = B.b1                          | LEFT SEMI JOIN ON A.a1 = B.b1        | The joined column in the right table must be the Unique Key or Primary Key. |
+| INNER JOIN ON A.a1 = B.b1                          | RIGHT SEMI JOIN ON A.a1 = B.b1       | The joined column in the left table must be the Unique Key or Primary Key. |
+| FULL OUTER JOIN ON A.a1 = B.b1                     | LEFT OUTER JOIN ON A.a1 = B.b1       | At least one NOT NULL column in the left table.              |
+| FULL OUTER JOIN ON A.a1 = B.b1                     | RIGHT OUTER JOIN ON A.a1 = B.b1      | At least one NOT NULL column in the right table.             |
+| FULL OUTER JOIN ON A.a1 = B.b1                     | INNER JOIN ON A.a1 = B.b1            | At least one NOT NULL column in both the left and right table. |
+
+For example, if you create an asynchronous materialized view as follows:
+
+```SQL
+CREATE MATERIALIZED VIEW derivable_join_mv
+DISTRIBUTED BY hash(lo_orderkey)
+AS
+SELECT lo_orderkey, lo_linenumber, lo_revenue, c_custkey, c_name, c_address
+FROM lineorder LEFT OUTER JOIN customer
+ON lo_custkey = c_custkey;
+```
+
+The materialized view can rewrite queries in the following pattern:
+
+```SQL
+SELECT lo_orderkey, lo_linenumber, lo_revenue, c_name, c_address
+FROM lineorder INNER JOIN customer
+ON lo_custkey = c_custkey;
+```
+
+The query is rewritten as follows:
+
+```SQL
+SELECT lo_orderkey, lo_linenumber, lo_revenue, c_name, c_address
+FROM derivable_join_mv
+WHERE c_custkey IS NOT NULL;
+```
+
 ### Configure query rewrite
 
 You can configure the asynchronous materialized view query rewrite through the following session variables:
