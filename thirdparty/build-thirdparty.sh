@@ -1110,6 +1110,19 @@ build_async_profiler() {
     cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/profiler.sh $TP_INSTALL_DIR/async-profiler
 }
 
+# fiu
+build_fiu() {
+    check_if_source_exist $FIU_SOURCE
+    cd $TP_SOURCE_DIR/$FIU_SOURCE
+    mkdir -p $TP_SOURCE_DIR/$FIU_SOURCE/installed
+    make -j$PARALLEL
+    make PREFIX=$TP_SOURCE_DIR/$FIU_SOURCE/installed install
+
+    mkdir -p $TP_INSTALL_DIR/include/fiu
+    cp $TP_SOURCE_DIR/$FIU_SOURCE/installed/include/* $TP_INSTALL_DIR/include/fiu/
+    cp $TP_SOURCE_DIR/$FIU_SOURCE/installed/lib/libfiu.a $TP_INSTALL_DIR/lib/
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1193,6 +1206,7 @@ build_avro_c
 build_serdes
 build_datasketches
 build_async_profiler
+build_fiu
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
