@@ -155,21 +155,21 @@ public class RollupJobV2Test extends DDLTestBase {
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
 
         // runPendingJob
-        materializedViewHandler.runAfterCatalogReady();
+        rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.WAITING_TXN, rollupJob.getJobState());
         assertEquals(2, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
         assertEquals(1, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         assertEquals(1, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
-        materializedViewHandler.runAfterCatalogReady();
+        rollupJob.runWaitingTxnJob();
         assertEquals(AlterJobV2.JobState.RUNNING, rollupJob.getJobState());
 
         int retryCount = 0;
         int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            materializedViewHandler.runAfterCatalogReady();
+            rollupJob.runRunningJob();
             if (rollupJob.getJobState() == AlterJobV2.JobState.FINISHED) {
                 break;
             }
@@ -213,26 +213,26 @@ public class RollupJobV2Test extends DDLTestBase {
 
         // runPendingJob
         replica1.setState(Replica.ReplicaState.DECOMMISSION);
-        materializedViewHandler.runAfterCatalogReady();
+        rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.PENDING, rollupJob.getJobState());
 
         // table is stable, runPendingJob again
         replica1.setState(Replica.ReplicaState.NORMAL);
-        materializedViewHandler.runAfterCatalogReady();
+        rollupJob.runPendingJob();
         assertEquals(AlterJobV2.JobState.WAITING_TXN, rollupJob.getJobState());
         assertEquals(2, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
         assertEquals(1, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         assertEquals(1, testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
-        materializedViewHandler.runAfterCatalogReady();
+        rollupJob.runWaitingTxnJob();
         assertEquals(AlterJobV2.JobState.RUNNING, rollupJob.getJobState());
 
         int retryCount = 0;
         int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            materializedViewHandler.runAfterCatalogReady();
+            rollupJob.runRunningJob();
             if (rollupJob.getJobState() == AlterJobV2.JobState.FINISHED) {
                 break;
             }
