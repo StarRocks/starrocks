@@ -183,21 +183,27 @@ public abstract class AlterJobV2 implements Writable {
         }
 
         try {
-            switch (jobState) {
-                case PENDING:
-                    runPendingJob();
+            while (true) {
+                JobState prevState = jobState;
+                switch (prevState) {
+                    case PENDING:
+                        runPendingJob();
+                        break;
+                    case WAITING_TXN:
+                        runWaitingTxnJob();
+                        break;
+                    case RUNNING:
+                        runRunningJob();
+                        break;
+                    case FINISHED_REWRITING:
+                        runFinishedRewritingJob();
+                        break;
+                    default:
+                        break;
+                }
+                if (jobState == prevState) {
                     break;
-                case WAITING_TXN:
-                    runWaitingTxnJob();
-                    break;
-                case RUNNING:
-                    runRunningJob();
-                    break;
-                case FINISHED_REWRITING:
-                    runFinishedRewritingJob();
-                    break;
-                default:
-                    break;
+                } // else: handle the new state
             }
         } catch (AlterCancelException e) {
             cancelImpl(e.getMessage());
