@@ -233,15 +233,15 @@ public class PrivilegeCheckerVisitorEPack extends PrivilegeCheckerVisitor {
 
     // --------------------------------- Failover Group Statement ---------------------------------
     @Override
-    public Void visitCreatePrimaryFailoverGroupStatement(
-            CreatePrimaryFailoverGroupStmt statement, ConnectContext context) {
+    public Void visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt statement, 
+                                                         ConnectContext context) {
         // TODO
         return null;
     }
 
     @Override
-    public Void visitCreateSecondaryFailoverGroupStatement(
-            CreateSecondaryFailoverGroupStmt statement, ConnectContext context) {
+    public Void visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt statement, 
+                                                           ConnectContext context) {
         // TODO
         return null;
     }

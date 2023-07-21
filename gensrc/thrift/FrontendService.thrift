@@ -49,6 +49,7 @@ include "MasterService.thrift"
 include "AgentService.thrift"
 include "ResourceUsage.thrift"
 include "MVMaintenance.thrift"
+include "epack/FailoverGroup.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -1450,5 +1451,9 @@ service FrontendService {
     TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
     TGetPolicyReferenceResponse getPolicyReference(1: TGetPolicyReferencesRequest request)
+
+    // For Enterprise Failover
+    FailoverGroup.TFailoverGroupHandshakeResponse failoverGroupHandshake(1: FailoverGroup.TFailoverGroupHandshakeRequest request)
+    FailoverGroup.TFailoverGroupRequestMetaResponse failoverGroupRequestMeta(1: FailoverGroup.TFailoverGroupRequestMetaRequest request)
 }
 

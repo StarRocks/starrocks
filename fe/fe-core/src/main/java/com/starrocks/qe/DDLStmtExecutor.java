@@ -28,6 +28,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
@@ -1010,6 +1012,24 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getWarehouseMgr().dropWarehouse(stmt);
             });
+            return null;
+        }
+
+        //=========================================== Failover Group Statement ========================================
+        @Override
+        public ShowResultSet visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt stmt,
+                                                                      ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getFailoverGroupMgr().createFailoverGroup(stmt)
+            );
+            return null;
+        }
+
+        public ShowResultSet visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt stmt,
+                                                                        ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getFailoverGroupMgr().createFailoverGroup(stmt)
+            );
             return null;
         }
     }

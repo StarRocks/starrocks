@@ -142,6 +142,7 @@ import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.ha.FrontendNodeType;
@@ -541,6 +542,8 @@ public class GlobalStateMgr {
     private PipeManager pipeManager;
     private PipeListener pipeListener;
     private PipeScheduler pipeScheduler;
+    
+    private FailoverGroupMgr failoverGroupMgr;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -788,6 +791,8 @@ public class GlobalStateMgr {
                 LOG.warn("check config failed", e);
             }
         });
+
+        this.failoverGroupMgr = new FailoverGroupMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -1023,6 +1028,10 @@ public class GlobalStateMgr {
 
     public ConnectorTableMetadataProcessor getConnectorTableMetadataProcessor() {
         return connectorTableMetadataProcessor;
+    }
+
+    public FailoverGroupMgr getFailoverGroupMgr() {
+        return failoverGroupMgr;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -1393,6 +1402,8 @@ public class GlobalStateMgr {
             LOG.info("Start safe mode checker!");
             safeModeChecker.start();
         }
+
+        failoverGroupMgr.start();
     }
 
     // start threads that should run on all FE

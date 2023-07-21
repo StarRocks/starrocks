@@ -82,6 +82,10 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.epack.catalog.system.starrocks.PolicyReferences;
+import com.starrocks.epack.thrift.TFailoverGroupHandshakeRequest;
+import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
+import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
+import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.lake.LakeTablet;
@@ -2196,5 +2200,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetPolicyReferenceResponse getPolicyReference(TGetPolicyReferencesRequest request) {
         return PolicyReferences.getPolicyReference(request);
+    }
+
+    @Override
+    public TFailoverGroupHandshakeResponse failoverGroupHandshake(TFailoverGroupHandshakeRequest request) 
+            throws TException {
+        return leaderImpl.failoverGroupHandshake(request);
+    }
+
+    @Override
+    public TFailoverGroupRequestMetaResponse failoverGroupRequestMeta(TFailoverGroupRequestMetaRequest request) 
+            throws TException {
+        return leaderImpl.failoverGroupRequestMeta(request);
     }
 }

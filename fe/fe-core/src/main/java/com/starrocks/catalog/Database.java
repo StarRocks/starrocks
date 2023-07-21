@@ -595,10 +595,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     public Table getTable(String tableName) {
-        if (nameToTable.containsKey(tableName)) {
-            return nameToTable.get(tableName);
-        }
-        return null;
+        return nameToTable.get(tableName);
     }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String mvName) {
