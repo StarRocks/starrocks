@@ -1,4 +1,4 @@
--- name: test_show_create_routine_load
+-- name: test_show_create_routine_load_basic
 create database test_show_create_routine_load;
 -- result:
 -- !result
@@ -16,8 +16,7 @@ DISTRIBUTED BY HASH(advertiser_id) BUCKETS 3
 PROPERTIES ( "replication_num" = "1", "storage_format" = "v2" );
 -- result:
 -- !result
--- name: test_show_create_routine_load_basic
-CREATE ROUTINE LOAD herb.testherbavro on herbavro COLUMNS TERMINATED BY '\t'
+CREATE ROUTINE LOAD test_show_create_routine_load.testherbavro on herbavro COLUMNS TERMINATED BY '\t'
 PROPERTIES (
 "desired_concurrent_number"="1",
 "max_error_number"="1000",
@@ -31,11 +30,10 @@ FROM KAFKA (
 "kafka_offsets"="OFFSET_BEGINNING"
 );
 -- result:
-E: (1064, 'Unexpected exception: Name testherbavro already used in db herb')
 -- !result
 SHOW CREATE ROUTINE LOAD FOR testherbavro;
 -- result:
-testherbavro	CREATE ROUTINE LOAD herb.testherbavro on herbavro
+testherbavro	CREATE ROUTINE LOAD test_show_create_routine_load.testherbavro on herbavro
  COLUMNS TERMINATED BY '\t'
 PROPERTIES
 (
@@ -63,6 +61,7 @@ FROM KAFKA
 "kafka_broker_list"="172.26.194.239:9092",
 "kafka_topic"="herb-avro",
 "kafka_partitions"="0",
-"kafka_offsets"="OFFSET_BEGINNING"
+"kafka_offsets"="OFFSET_BEGINNING",
+"confluent.schema.registry.url"="http://172.26.194.240:8081"
 );
 -- !result

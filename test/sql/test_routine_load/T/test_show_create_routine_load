@@ -1,4 +1,4 @@
--- name: test_show_create_routine_load
+-- name: test_show_create_routine_load_basic
 create database test_show_create_routine_load;
 
 use test_show_create_routine_load;
@@ -13,8 +13,7 @@ DUPLICATE KEY(advertiser_id) COMMENT "OLAP"
 DISTRIBUTED BY HASH(advertiser_id) BUCKETS 3 
 PROPERTIES ( "replication_num" = "1", "storage_format" = "v2" );
 
--- name: test_show_create_routine_load_basic
-CREATE ROUTINE LOAD herb.testherbavro on herbavro COLUMNS TERMINATED BY '\t' 
+CREATE ROUTINE LOAD test_show_create_routine_load.testherbavro on herbavro COLUMNS TERMINATED BY '\t' 
 PROPERTIES (
 "desired_concurrent_number"="1",
 "max_error_number"="1000",
