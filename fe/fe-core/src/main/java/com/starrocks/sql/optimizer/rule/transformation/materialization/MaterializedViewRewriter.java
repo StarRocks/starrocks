@@ -624,10 +624,6 @@ public class MaterializedViewRewriter {
             // construct query based view EC
             final EquivalenceClasses queryBasedViewEqualPredicate =
                     createQueryBasedEquivalenceClasses(columnRewriter, mvEqualPredicate);
-            if (queryBasedViewEqualPredicate == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite complete failed: cannot construct query based equivalence classes");
-                return null;
-            }
             rewriteContext.setQueryBasedViewEquivalenceClasses(queryBasedViewEqualPredicate);
 
             OptExpression rewrittenExpression = tryRewriteForRelationMapping(rewriteContext, compensationJoinColumns);
