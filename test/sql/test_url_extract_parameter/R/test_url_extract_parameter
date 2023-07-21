@@ -1,0 +1,333 @@
+-- name: test_url_extract_parameter
+DROP TABLE if exists t0;
+-- result:
+-- !result
+CREATE TABLE if not exists t0
+(
+id INT NOT NULL,
+url VARCHAR(255) NOT NULL,
+param_key VARCHAR(255) NOT NULL,
+expect VARCHAR(255) NOT NULL,
+only_null BOOLEAN NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES(
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "default"
+);
+-- result:
+-- !result
+INSERT INTO t0
+  (id, url, param_key, expect, only_null)
+VALUES
+  ('0', 'https://starrocks.com/doc?k1=10', 'k1', '10', 'false'),
+  ('1', 'https://starrocks.com/doc?kk12=10', 'k1', '', 'true'),
+  ('2', 'https://starrocks.com/doc?kk12=10', 'kk1', '', 'true'),
+  ('3', 'https://starrocks.com/doc?kk12=10', 'k12', '', 'true'),
+  ('4', 'https://starrocks.com/doc?k0=100&k1=10', 'k1', '10', 'false'),
+  ('5', 'https://starrocks.com/doc?k0=abc&kk12=10', 'k1', '', 'true'),
+  ('6', 'https://starrocks.com/doc?k0=100&kk12=10', 'kk1', '', 'true'),
+  ('7', 'https://starrocks.com/doc?k0=1000kk12=10', 'k12', '', 'true'),
+  ('8', 'https://starrocks.com/doc?k0=abc&k1=10#section1', 'k1', '10', 'false'),
+  ('9', 'https://starrocks.com/doc?k0=100&k1=10=20', 'k1', '10=20', 'false'),
+  ('10', 'https://starrocks.com/doc?k0=1000&k1', 'k1', '', 'false'),
+  ('11', 'https://starrocks.com/doc?k0=1000&k1&k1=2', 'k1', '', 'false'),
+  ('12', 'https://starrocks.com/doc?k0=1000&k1&=2', 'k1', '', 'false'),
+  ('13', 'https://starrocks.com/doc?k0=1000&k1=100&k1=200', 'k1', '100', 'false'),
+  ('14', 'https://starrocks.com/doc?k0=1000&k1:200=100&k1=200', 'k1:200', '100', 'false'),
+  ('15', 'https://starrocks.com/doc?k0=1000&k1: 200=100&k1=200', 'k1: 200', '', 'true'),
+  ('16', '', 'k1', '', 'true'),
+  ('17', 'https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', 'k1', '!#$&\'()*+,/:;=?@[] "%-.<>\\^_`{|}~', 'false');
+-- result:
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 0;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k1=10', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k1=10', param_key) = expect end) as result from t0 where id = 0;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 0;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k1=10', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k1=10', 'k1') = expect end) as result from t0 where id = 0;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 1;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?kk12=10', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?kk12=10', param_key) = expect end) as result from t0 where id = 1;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 1;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?kk12=10', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?kk12=10', 'k1') = expect end) as result from t0 where id = 1;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 2;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?kk12=10', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?kk12=10', param_key) = expect end) as result from t0 where id = 2;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'kk1') is NULL else url_extract_parameter(url, 'kk1') = expect end) as result from t0 where id = 2;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?kk12=10', 'kk1') is NULL else url_extract_parameter('https://starrocks.com/doc?kk12=10', 'kk1') = expect end) as result from t0 where id = 2;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 3;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?kk12=10', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?kk12=10', param_key) = expect end) as result from t0 where id = 3;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k12') is NULL else url_extract_parameter(url, 'k12') = expect end) as result from t0 where id = 3;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?kk12=10', 'k12') is NULL else url_extract_parameter('https://starrocks.com/doc?kk12=10', 'k12') = expect end) as result from t0 where id = 3;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 4;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=100&k1=10', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=100&k1=10', param_key) = expect end) as result from t0 where id = 4;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 4;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=100&k1=10', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=100&k1=10', 'k1') = expect end) as result from t0 where id = 4;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 5;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=abc&kk12=10', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=abc&kk12=10', param_key) = expect end) as result from t0 where id = 5;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 5;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=abc&kk12=10', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=abc&kk12=10', 'k1') = expect end) as result from t0 where id = 5;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 6;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=100&kk12=10', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=100&kk12=10', param_key) = expect end) as result from t0 where id = 6;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'kk1') is NULL else url_extract_parameter(url, 'kk1') = expect end) as result from t0 where id = 6;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=100&kk12=10', 'kk1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=100&kk12=10', 'kk1') = expect end) as result from t0 where id = 6;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 7;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000kk12=10', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000kk12=10', param_key) = expect end) as result from t0 where id = 7;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k12') is NULL else url_extract_parameter(url, 'k12') = expect end) as result from t0 where id = 7;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000kk12=10', 'k12') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000kk12=10', 'k12') = expect end) as result from t0 where id = 7;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 8;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=abc&k1=10#section1', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=abc&k1=10#section1', param_key) = expect end) as result from t0 where id = 8;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 8;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=abc&k1=10#section1', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=abc&k1=10#section1', 'k1') = expect end) as result from t0 where id = 8;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 9;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=100&k1=10=20', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=100&k1=10=20', param_key) = expect end) as result from t0 where id = 9;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 9;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=100&k1=10=20', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=100&k1=10=20', 'k1') = expect end) as result from t0 where id = 9;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 10;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1', param_key) = expect end) as result from t0 where id = 10;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 10;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1', 'k1') = expect end) as result from t0 where id = 10;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 11;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1&k1=2', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1&k1=2', param_key) = expect end) as result from t0 where id = 11;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 11;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1&k1=2', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1&k1=2', 'k1') = expect end) as result from t0 where id = 11;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 12;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1&=2', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1&=2', param_key) = expect end) as result from t0 where id = 12;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 12;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1&=2', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1&=2', 'k1') = expect end) as result from t0 where id = 12;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 13;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1=100&k1=200', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1=100&k1=200', param_key) = expect end) as result from t0 where id = 13;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 13;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1=100&k1=200', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1=100&k1=200', 'k1') = expect end) as result from t0 where id = 13;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 14;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1:200=100&k1=200', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1:200=100&k1=200', param_key) = expect end) as result from t0 where id = 14;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1:200') is NULL else url_extract_parameter(url, 'k1:200') = expect end) as result from t0 where id = 14;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1:200=100&k1=200', 'k1:200') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1:200=100&k1=200', 'k1:200') = expect end) as result from t0 where id = 14;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 15;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1: 200=100&k1=200', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1: 200=100&k1=200', param_key) = expect end) as result from t0 where id = 15;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1: 200') is NULL else url_extract_parameter(url, 'k1: 200') = expect end) as result from t0 where id = 15;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=1000&k1: 200=100&k1=200', 'k1: 200') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=1000&k1: 200=100&k1=200', 'k1: 200') = expect end) as result from t0 where id = 15;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 16;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('', param_key) is NULL else url_extract_parameter('', param_key) = expect end) as result from t0 where id = 16;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 16;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('', 'k1') is NULL else url_extract_parameter('', 'k1') = expect end) as result from t0 where id = 16;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, param_key) is NULL else url_extract_parameter(url, param_key) = expect end) as result from t0 where id = 17;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', param_key) is NULL else url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', param_key) = expect end) as result from t0 where id = 17;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter(url, 'k1') is NULL else url_extract_parameter(url, 'k1') = expect end) as result from t0 where id = 17;
+-- result:
+1
+-- !result
+select (case only_null when true then url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', 'k1') is NULL else url_extract_parameter('https://starrocks.com/doc?k0=10&k1=%21%23%24%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5D%20%22%25%2D%2E%3C%3E%5C%5E%5F%60%7B%7C%7D%7E&k2', 'k1') = expect end) as result from t0 where id = 17;
+-- result:
+1
+-- !result
