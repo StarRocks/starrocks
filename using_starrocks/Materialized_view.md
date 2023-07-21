@@ -304,6 +304,51 @@ PROPERTIES (
 );
 ```
 
+### 基于派生 Join 场景改写查询
+
+自 v3.1.0 起，StarRocks 支持基于派生 Join 场景改写查询，即基于某种 Join 模式构建的异步物化视图可以改写使用不同 Join 的查询，只要满足以下条件：Join 表和 Join 列相同，并且 Join 模式满足一些要求。
+
+下表列出了物化视图中的 Join 模式与可改写查询中的 Join 模式的对应关系（其中 `A` 和 `B` 表示需要 Join 的表，`a1` 表示 `A` 中的 Join 列，`b1` 表示 `B` 中的 Join 列）：
+
+| **物化视图****中的 Join 模式**  | **可改写查询中的 Join 模式**    | **限制说明**                               |
+| ------------------------------- | ------------------------------- | ------------------------------------------ |
+| LEFT OUTER JOIN ON A.a1 = B.b1  | INNER JOIN ON A.a1 = B.b1       | 无                                         |
+| LEFT OUTER JOIN ON A.a1 = B.b1  | LEFT ANTI JOIN ON A.a1 = B.b1   | 无                                         |
+| RIGHT OUTER JOIN ON A.a1 = B.b1 | INNER JOIN ON A.a1 = B.b1       | 无                                         |
+| RIGHT OUTER JOIN ON A.a1 = B.b1 | RIGHT ANTI JOIN ON A.a1 = B.b1  | 无                                         |
+| INNER JOIN ON A.a1 = B.b1       | LEFT SEMI JOIN ON A.a1 = B.b1   | 右表的 Join 列必须有唯一键约束或者主键约束 |
+| INNER JOIN ON A.a1 = B.b1       | RIGHT SEMI JOIN ON A.a1 = B.b1  | 左表的 Join 列必须有唯一键约束或者主键约束 |
+| FULL OUTER JOIN ON A.a1 = B.b1  | LEFT OUTER JOIN ON A.a1 = B.b1  | 左表中至少有一列为 NOT NULL                |
+| FULL OUTER JOIN ON A.a1 = B.b1  | RIGHT OUTER JOIN ON A.a1 = B.b1 | 右表中至少有一列为 NOT NULL                |
+| FULL OUTER JOIN ON A.a1 = B.b1  | INNER JOIN ON A.a1 = B.b1       | 左表和右表中至少有一列为 NOT NULL          |
+
+例如，如果您构建以下异步物化视图：
+
+```SQL
+CREATE MATERIALIZED VIEW derivable_join_mv
+DISTRIBUTED BY hash(lo_orderkey)
+AS
+SELECT lo_orderkey, lo_linenumber, lo_revenue, c_custkey, c_name, c_address
+FROM lineorder LEFT OUTER JOIN customer
+ON lo_custkey = c_custkey;
+```
+
+则该物化视图可以改写如下查询：
+
+```SQL
+SELECT lo_orderkey, lo_linenumber, lo_revenue, c_name, c_address
+FROM lineorder INNER JOIN customer
+ON lo_custkey = c_custkey;
+```
+
+此查询将被改写为以下形式：
+
+```SQL
+SELECT lo_orderkey, lo_linenumber, lo_revenue, c_name, c_address
+FROM derivable_join_mv
+WHERE c_custkey IS NOT NULL;
+```
+
 ### 设置物化视图查询改写
 
 您可以通过以下 Session 变量设置异步物化视图查询改写。
