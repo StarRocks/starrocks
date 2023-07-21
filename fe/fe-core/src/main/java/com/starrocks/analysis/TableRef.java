@@ -83,7 +83,6 @@ import java.util.List;
  * structure of all subclasses.
  */
 public class TableRef implements ParseNode, Writable {
-    private static final Logger LOG = LogManager.getLogger(TableRef.class);
     @SerializedName(value = "name")
     protected TableName name;
     @SerializedName(value = "partitionNames")

@@ -45,7 +45,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class AggregateInfo extends AggregateInfoBase {
-    private static final Logger LOG = LogManager.getLogger(AggregateInfo.class);
 
     public enum AggPhase {
         FIRST,

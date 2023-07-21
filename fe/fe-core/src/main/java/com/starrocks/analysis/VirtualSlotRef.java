@@ -33,7 +33,6 @@ import java.util.List;
  * It like a SlotRef except that it is not a real column exist in table.
  */
 public class VirtualSlotRef extends SlotRef {
-    private static final Logger LOG = LogManager.getLogger(VirtualSlotRef.class);
     // results of analysis slot
 
     private TupleDescriptor tupleDescriptor;
