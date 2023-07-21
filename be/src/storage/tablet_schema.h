@@ -145,7 +145,11 @@ public:
     void set_index_length(ColumnIndexLength index_length) { _index_length = index_length; }
 
     bool has_default_value() const { return _extra_fields && _extra_fields->has_default_value; }
-    std::string default_value() const { return has_default_value() ? _extra_fields->default_value : ""; }
+
+    const std::string& default_value() const {
+        return _extra_fields ? _extra_fields->default_value : kEmptyDefaultValue;
+    }
+
     void set_default_value(std::string value) {
         ExtraFields* ext = _get_or_alloc_extra_fields();
         ext->has_default_value = true;
@@ -174,6 +178,7 @@ public:
     }
 
 private:
+    inline static const std::string kEmptyDefaultValue;
     constexpr static uint8_t kIsKeyShift = 0;
     constexpr static uint8_t kIsNullableShift = 1;
     constexpr static uint8_t kIsBfColumnShift = 2;
