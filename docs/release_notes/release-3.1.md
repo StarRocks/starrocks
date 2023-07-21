@@ -12,7 +12,7 @@ Supports abstraction of storage volumes, which makes it easier for users to conf
 
 #### Storage engine, data ingestion, and query
 
-- Upgraded automatic partitioning to expression partitioning. Users only need to specify a simple partition expression (either a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is easier to use and more user-friendly.
+- Upgraded automatic partitioning to expression partitioning. Users only need to specify a simple partition expression (either a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is more flexible and user-friendly.
 - Supports list partitioning. Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.
 - Supports using the files() function in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3.
 
