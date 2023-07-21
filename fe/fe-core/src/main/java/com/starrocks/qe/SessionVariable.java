@@ -40,6 +40,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
@@ -445,6 +446,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
 
     public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
+
+    public static final String WAREHOUSE = "warehouse";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1177,6 +1180,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
+    @VariableMgr.VarAttr(name = WAREHOUSE)
+    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
     private int exprChildrenLimit = -1;
 
     public int getExprChildrenLimit() {
@@ -1408,6 +1414,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getMaxParallelScanInstanceNum() {
         return maxParallelScanInstanceNum;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
+    }
+
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
     }
 
     // when pipeline engine is enabled

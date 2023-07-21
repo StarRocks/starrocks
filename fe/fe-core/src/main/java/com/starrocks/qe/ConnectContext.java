@@ -51,7 +51,6 @@ import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetListItem;
@@ -131,8 +130,6 @@ public class ConnectContext {
     protected volatile String currentCatalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     // Db
     protected String currentDb = "";
-    // warehouse
-    protected String currentWarehouse;
 
     // username@host of current login user
     protected String qualifiedUser;
@@ -610,14 +607,11 @@ public class ConnectContext {
     }
 
     public String getCurrentWarehouse() {
-        if (currentWarehouse != null) {
-            return currentWarehouse;
-        }
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        return this.sessionVariable.getWarehouse();
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
-        this.currentWarehouse = currentWarehouse;
+        this.sessionVariable.setWarehouse(currentWarehouse);
     }
 
     public void setParentConnectContext(ConnectContext parent) {
@@ -815,7 +809,7 @@ public class ConnectContext {
             }
             row.add(stmt);
             row.add(Boolean.toString(isPending));
-            row.add(currentWarehouse);
+            row.add(sessionVariable.getWarehouse());
             return row;
         }
     }
