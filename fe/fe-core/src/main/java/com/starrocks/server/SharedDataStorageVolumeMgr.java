@@ -26,6 +26,8 @@ import com.starrocks.common.util.LogUtil;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,6 +39,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
+    private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
     @Override
     public StorageVolume getStorageVolumeByName(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
@@ -176,7 +179,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
                 if (sv == null) {
                     if (Config.enable_load_volume_from_conf) {
-                        LogUtil.getCurrentStackTrace();
+                        LOG.error("Failed to get builtin storage volume, svName: {}, dbId: {}, current stack trace: {}",
+                                svName, dbId, LogUtil.getCurrentStackTrace());
                         throw new DdlException("Internal error");
                     } else {
                         throw new DdlException("Cannot find a suitable storage volume. " +
