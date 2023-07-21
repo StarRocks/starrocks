@@ -76,11 +76,15 @@ Status OrdinalIndexWriter::finish(WritableFile* wfile, ColumnIndexMetaPB* meta) 
 }
 
 OrdinalIndexReader::OrdinalIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(), sizeof(OrdinalIndexReader));
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), sizeof(OrdinalIndexReader));
 }
 
 OrdinalIndexReader::~OrdinalIndexReader() {
+<<<<<<< HEAD
     MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->ordinal_index_mem_tracker(), mem_usage());
+=======
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), _mem_usage());
+>>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
 }
 
 StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const OrdinalIndexPB& meta,
@@ -88,8 +92,13 @@ StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const Ordi
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta, num_values);
         if (st.ok()) {
+<<<<<<< HEAD
             MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
                                      mem_usage() - sizeof(OrdinalIndexReader))
+=======
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+                                     _mem_usage() - sizeof(OrdinalIndexReader))
+>>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
         } else {
             _reset();
         }

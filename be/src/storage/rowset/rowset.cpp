@@ -69,12 +69,16 @@ Rowset::Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSh
           _rowset_path(std::move(rowset_path)),
           _rowset_meta(std::move(rowset_meta)),
           _refs_by_reader(0) {
+<<<<<<< HEAD
     _keys_type = _schema->keys_type();
     MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+=======
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+>>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
 }
 
 Rowset::~Rowset() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
 }
 
 Status Rowset::load() {

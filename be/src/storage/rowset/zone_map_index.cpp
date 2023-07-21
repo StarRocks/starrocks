@@ -255,19 +255,28 @@ Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMeta
 }
 
 ZoneMapIndexReader::ZoneMapIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
 }
 
 ZoneMapIndexReader::~ZoneMapIndexReader() {
+<<<<<<< HEAD
     MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(), mem_usage());
+=======
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), _mem_usage());
+>>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
 }
 
 StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const ZoneMapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
+<<<<<<< HEAD
             MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                      mem_usage() - sizeof(ZoneMapIndexReader));
+=======
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+                                     _mem_usage() - sizeof(ZoneMapIndexReader));
+>>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
         } else {
             _reset();
         }
