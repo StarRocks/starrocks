@@ -265,10 +265,6 @@ public:
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
 
-    // The in-memory property is no longer supported, but leave this API for compatibility.
-    // Newly-added code should not rely on this method, it may be removed at any time.
-    static bool is_in_memory() { return false; }
-
     std::string debug_string() const;
 
     int64_t mem_usage() const {

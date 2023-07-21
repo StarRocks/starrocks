@@ -1400,7 +1400,6 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
     tablet_info->__set_partition_id(_tablet_meta->partition_id());
     tablet_info->__set_storage_medium(_data_dir->storage_medium());
     tablet_info->__set_path_hash(_data_dir->path_hash());
-    tablet_info->__set_is_in_memory(_tablet_meta->tablet_schema().is_in_memory());
     tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
     if (_tablet_meta->get_binlog_config() != nullptr) {
         tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
