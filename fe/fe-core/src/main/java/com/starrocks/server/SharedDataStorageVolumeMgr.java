@@ -22,6 +22,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
@@ -174,7 +175,14 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             } else {
                 sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
                 if (sv == null) {
-                    throw new DdlException("Builtin storage volume not exists, please check the params in config");
+                    if (Config.enable_load_volume_from_conf) {
+                        LogUtil.getCurrentStackTrace();
+                        throw new DdlException("Internal error");
+                    } else {
+                        throw new DdlException("Cannot find a suitable storage volume. " +
+                                "Try setting 'enable_load_volume_from_conf' to true " +
+                                "and ensure the related storage volume settings are correct");
+                    }
                 }
             }
         } else if (svName.equals(StorageVolumeMgr.DEFAULT)) {
