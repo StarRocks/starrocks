@@ -238,6 +238,7 @@ public class JoinPredicatePushdown {
                 .setJoinType(newJoinType)
                 .setOnPredicate(newJoinOnPredicate)
                 .setOriginalOnPredicate(join.getOnPredicate())
+                .setPredicate(null)
                 .build();
         root = OptExpression.create(newJoinOperator, joinOptExpression.getInputs());
         // for mv planner, do not derive the is not null predicate to make mv rewrite cover more cases
