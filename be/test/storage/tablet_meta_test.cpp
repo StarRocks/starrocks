@@ -52,7 +52,6 @@ TEST(TabletMetaTest, test_create) {
 
     TTabletSchema& schema = request.tablet_schema;
     schema.__set_schema_hash(12345);
-    schema.__set_is_in_memory(false);
     schema.__set_keys_type(TKeysType::DUP_KEYS);
     schema.__set_short_key_column_count(1);
 
@@ -138,7 +137,6 @@ TEST(TabletMetaTest, test_create) {
     const TabletSchema& tablet_schema = tablet_meta->tablet_schema();
     ASSERT_EQ(3, tablet_schema.num_columns());
     ASSERT_EQ(KeysType::DUP_KEYS, tablet_schema.keys_type());
-    ASSERT_EQ(false, tablet_schema.is_in_memory());
 
     const TabletColumn& c0 = tablet_schema.column(0);
     const TabletColumn& c1 = tablet_schema.column(1);

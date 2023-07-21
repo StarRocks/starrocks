@@ -334,7 +334,7 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
 
     IndexReadOptions opts;
     opts.use_page_cache = !config::disable_storage_page_cache;
-    opts.kept_in_memory = !config::disable_storage_page_cache;
+    opts.kept_in_memory = false;
     opts.skip_fill_data_cache = _skip_fill_data_cache();
     opts.read_file = _opts.read_file;
     opts.stats = _opts.stats;

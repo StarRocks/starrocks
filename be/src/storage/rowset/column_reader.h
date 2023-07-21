@@ -157,8 +157,6 @@ public:
 private:
     const std::string& file_name() const { return _segment->file_name(); }
 
-    bool keep_in_memory() const { return _segment->keep_in_memory(); }
-
     struct private_type {
         explicit private_type(int) {}
     };
