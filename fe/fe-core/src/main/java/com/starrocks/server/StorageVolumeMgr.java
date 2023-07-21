@@ -120,11 +120,14 @@ public abstract class StorageVolumeMgr {
             }
             Preconditions.checkState(!defaultStorageVolumeId.equals(sv.getId()),
                     "default storage volume can not be removed");
-            Set<Long> dbs = storageVolumeToDbs.get(sv.getId());
-            Set<Long> tables = storageVolumeToTables.get(sv.getId());
-            Preconditions.checkState(dbs == null && tables == null,
+            Set<Long> dbs = storageVolumeToDbs.getOrDefault(sv.getId(), new HashSet<>());
+            Set<Long> tables = storageVolumeToTables.getOrDefault(sv.getId(), new HashSet<>());
+            if (name.equals(BUILTIN_STORAGE_VOLUME)) {
+                tables.addAll(getTableBindingsOfBuiltinStorageVolume());
+            }
+            Preconditions.checkState(dbs.isEmpty() && tables.isEmpty(),
                     "Storage volume '%s' is referenced by dbs or tables, dbs: %s, tables: %s",
-                    name, dbs != null ? dbs.toString() : "[]", tables != null ? tables.toString() : "[]");
+                    name, dbs.toString(), tables.toString());
             removeInternalNoLock(sv);
         }
     }
@@ -305,4 +308,6 @@ public abstract class StorageVolumeMgr {
     public abstract String createBuiltinStorageVolume() throws DdlException, AlreadyExistsException;
 
     public abstract void validateStorageVolumeConfig() throws InvalidConfException;
+
+    protected abstract Set<Long> getTableBindingsOfBuiltinStorageVolume();
 }
