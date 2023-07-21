@@ -116,7 +116,7 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
 fi
 
 if [[ "$JAVA_VERSION" -lt 11 ]]; then
-    echo "tips: current jdk version is $JAVA_VERSION, using jdk 11 or 17 will provide better GC performance"
+    echo "Tips: current JDK version is $JAVA_VERSION, JDK 11 or 17 is highly recommended for better GC performance(lower version JDK may not be supported in the future)"
 fi
 
 if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
