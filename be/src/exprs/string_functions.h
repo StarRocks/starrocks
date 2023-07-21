@@ -370,6 +370,10 @@ public:
 
     static Status sub_str_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
+    static Status url_extract_parameter_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    static Status url_extract_parameter_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     static Status sub_str_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     static Status left_or_right_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -392,6 +396,8 @@ public:
    * @return: BinaryColumn
    */
     DEFINE_VECTORIZED_FN(parse_url);
+
+    DEFINE_VECTORIZED_FN(url_extract_parameter);
 
     /**
      * @param: [BigIntColumn]
@@ -480,6 +486,14 @@ private:
         bool const_pattern{false};
         std::unique_ptr<UrlParser::UrlPart> url_part;
         ParseUrlState() : url_part() {}
+    };
+
+    struct UrlExtractParameterState {
+        std::optional<std::string> opt_const_result;
+        bool result_is_null{false};
+        std::optional<std::string> opt_const_param_key;
+        std::optional<std::string> opt_const_query_params;
+        UrlExtractParameterState() = default;
     };
 
     static StatusOr<ColumnPtr> parse_url_general(FunctionContext* context, const starrocks::Columns& columns);
