@@ -2,7 +2,7 @@
 
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 
-Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md). From StarRocks v3.1 onwards, you can directly load data from files in an external source using the INSERT command and the TABLE keyword.
+Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md). From StarRocks v3.1 onwards, you can directly load data from files in an external source using the INSERT command and the table function [FILES()](../sql-reference/sql-functions/table-functions/files.md).
 
 StarRocks v2.4 further supports overwriting data into a table by using INSERT OVERWRITE. The INSERT OVERWRITE statement integrates the following operations to implement the overwriting function:
 
@@ -126,7 +126,9 @@ VALUES
 
 ## Insert data via INSERT INTO SELECT
 
-You can load the result of a query on a data source table into the target table via INSERT INTO SELECT command. INSERT INTO SELECT command performs ETL operations on the data from the data source table, and loads the data into an internal table in StarRocks. The data source can be one or more internal or external tables. The target table MUST be an internal table in StarRocks. For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+You can load the result of a query on a data source table into the target table via INSERT INTO SELECT command. INSERT INTO SELECT command performs ETL operations on the data from the data source table, and loads the data into an internal table in StarRocks. The data source can be one or more internal or external tables, or even data files from an external storage system. The target table MUST be an internal table in StarRocks. For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+
+### Insert data from an internal or external table into an internal table
 
 > **NOTE**
 >
@@ -181,6 +183,34 @@ WITH LABEL insert_load_wikipedia_3
     channel
 )
 SELECT event_time, channel FROM source_wiki_edit;
+```
+
+### Insert data directly from files in an external source using FILES()
+
+From v3.1 onwards, StarRocks supports directly loading data from files in an external source using the INSERT command and the [FILES()](../sql-reference/sql-functions/table-functions/files.md) function, saving you from the trouble of creating an external table first.
+
+Currently, the FILES() function supports the following data sources and file formats:
+
+- **Data sources:**
+
+  - AWS S3
+
+- **File formats:**
+
+  - Parquet
+  - ORC
+
+The following example inserts data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
+
+```Plain
+INSERT INTO insert_wiki_edit
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "ap-southeast-1"
+);
 ```
 
 ## Overwrite data via INSERT OVERWRITE VALUES
@@ -302,33 +332,6 @@ WITH LABEL insert_load_wikipedia_ow_3
     channel
 )
 SELECT event_time, channel FROM source_wiki_edit;
-```
-
-## Insert data directly from files in an external source using TABLE keyword
-
-From v3.1 onwards, StarRocks supports directly loading data from files in an external source using the INSERT command and the TABLE keyword, saving you from the trouble of creating an external table first.
-
-Currently, StarRocks supports the following data sources and file formats:
-
-- **Data sources**:
-  - AWS S3
-- **File formats**:
-  - Parquet
-  - ORC
-
-The following example inserts data rows from the Parquet file **parquet_file/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
-
-```Plain
-mysql> INSERT INTO insert_wiki_edit
-    ->     SELECT * FROM TABLE(
-    ->         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
-    ->         "format" = "parquet",
-    ->         "aws.s3.access_key" = "xxxxxxxxxx",
-    ->         "aws.s3.secret_key" = "yyyyyyyyyy",
-    ->         "aws.s3.region" = "aa-bbbb-c"
-    -> );
-Query OK, 2 rows affected (0.03 sec)
-{'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
 ```
 
 ## Insert data into a table with generated columns
