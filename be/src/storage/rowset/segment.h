@@ -158,6 +158,8 @@ public:
 
     bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
 
+    const TabletSchema& tablet_schema() const { return *_tablet_schema; }
+
     const std::string& file_name() const { return _fname; }
 
     uint32_t num_rows() const { return _num_rows; }
