@@ -1505,6 +1505,11 @@ public class TabletScheduler extends FrontendDaemon {
         LOG.info("remove the tablet {}. because: {}", tabletCtx.getTabletId(), reason);
     }
 
+    @VisibleForTesting
+    public void removeOneFromPendingQ() {
+        pendingTablets.poll();
+    }
+
     // get next batch of tablets from queue.
     private synchronized List<TabletSchedCtx> getNextTabletCtxBatch() {
         List<TabletSchedCtx> list = Lists.newArrayList();
