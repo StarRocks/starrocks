@@ -23,50 +23,50 @@
 GRANT  
     { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
     ON SYSTEM
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# resource group 相关
+# Resource group 相关
 
 GRANT  
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resource_name> [, < resource_name >,...] ｜ ALL RESOURCE GROUPS} 
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# resource 相关
+# Resource 相关
 
 GRANT 
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# global udf 相关
+# Global udf 相关
 
 GRANT { 
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { GLOBAL FUNCTION <function_name> [, < function_name >,...]    
        | ALL GLOBAL FUNCTIONS }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# internal catalog 相关
+# Internal catalog 相关
 
 GRANT 
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# external catalog 相关
+# External catalog 相关
 
 GRANT  
    { USAGE | DROP | ALL [PRIVILEGES] } 
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
-   TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+   TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 # Database 相关
 
 GRANT 
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
     ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ] ;
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
   
 *注意：需要执行 set catalog 之后才能使用。
 
@@ -77,11 +77,11 @@ GRANT
     ON { TABLE <table_name> [, < table_name >,...]
        | ALL TABLES IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 *注意：需要执行 set catalog 之后才能使用。
 注意：table还可以用db.tbl的方式来进行表示
-GRANT <priv> ON TABLE db.tbl TO {ROLE <rolename> | USER <username>};
+GRANT <priv> ON TABLE db.tbl TO {ROLE <rolename> | USER <username>}
 
 # View 相关
 
@@ -90,48 +90,60 @@ GRANT
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 *注意：需要执行 set catalog 之后才能使用。
 注意：view 还可以用db.view的方式来进行表示。
-GRANT <priv> ON VIEW db.view TO {ROLE <rolename> | USER <username>};
+GRANT <priv> ON VIEW db.view TO {ROLE <rolename> | USER <username>}
 
-# materialized view 相关
+# Materialized view 相关
 
 GRANT { 
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * 注意：需要执行 set catalog 之后才能使用。 
 mv 还可以用db.mv的方式来进行表示。
-GRANT <priv> ON MATERIALIZED_VIEW db.mv TO {ROLE <rolename> | USER <username>};
+GRANT <priv> ON MATERIALIZED_VIEW db.mv TO {ROLE <rolename> | USER <username>}
 
-# function 相关
+# Function 相关
 
 GRANT { 
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
        ｜ ALL FUNCTIONS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 *注意：需要执行 set catalog 之后才能使用。
 function 还可以用 db.function 的方式来进行表示。
-GRANT <priv> ON FUNCTION db.function TO {ROLE <rolename> | USER <username>};
+GRANT <priv> ON FUNCTION db.function TO {ROLE <rolename> | USER <username>}
 
-# user 相关
+# User 相关
 
-GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity> [ WITH GRANT OPTION ];
+GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity> [ WITH GRANT OPTION ]
+
+# Storage volume 相关
+
+GRANT
+    CREATE STORAGE VOLUME 
+    ON SYSTEM
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+
+GRANT  
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUME} 
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
 ### 授予角色给用户或者其他角色
 
 ```SQL
-GRANT <role_name> [,<role_name>, ...] TO ROLE <role_name>；
-GRANT <role_name> [,<role_name>, ...] TO USER <user_identity>；
+GRANT <role_name> [,<role_name>, ...] TO ROLE <role_name>
+GRANT <role_name> [,<role_name>, ...] TO USER <user_identity>
 ```
 
 ## 示例
