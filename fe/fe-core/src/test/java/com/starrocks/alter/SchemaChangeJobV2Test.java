@@ -142,21 +142,21 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         assertEquals(1, replica1.getLastSuccessVersion());
 
         // runPendingJob
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeJob.runPendingJob();
         Assert.assertEquals(JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assert.assertEquals(2, testPartition.getMaterializedIndices(IndexExtState.ALL).size());
         Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.VISIBLE).size());
         Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(JobState.RUNNING, schemaChangeJob.getJobState());
 
         int retryCount = 0;
         int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            schemaChangeHandler.runAfterCatalogReady();
+            schemaChangeJob.runRunningJob();
             if (schemaChangeJob.getJobState() == JobState.FINISHED) {
                 break;
             }
@@ -195,26 +195,26 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
 
         // runPendingJob
         replica1.setState(Replica.ReplicaState.DECOMMISSION);
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeJob.runPendingJob();
         Assert.assertEquals(JobState.PENDING, schemaChangeJob.getJobState());
 
         // table is stable runPendingJob again
         replica1.setState(Replica.ReplicaState.NORMAL);
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeJob.runPendingJob();
         Assert.assertEquals(JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assert.assertEquals(2, testPartition.getMaterializedIndices(IndexExtState.ALL).size());
         Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.VISIBLE).size());
         Assert.assertEquals(1, testPartition.getMaterializedIndices(IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
-        schemaChangeHandler.runAfterCatalogReady();
+        schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(JobState.RUNNING, schemaChangeJob.getJobState());
 
         int retryCount = 0;
         int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            schemaChangeHandler.runAfterCatalogReady();
+            schemaChangeJob.runRunningJob();
             if (schemaChangeJob.getJobState() == JobState.FINISHED) {
                 break;
             }
