@@ -71,36 +71,36 @@ StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta,
 }
 
 ColumnReader::ColumnReader(const private_type&, const Segment* segment) : _segment(segment) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
 ColumnReader::~ColumnReader() {
     if (_segment_zone_map != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->segment_zonemap_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),
                                  _segment_zone_map->SpaceUsedLong());
         _segment_zone_map.reset(nullptr);
     }
     if (_ordinal_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
         _ordinal_index_meta.reset(nullptr);
     }
     if (_zonemap_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
         _zonemap_index_meta.reset(nullptr);
     }
     if (_bitmap_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
         _bitmap_index_meta.reset(nullptr);
     }
     if (_bloom_filter_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset(nullptr);
     }
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
 Status ColumnReader::_init(ColumnMetaPB* meta) {
@@ -126,30 +126,30 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             switch (index_meta->type()) {
             case ORDINAL_INDEX:
                 _ordinal_index_meta.reset(index_meta->release_ordinal_index());
-                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
                                          _ordinal_index_meta->SpaceUsedLong());
                 _ordinal_index = std::make_unique<OrdinalIndexReader>();
                 break;
             case ZONE_MAP_INDEX:
                 _zonemap_index_meta.reset(index_meta->release_zone_map_index());
                 _segment_zone_map.reset(_zonemap_index_meta->release_segment_zone_map());
-                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                          _zonemap_index_meta->SpaceUsedLong())
                 // the segment zone map will release from zonemap_index_map,
                 // so we should calc mem usage after release.
-                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_zonemap_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),
                                          _segment_zone_map->SpaceUsedLong())
                 _zonemap_index = std::make_unique<ZoneMapIndexReader>();
                 break;
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
-                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
                                          _bitmap_index_meta->SpaceUsedLong());
                 _bitmap_index = std::make_unique<BitmapIndexReader>();
                 break;
             case BLOOM_FILTER_INDEX:
                 _bloom_filter_index_meta.reset(index_meta->release_bloom_filter_index());
-                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                          _bloom_filter_index_meta->SpaceUsedLong());
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
                 break;
@@ -348,7 +348,7 @@ Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
     auto meta = _ordinal_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(opts, *meta, num_rows()));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
         _ordinal_index_meta.reset();
     }
@@ -361,7 +361,7 @@ Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
     auto meta = _zonemap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
         _zonemap_index_meta.reset();
     }
@@ -374,7 +374,7 @@ Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
     auto meta = _bitmap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
         _bitmap_index_meta.reset();
     }
@@ -387,7 +387,7 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
     auto meta = _bloom_filter_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _bloom_filter_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset();
     }

@@ -325,16 +325,16 @@ Schema* TabletSchema::schema() const {
 
 TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb) {
     _init_from_pb(schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
     _init_from_pb(schema_pb);
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
 }
 
 TabletSchema::~TabletSchema() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);
     }

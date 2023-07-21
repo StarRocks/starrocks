@@ -116,7 +116,7 @@ void ChecksumAction::handle(HttpRequest* req) {
 }
 
 int64_t ChecksumAction::do_checksum(int64_t tablet_id, int64_t version, int32_t schema_hash, HttpRequest* req) {
-    MemTracker* mem_tracker = ExecEnv::GetInstance()->consistency_mem_tracker();
+    MemTracker* mem_tracker = GlobalEnv::GetInstance()->consistency_mem_tracker();
     Status check_limit_st = mem_tracker->check_mem_limit("Start consistency check.");
     if (!check_limit_st.ok()) {
         LOG(WARNING) << "checksum failed: " << check_limit_st.message();

@@ -370,8 +370,9 @@ int main(int argc, char** argv) {
                 s.to_string().c_str());
         return -1;
     }
+    auto* global_env = starrocks::GlobalEnv::GetInstance();
+    global_env->init();
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    exec_env->init_mem_tracker();
     exec_env->init(paths);
     int r = RUN_ALL_TESTS();
 
@@ -385,6 +386,7 @@ int main(int argc, char** argv) {
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     exec_env->destroy();
+    global_env->stop();
 
     return r;
 }

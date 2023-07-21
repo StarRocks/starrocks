@@ -30,7 +30,7 @@ namespace starrocks {
 void MemoryMetricsAction::handle(HttpRequest* req) {
     LOG(INFO) << "Start collect memory metrics.";
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_memory_metrics"));
-    MemTracker* process_mem_tracker = ExecEnv::GetInstance()->process_mem_tracker();
+    MemTracker* process_mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
     std::stringstream result;
     std::vector<std::string> metric_labels_to_print = {"process",
                                                        "query_pool",
@@ -62,10 +62,10 @@ void MemoryMetricsAction::handle(HttpRequest* req) {
     result << "[";
     getMemoryMetricTree(process_mem_tracker, result, process_mem_tracker->consumption(), metric_labels_to_print);
     result << ",";
-    getMemoryMetricTree(ExecEnv::GetInstance()->metadata_mem_tracker(), result, process_mem_tracker->consumption(),
+    getMemoryMetricTree(GlobalEnv::GetInstance()->metadata_mem_tracker(), result, process_mem_tracker->consumption(),
                         metric_labels_to_print);
     result << ",";
-    getMemoryMetricTree(ExecEnv::GetInstance()->update_mem_tracker(), result, process_mem_tracker->consumption(),
+    getMemoryMetricTree(GlobalEnv::GetInstance()->update_mem_tracker(), result, process_mem_tracker->consumption(),
                         metric_labels_to_print);
     result << "]";
     req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");

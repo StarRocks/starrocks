@@ -26,6 +26,6 @@ CompactionTask::CompactionTask(int64_t txn_id, int64_t version, std::shared_ptr<
           _input_rowsets(std::move(input_rowsets)),
           _mem_tracker(std::make_unique<MemTracker>(MemTracker::COMPACTION, -1,
                                                     "Compaction-" + std::to_string(_tablet->id()),
-                                                    ExecEnv::GetInstance()->compaction_mem_tracker())) {}
+                                                    GlobalEnv::GetInstance()->compaction_mem_tracker())) {}
 
 } // namespace starrocks::lake
