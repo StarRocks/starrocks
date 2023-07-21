@@ -298,9 +298,9 @@ void SystemMetrics::_update_memory_metrics() {
     }
 #endif
 
-#define SET_MEM_METRIC_VALUE(tracker, key)                                                \
-    if (ExecEnv::GetInstance()->tracker() != nullptr) {                                   \
-        _memory_metrics->key.set_value(ExecEnv::GetInstance()->tracker()->consumption()); \
+#define SET_MEM_METRIC_VALUE(tracker, key)                                                  \
+    if (GlobalEnv::GetInstance()->tracker() != nullptr) {                                   \
+        _memory_metrics->key.set_value(GlobalEnv::GetInstance()->tracker()->consumption()); \
     }
 
     SET_MEM_METRIC_VALUE(process_mem_tracker, process_mem_bytes)

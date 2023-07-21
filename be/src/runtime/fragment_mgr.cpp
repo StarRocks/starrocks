@@ -424,7 +424,8 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
                                        const FinishCallback& cb) {
-    RETURN_IF_ERROR(_exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+    RETURN_IF_ERROR(
+            GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
     const TUniqueId& fragment_instance_id = params.params.fragment_instance_id;
     std::shared_ptr<FragmentExecState> exec_state;
