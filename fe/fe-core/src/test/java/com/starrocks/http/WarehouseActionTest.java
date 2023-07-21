@@ -292,7 +292,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
         new MockUp<NodeMgr>() {
             @Mock
-            public List<Frontend> getFrontends(FrontendNodeType nodeType) {
+            public List<Frontend> getAllFrontends() {
                 return frontends;
             }
 
