@@ -139,7 +139,7 @@ void MetricCollector::get_metrics(std::vector<Metric*>* metrics) {
 
 MetricRegistry::~MetricRegistry() noexcept {
     {
-        std::unique_lock lock(_mutex);
+        std::unique_lock lock(_collector_mutex);
 
         std::vector<Metric*> metrics;
         for (const auto& it : _collectors) {
@@ -149,6 +149,10 @@ MetricRegistry::~MetricRegistry() noexcept {
             _deregister_locked(metric);
         }
     }
+    {
+        std::unique_lock lock(_hooks_mutex);
+        _hooks.clear();
+    }
     // All register metric will deregister
     DCHECK(_collectors.empty()) << "_collectors not empty, size=" << _collectors.size();
 }
@@ -156,7 +160,7 @@ MetricRegistry::~MetricRegistry() noexcept {
 bool MetricRegistry::register_metric(const std::string& name, const MetricLabels& labels, Metric* metric) {
     DCHECK(metric != nullptr);
     metric->hide();
-    std::unique_lock lock(_mutex);
+    std::unique_lock lock(_collector_mutex);
     MetricCollector* collector = nullptr;
     auto it = _collectors.find(name);
     if (it == _collectors.end()) {
@@ -188,7 +192,7 @@ void MetricRegistry::_deregister_locked(Metric* metric) {
 }
 
 Metric* MetricRegistry::get_metric(const std::string& name, const MetricLabels& labels) const {
-    std::shared_lock lock(_mutex);
+    std::shared_lock lock(_collector_mutex);
     auto it = _collectors.find(name);
     if (it != _collectors.end()) {
         return it->second->get_metric(labels);
@@ -197,13 +201,13 @@ Metric* MetricRegistry::get_metric(const std::string& name, const MetricLabels& 
 }
 
 bool MetricRegistry::register_hook(const std::string& name, const std::function<void()>& hook) {
-    std::unique_lock lock(_mutex);
+    std::unique_lock lock(_hooks_mutex);
     auto it = _hooks.emplace(name, hook);
     return it.second;
 }
 
 void MetricRegistry::deregister_hook(const std::string& name) {
-    std::unique_lock lock(_mutex);
+    std::unique_lock lock(_hooks_mutex);
     _hooks.erase(name);
 }
 
