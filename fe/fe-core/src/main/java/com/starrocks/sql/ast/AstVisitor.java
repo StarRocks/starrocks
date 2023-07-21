@@ -812,6 +812,11 @@ public abstract class AstVisitor<R, C> {
         return visitNode(statement, context);
     }
 
+    // ---------------------------------------- FailPoint Statement ----------------------------------------------------
+    public R visitUpdateFailPointStatusStatement(UpdateFailPointStatusStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
     public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {

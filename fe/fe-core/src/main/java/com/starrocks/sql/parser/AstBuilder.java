@@ -322,6 +322,7 @@ import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowEventsStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.ShowFailPointStatement;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -381,6 +382,7 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitBoundary;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.UnsupportedStmt;
+import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
@@ -3328,6 +3330,53 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             properties.put(property.getKey(), property.getValue());
         }
         return new ModifyStorageVolumePropertiesClause(properties, createPos(context));
+    }
+
+    // ----------------------------------------------- FailPoint Statement -----------------------------------------------------
+
+    @Override
+    public ParseNode visitUpdateFailPointStatusStatement(
+            StarRocksParser.UpdateFailPointStatusStatementContext ctx) {
+        String failpointName = ((StringLiteral) visit(ctx.string(0))).getStringValue();
+        List<String> backendList = null;
+        if (ctx.BACKEND() != null) {
+            String tmp = ((StringLiteral) visit(ctx.string(1))).getStringValue();
+            backendList = Lists.newArrayList(tmp.split(","));
+        }
+        if (ctx.ENABLE() != null) {
+            if (ctx.TIMES() != null) {
+                int nTimes = Integer.parseInt(ctx.INTEGER_VALUE().getText());
+                if (nTimes <= 0) {
+                    throw new ParsingException(String.format(
+                            "Invalid TIMES value %d, it should be a positive integer", nTimes));
+                }
+                return new UpdateFailPointStatusStatement(failpointName, nTimes, backendList, createPos(ctx));
+            } else if (ctx.PROBABILITY() != null) {
+                double probability = Double.parseDouble(ctx.DECIMAL_VALUE().getText());
+                if (probability < 0 || probability > 1) {
+                    throw new ParsingException(String.format(
+                            "Invalid PROBABILITY value %f, it should be in range [0, 1]", probability));
+                }
+                return new UpdateFailPointStatusStatement(failpointName, probability, backendList, createPos(ctx));
+            }
+            return new UpdateFailPointStatusStatement(failpointName, true, backendList, createPos(ctx));
+        }
+        return new UpdateFailPointStatusStatement(failpointName, false, backendList, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitShowFailPointStatement(StarRocksParser.ShowFailPointStatementContext ctx) {
+        String pattern = null;
+        List<String> backendList = null;
+        int idx = 0;
+        if (ctx.LIKE() != null) {
+            pattern = ((StringLiteral) visit(ctx.string(idx++))).getStringValue();
+        }
+        if (ctx.BACKEND() != null) {
+            String tmp = ((StringLiteral) visit(ctx.string(idx++))).getStringValue();
+            backendList = Lists.newArrayList(tmp.split(","));
+        }
+        return new ShowFailPointStatement(pattern, backendList, createPos(ctx));
     }
 
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------

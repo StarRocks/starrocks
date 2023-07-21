@@ -528,6 +528,42 @@ message ExecuteCommandResultPB {
     optional string result = 2;
 };
 
+enum FailPointTriggerModeType {
+    ENABLE = 1;
+    DISABLE = 2;
+    PROBABILITY_ENABLE = 3;
+    ENABLE_N_TIMES = 4;
+}
+
+message PFailPointTriggerMode {
+    optional FailPointTriggerModeType mode = 1;
+    optional double probability = 2;
+    optional int32 n_times = 3;
+}
+
+message PUpdateFailPointStatusRequest {
+    optional string fail_point_name = 1;
+    optional PFailPointTriggerMode trigger_mode = 2;
+}
+
+message PUpdateFailPointStatusResponse {
+    optional StatusPB status = 1;
+}
+
+message PFailPointInfo {
+    optional string name = 1;
+    optional PFailPointTriggerMode trigger_mode = 2;
+}
+
+message PListFailPointRequest {
+}
+
+message PListFailPointResponse {
+    optional StatusPB status = 1;
+    repeated PFailPointInfo fail_points = 2;
+}
+
+
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
 service PInternalService {
@@ -563,4 +599,7 @@ service PInternalService {
     rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
 
     rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
+    
+    rpc update_fail_point_status(PUpdateFailPointStatusRequest) returns (PUpdateFailPointStatusResponse);
+    rpc list_fail_point(PListFailPointRequest) returns (PListFailPointResponse);
 };

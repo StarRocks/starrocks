@@ -65,6 +65,7 @@
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/debug_util.h"
+#include "util/failpoint/fail_point.h"
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
@@ -178,6 +179,13 @@ int main(int argc, char** argv) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
+
+#ifdef FIU_ENABLE
+    if (!starrocks::failpoint::init_failpoint_from_conf(std::string(getenv("STARROCKS_HOME")) +
+                                                        "/conf/failpoint.json")) {
+        fprintf(stderr, "fail to init failpoint from json file. ignore it...");
+    }
+#endif
 
 #if defined(ENABLE_STATUS_FAILED)
     // read range of source code for inject errors.
