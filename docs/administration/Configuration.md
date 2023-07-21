@@ -175,8 +175,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | authentication_ldap_simple_server_host   |  -  | Empty string |  The host on which the LDAP server runs.                               |
 | authentication_ldap_simple_server_port   |  -  | 389     | The port of the LDAP server.                                       |
 | authentication_ldap_simple_user_search_attr|  -  | uid     | The name of the attribute that identifies users in LDAP objects.|
-|max_upload_task_per_be                    |  -  | 0       | In each BACKUP operation, the maximum number of upload tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.1.0 onwards.     |
-|max_download_task_per_be                  |  -  | 0       | In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.1.0 onwards.     |
+|max_upload_task_per_be                    |  -  | 0       | In each BACKUP operation, the maximum number of upload tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v2.5.7 onwards.     |
+|max_download_task_per_be                  |  -  | 0       | In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v2.5.7 onwards.     |
 
 ### Configure FE static parameters
 
