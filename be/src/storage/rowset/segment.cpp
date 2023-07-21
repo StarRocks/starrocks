@@ -326,8 +326,8 @@ bool Segment::has_loaded_index() const {
     return invoked(_load_index_once);
 }
 
-bool Segment::is_valid_column(uint32_t column_index) const {
-    return _column_readers.count(column_index) > 0;
+bool Segment::is_valid_column(uint32_t column_unique_id) const {
+    return _column_readers.count(column_unique_id) > 0;
 }
 
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {

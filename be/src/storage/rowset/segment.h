@@ -164,7 +164,7 @@ public:
 
     int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
 
-    bool is_valid_column(uint32_t column_index) const;
+    bool is_valid_column(uint32_t column_unique_id) const;
     // read short_key_index, for data check, just used in unit test now
     [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
