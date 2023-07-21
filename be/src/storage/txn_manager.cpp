@@ -282,11 +282,16 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
 
 Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                                int64_t version, const RowsetSharedPtr& rowset) {
+    int64_t start_ts = MonotonicMillis();
+    int64_t t1 = 0;
+    int64_t t2 = 0;
     {
         std::lock_guard txn_lock(_get_txn_lock(transaction_id));
+        t1 = MonotonicMillis() - start_ts;
         if (tablet->updates() != nullptr) {
             StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
             auto st = tablet->rowset_commit(version, rowset);
+            t2 = MonotonicMillis() - start_ts;
             if (!st.ok()) {
                 StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
                 return st;
@@ -313,10 +318,13 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
                              << ", res=" << st;
                 return st;
             }
+            t2 = MonotonicMillis() - start_ts;
         }
     }
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
+    int64_t t3 = MonotonicMillis() - start_ts;
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
+    int64_t t4 = MonotonicMillis() - start_ts;
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
     auto it = txn_tablet_map.find(key);
@@ -329,9 +337,11 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
             txn_info.version = version;
             add_txn_info_history(txn_info);
             it->second.erase(tablet_txn_info_itr);
+            int64_t t5 = MonotonicMillis() - start_ts;
             LOG(INFO) << "add txn info history. txn_id: " << transaction_id << ", partition_id: " << partition_id
                       << ", tablet_id: " << tablet->tablet_id() << ", schema_hash: " << tablet->schema_hash()
-                      << ", rowset_id: " << rowset->rowset_id() << ", version: " << version;
+                      << ", rowset_id: " << rowset->rowset_id() << ", version: " << version << ", "
+                      << "time: " << t1 << "," << t2 << "," << t3 << "," << t4 << "," << t5;
         }
         if (it->second.empty()) {
             txn_tablet_map.erase(it);

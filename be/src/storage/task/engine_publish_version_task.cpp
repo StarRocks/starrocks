@@ -40,6 +40,7 @@ EnginePublishVersionTask::EnginePublishVersionTask(TTransactionId transaction_id
 Status EnginePublishVersionTask::execute() {
     VLOG(1) << "Begin publish txn tablet:" << _tablet_info.tablet_id << " version:" << _version
             << " partition:" << _partition_id << " txn_id: " << _transaction_id << " rowset:" << _rowset->rowset_id();
+    int64_t start_ts = MonotonicMillis();
 
     TabletSharedPtr tablet =
             StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_info.tablet_id, _tablet_info.tablet_uid);
@@ -50,8 +51,13 @@ Status EnginePublishVersionTask::execute() {
         return Status::NotFound(fmt::format("Not found tablet to publish_version. tablet_id: {}, txn_id: {}",
                                             _tablet_info.tablet_id, _transaction_id));
     }
+
+    int64_t t1 = MonotonicMillis() - start_ts;
+
     auto st = StorageEngine::instance()->txn_manager()->publish_txn(_partition_id, tablet, _transaction_id, _version,
                                                                     _rowset);
+    int64_t t2 = MonotonicMillis() - start_ts;
+
     if (!st.ok()) {
         LOG(WARNING) << "Publish txn failed tablet:" << _tablet_info.tablet_id << " version:" << _version
                      << " partition:" << _partition_id << " txn_id: " << _transaction_id
@@ -59,7 +65,7 @@ Status EnginePublishVersionTask::execute() {
     } else {
         LOG(INFO) << "Publish txn success tablet:" << _tablet_info.tablet_id << " version:" << _version
                   << " partition:" << _partition_id << " txn_id: " << _transaction_id
-                  << " rowset:" << _rowset->rowset_id();
+                  << " rowset:" << _rowset->rowset_id() << "time:" << t1 << "," << t2;
     }
     return st;
 }
