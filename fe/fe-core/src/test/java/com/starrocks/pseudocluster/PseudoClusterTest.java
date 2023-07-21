@@ -113,7 +113,10 @@ public class PseudoClusterTest {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
 
-
+            @Mock
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
+            }
         };
 
         Connection connection = PseudoCluster.getInstance().getQueryConnection();

@@ -40,7 +40,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.catalog.system.starrocks.StarRocksDb;
+import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -58,7 +58,6 @@ import com.starrocks.common.util.Util;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -555,9 +554,6 @@ public class Database extends MetaObject implements Writable {
         if (table != null) {
             this.nameToTable.remove(tableName);
             this.idToTable.remove(table.getId());
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isCloudNativeTable()) {
-                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
-            }
         }
     }
 
@@ -899,7 +895,7 @@ public class Database extends MetaObject implements Writable {
 
     public boolean isSystemDatabase() {
         return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
-                fullQualifiedName.equalsIgnoreCase(StarRocksDb.DATABASE_NAME);
+                fullQualifiedName.equalsIgnoreCase(SysDb.DATABASE_NAME);
     }
 
     // the invoker should hold db's writeLock

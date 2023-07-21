@@ -234,6 +234,11 @@ public:
         return _last_active_timestamp;
     }
 
+    int active_threads() const {
+        std::lock_guard l(_lock);
+        return _active_threads;
+    }
+
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;

@@ -86,9 +86,11 @@ import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -97,6 +99,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 
 import java.io.IOException;
@@ -106,6 +110,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 public class StarRocksAssert {
+    private static final Logger LOG = LogManager.getLogger(StarRocksAssert.class);
 
     private ConnectContext ctx;
 
@@ -278,6 +283,15 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert alterTableProperties(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertFalse(alterTableStmt.getOps().isEmpty());
+        Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof ModifyTablePropertiesClause);
+        Analyzer.analyze(alterTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        return this;
+    }
+
     public StarRocksAssert dropTable(String tableName) throws Exception {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
@@ -421,6 +435,14 @@ public class StarRocksAssert {
 
         Assert.assertTrue(statement instanceof ShowResourceGroupStmt);
         return GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup((ShowResourceGroupStmt) statement);
+    }
+
+    public List<List<String>> show(String sql) throws Exception {
+        StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        Assert.assertTrue(stmt instanceof ShowStmt);
+        Analyzer.analyze(stmt, ctx);
+        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
+        return showExecutor.execute().getResultRows();
     }
 
     private void checkAlterJob() throws InterruptedException {

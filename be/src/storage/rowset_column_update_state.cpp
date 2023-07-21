@@ -334,8 +334,9 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
         Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema, uint32_t rssid, int64_t ver) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     ASSIGN_OR_RETURN(auto rowsetid_segid, _find_rowset_seg_id(rssid));
+    // always 0 file suffix here, because alter table will execute after this version has been applied only.
     const std::string path = Rowset::delta_column_group_path(rowset->rowset_path(), rowsetid_segid.unique_rowset_id,
-                                                             rowsetid_segid.segment_id, ver);
+                                                             rowsetid_segid.segment_id, ver, 0);
     (void)fs->delete_file(path); // delete .cols if already exist
     WritableFileOptions opts{.sync_on_close = true};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
@@ -501,7 +502,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
         RETURN_IF_ERROR(_read_chunk_from_update(each.second, update_file_iters, rowids, update_chunk_ptr.get()));
         int64_t t3 = MonotonicMillis();
         // 4.3 merge source chunk and update chunk
-        RETURN_IF_ERROR(source_chunk_ptr->update_rows(*update_chunk_ptr, rowids.data()));
+        RETURN_IF_EXCEPTION(source_chunk_ptr->update_rows(*update_chunk_ptr, rowids.data()));
         // 4.4 write column to delta column file
         int64_t t4 = MonotonicMillis();
         uint64_t segment_file_size = 0;
@@ -518,9 +519,10 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
         // 4.5 generate delta columngroup
         _rssid_to_delta_column_group[each.first] = std::make_shared<DeltaColumnGroup>();
         // must record unique column id in delta column group
-        _rssid_to_delta_column_group[each.first]->init(
-                latest_applied_version.major() + 1, unique_update_column_ids,
-                file_name(delta_column_group_writer[each.first]->segment_path()));
+        std::vector<std::vector<uint32_t>> dcg_column_ids{unique_update_column_ids};
+        std::vector<std::string> dcg_column_files{file_name(delta_column_group_writer[each.first]->segment_path())};
+        _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major() + 1, dcg_column_ids,
+                                                       dcg_column_files);
     }
     cost_str << " [generate delta column group] " << watch.elapsed_time();
     watch.reset();

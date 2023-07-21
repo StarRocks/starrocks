@@ -59,15 +59,15 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
-                                      const ColumnPredicate* del_predicate, SparseRange* range) override;
+                                      const ColumnPredicate* del_predicate, SparseRange<>* range) override;
 
     Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                          SparseRange* range) override;
+                                          SparseRange<>* range) override;
 
     bool all_page_dict_encoded() const override { return _all_dict_encoded; }
 
@@ -77,7 +77,7 @@ public:
 
     Status next_dict_codes(size_t* n, Column* dst) override;
 
-    Status next_dict_codes(const SparseRange& range, Column* dst) override;
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
 
     Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
 
@@ -107,7 +107,7 @@ private:
     Status _do_next_dict_codes(size_t* n, Column* dst);
 
     template <LogicalType Type>
-    Status _do_next_batch_dict_codes(const SparseRange& range, Column* dst);
+    Status _do_next_batch_dict_codes(const SparseRange<>& range, Column* dst);
 
     template <LogicalType Type>
     Status _do_decode_dict_codes(const int32_t* codes, size_t size, Column* words);
@@ -125,7 +125,7 @@ private:
 
     bool _contains_deleted_row(uint32_t page_index) const;
 
-    bool _skip_fill_local_cache() const { return _opts.reader_type != READER_QUERY; }
+    bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
 
     ColumnReader* _reader;
 
@@ -153,7 +153,7 @@ private:
 
     int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
     Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, Column* dst) = nullptr;
-    Status (ScalarColumnIterator::*_next_batch_dict_codes_func)(const SparseRange& range, Column* dst) = nullptr;
+    Status (ScalarColumnIterator::*_next_batch_dict_codes_func)(const SparseRange<>& range, Column* dst) = nullptr;
     Status (ScalarColumnIterator::*_decode_dict_codes_func)(const int32_t* codes, size_t size, Column* words) = nullptr;
     Status (ScalarColumnIterator::*_init_dict_decoder_func)() = nullptr;
 

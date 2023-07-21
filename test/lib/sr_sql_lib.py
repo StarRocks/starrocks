@@ -448,14 +448,17 @@ class StarrocksSQLApiLib(object):
         """check sql result"""
         # judge if it needs to check
         if exp == "":
-            log.info("[%s.check] only check with no Error" % sql_id)
-
             if sql.startswith(SHELL_FLAG):
                 # SHELL check
+                log.info("[%s.check] only check with no Error" % sql_id)
                 tools.assert_equal(0, act[0], "shell %s error: %s" % (sql, act))
             elif not sql.startswith(FUNCTION_FLAG):
-                # SQL, without error msg
+                # Function, without error msg
+                log.info("[%s.check] only check with no Error" % sql_id)
                 tools.assert_false(str(act).startswith("E: "), "sql result not match: actual with E(%s)" % str(act))
+            else:
+                # SQL, with empty result
+                exp = []
             return
 
         if any(re.compile(condition).search(sql) is not None for condition in skip.skip_res_cmd) or any(
@@ -475,18 +478,22 @@ class StarrocksSQLApiLib(object):
             act_code = act[0]
             act_std = act[1]
             act_std_is_json = act_std.startswith("{")
-
             # check json/str match
             tools.assert_equal(exp_std_is_json, act_std_is_json)
 
             if exp_std_is_json:
-                exp_std = json.loads(exp_std)
-                act_std = json.loads(act_std)
-                # check all key,values in exp_std
-                tools.assert_true(
-                    all(k in act_std and exp_std[k] == act_std[k] for k in exp_std),
-                    "shell result json not match, \n[exp]: %s,\n[act]: %s" % (exp_std, act_std),
-                )
+                try:
+                    exp_std = json.loads(exp_std)
+                    act_std = json.loads(act_std)
+                    # check all key,values in exp_std
+                    tools.assert_true(
+                        all(k in act_std and exp_std[k] == act_std[k] for k in exp_std),
+                        "shell result json not match, \n[exp]: %s,\n[act]: %s" % (exp_std, act_std),
+                    )
+                except Exception as e:
+                    # if can't be treat as json, cmp as str
+                    if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
+                        tools.assert_true(False, "shell result str not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
             else:
                 # str
                 if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
@@ -833,20 +840,24 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_true(load_finished, "show bitmap_index timeout")
 
-    def wait_materialized_view_finish(self):
+    def wait_materialized_view_finish(self, check_count=60):
         """
         wait materialized view job finish and return status
         """
         status = ""
         show_sql = "SHOW ALTER MATERIALIZED VIEW"
-        while True:
+        count = 0
+        while count < check_count:
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][8]
-            if status == "FINISHED" or status == "CANCELLED" or status == "":
+            if status != "FINISHED":
+                time.sleep(5)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(5)
                 break
-            time.sleep(0.5)
+            count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
-
 
     def wait_alter_table_finish(self, alter_type="COLUMN"):
         """
@@ -866,6 +877,57 @@ class StarrocksSQLApiLib(object):
                 break
             time.sleep(0.5)
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+
+    def wait_global_dict_ready(self, column_name, table_name):
+        """
+        wait global dict ready
+        """
+        status = ""
+        count = 0
+        while True:
+            if count > 60:
+                tools.assert_true(False, "acquire dictionary timeout for 60s")
+            sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "acquire dictionary error")
+            if str(res["result"]).find("Decode") > 0:
+                return ""
+            time.sleep(1)
+
+    def assert_has_global_dict(self, column_name, table_name):
+        """
+        assert table_name:column_name has global dict
+        """
+        time.sleep(1)
+        sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+        res = self.execute_sql(sql, True)
+        tools.assert_true(str(res["result"]).find("Decode") > 0, "assert dictionary error")
+    
+    def assert_no_global_dict(self, column_name, table_name):
+        """
+        assert table_name:column_name has global dict
+        """
+        time.sleep(1)
+        sql = "explain costs select distinct %s from %s" % (column_name, table_name)
+        res = self.execute_sql(sql, True)
+        tools.assert_true(str(res["result"]).find("Decode") <= 0, "assert dictionary error")
+
+    def wait_submit_task_ready(self, task_name):
+        """
+        wait submit task ready
+        """
+        status = ""
+        while True:
+            sql = "select STATE from information_schema.task_runs where TASK_NAME = '%s'" % task_name
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "acquire task state error")
+            state = res["result"][0][0]
+            if status != "RUNNING":
+                return ""
+            time.sleep(1)
 
     def check_es_table_metadata_ready(self, table_name):
         check_sql = "SELECT * FROM %s limit 1" % table_name

@@ -33,6 +33,7 @@ set(EXEC_FILES
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
         ./exec/iceberg/iceberg_delete_builder_test.cpp
+        ./exec/iceberg/iceberg_table_sink_operator_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
@@ -44,6 +45,7 @@ set(EXEC_FILES
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
+        ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
         ./exec/stream/stream_aggregator_test.cpp
         ./exec/stream/stream_operators_test.cpp
@@ -391,28 +393,6 @@ add_executable(starrocks_test ${EXEC_FILES})
 
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
-
-# =================================================
-# bytes_test requires tcmalloc which conflicts with sanitizer.
-# Thus we need a standalone binary without sanitizer to test it.
-add_executable(bytes_test
-        ./column/bytes_test.cpp
-        ../src/service/mem_hook.cpp
-        )
-
-set_target_properties(bytes_test PROPERTIES
-        COMPILE_OPTIONS
-        "-lpthread;-std=gnu++17;-g;-fno-sanitize=address")
-
-set_target_properties(bytes_test PROPERTIES
-        LINK_OPTIONS
-        "-static-libstdc++;-static-libgcc;-fno-sanitize=address")
-
-TARGET_LINK_LIBRARIES(bytes_test
-        pthread
-        gtest
-        tcmalloc
-        )
 
 # =================================================
 # test cases must be compiled as a standalone binary

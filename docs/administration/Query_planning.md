@@ -193,6 +193,104 @@ By removing the specific expressions (only keep the operators), the query plan c
 
 ![8-5](../assets/8-5.png)
 
+## Query hint
+
+Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports two types of hints: variable-setting hint and join hint. Hints only take effect within a single query.
+
+### Variable-Setting hint
+
+You can set one or more [system variables](../reference/System_variable.md) by using the `SET_VAR` hint in the form of the syntax `/*+ SET_VAR(var_name = value) */` in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
+
+#### Syntax
+
+~~~ SQL
+[...] SELECT [/*+ SET_VAR(key=value [, key = value]*) */] ...
+SUBMIT [/*+ SET_VAR(key=value [, key = value]*) */] TASK ...
+~~~
+
+#### Examples
+
+ Hint the aggregation method for an aggregate query by setting the system variables `streaming_preaggregation_mode` and `new_planner_agg_stage`.
+
+~~~ SQL
+SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
+~~~
+
+Hint the query's task execution timeout period by setting the system variable `query_timeout` in the SUBMIT TASK statement.
+
+~~~ SQL
+SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
+~~~
+
+Hint the query's execution timeout period by setting the system variable `query_timeout` in the SELECT clause when creating a materialized view.
+
+~~~ SQL
+CREATE MATERIALIZED VIEW mv 
+PARTITION BY dt 
+DISTRIBUTED BY HASH(`key`) 
+BUCKETS 10 
+REFRESH ASYNC 
+AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
+~~~
+
+### Join hint
+
+For multi-table join queries, the optimizer usually selects the optimal join execution method. In special cases, you can use a join hint to explicitly suggest the join execution method to the optimizer or disable Join Reorder. Currently, a join hint supports suggesting Shuffle Join, Broadcast Join, Bucket Shuffle Join, or Colocate Join as a join execution method. When a join hint is used, the optimizer does not perform Join Reorder. So you need to select the smaller table as the right table. Additionally, when suggesting [Colocate Join](../using_starrocks/Colocate_join.md) or Bucket Shuffle Join as the join execution method, make sure that the data distribution of the joined table meets the requirements of these join execution methods. Otherwise, the suggested join execution method cannot take effect.
+
+#### Syntax
+
+~~~SQL
+... JOIN { [BROADCAST] | [SHUFFLE] | [BUCKET] | [COLOCATE] | [UNREORDER]} ...
+~~~
+
+> **NOTE**
+>
+> Join Hint is case-insensitive.
+
+#### Examples
+
+- Shuffle Join
+
+  If you need to shuffle the data rows with the same bucketing key values from tables A and B onto the same machine before a Join operation is performed, you can hint the join execution method as Shuffle Join.
+
+  ~~~SQL
+  select k1 from t1 join [SHUFFLE] t2 on t1.k1 = t2.k2 group by t2.k2;
+  ~~~
+
+- Broadcast Join
+  
+  If table A is a large table and table B is a small table, you can hint the join execution method as Broadcast Join. The data of the table B is fully broadcasted to the machines on which the data of table A resides, and then the Join operation is performed. Compared to Shuffle Join, Broadcast Join saves the cost of shuffling the data of table A.
+
+  ~~~SQL
+  select k1 from t1 join [BROADCAST] t2 on t1.k1 = t2.k2 group by t2.k2;
+  ~~~
+
+- Bucket Shuffle Join
+  
+  If the Join equijoin expression in the join query contains the bucketing key of table A, especially when both tables A and B are large tables, you can hint the join execution method as Bucket Shuffle Join. The data of table B is shuffled to the machines on which the data of table A resides, according to the data distribution of table A, and then the Join operation is performed. Compared to Broadcast Join, Bucket Shuffle Join significantly reduces data transferring because the data of table B is shuffled only once globally.
+
+  ~~~SQL
+  select k1 from t1 join [BUCKET] t2 on t1.k1 = t2.k2 group by t2.k2;
+  ~~~
+
+- Colocate Join
+  
+  If tables A and B belong to the same Colocation Group which is specified during table creation, the data rows with the same bucketing key values from tables A and B are distributed on the same BE node. When the Join equijoin expression contains the bucketing key of tables A and B in the join query, you can hint the join execution method as Colocate Join. Data with the same key values are directly joined locally, reducing the time spent on data transmission between nodes and improving query performance.
+
+  ~~~SQL
+  select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
+  ~~~
+
+### View join execution method
+
+Use the `EXPLAIN` command to view the actual join execution method. If the returned result shows that the join execution method matches the join hint, it means that the join hint is effective.
+
+~~~SQL
+EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
+~~~
+
+![8-9](../assets/8-9.png)
+
 ## SQL fingerprint
 
 SQL fingerprint is used to optimize slow queries and improve system resource utilization. StarRocks uses the SQL fingerprint feature to normalize SQL statements in the slow query log (`fe.audit.log.slow_query`), categorizes the SQL statements into different types, and calculates the MD5 hash value of each SQL type to identify slow queries. The MD5 hash value is specified by the field `Digest`.

@@ -4,6 +4,10 @@
 
 Creates a new table in StarRocks.
 
+> **NOTE**
+>
+> This operation requires the CREATE TABLE privilege on the destination database.
+
 ## Syntax
 
 ```Plain%20Text
@@ -14,7 +18,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [key_desc]
 [COMMENT "table comment"]
 [partition_desc]
-distribution_desc
+[distribution_desc]
 [rollup_index]
 [ORDER BY (column_definition1,...)]
 [PROPERTIES ("key"="value", ...)]
@@ -28,7 +32,7 @@ distribution_desc
 Syntax:
 
 ```SQL
-col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT]
+col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
 ```
 
 **col_name**: Column name.
@@ -81,7 +85,9 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 - **DEFAULT <default_value>**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
 - **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
 
-- **AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md).
+**AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
+
+**AS generation_expr**: specifies the generated column and its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
 
 ### index_definition
 
@@ -183,7 +189,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 ### key_desc
 
-Syntax: 
+Syntax:
 
 ```SQL
 key_type(k1[,k2 ...])
@@ -198,6 +204,12 @@ Data is sequenced in specified key columns and has different attributes for diff
 > **NOTE**
 >
 > Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
+
+### COMMENT
+
+You can add a table comment when you create a table, optional. Note that COMMENT must be placed after `key_desc`. Otherwise, the table cannot be created.
+
+From v3.1 onwards, you can modify the table comment suing `ALTER TABLE <table_name> COMMENT = "new table comment"`.
 
 ### partition_desc
 
@@ -270,30 +282,52 @@ For more information, see [Data distribution](../../../table_design/Data_distrib
 
 ### distribution_desc
 
-Syntax:
+StarRocks supports hash bucketing and random bucketing. If you do not configure bucketing, StarRocks uses random bucketing and automatically sets the number of buckets by default.
 
-```SQL
-DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
-```
+- Random bucketing (since v3.1)
 
-Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that meets the following two requirements as the bucketing column.
+  For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. And if you want StarRocks to automatically determine the number of buckets, you do not need to specify any bucketing configurations. If you choose to manually specify the number of buckets, the syntax is as follows:
 
-- High cardinality column such as ID
-- Column that is often used as a filter in queries
+  ```SQL
+  DISTRIBUTED BY RANDOM BUCKETS <num>
+  ```
+  
+  However, note that the query performance provided by random bucketing may not be ideal when you query massive amounts of data and frequently use certain columns as conditional columns. In this scenario, it is recommended to use hash bucketing. Because only a small number of buckets need to be scanned and computed, significantly improving query performance.
 
-If such a column does not exist, you can determine the bucketing column according to the complexity of queries.
+  **Precautions**
+  - You can only use random bucketing to create Duplicate Key tables.
+  - You can not specify a [Colocation Group](../../../using_starrocks/Colocate_join.md) for a table bucketed randomly.
+  - [Spark Load](../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
-- If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
-- If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
+  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31).
 
-If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md).
+- Hash bucketing
 
-**Precautions**:
+  Syntax:
 
-- **When you create a table, you must specify the bucketing columns**.
-- The values of bucketing columns cannot be updated.
-- Bucketing columns cannot be modified after they are specified.
-- Since StarRocks 2.5, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
+  ```SQL
+  DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
+  ```
+
+  Data in partitions can be subdivided into buckets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that meets the following two requirements as the bucketing column.
+
+  - High cardinality column such as ID
+  - Column that is often used as a filter in queries
+
+  If such a column does not exist, you can determine the bucketing column according to the complexity of queries.
+
+  - If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
+  - If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
+
+  If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md).
+
+  **Precautions**:
+
+  - **When you create a table, you must specify its bucketing columns**.
+  - The values of bucketing columns cannot be updated.
+  - Bucketing columns cannot be modified after they are specified.
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ### ORDER BY
 
@@ -471,6 +505,38 @@ PROPERTIES (
 > - The `child_column` in a table's `foreign_key_constraints` must be referenced to a `unique_key` in another table's `unique_constraints`.
 > - The number of `child_column` and `parent_column` must agree.
 > - The data types of the `child_column` and the corresponding `parent_column` must match.
+
+#### Create cloud-native tables for StarRocks Shared-data cluster
+
+To [use your StarRocks Shared-data cluster](../../../deployment/deploy_shared_data.md#use-your-shared-data-starrocks-cluster), you must create cloud-native tables with the following properties:
+
+```SQL
+PROPERTIES (
+    "datacache.enable" = "{ true | false }",
+    "datacache.partition_duration" = "<string_value>",
+    "enable_async_write_back" = "{ true | false }"
+)
+```
+
+- `datacache.enable`: Whether to enable the local disk cache. Default: `true`.
+
+  - When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).
+  - When this property is set to `false`, the data is loaded only into the object storage.
+
+  > **NOTE**
+  >
+  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/Configuration.md#be-configuration-items).
+
+- `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
+
+  > **NOTE**
+  >
+  > This property is available only when `datacache.enable` is set to `true`.
+
+- `enable_async_write_back`: Whether to allow data to be written into object storage asynchronously. Default: `false`.
+
+  - When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
+  - When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
 
 ## Examples
 
@@ -788,3 +854,11 @@ PROPERTIES(
     "enable_persistent_index" = "true"
 );
 ```
+
+## References
+
+- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+- [USE](USE.md)
+- [ALTER TABLE](ALTER%20TABLE.md)
+- [DROP TABLE](DROP%20TABLE.md)

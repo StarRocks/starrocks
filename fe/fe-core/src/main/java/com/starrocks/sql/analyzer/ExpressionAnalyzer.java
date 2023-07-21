@@ -109,6 +109,10 @@ public class ExpressionAnalyzer {
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
+        if (session == null) {
+            // For some load requests, the ConnectContext will be null
+            session = new ConnectContext();
+        }
         this.session = session;
     }
 
@@ -363,6 +367,7 @@ public class ExpressionAnalyzer {
             }
 
             List<String> fieldNames = node.getFieldNames();
+            List<String> rightNames = Lists.newArrayList();
             Type tmpType = child.getType();
             for (String fieldName : fieldNames) {
                 StructType structType = (StructType) tmpType;
@@ -371,9 +376,12 @@ public class ExpressionAnalyzer {
                     throw new SemanticException(String.format("Struct subfield '%s' cannot be resolved", fieldName),
                             node.getPos());
                 }
+                rightNames.add(structField.getName());
                 tmpType = structField.getType();
             }
 
+            // set right field names
+            node.setFieldNames(rightNames);
             node.setType(tmpType);
             return null;
         }
@@ -796,10 +804,15 @@ public class ExpressionAnalyzer {
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
 
+            if (compatibleType == Type.INVALID) {
+                throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
+                        Collectors.joining(",")) + ") of in predict are not compatible", node.getPos());
+            }
+
             for (Expr child : node.getChildren()) {
                 Type type = child.getType();
-                if (type.isJsonType()) {
-                    throw new SemanticException("InPredicate of JSON is not supported", child.getPos());
+                if (type.isJsonType() && queryExpressions.size() > 0) { // TODO: enable it after support join on JSON
+                    throw new SemanticException("In predicate of JSON does not support subquery", child.getPos());
                 }
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
@@ -900,7 +913,8 @@ public class ExpressionAnalyzer {
 
             for (Expr expr : node.getChildren()) {
                 if (expr.getType().isOnlyMetricType() ||
-                        (expr.getType().isComplexType() && !(node instanceof IsNullPredicate))) {
+                        (expr.getType().isComplexType() && !(node instanceof IsNullPredicate) &&
+                                !(node instanceof InPredicate))) {
                     throw new SemanticException(
                             "HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate", node.getPos());
                 }
@@ -1224,12 +1238,12 @@ public class ExpressionAnalyzer {
                         }
 
                         String name = ((StringLiteral) node.getChild(i)).getValue();
-                        if (check.contains(name)) {
+                        if (check.contains(name.toLowerCase())) {
                             throw new SemanticException("named_struct contains duplicate subfield name: " +
                                     name + " at " + (i + 1) + "-th input", node.getPos());
                         }
 
-                        check.add(name);
+                        check.add(name.toLowerCase());
                     }
                     break;
                 }

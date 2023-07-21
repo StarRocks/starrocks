@@ -48,6 +48,8 @@ struct AutoIncrementPartialUpdateState {
     std::unique_ptr<Column> write_column;
     Rowset* rowset;
     TabletSchemaCSPtr schema;
+    // auto increment column id in partial segment file
+    // but not in full tablet schema
     uint32_t id;
     uint32_t segment_id;
     std::vector<uint32_t> rowids;
@@ -130,7 +132,7 @@ private:
 
     Status _prepare_auto_increment_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
                                                          EditVersion latest_applied_version,
-                                                         std::vector<uint32_t> column_id);
+                                                         const std::vector<uint32_t>& column_id);
 
     Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
                                        EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,

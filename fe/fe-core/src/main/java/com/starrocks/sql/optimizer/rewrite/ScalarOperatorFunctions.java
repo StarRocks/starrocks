@@ -218,8 +218,8 @@ public class ScalarOperatorFunctions {
         }
         // unix style
         if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
-            DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
-            return ConstantOperator.createVarchar(builder.toFormatter().format(date.getDatetime()));
+            DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar());
+            return ConstantOperator.createVarchar(builder.format(date.getDatetime()));
         } else {
             String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));
             return ConstantOperator.createVarchar(result);
@@ -228,23 +228,22 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
-        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+        DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
         String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
             LocalDateTime ldt;
             try {
-                ldt = LocalDateTime.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
             } catch (DateTimeParseException e) {
                 // If parsing fails, it can be re-parsed from the position of the successful prefix string.
                 // This way datetime string can use incomplete format
                 // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
-                ldt = LocalDateTime.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT)
+                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
                         .parse(dateStr.substring(0, e.getErrorIndex())));
             }
             return ConstantOperator.createDatetime(ldt, Type.DATETIME);
         } else {
-            LocalDate ld = LocalDate.from(
-                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+            LocalDate ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
             return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATETIME);
         }
     }
@@ -385,11 +384,15 @@ public class ScalarOperatorFunctions {
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
         return dateFormat(dl, fmtLiteral);
     }
-
-    @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)
+    @ConstantFunction.List(list = {
+        @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME),
+        @ConstantFunction(name = "current_timestamp", argTypes = {}, returnType = DATETIME),
+        @ConstantFunction(name = "localtime", argTypes = {}, returnType = DATETIME),
+        @ConstantFunction(name = "localtimestamp", argTypes = {}, returnType = DATETIME)
+    })
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
-        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetime(startTime);
     }
@@ -430,7 +433,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "utc_timestamp", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator utcTimestamp() {
         // for consistency with mysql, ignore milliseconds
-        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime() / 1000 * 1000)
+        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         return ConstantOperator.createDatetime(utcStartTime);
     }

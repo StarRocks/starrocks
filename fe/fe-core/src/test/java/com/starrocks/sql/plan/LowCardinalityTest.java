@@ -316,7 +316,7 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:Decode\n" +
                 "  |  <dict id 10> : <string id 3>"));
         String thrift = getThriftPlan(sql);
-        Assert.assertTrue(thrift.contains("TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
+        Assert.assertTrue(thrift.contains("TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1]"));
     }
 
     @Test
@@ -454,8 +454,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <slot 14> : DictExpr(12: S_ADDRESS,[upper(<place-holder>)])"));
         Assert.assertFalse(plan.contains("common expressions"));
         plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[6D 6F 63 6B], ids:[1])]"));
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[6D 6F 63 6B], ids:[1])]"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[6D 6F 63 6B], ids:[1]"));
 
         sql = "select count(*) from supplier group by S_ADDRESS";
         plan = getFragmentPlan(sql);
@@ -466,16 +465,16 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select count(*) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1]"));
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
+                "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1]"));
 
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
         System.out.println(plan);
         Assert.assertTrue(plan, plan.contains(
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                        "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])]"));
+                        "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1]"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -870,7 +869,7 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks', true, false)";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan,
-                plan.contains("PREDICATES: DictExpr(12: S_ADDRESS,[if(<place-holder> = 'kks', TRUE, FALSE)])"));
+                plan.contains("PREDICATES: DictExpr(12: S_ADDRESS,[<place-holder> = 'kks'])"));
 
         // Test single input Expression
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks', cast(S_ADDRESS as boolean), false)";
@@ -1035,10 +1034,10 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getThriftPlan(sql);
         Assert.assertEquals(plan.split("\n").length, 3);
         assertContains(plan.split("\n")[0], "query_global_dicts:" +
-                "[TGlobalDict(columnId:19, strings:[6D 6F 63 6B], ids:[1]), " +
-                "TGlobalDict(columnId:20, strings:[6D 6F 63 6B], ids:[1]), " +
-                "TGlobalDict(columnId:21, strings:[6D 6F 63 6B], ids:[1]), " +
-                "TGlobalDict(columnId:22, strings:[6D 6F 63 6B], ids:[1])])");
+                "[TGlobalDict(columnId:19, strings:[6D 6F 63 6B], ids:[1], version:1), " +
+                "TGlobalDict(columnId:20, strings:[6D 6F 63 6B], ids:[1], version:1), " +
+                "TGlobalDict(columnId:21, strings:[6D 6F 63 6B], ids:[1], version:1), " +
+                "TGlobalDict(columnId:22, strings:[6D 6F 63 6B], ids:[1], version:1)])");
         // the fragment on the top don't have to send global dicts
         sql = "select upper(ST_S_ADDRESS),\n" +
                 "    upper(ST_S_COMMENT)\n" +
@@ -1494,7 +1493,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "select x1.a, x1.b from v1 x1 join v1 x2 on x1.a=x2.a";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(
-                plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1])"));
+                plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1]"));
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(false);
     }
@@ -1615,15 +1614,14 @@ public class LowCardinalityTest extends PlanTestBase {
                 "if(S_ADDRESS > 'a' and S_ADDRESS < 'b', true, false)";
         String plan = getVerboseExplain(sql);
         assertContains(plan,
-                "DictExpr(10: S_ADDRESS,[if((<place-holder> > 'a') " +
-                        "AND (<place-holder> < 'b'), TRUE, FALSE)])");
+                "DictExpr(10: S_ADDRESS,[<place-holder> > 'a']), " +
+                        "DictExpr(10: S_ADDRESS,[<place-holder> < 'b'])");
 
         sql = "select count(*) from supplier group by S_ADDRESS having " +
                 "if(not S_ADDRESS like '%a%' and S_ADDRESS < 'b', true, false)";
         plan = getVerboseExplain(sql);
         assertContains(plan,
-                "DictExpr(10: S_ADDRESS,[if((NOT (<place-holder> LIKE '%a%')) " +
-                        "AND (<place-holder> < 'b'), TRUE, FALSE)])");
+                "NOT (3: S_ADDRESS LIKE '%a%'), [3: S_ADDRESS, VARCHAR, false] < 'b'");
     }
 
     @Test

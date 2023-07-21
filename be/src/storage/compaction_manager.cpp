@@ -139,7 +139,6 @@ void CompactionManager::init_max_task_num(int32_t num) {
 }
 
 void CompactionManager::update_candidates(std::vector<CompactionCandidate> candidates) {
-    size_t erase_num = 0;
     {
         std::lock_guard lg(_candidates_mutex);
         // TODO(meegoo): This is very inefficient to implement, just to fix bug, it will refactor later
@@ -148,7 +147,6 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             for (auto& candidate : candidates) {
                 if (candidate.tablet->tablet_id() == iter->tablet->tablet_id()) {
                     iter = _compaction_candidates.erase(iter);
-                    erase_num++;
                     has_erase = true;
                     break;
                 }

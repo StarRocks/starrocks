@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -24,9 +25,11 @@ import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -47,9 +50,9 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public StorageVolume getStorageVolume(String storageVolumeId) {
+    public StorageVolume getStorageVolume(String svId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return idToSV.get(storageVolumeId);
+            return idToSV.get(svId);
         }
     }
 
@@ -113,5 +116,50 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             idToSV.remove(log.getId());
         }
+    }
+
+    @Override
+    public boolean bindDbToStorageVolume(String svName, long dbId) {
+        return true;
+    }
+
+    @Override
+    public void replayBindDbToStorageVolume(String svId, long dbId) {
+
+    }
+
+    @Override
+    public void unbindDbToStorageVolume(long dbId) {
+
+    }
+
+    @Override
+    public boolean bindTableToStorageVolume(String svName, long dbId, long tableId) {
+        return true;
+    }
+
+    @Override
+    public void replayBindTableToStorageVolume(String svId, long tableId) {
+
+    }
+
+    @Override
+    public void unbindTableToStorageVolume(long tableId) {
+
+    }
+
+    @Override
+    public String createBuiltinStorageVolume() {
+        return "";
+    }
+
+    @Override
+    public void validateStorageVolumeConfig() throws InvalidConfException {
+
+    }
+
+    @Override
+    protected Set<Long> getTableBindingsOfBuiltinStorageVolume() {
+        return new HashSet<>();
     }
 }

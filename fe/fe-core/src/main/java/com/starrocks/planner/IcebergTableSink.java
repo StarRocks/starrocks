@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
@@ -92,6 +93,10 @@ public class IcebergTableSink extends DataSink {
 
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
+    }
+
+    public static boolean isUnSupportedPartitionColumnType(Type type) {
+        return type.isFloat() || type.isDecimalOfAnyVersion() || type.isDatetime();
     }
 
     @Override

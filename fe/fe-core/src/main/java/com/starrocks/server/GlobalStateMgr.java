@@ -116,6 +116,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -218,8 +219,8 @@ import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
@@ -231,6 +232,7 @@ import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -1299,9 +1301,7 @@ public class GlobalStateMgr {
             throw t;
         }
 
-        if (RunMode.allowCreateLakeTable()) {
-            createOrUpdateBuiltinStorageVolume();
-        }
+        createBuiltinStorageVolume();
     }
 
     // start all daemon threads only running on Master
@@ -2469,7 +2469,7 @@ public class GlobalStateMgr {
             List<String> colDef = Lists.newArrayList();
             for (Column column : table.getBaseSchema()) {
                 StringBuilder colSb = new StringBuilder();
-                colSb.append(column.getName());
+                colSb.append("`" + column.getName() + "`");
                 if (!Strings.isNullOrEmpty(column.getComment())) {
                     colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
                 }
@@ -3504,9 +3504,13 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
-        if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+        if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+            try {
+                PrivilegeChecker.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                        ctx.getCurrentRoleIds(), newCatalogName);
+            } catch (AccessDeniedException e) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            }
         }
         ctx.setCurrentCatalog(newCatalogName);
         ctx.setDatabase("");
@@ -3531,9 +3535,13 @@ public class GlobalStateMgr {
             if (!catalogMgr.catalogExists(newCatalogName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
-            if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+                try {
+                    PrivilegeChecker.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                            ctx.getCurrentRoleIds(), newCatalogName);
+                } catch (AccessDeniedException e) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                }
             }
             ctx.setCurrentCatalog(newCatalogName);
             dbName = parts[1];
@@ -3546,7 +3554,10 @@ public class GlobalStateMgr {
 
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
-        if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
+        try {
+            PrivilegeChecker.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(),
+                    ctx.getCurrentRoleIds(), ctx.getCurrentCatalog(), dbName);
+        } catch (AccessDeniedException e) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     ctx.getQualifiedUser(), dbName);
         }
@@ -4039,13 +4050,16 @@ public class GlobalStateMgr {
         return metaContext;
     }
 
-    public void createOrUpdateBuiltinStorageVolume() {
+    public void createBuiltinStorageVolume() {
         try {
-            ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
-            String builtinStorageVolumeId = storageVolumeMgr
-                    .getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME).getId();
-            authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
-        } catch (DdlException | AnalysisException | AlreadyExistsException e) {
+            String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
+            if (!builtinStorageVolumeId.isEmpty()) {
+                authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
+            }
+        } catch (InvalidConfException e) {
+            LOG.fatal(e.getMessage());
+            System.exit(-1);
+        } catch (DdlException | AlreadyExistsException e) {
             LOG.warn("Failed to create or update builtin storage volume", e);
         } catch (PrivilegeException e) {
             LOG.warn("Failed to grant builtin storage volume usage to public role", e);

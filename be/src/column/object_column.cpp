@@ -193,7 +193,7 @@ void ObjectColumn<T>::fill_default(const Filter& filter) {
 }
 
 template <typename T>
-Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
+void ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     size_t replace_num = src.size();
     for (size_t i = 0; i < replace_num; i++) {
@@ -201,7 +201,6 @@ Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) 
         _pool[indexes[i]] = *obj_col.get_object(i);
     }
     _cache_ok = false;
-    return Status::OK();
 }
 
 template <typename T>

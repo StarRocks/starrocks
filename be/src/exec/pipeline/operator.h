@@ -131,6 +131,10 @@ public:
     // 3. operators decorated by MultilaneOperator except case 2: e.g. ProjectOperator, Chunk AccumulateOperator and etc.
     virtual Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) { return Status::OK(); }
 
+    // Some operator's metrics are updated in the finishing stage, which is not suitable to the runtime profile mechanism.
+    // So we add this function for manual updation of metrics when reporting the runtime profile.
+    virtual void update_metrics(RuntimeState* state) {}
+
     virtual size_t output_amplification_factor() const { return 1; }
     enum class OutputAmplificationType { ADD, MAX };
     virtual OutputAmplificationType intra_pipeline_amplification_type() const { return OutputAmplificationType::MAX; }
@@ -225,9 +229,14 @@ public:
 
     // Adjusts the execution mode of the operator (will only be called by the OperatorMemoryResourceManager component)
     virtual void set_execute_mode(int performance_level) {}
+    // @TODO(silverbullet233): for an operator, the way to reclaim memory is either spill
+    // or push the buffer data to the downstream operator.
+    // Maybe we don’t need to have the concepts of spillable and releasable, and we can use reclaimable instead.
+    // Later, we need to refactor here.
     virtual bool spillable() const { return false; }
     // Operator can free memory/buffer early
     virtual bool releaseable() const { return false; }
+    virtual void enter_release_memory_mode() {}
     spill::OperatorMemoryResourceManager& mem_resource_manager() { return _mem_resource_manager; }
 
     // the memory that can be freed by the current operator

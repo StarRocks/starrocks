@@ -414,8 +414,12 @@ public class DatabaseTransactionMgr {
             return waiter;
         }
         // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
-        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
+        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())
+                && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+        }
+        if (tabletCommitInfos != null && !tabletCommitInfos.isEmpty()) {
+            transactionState.setTabletCommitInfos(tabletCommitInfos);
         }
 
         // update transaction state extra if exists
@@ -818,6 +822,10 @@ public class DatabaseTransactionMgr {
                             // which means publish version task finished in replica
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errReplicas.contains(replica.getId())) {
+                                    // if replica not in can load state, skip it.
+                                    if (!replica.getState().canLoad()) {
+                                        continue;
+                                    }
                                     // success healthy replica condition:
                                     // 1. version is equal to partition's visible version
                                     // 2. publish version task in this replica has finished
@@ -959,6 +967,15 @@ public class DatabaseTransactionMgr {
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errorReplicaIds.contains(replica.getId())
                                         && replica.getLastFailedVersion() < 0) {
+                                    // if replica not in can load state, skip it.
+                                    if (!replica.getState().canLoad()) {
+                                        continue;
+                                    }
+                                    // if replica not commit yet, skip it. This may happen when it's just create by clone.
+                                    if (!transactionState.tabletCommitInfosContainsReplica(tablet.getId(), 
+                                            replica.getBackendId())) {
+                                        continue;
+                                    }
                                     // this means the replica is a healthy replica,
                                     // it is healthy in the past and does not have error in current load
                                     if (replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {

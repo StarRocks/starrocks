@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -32,9 +31,8 @@ import org.apache.commons.lang3.StringUtils;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.text.DecimalFormat;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
@@ -75,11 +73,6 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     public static final ConstantOperator TRUE = ConstantOperator.createBoolean(true);
     public static final ConstantOperator FALSE = ConstantOperator.createBoolean(false);
 
-    // Don't need fixWidth
-    private static final DateTimeFormatter DATE_TIME_FORMATTER_MS =
-            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f", false)
-                    .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
         if (null == dateTime || dateTime.isBefore(MIN_DATETIME) || dateTime.isAfter(MAX_DATETIME)) {
             throw new SemanticException("Invalid date value: " + (dateTime == null ? "NULL" : dateTime.toString()));
@@ -91,7 +84,6 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             throw new SemanticException("Invalid float/double value: " + value);
         }
     }
-
 
     private final Object value;
     private final boolean isNull;
@@ -194,7 +186,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     }
 
     public boolean isZero() {
-        boolean isZero = false;
+        boolean isZero;
+        if (isNull || value == null) {
+            return false;
+        }
         if (type.isInt()) {
             Integer val = (Integer) value;
             isZero = (val.compareTo(0) == 0);
@@ -321,14 +316,20 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             if (time.getNano() != 0) {
                 return time.format(DateUtils.DATE_TIME_MS_FORMATTER_UNIX);
             }
-            return time.format(DateUtils.DATE_TIME_FORMATTER);
+            return time.format(DateUtils.DATE_TIME_FORMATTER_UNIX);
         } else if (type.isDate()) {
             LocalDateTime time = (LocalDateTime) Optional.ofNullable(value).orElse(LocalDateTime.MIN);
-            return time.format(DateUtils.DATE_FORMATTER);
-        } else if (type.isDouble()) {
+            return time.format(DateUtils.DATE_FORMATTER_UNIX);
+        } else if (type.isFloatingPointType()) {
             double val = (double) Optional.ofNullable(value).orElse((double) 0);
             BigDecimal decimal = BigDecimal.valueOf(val);
-            return decimal.toPlainString();
+            return decimal.stripTrailingZeros().toPlainString();
+        } else if (type.isDecimalOfAnyVersion()) {
+            // align zero, keep same with BE
+            int scale = ((ScalarType) type).getScalarScale();
+            BigDecimal val = (BigDecimal) value;
+            DecimalFormat df = new DecimalFormat((scale == 0 ? "0" : "0.") + StringUtils.repeat("0", scale));
+            return df.format(val);
         }
 
         return String.valueOf(value);
@@ -465,32 +466,12 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (desc.isDouble()) {
             return ConstantOperator.createDouble(Double.parseDouble(childString));
         } else if (desc.isDate() || desc.isDatetime()) {
-            DateLiteral literal;
             String dateStr = StringUtils.strip(childString, "\r\n\t ");
-            try {
-                // DateLiteral will throw Exception if cast failed
-                // 1.try cast by format "yyyy-MM-dd HH:mm:ss"
-                if (dateStr.length() <= "yyyy-MM-dd HH:mm:ss".length()) {
-                    literal = new DateLiteral(dateStr, Type.DATETIME);
-                } else {
-                    // try cast by format "yyyy-MM-dd HH:mm:ss.SSS"
-                    LocalDateTime localDateTime = LocalDateTime.from(DATE_TIME_FORMATTER_MS.parse(dateStr));
-                    if (desc.isDate()) {
-                        // The date type only needs to retain the precision of the day
-                        localDateTime = localDateTime.truncatedTo(ChronoUnit.DAYS);
-                    }
-                    return ConstantOperator.createDatetime(localDateTime, desc);
-                }
-            } catch (Exception e) {
-                // 2.try cast by format "yyyy-MM-dd", will original operator if failed
-                literal = new DateLiteral(dateStr, Type.DATE);
-            }
-
+            LocalDateTime dateTime = DateUtils.parseStrictDateTime(dateStr);
             if (Type.DATE.equals(desc)) {
-                literal.castToDate();
+                dateTime = dateTime.truncatedTo(ChronoUnit.DAYS);
             }
-
-            return ConstantOperator.createDatetime(literal.toLocalDateTime(), desc);
+            return ConstantOperator.createDatetime(dateTime, desc);
         } else if (desc.isDecimalV2()) {
             return ConstantOperator.createDecimal(BigDecimal.valueOf(Double.parseDouble(childString)), Type.DECIMALV2);
         } else if (desc.isDecimalV3()) {

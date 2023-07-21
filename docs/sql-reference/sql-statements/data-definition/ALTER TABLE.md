@@ -4,6 +4,10 @@
 
 Modifies an existing table.
 
+> **NOTE**
+>
+> This operation requires the ALTER privilege on the destination table.
+
 ## Syntax
 
 ```SQL
@@ -11,14 +15,15 @@ ALTER TABLE [database.]table
 alter_clause1[, alter_clause2, ...]
 ```
 
-`alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, and swap.
+`alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, swap, and comment.
 
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - rollup: creates or drops a rollup index.
 - schema change: adds, drops, or reorder columns, or modify column type.
 - rename: renames a table, rollup index, or partition. **Note that column name cannot be modified.**
-- index: modifies index (only bitmap index can be modified.)
-- swap: atomic exchange of two tables
+- index: modifies index (only Bitmap index can be modified).
+- swap: atomic exchange of two tables.
+- comment: modifies the table comment (supported from v3.1 onwards).
 
 > **NOTE**
 >
@@ -307,6 +312,17 @@ Note:
 1. All columns in the index must be written.
 2. The value column is listed after the key column.
 
+#### Add a generated column
+
+Syntax:
+
+```sql
+ALTER TABLE [database.]table
+ADD col_name data_type [NULL] AS generation_expr [COMMENT 'string']
+```
+
+You can add a generated column and specify its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
+
 #### Modify table properties
 
 Currently, StarRocks supports modifying bloomfilter columns, colocate_with property, dynamic_partition property, enable_persistent_index property, replication_num property and default.replication_num property.
@@ -381,6 +397,14 @@ Syntax:
 ```sql
 ALTER TABLE [database.]table
 SWAP WITH table_name;
+```
+
+### Alter table comment (from v3.1)
+
+Syntax:
+
+```sql
+ALTER TABLE [database.]table COMMENT = "<new table comment>";
 ```
 
 ## Examples
@@ -675,3 +699,9 @@ SWAP WITH table_name;
     ```sql
     ALTER TABLE table1 SWAP WITH table2
     ```
+
+## References
+
+- [CREATE TABLE](CREATE%20TABLE.md)
+- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
+- [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md)

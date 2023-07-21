@@ -43,23 +43,22 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class SelectStmtTest {
     private static StarRocksAssert starRocksAssert;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
@@ -109,13 +108,13 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testGroupByConstantExpression() throws Exception {
+    void testGroupByConstantExpression() throws Exception {
         String sql = "SELECT k1 - 4*60*60 FROM baseall GROUP BY k1 - 4*60*60";
         starRocksAssert.query(sql).explainQuery();
     }
 
     @Test
-    public void testWithWithoutDatabase() throws Exception {
+    void testWithWithoutDatabase() throws Exception {
         String sql = "with tmp as (select count(*) from db1.tbl1) select * from tmp;";
         starRocksAssert.withoutUseDatabase();
         starRocksAssert.query(sql).explainQuery();
@@ -128,7 +127,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testDataGripSupport() throws Exception {
+    void testDataGripSupport() throws Exception {
         String sql = "select schema();";
         starRocksAssert.query(sql).explainQuery();
         sql = "select\n" +
@@ -140,7 +139,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testEqualExprNotMonotonic() throws Exception {
+    void testEqualExprNotMonotonic() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         String sql = "select k1 from db1.baseall where (k1=10) = true";
         String expectString =
@@ -154,7 +153,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testCurrentUserFunSupport() throws Exception {
+    void testCurrentUserFunSupport() throws Exception {
         String sql = "select current_user()";
         starRocksAssert.query(sql).explainQuery();
         sql = "select current_user";
@@ -162,7 +161,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testTimeFunSupport() throws Exception {
+    void testTimeFunSupport() throws Exception {
         String sql = "select current_timestamp()";
         starRocksAssert.query(sql).explainQuery();
         sql = "select current_timestamp";
@@ -186,14 +185,14 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testDateTruncUpperCase() throws Exception {
+    void testDateTruncUpperCase() throws Exception {
         String sql = "select date_trunc('MONTH', CAST('2020-11-04 11:12:13' AS DATE));";
         ConnectContext ctx = starRocksAssert.getCtx();
         UtFrameUtils.parseStmtWithNewParser(sql, ctx);
     }
 
     @Test
-    public void testSelectFromTabletIds() throws Exception {
+    void testSelectFromTabletIds() throws Exception {
         FeConstants.runningUnitTest = true;
         ShowResultSet tablets = starRocksAssert.showTablet("db1", "partition_table");
         List<String> tabletIds = tablets.getResultRows().stream().map(r -> r.get(0)).collect(Collectors.toList());
@@ -214,7 +213,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testNegateEqualForNullInWhereClause() throws Exception {
+    void testNegateEqualForNullInWhereClause() throws Exception {
         String[] queryList = {
                 "select * from db1.tbl1 where not(k1 <=> NULL)",
                 "select * from db1.tbl1 where not(k1 <=> k2)",
@@ -228,7 +227,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testSimplifiedPredicateRuleApplyToNegateEuqualForNull() throws Exception {
+    void testSimplifiedPredicateRuleApplyToNegateEuqualForNull() throws Exception {
         String[] queryList = {
                 "select not(k1 <=> NULL) from db1.tbl1",
                 "select not(NULL <=> k1) from db1.tbl1",
@@ -251,7 +250,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testFoldCastOfChildExprsOfSetOperation() throws Exception {
+    void testFoldCastOfChildExprsOfSetOperation() throws Exception {
         String sql0 = "select cast('abcdefg' as varchar(2)) a, cast('abc' as  varchar(3)) b\n" +
                 "intersect\n" +
                 "select cast('aa123456789' as varchar) a, cast('abcd' as varchar(4)) b";
@@ -272,14 +271,13 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testCatalogFunSupport() throws Exception {
+    void testCatalogFunSupport() throws Exception {
         String sql = "select catalog()";
         starRocksAssert.query(sql).explainQuery();
     }
 
     @Test
-    public void testBanSubqueryAppearsInLeftSideChildOfInPredicates()
-            throws Exception {
+    void testBanSubqueryAppearsInLeftSideChildOfInPredicates() {
         String sql = "select k1, count(k2) from db1.tbl1 group by k1 " +
                 "having (exists (select k1 from db1.tbl1 where NULL)) in (select k1 from db1.tbl1 where NULL);";
         try {
@@ -290,7 +288,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testGroupByCountDistinctWithSkewHint() throws Exception {
+    void testGroupByCountDistinctWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql =
                 "select cast(k1 as int), count(distinct [skew] cast(k2 as int)) from db1.tbl1 group by cast(k1 as int)";
@@ -303,7 +301,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
+    void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         // array is not supported now
         String sql = "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) t1 group by b1";
@@ -341,7 +339,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testGroupByMultiColumnCountDistinctWithSkewHint() throws Exception {
+    void testGroupByMultiColumnCountDistinctWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql =
                 "select cast(k1 as int), k3, count(distinct [skew] cast(k2 as int)) from db1.tbl1 group by cast(k1 as int), k3";
@@ -355,7 +353,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testGroupByMultiColumnMultiCountDistinctWithSkewHint() throws Exception {
+    void testGroupByMultiColumnMultiCountDistinctWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql =
                 "select k1, k3, count(distinct [skew] k2), count(distinct k4) from db1.tbl1 group by k1, k3";
@@ -369,7 +367,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testGroupByCountDistinctUseTheSameColumn()
+    void testGroupByCountDistinctUseTheSameColumn()
             throws Exception {
         FeConstants.runningUnitTest = true;
         String sql =
@@ -380,7 +378,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testScalarCorrelatedSubquery() {
+    void testScalarCorrelatedSubquery() {
         try {
             String sql = "select *, (select [a.k1,a.k2] from db1.tbl1 a where a.k4 = b.k1) as r from db1.baseall b;";
             UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
@@ -399,37 +397,89 @@ public class SelectStmtTest {
         }
     }
 
-    @Test
-    public void testMultiDistinctMultiColumnWithLimit() throws Exception {
-        String[] sqlList = {
-                "select count(distinct k1, k2), count(distinct k3) from db1.tbl1 limit 1",
-                "select * from (select count(distinct k1, k2), count(distinct k3) from db1.tbl1) t1 limit 1",
-                "with t1 as (select count(distinct k1, k2) as a, count(distinct k3) as b from db1.tbl1) " +
-                        "select * from t1 limit 1",
-                "select count(distinct k1, k2), count(distinct k3) from db1.tbl1 group by k4 limit 1",
-                "select * from (select count(distinct k1, k2), count(distinct k3) from db1.tbl1 group by k4, k3) t1" +
-                        " limit 1",
-                "with t1 as (select count(distinct k1, k2) as a, count(distinct k3) as b from db1.tbl1 " +
-                        "group by k2, k3, k4) select * from t1 limit 1",
-        };
-        boolean cboCteReuse = starRocksAssert.getCtx().getSessionVariable().isCboCteReuse();
-        try {
-            starRocksAssert.getCtx().getSessionVariable().setCboCteReuse(true);
-            for (String sql : sqlList) {
-                UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            }
-            starRocksAssert.getCtx().getSessionVariable().setCboCteReuse(false);
-            for (String sql : sqlList) {
-                UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            }
+    @ParameterizedTest
+    @MethodSource("multiDistinctMultiColumnWithLimitSqls")
+    void testMultiDistinctMultiColumnWithLimit(String sql, String pattern) throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan, plan.contains(pattern));
+    }
 
-        } finally {
-            starRocksAssert.getCtx().getSessionVariable().setCboCteReuse(cboCteReuse);
-        }
+
+    private static Stream<Arguments> multiDistinctMultiColumnWithLimitSqls() {
+        String[][] sqlList = {
+                {"select count(distinct k1, k2), count(distinct k3) from db1.tbl1 limit 1",
+                        "18:NESTLOOP JOIN\n" +
+                                "  |  join op: CROSS JOIN\n" +
+                                "  |  colocate: false, reason: \n" +
+                                "  |  limit: 1\n" +
+                                "  |  \n" +
+                                "  |----17:EXCHANGE"},
+                {"select * from (select count(distinct k1, k2), count(distinct k3) from db1.tbl1) t1 limit 1",
+                     "18:NESTLOOP JOIN\n" +
+                             "  |  join op: CROSS JOIN\n" +
+                             "  |  colocate: false, reason: \n" +
+                             "  |  limit: 1\n" +
+                             "  |  \n" +
+                             "  |----17:EXCHANGE"
+                },
+                {"with t1 as (select count(distinct k1, k2) as a, count(distinct k3) as b from db1.tbl1) " +
+                        "select * from t1 limit 1",
+                        "18:NESTLOOP JOIN\n" +
+                                "  |  join op: CROSS JOIN\n" +
+                                "  |  colocate: false, reason: \n" +
+                                "  |  limit: 1\n" +
+                                "  |  \n" +
+                                "  |----17:EXCHANGE"
+                },
+                {"select count(distinct k1, k2), count(distinct k3) from db1.tbl1 group by k4 limit 1",
+                    "14:Project\n" +
+                            "  |  <slot 5> : 5: count\n" +
+                            "  |  <slot 6> : 6: count\n" +
+                            "  |  limit: 1\n" +
+                            "  |  \n" +
+                            "  13:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                            "  |  colocate: false, reason: \n" +
+                            "  |  equal join conjunct: 9: k4 <=> 11: k4\n" +
+                            "  |  limit: 1"
+                },
+                {"select * from (select count(distinct k1, k2), count(distinct k3) from db1.tbl1 group by k4, k3) t1" +
+                        " limit 1",
+                       "14:Project\n" +
+                               "  |  <slot 5> : 5: count\n" +
+                               "  |  <slot 6> : 6: count\n" +
+                               "  |  limit: 1\n" +
+                               "  |  \n" +
+                               "  13:HASH JOIN\n" +
+                               "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                               "  |  colocate: false, reason: \n" +
+                               "  |  equal join conjunct: 10: k4 <=> 12: k4\n" +
+                               "  |  equal join conjunct: 9: k3 <=> 11: k3\n" +
+                               "  |  limit: 1"
+                },
+                {"with t1 as (select count(distinct k1, k2) as a, count(distinct k3) as b from db1.tbl1 " +
+                        "group by k2, k3, k4) select * from t1 limit 1",
+                        "14:Project\n" +
+                                "  |  <slot 11> : 11: count\n" +
+                                "  |  <slot 12> : 12: count\n" +
+                                "  |  limit: 1\n" +
+                                "  |  \n" +
+                                "  13:HASH JOIN\n" +
+                                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                                "  |  colocate: false, reason: \n" +
+                                "  |  equal join conjunct: 14: k2 <=> 17: k2\n" +
+                                "  |  equal join conjunct: 15: k3 <=> 18: k3\n" +
+                                "  |  equal join conjunct: 16: k4 <=> 19: k4\n" +
+                                "  |  limit: 1"
+                }
+        };
+        return Arrays.stream(sqlList).map(e -> Arguments.of(e[0], e[1]));
     }
 
     @Test
-    public void testSubstringConstantFolding() {
+    void testSubstringConstantFolding() {
         try {
             String sql = "select * from db1.t where dt = \"2022-01-02\" or dt = cast(substring(\"2022-01-03\", 1, 10) as date);";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
@@ -440,7 +490,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testAnalyzeDecimalArithmeticExprIdempotently()
+    void testAnalyzeDecimalArithmeticExprIdempotently()
             throws Exception {
         {
             String sql = "select c0, sum(c2/(1+c1)) as a, sum(c2/(1+c1)) as b from t0 group by c0;";
@@ -473,7 +523,7 @@ public class SelectStmtTest {
                     "  RESULT SINK\n" +
                     "\n" +
                     "  1:AGGREGATE (update finalize)\n" +
-                    "  |  aggregate: sum[(1 / 2.12); args: DECIMAL128; result: DECIMAL128(38,6);" +
+                    "  |  aggregate: sum[(1 / 2.1200); args: DECIMAL128; result: DECIMAL128(38,6);" +
                     " args nullable: true; result nullable: true]\n" +
                     "  |  group by: [1: c0, VARCHAR, false]\n" +
                     "  |  cardinality: 1"));
@@ -500,6 +550,20 @@ public class SelectStmtTest {
                     "  |  4 <-> cast([3: c2, DECIMAL128(24,2), false] as DECIMAL128(38,19)) / 1 + " +
                     "[2: c1, DECIMAL128(24,5), false]\n" +
                     "  |  cardinality: 1"));
+        }
+    }
+
+    @Test
+    void testArraySubfieldsPrune() {
+        try {
+            String sql = "select str_to_map('age=18&sex=1&gender=1','&','=')['age'] AS age, " +
+                    "str_to_map('age=18&sex=1&gender=1','&','=')['sex'] AS sex;";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("str_to_map[([4: split, ARRAY<VARCHAR>, true], '='); " +
+                    "args: INVALID_TYPE,VARCHAR; result: MAP<VARCHAR,VARCHAR>; " +
+                    "args nullable: true; result nullable: true]"));
+        } catch (Exception e) {
+            Assert.fail("Should not throw an exception");
         }
     }
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
@@ -47,6 +46,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
         List<String> validDictCacheColumns = Lists.newArrayList();
+        List<Long> dictCollectedVersions = Lists.newArrayList();
+
         long maxPartitionVersionTime = -1;
         long tableId = table.getId();
         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
@@ -74,10 +75,19 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
                 validDictCacheColumns = partitionCommitInfo.getValidDictCacheColumns();
             }
+            if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
+                dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
+            }
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }
-        for (String column : validDictCacheColumns) {
-            IDictManager.getInstance().updateGlobalDict(tableId, column, maxPartitionVersionTime);
+
+        if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
+            for (int i = 0; i < validDictCacheColumns.size(); i++) {
+                String columnName = validDictCacheColumns.get(i);
+                long collectedVersion = dictCollectedVersions.get(i);
+                IDictManager.getInstance()
+                        .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+            }
         }
     }
 }

@@ -44,6 +44,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.metric.MetricRepo;
@@ -91,10 +92,10 @@ import java.util.Optional;
 public class ConnectProcessor {
     private static final Logger LOG = LogManager.getLogger(ConnectProcessor.class);
 
-    private final ConnectContext ctx;
+    protected final ConnectContext ctx;
     private ByteBuffer packetBuf;
 
-    private StmtExecutor executor = null;
+    protected StmtExecutor executor = null;
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -210,11 +211,11 @@ public class ConnectProcessor {
         if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
             // Some information like username, password in the stmt should not be printed.
             ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQL(parsedStmt));
-        } else if (ctx.getState().isQuery() && containsComment(origStmt)) {
-            // avoid audit log can't replay
+        } else if (parsedStmt == null) {
+            // invalid sql, record the original statement to avoid audit log can't replay
             ctx.getAuditEventBuilder().setStmt(origStmt);
         } else {
-            ctx.getAuditEventBuilder().setStmt(origStmt.replace("\n", " "));
+            ctx.getAuditEventBuilder().setStmt(LogUtil.removeCommentAndLineSeparator(origStmt));
         }
 
         GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
@@ -240,7 +241,7 @@ public class ConnectProcessor {
         return (sql.contains("--")) || sql.contains("#");
     }
 
-    private void addFinishedQueryDetail() {
+    protected void addFinishedQueryDetail() {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
@@ -274,7 +275,7 @@ public class ConnectProcessor {
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
     }
 
-    private void addRunningQueryDetail(StatementBase parsedStmt) {
+    protected void addRunningQueryDetail(StatementBase parsedStmt) {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
@@ -304,7 +305,7 @@ public class ConnectProcessor {
     }
 
     // process COM_QUERY statement,
-    private void handleQuery() {
+    protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
         // convert statement to Java string
         String originStmt = null;

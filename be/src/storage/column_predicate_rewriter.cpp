@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <utility>
 
 #include "column/binary_column.h"
@@ -35,6 +36,7 @@
 #include "simd/simd.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
+#include "storage/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
 
@@ -77,7 +79,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             int code = _column_iterators[cid]->dict_lookup(value.get_slice());
             if (code < 0) {
                 // predicate always false, clear scan range, this will make `get_next` return EOF directly.
-                _scan_range = _scan_range.intersection(SparseRange());
+                _scan_range = _scan_range.intersection(SparseRange<>());
                 continue;
             }
             auto ptr = new_column_eq_predicate(get_type_info(kDictCodeType), cid, std::to_string(code));
@@ -113,7 +115,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             }
             if (codewords.empty()) {
                 // predicate always false, clear scan range.
-                _scan_range = _scan_range.intersection(SparseRange());
+                _scan_range = _scan_range.intersection(SparseRange<>());
                 continue;
             }
             std::vector<std::string> str_codewords;
@@ -175,7 +177,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
                 auto ptr = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
                 i = pool->add(ptr);
             } else {
-                _scan_range = _scan_range.intersection(SparseRange());
+                _scan_range = _scan_range.intersection(SparseRange<>());
                 continue;
             }
         }
@@ -203,7 +205,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
                 auto ptr = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
                 i = pool->add(ptr);
             } else {
-                _scan_range = _scan_range.intersection(SparseRange());
+                _scan_range = _scan_range.intersection(SparseRange<>());
                 continue;
             }
         }
@@ -224,7 +226,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             ASSIGN_OR_RETURN(bool non_empty,
                              _rewrite_expr_predicate(pool, pred, dict_column, code_column, field->is_nullable(), &ptr));
             if (!non_empty) {
-                _scan_range = _scan_range.intersection(SparseRange());
+                _scan_range = _scan_range.intersection(SparseRange<>());
             } else {
                 i = pool->add(ptr);
             }
@@ -302,7 +304,25 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
     const auto* pred = down_cast<const ColumnExprPredicate*>(raw_pred);
-    RETURN_IF_ERROR(pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size));
+    size_t chunk_size = std::min<size_t>(pred->runtime_state()->chunk_size(), std::numeric_limits<uint16_t>::max());
+
+    if (value_size <= chunk_size) {
+        RETURN_IF_ERROR(pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size));
+    } else {
+        auto dict_column = raw_dict_column->clone_empty();
+        SparseRange<> range(0, value_size);
+        auto iter = range.new_iterator();
+        auto selection_cursor = selection.data();
+        while (iter.has_more()) {
+            auto next_range = iter.next(chunk_size);
+            size_t num_rows = next_range.span_size();
+            DCHECK_LE(next_range.begin() + num_rows, raw_dict_column->size());
+            dict_column->append(*raw_dict_column, next_range.begin(), num_rows);
+            RETURN_IF_ERROR(pred->evaluate(dict_column.get(), selection_cursor, 0, num_rows));
+            dict_column->reset_column();
+            selection_cursor += num_rows;
+        }
+    }
 
     size_t code_size = raw_code_column->size();
     const auto& code_column = ColumnHelper::cast_to<TYPE_INT>(raw_code_column);
@@ -366,9 +386,9 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     return true;
 }
 
-// member function for ConjunctivePredicatesRewriter
+// member function for GlobalDictPredicatesRewriter
 
-Status ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
+Status GlobalDictPredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
     std::vector<uint8_t> selection;
     auto pred_rewrite = [&](std::vector<const ColumnPredicate*>& preds) {
         for (auto& pred : preds) {

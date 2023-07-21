@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -33,6 +34,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.external.starrocks.TableMetaSyncer;
+import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -165,6 +167,13 @@ public class InsertAnalyzer {
             } else if (insertStmt.isStaticKeyPartitionInsert()) {
                 checkStaticKeyPartitionInsert(insertStmt, icebergTable, targetPartitionNames);
             }
+
+            for (Column column : icebergTable.getPartitionColumns()) {
+                if (IcebergTableSink.isUnSupportedPartitionColumnType(column.getType())) {
+                    throw new SemanticException("Unsupported partition column type [%s] for iceberg table sink",
+                            column.getType().canonicalName());
+                }
+            }
         }
 
         // Build target columns
@@ -243,7 +252,9 @@ public class InsertAnalyzer {
         insertStmt.setTargetTable(table);
         insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);
-        session.getDumpInfo().addTable(database.getFullName(), table);
+        if (session.getDumpInfo() != null) {
+            session.getDumpInfo().addTable(database.getFullName(), table);
+        }
     }
 
     private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionNames targetPartitionNames) {
@@ -282,6 +293,10 @@ public class InsertAnalyzer {
 
             if (!partitionValue.isLiteral()) {
                 throw new SemanticException("partition value should be literal expression");
+            }
+
+            if (partitionValue instanceof NullLiteral) {
+                throw new SemanticException("partition value can't be null");
             }
 
             LiteralExpr literalExpr = (LiteralExpr) partitionValue;

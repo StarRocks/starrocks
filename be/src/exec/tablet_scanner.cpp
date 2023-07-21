@@ -170,7 +170,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
         _predicate_free_pool.emplace_back(std::move(p));
     }
 
-    ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
+    GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
     not_pushdown_predicate_rewriter.rewrite_predicate(&_pool);
 
     // Range

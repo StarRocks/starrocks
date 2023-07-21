@@ -87,7 +87,7 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
         params->output_tuple_id = tnode.agg_node.output_tuple_id;
         params->sql_grouping_keys = tnode.agg_node.__isset.sql_grouping_keys ? tnode.agg_node.sql_grouping_keys : "";
         params->sql_aggregate_functions =
-                tnode.agg_node.__isset.sql_aggregate_functions ? tnode.agg_node.sql_grouping_keys : "";
+                tnode.agg_node.__isset.sql_aggregate_functions ? tnode.agg_node.sql_aggregate_functions : "";
         params->has_outer_join_child =
                 tnode.agg_node.__isset.has_outer_join_child && tnode.agg_node.has_outer_join_child;
         params->grouping_exprs = tnode.agg_node.grouping_exprs;
@@ -522,7 +522,7 @@ Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<Statu
         if (chunk_with_st.ok()) {
             if (!chunk_with_st.value()->is_empty()) {
                 RETURN_IF_ERROR(spiller->spill(state, chunk_with_st.value(), *io_executor,
-                                               RESOURCE_TLS_MEMTRACER_GUARD(state)));
+                                               TRACKER_WITH_SPILLER_GUARD(state, spiller)));
             }
         } else if (chunk_with_st.status().is_end_of_file()) {
             // chunk_provider return eos means provider has output all data from hash_map/hash_set.

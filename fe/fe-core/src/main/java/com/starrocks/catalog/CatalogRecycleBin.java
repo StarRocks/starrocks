@@ -731,21 +731,24 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             for (Partition partition : olapTable.getAllPartitions()) {
                 long partitionId = partition.getId();
                 TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-                    long indexId = index.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                    TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium,
-                            table.isCloudNativeTable());
-                    for (Tablet tablet : index.getTablets()) {
-                        long tabletId = tablet.getId();
-                        invertedIndex.addTablet(tabletId, tabletMeta);
-                        if (table.isOlapTableOrMaterializedView()) {
-                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                                invertedIndex.addReplica(tabletId, replica);
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    long physicalPartitionId = physicalPartition.getId();
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                        long indexId = index.getId();
+                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, schemaHash, medium,
+                                table.isCloudNativeTable());
+                        for (Tablet tablet : index.getTablets()) {
+                            long tabletId = tablet.getId();
+                            invertedIndex.addTablet(tabletId, tabletMeta);
+                            if (table.isOlapTableOrMaterializedView()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                    invertedIndex.addReplica(tabletId, replica);
+                                }
                             }
                         }
-                    }
-                } // end for indices
+                    } // end for indices
+                }
             } // end for partitions
         }
 
@@ -786,21 +789,24 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             // storage medium should be got from RecyclePartitionInfo, not from olap table. because olap table
             // does not have this partition any more
             TStorageMedium medium = partitionInfo.getDataProperty().getStorageMedium();
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-                long indexId = index.getId();
-                int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium,
-                        olapTable.isCloudNativeTable());
-                for (Tablet tablet : index.getTablets()) {
-                    long tabletId = tablet.getId();
-                    invertedIndex.addTablet(tabletId, tabletMeta);
-                    if (olapTable.isOlapTableOrMaterializedView()) {
-                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            invertedIndex.addReplica(tabletId, replica);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                long physicalPartitionId = physicalPartition.getId();
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                    long indexId = index.getId();
+                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                    TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, schemaHash, medium,
+                            olapTable.isCloudNativeTable());
+                    for (Tablet tablet : index.getTablets()) {
+                        long tabletId = tablet.getId();
+                        invertedIndex.addTablet(tabletId, tabletMeta);
+                        if (olapTable.isOlapTableOrMaterializedView()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                invertedIndex.addReplica(tabletId, replica);
+                            }
                         }
                     }
-                }
-            } // end for indices
+                } // end for indices
+            } // end for partitions
         }
     }
 

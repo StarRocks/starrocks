@@ -14,18 +14,12 @@
 
 #include "exec/tablet_sink_index_channel.h"
 
-#include "agent/master_info.h"
-#include "agent/utils.h"
-#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
 #include "config.h"
-#include "exec/pipeline/query_context.h"
-#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/tablet_sink.h"
-#include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
@@ -33,16 +27,9 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "simd/simd.h"
-#include "storage/storage_engine.h"
-#include "storage/tablet_manager.h"
-#include "types/hll.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
-#include "util/defer_op.h"
-#include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/uid_util.h"
 
 namespace starrocks::stream_load {
 
@@ -203,6 +190,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
+    const auto& dict_version = _runtime_state->load_dict_versions();
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());
@@ -211,6 +199,10 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
             for (auto& item : dict) {
                 slot->add_global_dict_words(item.first.to_string());
             }
+        }
+        auto it_version = dict_version.find(slot->id());
+        if (it_version != dict_version.end()) {
+            slot->set_global_dict_version(it_version->second);
         }
     }
 
@@ -657,8 +649,6 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     }
 
     std::vector<int64_t> tablet_ids;
-    std::unordered_set<std::string> invalid_dict_cache_column_set;
-    std::unordered_set<std::string> valid_dict_cache_column_set;
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
@@ -668,12 +658,18 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
             commit_info.backendId = _node_id;
         }
 
-        for (auto& col_name : tablet.invalid_dict_cache_columns()) {
-            invalid_dict_cache_column_set.insert(col_name);
+        for (const auto& col_name : tablet.invalid_dict_cache_columns()) {
+            _valid_dict_cache_info.invalid_dict_cache_column_set.insert(col_name);
         }
 
-        for (auto& col_name : tablet.valid_dict_cache_columns()) {
-            valid_dict_cache_column_set.insert(col_name);
+        for (size_t i = 0; i < tablet.valid_dict_cache_columns_size(); ++i) {
+            int64_t version = 0;
+            // Some BEs don't have this field during grayscale upgrades, and we need to detect this case
+            if (tablet.valid_dict_collected_version_size() == tablet.valid_dict_cache_columns_size()) {
+                version = tablet.valid_dict_collected_version(i);
+            }
+            const auto& col_name = tablet.valid_dict_cache_columns(i);
+            _valid_dict_cache_info.valid_dict_cache_column_set.emplace(std::make_pair(col_name, version));
         }
 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
@@ -681,19 +677,6 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         if (tablet_ids.size() < 128) {
             tablet_ids.emplace_back(commit_info.tabletId);
         }
-    }
-
-    // Only send valid and invalid dict cache columns info once
-    if (!_tablet_commit_infos.empty()) {
-        std::vector<std::string> invalid_dict_cache_columns;
-        invalid_dict_cache_columns.assign(invalid_dict_cache_column_set.begin(), invalid_dict_cache_column_set.end());
-        _tablet_commit_infos[0].__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
-
-        std::vector<std::string> valid_dict_cache_columns;
-        std::set_difference(valid_dict_cache_column_set.begin(), valid_dict_cache_column_set.end(),
-                            invalid_dict_cache_column_set.begin(), invalid_dict_cache_column_set.end(),
-                            std::back_inserter(valid_dict_cache_columns));
-        _tablet_commit_infos[0].__set_valid_dict_cache_columns(valid_dict_cache_columns);
     }
 
     if (!tablet_ids.empty()) {
@@ -809,6 +792,25 @@ Status NodeChannel::close_wait(RuntimeState* state) {
     // 2. wait eos request finish
     RETURN_IF_ERROR(_wait_all_prev_request());
 
+    // assign tablet dict infos
+    if (!_tablet_commit_infos.empty()) {
+        std::vector<std::string> invalid_dict_cache_columns;
+        invalid_dict_cache_columns.assign(_valid_dict_cache_info.invalid_dict_cache_column_set.begin(),
+                                          _valid_dict_cache_info.invalid_dict_cache_column_set.end());
+        _tablet_commit_infos[0].__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
+
+        std::vector<std::string> valid_dict_cache_columns;
+        std::vector<int64_t> valid_dict_collected_versions;
+        for (const auto& [name, version] : _valid_dict_cache_info.valid_dict_cache_column_set) {
+            if (_valid_dict_cache_info.invalid_dict_cache_column_set.count(name) == 0) {
+                valid_dict_cache_columns.emplace_back(name);
+                valid_dict_collected_versions.emplace_back(version);
+            }
+        }
+        _tablet_commit_infos[0].__set_valid_dict_cache_columns(valid_dict_cache_columns);
+        _tablet_commit_infos[0].__set_valid_dict_collected_versions(valid_dict_collected_versions);
+    }
+
     // 3. commit tablet infos
     state->append_tablet_commit_infos(_tablet_commit_infos);
 
@@ -854,7 +856,6 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
             auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id());
             return Status::NotFound(msg);
         }
-        std::vector<int64_t> bes;
         for (auto& node_id : location->node_ids) {
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
@@ -869,9 +870,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
                 channel = it->second.get();
             }
             channel->add_tablet(_index_id, tablet);
-            bes.emplace_back(node_id);
         }
-        _tablet_to_be.emplace(tablet.tablet_id(), std::move(bes));
     }
     for (auto& it : _node_channels) {
         RETURN_IF_ERROR(it.second->init(state));

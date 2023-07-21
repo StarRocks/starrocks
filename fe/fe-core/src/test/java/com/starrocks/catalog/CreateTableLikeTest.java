@@ -268,6 +268,15 @@ public class CreateTableLikeTest {
         checkCreateOlapTableLike(automaticTableSql, createTableLikeSql9, newDbName9, existedDbName9, newTblName9,
                 existedTblName9);
 
+        // 10. create table like with properties
+        String sql = "create table test.table_like_10 " +
+                "distributed by random buckets 7 " +
+                "properties('replication_num'='1') " +
+                "like test.duplicate_table_with_null";
+        createTableLike(sql);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb(newDbName).getTable("table_like_10");
+        Assert.assertEquals(new RandomDistributionInfo(7), table.getDefaultDistributionInfo());
+        Assert.assertEquals("1", table.getProperties().get("replication_num"));
     }
 
     @Test

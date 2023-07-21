@@ -1,0 +1,130 @@
+-- name: test_sync_materialized_view_with_colocate @sequential
+create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('colocate_with' = 'colocate_gorup1', 'replication_num' = '3', 'replicated_storage' = 'true');
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
+-- result:
+-- !result
+create materialized view user_tags_mv1
+PROPERTIES ("colocate_mv" = "true")
+as select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+create materialized view user_tags_hll_mv1 
+PROPERTIES ("colocate_mv" = "true")
+as select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+create materialized view user_tags_percential_mv1 
+PROPERTIES ("colocate_mv" = "true")
+as select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
+-- result:
+-- !result
+insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_colocate_mv_index" = "true");
+-- result:
+-- !result
+select * from user_tags_mv1 [_SYNC_MV_] order by user_id;
+-- result:
+1	2023-04-13	None
+2	2023-04-13	None
+3	2023-04-13	None
+-- !result
+select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;
+-- result:
+1	5
+2	1
+3	1
+-- !result
+select user_id, bitmap_union_count(to_bitmap(tag_id)) from user_tags group by user_id order by user_id;
+-- result:
+1	5
+2	1
+3	1
+-- !result
+select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id order by user_id;
+-- result:
+1	5
+2	1
+3	1
+-- !result
+select * from user_tags_hll_mv1 [_SYNC_MV_] order by user_id;
+-- result:
+1	2023-04-13	None
+2	2023-04-13	None
+3	2023-04-13	None
+-- !result
+select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
+-- result:
+1	5
+2	1
+3	1
+-- !result
+select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;
+-- result:
+1	5
+2	1
+3	1
+-- !result
+select user_id, hll_union_agg(hll_hash(tag_id)) x from user_tags group by user_id order by user_id;
+-- result:
+1	5
+2	1
+3	1
+-- !result
+select user_id, hll_cardinality(hll_union(hll_hash(tag_id))) x from user_tags group by user_id order by user_id;
+-- result:
+1	5
+2	1
+3	1
+-- !result
+select * from user_tags_percential_mv1 [_SYNC_MV_] order by user_id;
+-- result:
+1	2023-04-13	None
+2	2023-04-13	None
+3	2023-04-13	None
+-- !result
+select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
+-- result:
+1	5.0
+2	5.0
+3	6.0
+-- !result
+select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id order by user_id;
+-- result:
+1	1.0
+2	5.0
+3	6.0
+-- !result
+select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id order by user_id;
+-- result:
+1	1
+2	5
+3	6
+-- !result
+drop materialized view user_tags_mv1;
+-- result:
+-- !result
+drop materialized view user_tags_hll_mv1;
+-- result:
+-- !result
+drop materialized view user_tags_percential_mv1;
+-- result:
+-- !result

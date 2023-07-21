@@ -343,7 +343,8 @@ private:
     }
 
     static StatusOr<ColumnPtr> _array_remove_generic(const ColumnPtr& array, const ColumnPtr& target) {
-        if (auto nullable = dynamic_cast<const NullableColumn*>(array.get()); nullable != nullptr) {
+        if (array->is_nullable()) {
+            auto nullable = down_cast<const NullableColumn*>(array.get());
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             ASSIGN_OR_RETURN(auto result, _array_remove_non_nullable(*array_col, *target));
             DCHECK_EQ(nullable->size(), result->size());
@@ -665,7 +666,8 @@ private:
     }
 
     static StatusOr<ColumnPtr> _array_contains_generic(const Column& array, const Column& target) {
-        if (auto nullable = dynamic_cast<const NullableColumn*>(&array); nullable != nullptr) {
+        if (array.is_nullable()) {
+            auto nullable = down_cast<const NullableColumn*>(&array);
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             ASSIGN_OR_RETURN(auto result, _array_contains_non_nullable(*array_col, target));
             DCHECK_EQ(nullable->size(), result->size());
@@ -740,7 +742,7 @@ private:
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
                               std::is_same_v<StructColumn, ElementColumn> ||
                               std::is_same_v<JsonColumn, ElementColumn>) {
-                    found = (elements.compare_at(j, i, targets, -1) == 0);
+                    found = (elements.equals(j, targets, i) == 1);
                 } else {
                     found = (elements_ptr[j] == targets_ptr[i]);
                 }
@@ -946,7 +948,7 @@ private:
         }
 
         ASSIGN_OR_RETURN(auto result, _array_has_non_nullable(*array_col, *target_col));
-        DCHECK_EQ(array_nullable->size(), result->size());
+        DCHECK_EQ(array_col->size(), result->size());
         return NullableColumn::create(std::move(result), merge_nullcolum(array_nullable, target_nullable));
     }
 };

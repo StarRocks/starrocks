@@ -66,6 +66,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.UnsupportedMVException;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapUnionPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnHLLUnionPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnOneChildPattern;
@@ -283,7 +284,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
         if (tables.size() != 1) {
-            throw new SemanticException("The materialized view only support one table in from clause.");
+            throw new UnsupportedMVException("The materialized view only support one table in from clause.");
         }
         Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
         Table table = entry.getValue();
@@ -291,15 +292,16 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         // SyncMV doesn't support mv's database is different from table's db.
         if (mvTableName != null && !Strings.isNullOrEmpty(mvTableName.getDb()) &&
                 !mvTableName.getDb().equalsIgnoreCase(entry.getKey().getDb())) {
-            throw new SemanticException(String.format("Creating materialized view does not support: MV's db %s is different " +
-                    "from table's db %s", mvTableName.getDb(), entry.getKey().getDb()));
+            throw new UnsupportedMVException(
+                    String.format("Creating materialized view does not support: MV's db %s is different " +
+                            "from table's db %s", mvTableName.getDb(), entry.getKey().getDb()));
         }
 
         if (table instanceof View) {
             // Only in order to make the error message keep compatibility
             throw new SemanticException("Do not support alter non-OLAP table[" + table.getName() + "]");
         } else if (!(table instanceof OlapTable)) {
-            throw new SemanticException("The materialized view only support olap table.");
+            throw new UnsupportedMVException("The materialized view only support olap table.");
         }
 
         TableName tableName = entry.getKey();
@@ -308,36 +310,37 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
         SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
         if (!(selectRelation.getRelation() instanceof TableRelation)) {
-            throw new SemanticException("Materialized view query statement only support direct query from table.");
+            throw new UnsupportedMVException("Materialized view query statement only support direct query from table.");
         }
         int beginIndexOfAggregation = genColumnAndSetIntoStmt(table, selectRelation);
         if (selectRelation.isDistinct() || selectRelation.hasAggregation()) {
             setMvKeysType(KeysType.AGG_KEYS);
         }
         if (selectRelation.hasWhereClause()) {
-            throw new SemanticException("The where clause is not supported in add materialized view clause, expr:"
+            throw new UnsupportedMVException("The where clause is not supported in add materialized view clause, expr:"
                     + selectRelation.getWhereClause().toSql());
         }
         if (selectRelation.hasHavingClause()) {
-            throw new SemanticException("The having clause is not supported in add materialized view clause, expr:"
+            throw new UnsupportedMVException("The having clause is not supported in add materialized view clause, expr:"
                     + selectRelation.getHavingClause().toSql());
         }
         analyzeOrderByClause(selectRelation, beginIndexOfAggregation);
         if (selectRelation.hasLimit()) {
-            throw new SemanticException("The limit clause is not supported in add materialized view clause, expr:"
+            throw new UnsupportedMVException("The limit clause is not supported in add materialized view clause, expr:"
                     + " limit " + selectRelation.getLimit());
         }
         final String countPrefix = new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX)
                 .append(FunctionSet.COUNT).append("_").toString();
         for (MVColumnItem mvColumnItem : getMVColumnItemList()) {
             if (!isReplay && mvColumnItem.isKey() && !mvColumnItem.getType().canBeMVKey()) {
-                throw new SemanticException(
+                throw new UnsupportedMVException(
                         String.format("Invalid data type of materialized key column '%s': '%s'",
                                 mvColumnItem.getName(), mvColumnItem.getType()));
             }
             if (mvColumnItem.getName().startsWith(countPrefix)
                     && ((OlapTable) table).getKeysType().isAggregationFamily()) {
-                throw new SemanticException("Aggregate type table do not support count function in materialized view");
+                throw new UnsupportedMVException(
+                        "Aggregate type table do not support count function in materialized view");
             }
         }
     }
@@ -358,19 +361,20 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         for (int i = 0; i < selectListItems.size(); ++i) {
             SelectListItem selectListItem = selectListItems.get(i);
             if (selectListItem.isStar()) {
-                throw new SemanticException("The materialized view currently does not support * in select statement");
+                throw new UnsupportedMVException(
+                        "The materialized view currently does not support * in select statement");
             }
             Expr selectListItemExpr = selectListItem.getExpr();
             List<SlotRef> slots = Lists.newArrayList();
             selectListItemExpr.collect(SlotRef.class, slots);
             if (!isReplay) {
                 if (slots.size() == 0) {
-                    throw new SemanticException(String.format("The materialized view currently does not support " +
+                    throw new UnsupportedMVException(String.format("The materialized view currently does not support " +
                             "const expr in select " + "statement: {}", selectListItemExpr.toMySql()));
                 }
                 // TODO: support multi slot-refs later.
                 if (slots.size() > 1) {
-                    throw new SemanticException(
+                    throw new UnsupportedMVException(
                             String.format("The materialized view currently does not support multi-slot-refs expr: {}",
                                     selectListItemExpr.toSql()));
                 }
@@ -385,17 +389,17 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 MVColumnPattern mvColumnPattern =
                         CreateMaterializedViewStmt.FN_NAME_TO_PATTERN.get(functionName.toLowerCase());
                 if (mvColumnPattern == null) {
-                    throw new SemanticException(
+                    throw new UnsupportedMVException(
                             "Materialized view does not support function:%s, supported functions are: %s",
                             functionCallExpr.toSqlImpl(), FN_NAME_TO_PATTERN.keySet());
                 }
                 // current version not support count(distinct) function in creating materialized view
                 if (!isReplay && functionCallExpr.isDistinct()) {
-                    throw new SemanticException(
+                    throw new UnsupportedMVException(
                             "Materialized view does not support distinct function " + functionCallExpr.toSqlImpl());
                 }
                 if (!mvColumnPattern.match(functionCallExpr)) {
-                    throw new SemanticException(
+                    throw new UnsupportedMVException(
                             "The function " + functionName + " must match pattern:" + mvColumnPattern);
                 }
                 if (beginIndexOfAggregation == -1) {
@@ -410,7 +414,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 mvColumnItemList.add(mvColumnItem);
             } else {
                 if (meetAggregate) {
-                    throw new SemanticException("Any single column should be before agg column. " +
+                    throw new UnsupportedMVException("Any single column should be before agg column. " +
                             "Column %s at wrong location", selectListItemExpr.toMySql());
                 }
 
@@ -427,14 +431,16 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 Expr existedDefinedExpr = table.getColumn(mvColumnItem.getName()).getDefineExpr();
                 if (existedDefinedExpr != null && !existedDefinedExpr.toSqlWithoutTbl()
                         .equalsIgnoreCase(mvColumnItem.getDefineExpr().toSqlWithoutTbl())) {
-                    throw new SemanticException(String.format("The mv column %s has already existed in the table's full " +
-                                    "schema, old expr: %s, new expr: %s", selectListItem.getAlias(),
-                            existedDefinedExpr.toSqlWithoutTbl(), mvColumnItem.getDefineExpr().toSqlWithoutTbl()));
+                    throw new UnsupportedMVException(
+                            String.format("The mv column %s has already existed in the table's full " +
+                                            "schema, old expr: %s, new expr: %s", selectListItem.getAlias(),
+                                    existedDefinedExpr.toSqlWithoutTbl(),
+                                    mvColumnItem.getDefineExpr().toSqlWithoutTbl()));
                 }
             }
         }
         if (beginIndexOfAggregation == 0) {
-            throw new SemanticException("Only %s found in the select list. " +
+            throw new UnsupportedMVException("Only %s found in the select list. " +
                     "Please add group by clause and at least one group by column in the select list", joiner);
         }
         setMvColumnItemList(mvColumnItemList);
@@ -455,6 +461,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         selectListItem);
             }
             columnName = MVUtils.getMVColumnName(selectListItem.getAlias());
+            type = AnalyzerUtils.transformTableColumnType(type, false);
         }
         Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName().toLowerCase()).
                 collect(Collectors.toSet());
@@ -534,7 +541,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 type = Type.BIGINT;
                 break;
             default:
-                throw new SemanticException("Unsupported function:" + functionName);
+                throw new UnsupportedMVException("Unsupported function:" + functionName);
         }
         if (mvAggregateType == null) {
             mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
@@ -563,22 +570,24 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         List<MVColumnItem> mvColumnItemList = getMVColumnItemList();
 
         if (orderByElements.size() > mvColumnItemList.size()) {
-            throw new SemanticException("The number of columns in order clause must be less then " + "the number of "
-                    + "columns in select clause");
+            throw new UnsupportedMVException(
+                    "The number of columns in order clause must be less then " + "the number of "
+                            + "columns in select clause");
         }
         if (beginIndexOfAggregation != -1 && (orderByElements.size() != (beginIndexOfAggregation))) {
-            throw new SemanticException("The order-by columns must be identical to the group-by columns");
+            throw new UnsupportedMVException("The order-by columns must be identical to the group-by columns");
         }
         for (int i = 0; i < orderByElements.size(); i++) {
             Expr orderByElement = orderByElements.get(i).getExpr();
             if (!(orderByElement instanceof SlotRef)) {
-                throw new SemanticException("The column in order clause must be original column without calculation. "
-                        + "Error column: " + orderByElement.toSql());
+                throw new UnsupportedMVException(
+                        "The column in order clause must be original column without calculation. "
+                                + "Error column: " + orderByElement.toSql());
             }
             MVColumnItem mvColumnItem = mvColumnItemList.get(i);
             SlotRef slotRef = (SlotRef) orderByElement;
             if (!mvColumnItem.getName().equalsIgnoreCase(slotRef.getColumnName())) {
-                throw new SemanticException("The order of columns in order by clause must be same as "
+                throw new UnsupportedMVException("The order of columns in order by clause must be same as "
                         + "the order of columns in select list");
             }
             Preconditions.checkState(mvColumnItem.getAggregationType() == null);
@@ -612,7 +621,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 if (mvColumnItem.getAggregationType() != null) {
                     break;
                 }
-                Preconditions.checkArgument(mvColumnItem.getType().isScalarType(), "non scalar type");
+                if (!mvColumnItem.getType().isScalarType()) {
+                    throw new SemanticException("Key column must be scalar type: " + mvColumnItem.getName());
+                }
                 mvColumnItem.setIsKey(true);
             }
         } else if (getMVKeysType() == KeysType.DUP_KEYS) {

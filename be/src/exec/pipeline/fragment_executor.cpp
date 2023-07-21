@@ -135,7 +135,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
     }
     if (query_options.__isset.runtime_profile_report_interval) {
-        _query_ctx->set_runtime_profile_report_interval(query_options.runtime_profile_report_interval);
+        _query_ctx->set_runtime_profile_report_interval(std::max(1L, query_options.runtime_profile_report_interval));
     }
 
     bool enable_query_trace = false;
@@ -175,7 +175,7 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 }
 
 Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
-    WorkGroupPtr wg = nullptr;
+    WorkGroupPtr wg;
     if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
         wg = WorkGroupManager::instance()->get_default_workgroup();
     } else if (request.common().workgroup.id == WorkGroup::DEFAULT_MV_WG_ID) {
@@ -209,16 +209,13 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_query_ctx(_query_ctx);
 
-    if (wg != nullptr && wg->use_big_query_mem_limit()) {
-        _query_ctx->init_mem_tracker(wg->big_query_mem_limit(), wg->mem_tracker());
-    } else {
-        auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
-        auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
-        auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
-        int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(
-                parent_mem_tracker->limit(), per_instance_mem_limit, degree_of_parallelism, option_query_mem_limit);
-        _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker);
-    }
+    auto* parent_mem_tracker = wg->mem_tracker();
+    auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
+    auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
+    int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
+                                                                  degree_of_parallelism, option_query_mem_limit);
+    int64_t big_query_mem_limit = wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
+    _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker, big_query_mem_limit, wg.get());
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
@@ -615,7 +612,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t prepare_runtime_state_time = 0;
         int64_t prepare_pipeline_driver_time = 0;
 
-        int64_t process_mem_bytes = ExecEnv::GetInstance()->process_mem_tracker()->consumption();
+        int64_t process_mem_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->consumption();
         size_t num_process_drivers = ExecEnv::GetInstance()->driver_limiter()->num_total_drivers();
     } profiler;
 
@@ -653,7 +650,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     });
 
     SCOPED_RAW_TIMER(&profiler.prepare_time);
-    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+    RETURN_IF_ERROR(
+            GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
     {
         SCOPED_RAW_TIMER(&profiler.prepare_query_ctx_time);
         RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
@@ -762,6 +760,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                                                            result_sink->get_file_opts(), dop, fragment_ctx);
         } else {
             op = std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
+                                                             result_sink->get_format_type(),
                                                              result_sink->get_output_exprs(), fragment_ctx);
         }
         // Add result sink operator to last pipeline

@@ -181,7 +181,7 @@ TOP-N (order by [[6: sum ASC NULLS FIRST]])
         CTEAnchor(cteid=1)
             CTEProducer(cteid=1)
                 SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-            INNER JOIN (join-predicate [divide(cast(9: sum as double), cast(11: count as double)) > 0.0] post-join-predicate [null])
+            INNER JOIN (join-predicate [divide(cast(9: sum as double), cast(11: count as double)) > 0] post-join-predicate [null])
                 CROSS JOIN (join-predicate [null] post-join-predicate [null])
                     CROSS JOIN (join-predicate [null] post-join-predicate [null])
                         AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count)}] group by [[]] having [null]

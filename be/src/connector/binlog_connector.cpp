@@ -90,7 +90,7 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         return _mock_chunk_test(chunk);
     }
 #endif
-    if (_need_seek_binlog.load(std::memory_order::memory_order_acquire)) {
+    if (_need_seek_binlog.load(std::memory_order::acquire)) {
         if (!_is_stream_pipeline) {
             RETURN_IF_ERROR(_prepare_non_stream_pipeline());
         }

@@ -27,6 +27,7 @@
 #include "fslib/star_cache_configuration.h"
 #include "gflags/gflags.h"
 #include "gutil/strings/fastmem.h"
+#include "util/await.h"
 #include "util/debug_util.h"
 #include "util/lru_cache.h"
 #include "util/sha.h"
@@ -80,7 +81,8 @@ absl::Status StarOSWorker::invalidate_fs(const ShardInfo& info) {
     if (!conf.ok()) {
         return conf.status();
     }
-    auto key = get_cache_key(*scheme, *conf);
+    std::string key_str = get_cache_key(*scheme, *conf);
+    CacheKey key(key_str);
     _fs_cache->erase(key);
     return absl::OkStatus();
 }
@@ -171,6 +173,15 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
                                                                                             const Configuration& conf) {
+    static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
+    static const int64_t kCheckInterval = 10 * 1000;             // 10ms
+    Awaitility wait;
+    auto cond = []() { return g_starlet->is_ready(); };
+    auto ret = wait.timeout(kGetShardInfoTimeout).interval(kCheckInterval).until(cond);
+    if (!ret) {
+        return absl::UnavailableError("starlet is still not ready!");
+    }
+
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
     auto info_or = g_starlet->get_shard_info(id);
     if (!info_or.ok()) {
@@ -308,7 +319,8 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
 
 absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shared_filesystem(
         std::string_view scheme, const Configuration& conf) {
-    auto key = get_cache_key(scheme, conf);
+    std::string key_str = get_cache_key(scheme, conf);
+    CacheKey key(key_str);
 
     // Lookup LRU cache
     std::shared_ptr<fslib::FileSystem> fs;
@@ -344,7 +356,7 @@ absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shar
     return std::move(fs);
 }
 
-CacheKey StarOSWorker::get_cache_key(std::string_view scheme, const Configuration& conf) {
+std::string StarOSWorker::get_cache_key(std::string_view scheme, const Configuration& conf) {
     // Take the SHA-256 hash value as the cache key
     SHA256Digest sha256;
     sha256.update(scheme.data(), scheme.size());
@@ -353,8 +365,7 @@ CacheKey StarOSWorker::get_cache_key(std::string_view scheme, const Configuratio
         sha256.update(v.data(), v.size());
     }
     sha256.digest();
-    CacheKey key(sha256.hex());
-    return key;
+    return sha256.hex();
 }
 
 Status to_status(const absl::Status& absl_status) {
@@ -392,6 +403,7 @@ void init_staros_worker() {
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
     fslib::FLAGS_star_cache_disk_size_percent = config::starlet_star_cache_disk_size_percent;
+    fslib::FLAGS_star_cache_disk_size_bytes = config::starlet_star_cache_disk_size_bytes;
     fslib::FLAGS_star_cache_block_size_bytes = config::starlet_star_cache_block_size_bytes;
 
     staros::starlet::StarletConfig starlet_config;

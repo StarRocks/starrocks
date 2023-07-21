@@ -56,6 +56,8 @@ import org.apache.commons.collections.CollectionUtils;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -411,6 +413,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 strings.add(kv.getKey());
                 integers.add(kv.getValue());
             }
+            globalDict.setVersion(dictPair.second.getCollectedVersionTime());
             globalDict.setStrings(strings);
             globalDict.setIds(integers);
             result.add(globalDict);
@@ -671,5 +674,26 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
 
         return olapScanNodes;
+    }
+
+    public boolean isUnionFragment() {
+        Deque<PlanNode> dq = new LinkedList<>();
+        dq.offer(planRoot);
+
+        while (!dq.isEmpty()) {
+            PlanNode nd = dq.poll();
+
+            if (nd instanceof UnionNode) {
+                return true;
+            }
+            if (!(nd instanceof ExchangeNode)) {
+                dq.addAll(nd.getChildren());
+            }
+        }
+        return false;
+    }
+
+    public void reset() {
+        // Do nothing.
     }
 }

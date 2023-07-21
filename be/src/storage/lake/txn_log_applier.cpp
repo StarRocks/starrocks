@@ -22,6 +22,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "util/phmap/phmap_fwd_decl.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {

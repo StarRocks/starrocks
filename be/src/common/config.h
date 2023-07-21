@@ -55,16 +55,6 @@ CONF_Int32(brpc_num_threads, "-1");
 // If no ip match this rule, will choose one randomly.
 CONF_String(priority_networks, "");
 
-////
-//// tcmalloc gc parameter
-////
-// Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
-CONF_mInt64(tc_use_memory_min, "0");
-// free memory rate.[0-100]
-CONF_mInt64(tc_free_memory_rate, "0");
-// tcmalloc gc period, default 60, it should be between [1, 180]
-CONF_mInt64(tc_gc_period, "60");
-
 CONF_mBool(enable_auto_adjust_pagecache, "true");
 // Memory urget water level, if the memory usage exceeds this level, reduce the size of
 // the Pagecache immediately, it should be between (memory_high_level, 100].
@@ -76,17 +66,6 @@ CONF_mInt64(memory_high_level, "75");
 CONF_mInt64(pagecache_adjust_period, "20");
 // Sleep time in seconds between pagecache adjust iterations.
 CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
-
-// Bound on the total amount of bytes allocated to thread caches.
-// This bound is not strict, so it is possible for the cache to go over this bound
-// in certain circumstances. The maximum value of this flag is capped to 1GB.
-// This value defaults to 1GB.
-// If you suspect your application is not scaling to many threads due to lock contention in TCMalloc,
-// you can try increasing this value. This may improve performance, at a cost of extra memory
-// use by TCMalloc.
-// reference: https://gperftools.github.io/gperftools/tcmalloc.html: TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES
-//            https://github.com/gperftools/gperftools/issues/1111
-CONF_Int64(tc_max_total_thread_cache_bytes, "1073741824");
 
 // process memory limit specified as number of bytes
 // ('<int>[bB]?'), megabytes ('<float>[mM]'), gigabytes ('<float>[gG]'),
@@ -754,6 +733,18 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 // https://github.com/aws/aws-sdk-cpp/issues/587
 // https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
 CONF_Bool(object_storage_endpoint_path_style_access, "false");
+// Socket connect timeout for object storage.
+// Default is -1, indicate to use the default value in sdk (1000ms)
+// Unless you are very far away from your the data center you are talking to, 1000ms is more than sufficient.
+CONF_Int64(object_storage_connect_timeout_ms, "-1");
+// Request timeout for object storage
+// Default is -1, indicate to use the default value in sdk.
+// For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be
+// below "lowSpeedLimit" for the library to consider it too slow and abort.
+// Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
+// value is greater than 0 and less than 1000.
+// When it's 0, low speed limit check will be disabled.
+CONF_Int64(object_storage_request_timeout_ms, "-1");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
@@ -764,7 +755,6 @@ CONF_mBool(orc_coalesce_read_enable, "true");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
-CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
@@ -779,6 +769,13 @@ CONF_Int32(connector_io_tasks_adjust_smooth, "4");
 CONF_Int32(connector_io_tasks_slow_io_latency_ms, "50");
 CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
+
+// hdfs hedged read
+CONF_mBool(hdfs_client_enable_hedged_read, "false");
+// dfs.client.hedged.read.threadpool.size
+CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
+// dfs.client.hedged.read.threshold.millis
+CONF_Int32(hdfs_client_hedged_read_threshold_millis, "2500");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -802,7 +799,7 @@ CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
 
 CONF_Int64(max_load_dop, "16");
 
-CONF_Bool(enable_load_colocate_mv, "false");
+CONF_Bool(enable_load_colocate_mv, "true");
 
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 CONF_Bool(manual_compact_before_data_dir_load, "false");
@@ -844,6 +841,7 @@ CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 CONF_Bool(starlet_use_star_cache, "false");
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "60");
+CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
 #endif
 
@@ -852,6 +850,11 @@ CONF_mBool(lake_print_delete_log, "true");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
+CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
+CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
+CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
+CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+CONF_mBool(lake_enable_publish_version_trace_log, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -885,10 +888,6 @@ CONF_mInt32(spill_init_partition, "16");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
-
-// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
-// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
-CONF_Int32(internal_service_async_thread_num, "10");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
@@ -997,5 +996,7 @@ CONF_mInt32(primary_key_limit_size, "128");
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
+
+CONF_mBool(dump_metrics_with_bvar, "true");
 
 } // namespace starrocks::config

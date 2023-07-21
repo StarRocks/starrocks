@@ -117,8 +117,6 @@ public class LakeTableTest {
         FilePathInfo pathInfo = builder.build();
         table.setStorageInfo(pathInfo, new DataCacheInfo(false, false));
 
-        table.setStorageVolume("storage_volume");
-
         // Test serialize and deserialize
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
         try (DataOutputStream out = new DataOutputStream(byteArrayOutputStream)) {
@@ -152,8 +150,6 @@ public class LakeTableTest {
         Assert.assertEquals(-1, newLakeTable.lastSchemaUpdateTime.longValue());
         Assert.assertEquals(-1, newLakeTable.lastVersionUpdateStartTime.longValue());
         Assert.assertEquals(0, newLakeTable.lastVersionUpdateEndTime.longValue());
-
-        Assert.assertEquals("storage_volume", newLakeTable.getStorageVolume());
 
         Assert.assertNull(table.delete(true));
         Assert.assertNotNull(table.delete(false));

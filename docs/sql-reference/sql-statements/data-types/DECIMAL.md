@@ -24,7 +24,7 @@ If `P` is omitted, the default is 10. If `S` is omitted, the default is 0.
 
 Fast Decimal is controlled by the FE dynamic parameter `enable_decimal_v3`, which is `true` by default.
 
-From v3.1 onwards, StarRocks supports Fast Decimal entries in ARRAY, MAP, and STRUCT.
+From v3.1 onwards, StarRocks supports Fast Decimal entries in [ARRAY](Array.md), [MAP](Map.md), and [STRUCT](STRUCT.md).
   
 ## Limits
 

@@ -47,7 +47,7 @@ under the License.
         <spark.version>3.4.0</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.10.1</parquet.version>
-        <hadoop.version>3.3.3</hadoop.version>
+        <hadoop.version>3.3.6</hadoop.version>
         <gcs.connector.version>hadoop3-2.2.11</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.12.2</hudi.version>
@@ -413,7 +413,7 @@ under the License.
             <dependency>
                 <groupId>com.squareup.okio</groupId>
                 <artifactId>okio</artifactId>
-                <version>2.10.0</version>
+                <version>3.4.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/javax.validation/validation-api -->

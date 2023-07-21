@@ -94,6 +94,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -559,6 +560,14 @@ public class AlterJobMgr {
                 }
                 asyncRefreshContext.setStep(step.getLongValue());
                 asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
+            } else {
+                if (materializedView.getBaseTableInfos().stream().anyMatch(tableInfo ->
+                        !tableInfo.getTable().isNativeTableOrMaterializedView()
+                )) {
+                    throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
+                            "external table");
+                }
+                refreshScheme.setAsyncRefreshContext(new MaterializedView.AsyncRefreshContext());
             }
         }
 
@@ -902,6 +911,12 @@ public class AlterJobMgr {
             }
         }
 
+        // inactive the related MVs
+        LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
+                String.format("based table %s swapped", origTblName));
+        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
+                String.format("based table %s swapped", newTblName));
+
         swapTableInternal(db, origTable, olapNewTbl);
 
         // write edit log
@@ -998,6 +1013,7 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
 
+            LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 
@@ -1028,6 +1044,7 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
 
+            LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 

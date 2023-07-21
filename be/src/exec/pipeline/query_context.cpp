@@ -121,13 +121,20 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
     return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
 }
 
-void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
+void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
+                                    workgroup::WorkGroup* wg) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
-        mem_tracker_counter->set(bytes_limit);
-        _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
+        mem_tracker_counter->set(query_mem_limit);
+        if (wg != nullptr && big_query_mem_limit > 0 && big_query_mem_limit < query_mem_limit) {
+            std::string label = "Group=" + wg->name() + ", " + _profile->name();
+            _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
+                                                        std::move(label), parent);
+        } else {
+            _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
+        }
     });
 }
 
@@ -183,7 +190,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     DCHECK(_is_result_sink) << "must be the result sink";
     auto res = std::make_shared<QueryStatistics>();
     res->add_scan_stats(_total_scan_rows_num, _total_scan_bytes);
-    res->add_cpu_costs(_total_cpu_cost_ns);
+    res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
 
     _sub_plan_query_statistics_recvr->aggregate(res.get());
@@ -564,6 +571,8 @@ void QueryContextManager::report_fragments(
                     LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
                     rpc_status = fe_connection.reopen();
                     if (!rpc_status.ok()) {
+                        LOG(WARNING) << "ReportExecStatus() to " << fe_addr << " failed after reopening connection:\n"
+                                     << rpc_status.get_error_msg();
                         continue;
                     }
                     fe_connection->batchReportExecStatus(res, report_batch);

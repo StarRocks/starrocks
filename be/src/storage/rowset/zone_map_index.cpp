@@ -255,18 +255,18 @@ Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMeta
 }
 
 ZoneMapIndexReader::ZoneMapIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
 }
 
 ZoneMapIndexReader::~ZoneMapIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), _mem_usage());
 }
 
 StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const ZoneMapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                      _mem_usage() - sizeof(ZoneMapIndexReader));
         } else {
             _reset();
@@ -276,11 +276,10 @@ StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const Zone
 }
 
 Status ZoneMapIndexReader::_do_load(const IndexReadOptions& opts, const ZoneMapIndexPB& meta) {
-    IndexedColumnReader reader(opts, meta.page_zone_maps());
-    RETURN_IF_ERROR(reader.load());
+    IndexedColumnReader reader(meta.page_zone_maps());
+    RETURN_IF_ERROR(reader.load(opts));
     std::unique_ptr<IndexedColumnIterator> iter;
-    IndexReadOptions options;
-    RETURN_IF_ERROR(reader.new_iterator(&iter, options));
+    RETURN_IF_ERROR(reader.new_iterator(opts, &iter));
 
     _page_zone_maps.resize(reader.num_values());
 

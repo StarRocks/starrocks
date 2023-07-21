@@ -88,12 +88,14 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.locations = new ArrayList<>(locations);
         this.comment = comment;
         this.enabled = enabled;
-        preprocessAuthenticationIfNeeded(params);
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
-        if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid");
-        }
         this.params = new HashMap<>(params);
+        Map<String, String> configurationParams = new HashMap<>(params);
+        preprocessAuthenticationIfNeeded(configurationParams);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams);
+        if (!isValidCloudConfiguration()) {
+            Gson gson = new Gson();
+            throw new SemanticException("Storage params is not valid " + gson.toJson(params));
+        }
     }
 
     public StorageVolume(StorageVolume sv) {
@@ -112,7 +114,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         newParams.putAll(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams);
         if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid");
+            Gson gson = new Gson();
+            throw new SemanticException("Storage params is not valid " + gson.toJson(newParams));
         }
         this.params = newParams;
     }
@@ -236,6 +239,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return params;
             case HDFS:
                 // TODO
+                return params;
             case AZBLOB:
                 AzBlobFileStoreInfo azBlobFileStoreInfo = fsInfo.getAzblobFsInfo();
                 params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, azBlobFileStoreInfo.getEndpoint());

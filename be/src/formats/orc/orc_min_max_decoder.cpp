@@ -14,13 +14,6 @@
 
 #include "formats/orc/orc_min_max_decoder.h"
 
-#include <glog/logging.h>
-
-#include <exception>
-#include <set>
-#include <unordered_map>
-#include <utility>
-
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
@@ -28,14 +21,7 @@
 #include "column/struct_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
-#include "formats/orc/fill_function.h"
-#include "formats/orc/orc_input_stream.h"
-#include "formats/orc/orc_mapping.h"
-#include "fs/fs.h"
-#include "gen_cpp/orc_proto.pb.h"
-#include "gutil/casts.h"
-#include "gutil/strings/substitute.h"
-#include "simd/simd.h"
+#include "formats/orc/utils.h"
 #include "types/logical_type.h"
 #include "util/timezone_utils.h"
 
@@ -149,7 +135,7 @@ static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::Colum
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
-            OrcTimestampHelper::orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns);
+            OrcTimestampHelper::orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns, true);
         }
 
         {
@@ -160,7 +146,7 @@ static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::Colum
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
-            OrcTimestampHelper::orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns);
+            OrcTimestampHelper::orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns, true);
         }
 
         DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_DATETIME);

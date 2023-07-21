@@ -31,6 +31,7 @@
 #include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -420,9 +421,6 @@ void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& re
             // Secondary replica will commit/abort by Primary replica
             if (delta_writer->replica_state() != Secondary) {
                 if (UNLIKELY(_partition_ids.count(delta_writer->partition_id()) == 0)) {
-                    LOG(WARNING) << "Commit non-existed partition id:" << delta_writer->partition_id()
-                                 << ", tablet_id=" << tablet_id << ", registered partition_ids="
-                                 << std::string(_partition_ids.begin(), _partition_ids.end());
                     // no data load, abort txn without printing log
                     delta_writer->abort(false);
 
@@ -490,7 +488,10 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
                 Slice slice(data, dict_word.size());
                 global_dict.emplace(slice, i);
             }
-            _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
+            GlobalDictsWithVersion<GlobalDictMap> dict;
+            dict.dict = std::move(global_dict);
+            dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+            _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
         }
     }
 
@@ -780,14 +781,18 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
     }
     if (committed_info != nullptr) {
         // committed tablets from primary replica
+        // TODO: dup code with SegmentFlushToken::submit
         PTabletInfo tablet_info;
         tablet_info.set_tablet_id(committed_info->tablet->tablet_id());
         tablet_info.set_schema_hash(committed_info->tablet->schema_hash());
         const auto& rowset_global_dict_columns_valid_info =
                 committed_info->rowset_writer->global_dict_columns_valid_info();
+        const auto* rowset_global_dicts = committed_info->rowset_writer->rowset_global_dicts();
         for (const auto& item : rowset_global_dict_columns_valid_info) {
-            if (item.second) {
+            if (item.second && rowset_global_dicts != nullptr &&
+                rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
                 tablet_info.add_valid_dict_cache_columns(item.first);
+                tablet_info.add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
             } else {
                 tablet_info.add_invalid_dict_cache_columns(item.first);
             }

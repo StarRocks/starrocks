@@ -874,7 +874,7 @@ struct StringHasher2 {
 class EqualOnStringWithHash {
 public:
     bool operator()(const std::string& lhs, const std::string& rhs) const {
-        return memequal(lhs.data(), lhs.size() - kIndexValueSize, rhs.data(), rhs.size() - kIndexValueSize);
+        return memequal_padded(lhs.data(), lhs.size() - kIndexValueSize, rhs.data(), rhs.size() - kIndexValueSize);
     }
 };
 
@@ -3791,16 +3791,18 @@ Status PersistentIndex::_merge_compaction_advance() {
     for (int i = merge_l1_start_idx; i < merge_l1_end_idx; i++) {
         for (const auto& [key_size, shard_info] : _l1_vec[i]->_shard_info_by_length) {
             auto [l1_shard_offset, l1_shard_size] = shard_info;
-            const auto size = std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
-                                              std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                              0L, [](size_t s, const auto& e) { return s + e.size; });
-            const auto usage = std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
-                                               std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                               0L, [](size_t s, const auto& e) { return s + e.data_size; });
+            const int64_t size =
+                    std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
+                                    std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size), 0L,
+                                    [](size_t s, const auto& e) { return s + e.size; });
+            const int64_t usage =
+                    std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
+                                    std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size), 0L,
+                                    [](size_t s, const auto& e) { return s + e.data_size; });
 
             auto iter = usage_and_size_stat.find(key_size);
             if (iter == usage_and_size_stat.end()) {
-                usage_and_size_stat.insert({key_size, {usage, size}});
+                usage_and_size_stat.insert({static_cast<uint32_t>(key_size), {usage, size}});
             } else {
                 iter->second.first += usage;
                 iter->second.second += size;

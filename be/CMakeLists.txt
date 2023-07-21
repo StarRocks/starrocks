@@ -511,7 +511,7 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_
 #  -fno-omit-frame-pointers: Keep frame pointer for functions in register
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-pragmas -pthread -Wno-register")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++17 -D__STDC_FORMAT_MACROS")
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -522,7 +522,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-documentation-unknown-command -Wno-old-style-cast")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-c++20-designator -Wno-mismatched-tags")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
-        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical -Wno-inconsistent-missing-override -Wno-ambiguous-reversed-operator")
     endif()
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16.0.0")
         # ignore warning from apache-orc
@@ -689,7 +689,6 @@ set(STARROCKS_LINK_LIBS
     Runtime
     Service
     ServiceBE
-    ServiceCN
     Types
     Udf
     Util
@@ -808,16 +807,10 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     -static-libgcc
 )
 
-# Add sanitize static link flags or tcmalloc
+# Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
-    if (USE_JEMALLOC)
-        message("use jemalloc")
-        add_definitions(-DUSE_JEMALLOC)
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
-    else()
-        message("use tcmalloc")
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} tcmalloc)
-    endif()
+    message("use jemalloc")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
@@ -827,14 +820,8 @@ elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
-    if (USE_JEMALLOC)
-        message("use jemalloc")
-        add_definitions(-DUSE_JEMALLOC)
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
-    else()
-        message("use tcmalloc")
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan tcmalloc)
-    endif()
+    message("use jemalloc")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
 else()

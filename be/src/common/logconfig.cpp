@@ -86,7 +86,7 @@ static void dump_trace_info() {
         // dump query_id and fragment id
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
-        const std::string custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
+        const std::string& custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
         const uint32_t MAX_BUFFER_SIZE = 512;
         char buffer[MAX_BUFFER_SIZE] = {};
 
@@ -110,7 +110,7 @@ static void dump_trace_info() {
         wt = write(STDERR_FILENO, buffer, res);
         // dump memory usage
         // copy trackers
-        auto trackers = ExecEnv::GetInstance()->mem_trackers();
+        auto& trackers = GlobalEnv::GetInstance()->mem_trackers();
         for (const auto& tracker : trackers) {
             if (tracker) {
                 size_t len = tracker->debug_string(buffer, sizeof(buffer));

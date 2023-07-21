@@ -20,8 +20,6 @@
 
 namespace starrocks::pipeline {
 
-static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
-
 static const std::string ICEBERG_UNPARTITIONED_TABLE_LOCATION = "iceberg_unpartitioned_table_fake_location";
 
 Status IcebergTableSinkOperator::prepare(RuntimeState* state) {
@@ -101,7 +99,8 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         }
 
         _partition_writers[ICEBERG_UNPARTITIONED_TABLE_LOCATION]->append_chunk(chunk.get(), state);
-        return Status::OK();
+    } else if (_is_static_partition_insert && !_partition_writers.empty()) {
+        _partition_writers.begin()->second->append_chunk(chunk.get(), state);
     } else {
         Columns partitions_columns;
         partitions_columns.resize(_partition_expr.size());
@@ -113,7 +112,13 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         const std::vector<std::string>& partition_column_names = _iceberg_table->partition_column_names();
         std::vector<std::string> partition_column_values;
         for (const ColumnPtr& column : partitions_columns) {
-            partition_column_values.emplace_back(_value_to_string(column));
+            if (column->has_null()) {
+                return Status::NotSupported("Partition value can't be null.");
+            }
+
+            std::string partition_value;
+            RETURN_IF_ERROR(partition_value_to_string(ColumnHelper::get_data_column(column.get()), partition_value));
+            partition_column_values.emplace_back(partition_value);
         }
 
         DCHECK(partition_column_names.size() == partition_column_values.size());
@@ -130,9 +135,8 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         } else {
             partition_writer->second->append_chunk(chunk.get(), state);
         }
-
-        return Status::OK();
     }
+    return Status::OK();
 }
 
 std::string IcebergTableSinkOperator::_get_partition_location(const std::vector<std::string>& names,
@@ -142,27 +146,6 @@ std::string IcebergTableSinkOperator::_get_partition_location(const std::vector<
         partition_location += names[i] + "=" + values[i] + "/";
     }
     return partition_location;
-}
-
-std::string IcebergTableSinkOperator::_value_to_string(const ColumnPtr& column) {
-    auto v = column->get(0);
-    std::string res;
-    v.visit([&](auto& variant) {
-        std::visit(
-                [&](auto&& arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, Slice> || std::is_same_v<T, TimestampValue> ||
-                                  std::is_same_v<T, DateValue> || std::is_same_v<T, decimal12_t> ||
-                                  std::is_same_v<T, DecimalV2Value>) {
-                        res = arg.to_string();
-                    } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> ||
-                                         std::is_same_v<T, float> || std::is_same_v<T, double>) {
-                        res = std::to_string(arg);
-                    }
-                },
-                variant);
-    });
-    return res;
 }
 
 IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, FragmentContext* fragment_ctx,
@@ -178,11 +161,13 @@ IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, Fra
           _file_format(thrift_sink.file_format),
           _compression_codec(thrift_sink.compression_type),
           _cloud_conf(thrift_sink.cloud_configuration),
-          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)),
+          is_static_partition_insert(thrift_sink.is_static_partition_sink) {
     DCHECK(thrift_sink.__isset.location);
     DCHECK(thrift_sink.__isset.file_format);
     DCHECK(thrift_sink.__isset.compression_type);
     DCHECK(thrift_sink.__isset.cloud_configuration);
+    DCHECK(thrift_sink.__isset.is_static_partition_sink);
 }
 
 Status IcebergTableSinkOperatorFactory::prepare(RuntimeState* state) {
@@ -200,6 +185,9 @@ Status IcebergTableSinkOperatorFactory::prepare(RuntimeState* state) {
         std::vector<parquet::FileColumnId> field_ids = generate_parquet_field_ids(t_iceberg_schema->fields);
         auto result = parquet::ParquetBuildHelper::make_schema(_iceberg_table->full_column_names(), _output_expr_ctxs,
                                                                field_ids);
+        if (!result.ok()) {
+            return Status::NotSupported(result.status().message());
+        }
         _parquet_file_schema = result.ValueOrDie();
     }
 
@@ -302,7 +290,8 @@ void calculate_column_stats(const std::shared_ptr<::parquet::FileMetaData>& meta
     }
 }
 
-static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state) {
+void IcebergTableSinkOperator::add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer,
+                                                       RuntimeState* state) {
     TIcebergColumnStats iceberg_column_stats;
     calculate_column_stats(writer->metadata(), iceberg_column_stats);
 
@@ -323,6 +312,43 @@ static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer,
     // update runtime state
     state->add_sink_commit_info(commit_info);
     state->update_num_rows_load_sink(iceberg_data_file.record_count);
+}
+
+Status IcebergTableSinkOperator::partition_value_to_string(Column* column, std::string& partition_value) {
+    auto v = column->get(0);
+    if (column->is_date()) {
+        partition_value = v.get_date().to_string();
+        return Status::OK();
+    }
+
+    bool not_support = false;
+    v.visit([&](auto& variant) {
+        std::visit(
+                [&](auto&& arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, Slice>) {
+                        partition_value = arg.to_string();
+                    } else if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int16_t> ||
+                                         std::is_same_v<T, uint16_t> || std::is_same_v<T, uint24_t> ||
+                                         std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
+                                         std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+                        partition_value = std::to_string(arg);
+                    } else if constexpr (std::is_same_v<T, int8_t>) {
+                        LOG(ERROR) << typeid(arg).name();
+                        // iceberg has no smallint type. we can safely use int8 as boolean.
+                        partition_value = arg == 0 ? "false" : "true";
+                    } else {
+                        not_support = true;
+                    }
+                },
+                variant);
+    });
+
+    if (not_support) {
+        return Status::NotSupported(fmt::format("Partition value can't be {}", column->get_name()));
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

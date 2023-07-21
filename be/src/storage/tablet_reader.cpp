@@ -202,7 +202,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.is_primary_keys = false;
 
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
-    auto rowid_range = std::make_shared<SparseRange>();
+    auto rowid_range = std::make_shared<SparseRange<>>();
     rowid_range->add({rowid, rowid + 1});
     if (segment_idx >= rowset->num_segments()) {
         return Status::InternalError(strings::Substitute("segment_idx out of range tablet:$0 $1 >= $2",
@@ -274,8 +274,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
-        rs_opts.meta = _tablet->data_dir()->get_meta();
     }
+    rs_opts.meta = _tablet->data_dir()->get_meta();
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges = params.short_key_ranges;
 

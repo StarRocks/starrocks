@@ -34,6 +34,8 @@ struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     std::unique_ptr<Column> write_column;
     std::shared_ptr<TabletSchema> schema;
+    // auto increment column id in partial segment file
+    // but not in full tablet schema
     uint32_t id;
     uint32_t segment_id;
     std::vector<uint32_t> rowids;

@@ -1072,6 +1072,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_create_table_timeout_second = 600;
 
+    @ConfField(mutable = true, comment = "The maximum number of replicas to create serially." +
+            "If actual replica count exceeds this, replicas will be created concurrently.")
+    public static int create_table_max_serial_replicas = 128;
+
     // Configurations for backup and restore
     /**
      * Plugins' path for BACKUP and RESTORE operations. Currently, deprecated.
@@ -1249,18 +1253,6 @@ public class Config extends ConfigBase {
     public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
 
     /**
-     * enable replicated storage as default table engine
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_replicated_storage_as_default_engine = true;
-
-    /**
-     * enable schedule insert query by row count
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_schedule_insert_query_by_row_count = true;
-
-    /**
      * FOR DiskAndTabletLoadBalancer:
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance
@@ -1324,6 +1316,17 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_metric_calculator = true;
 
+    /**
+     * enable replicated storage as default table engine
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_replicated_storage_as_default_engine = true;
+
+    /**
+     * enable schedule insert query by row count
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_schedule_insert_query_by_row_count = true;
 
     /**
      * the max concurrent routine load task num of a single routine load job
@@ -2034,6 +2037,11 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int cloud_native_meta_port = 6090;
+    /**
+     *  Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
+     */
+    @ConfField
+    public static boolean enable_load_volume_from_conf = true;
     // remote storage related configuration
     @ConfField(comment = "storage type for cloud native table. Available options: \"S3\", \"HDFS\", \"AZBLOB\". case-insensitive")
     public static String cloud_native_storage_type = "S3";
@@ -2102,6 +2110,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
+
+    /**
+     * Whether to support colocate mv index in olap table sink, tablet sink will only send chunk once
+     * if enabled to speed up the sync mv's transformation performance.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_colocate_mv_index = true;
 
     /**
      * Each automatic partition will create a hidden partition, which is not displayed to the user by default.

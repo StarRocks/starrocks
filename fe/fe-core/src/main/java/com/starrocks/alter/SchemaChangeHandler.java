@@ -64,8 +64,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -1434,17 +1433,15 @@ public class SchemaChangeHandler extends AlterHandler {
         getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
     }
 
-    public Optional<Long> getMinActiveTxnId() {
-        long minId = Long.MAX_VALUE;
+    public Optional<Long> getActiveTxnIdOfTable(long tableId) {
         Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
         for (AlterJobV2 job : alterJobV2Map.values()) {
-            AlterJobV2.JobState jobState = job.getJobState();
-            if (jobState == AlterJobV2.JobState.FINISHED || jobState == AlterJobV2.JobState.CANCELLED) {
-                continue;
+            AlterJobV2.JobState state = job.getJobState();
+            if (job.getTableId() == tableId && state != AlterJobV2.JobState.FINISHED && state != AlterJobV2.JobState.CANCELLED) {
+                return job.getTransactionId();
             }
-            minId = Math.min(minId, job.getTransactionId().orElse(Long.MAX_VALUE));
         }
-        return minId == Long.MAX_VALUE ? Optional.empty() : Optional.of(minId);
+        return Optional.empty();
     }
 
     @VisibleForTesting
@@ -1621,13 +1618,15 @@ public class SchemaChangeHandler extends AlterHandler {
         db.readLock();
         try {
             for (Partition partition : olapTable.getPartitions()) {
-                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                    int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
-                    for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            ClearAlterTask alterTask = new ClearAlterTask(replica.getBackendId(), db.getId(),
-                                    olapTable.getId(), partition.getId(), index.getId(), tablet.getId(), schemaHash);
-                            batchTask.addTask(alterTask);
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+                        for (Tablet tablet : index.getTablets()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                ClearAlterTask alterTask = new ClearAlterTask(replica.getBackendId(), db.getId(),
+                                        olapTable.getId(), physicalPartition.getId(), index.getId(), tablet.getId(), schemaHash);
+                                batchTask.addTask(alterTask);
+                            }
                         }
                     }
                 }
@@ -1944,13 +1943,15 @@ public class SchemaChangeHandler extends AlterHandler {
                         "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
             }
 
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
-                for (Tablet tablet : index.getTablets()) {
-                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                        Set<Pair<Long, Integer>> tabletIdWithHash =
-                                beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
-                        tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+                    for (Tablet tablet : index.getTablets()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                            Set<Pair<Long, Integer>> tabletIdWithHash =
+                                    beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
+                            tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
+                        }
                     }
                 }
             }

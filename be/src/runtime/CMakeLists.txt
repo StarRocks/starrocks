@@ -45,6 +45,7 @@ set(RUNTIME_FILES
     large_int_value.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
+    dummy_load_path_mgr.cpp
     types.cpp
     mem_tracker.cpp
     data_stream_recvr.cpp
@@ -69,6 +70,7 @@ set(RUNTIME_FILES
     memory_scratch_sink.cpp
     external_scan_context_mgr.cpp
     mysql_result_writer.cpp
+    http_result_writer.cpp
     file_result_writer.cpp
     statistic_result_writer.cpp
     variable_result_writer.cpp

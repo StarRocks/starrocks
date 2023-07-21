@@ -54,6 +54,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
@@ -355,7 +356,7 @@ public class UtFrameUtils {
     public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
                                                                                     String sql)
             throws DdlException, CloneNotSupportedException {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
 
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
@@ -391,7 +392,8 @@ public class UtFrameUtils {
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        originStmt = LogUtil.removeCommentAndLineSeparator(originStmt);
 
         List<StatementBase> statements;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
@@ -603,27 +605,31 @@ public class UtFrameUtils {
     private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
 
-        PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Transformer");
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
-                .transform((statement).getQueryRelation());
-        t.close();
+        LogicalPlan logicalPlan;
+        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Transformer")) {
+            logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                    .transform((statement).getQueryRelation());
 
-        t = PlannerProfile.getScopedTimer("Optimizer");
-        Optimizer optimizer = new Optimizer();
-        OptExpression optimizedPlan = optimizer.optimize(
-                connectContext,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
-        t.close();
+        }
 
-        t = PlannerProfile.getScopedTimer("Builder");
-        ExecPlan execPlan = PlanFragmentBuilder
-                .createPhysicalPlan(optimizedPlan, connectContext,
-                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
-                        TResultSinkType.MYSQL_PROTOCAL, true);
-        t.close();
+        OptExpression optimizedPlan;
+        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Optimizer")) {
+            Optimizer optimizer = new Optimizer();
+            optimizedPlan = optimizer.optimize(
+                    connectContext,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+        }
+
+        ExecPlan execPlan;
+        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Builder")) {
+            execPlan = PlanFragmentBuilder
+                    .createPhysicalPlan(optimizedPlan, connectContext,
+                            logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                            TResultSinkType.MYSQL_PROTOCAL, true);
+        }
 
         return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
     }
@@ -638,20 +644,21 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        replaySql = LogUtil.removeCommentAndLineSeparator(replaySql);
         Map<String, Database> dbs = null;
         try {
-            PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse");
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
-                    connectContext.getSessionVariable()).get(0);
-            st.close();
-
-            if (statementBase instanceof QueryStatement) {
-                replaceTableCatalogName(statementBase);
+            StatementBase statementBase;
+            try (PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse")) {
+                statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
+                        connectContext.getSessionVariable()).get(0);
+                if (statementBase instanceof QueryStatement) {
+                    replaceTableCatalogName(statementBase);
+                }
             }
 
-            PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Analyze");
-            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
-            st1.close();
+            try (PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Analyze")) {
+                com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+            }
 
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
             lock(dbs);

@@ -14,6 +14,9 @@
 
 #include "storage/lake/vacuum.h"
 
+#include <butil/time.h>
+#include <bvar/bvar.h>
+
 #include <algorithm>
 #include <ctime>
 #include <string_view>
@@ -36,11 +39,22 @@
 
 namespace starrocks::lake {
 
+static bvar::LatencyRecorder g_del_file_latency("lake_vacuum_del_file");
+static bvar::Adder<uint64_t> g_del_fails("lake_vacuum_del_file_fails");
+
 static Status delete_file(FileSystem* fs, const std::string& path) {
+    auto wait_duration = config::experimental_lake_wait_per_delete_ms;
+    if (wait_duration > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
+    }
+    auto t0 = butil::gettimeofday_us();
     auto st = fs->delete_file(path);
-    if (st.ok() && config::lake_print_delete_log) {
-        LOG(INFO) << "Deleted " << path;
+    if (st.ok()) {
+        auto t1 = butil::gettimeofday_us();
+        g_del_file_latency << (t1 - t0);
+        LOG_IF(INFO, config::lake_print_delete_log) << "Deleted " << path;
     } else if (!st.is_not_found()) {
+        g_del_fails << 1;
         LOG(WARNING) << "Fail to delete " << path << ": " << st;
     }
     return st;

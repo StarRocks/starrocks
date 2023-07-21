@@ -116,9 +116,13 @@ private:
         return result.build(ColumnHelper::is_all_const(columns));
     }
 
-    ColumnPtr _evaluate_complex(const Columns& columns) {
-        auto num_rows = columns[0]->size();
-        auto res = ColumnHelper::cast_to_nullable_column(columns[0]->clone_empty());
+    ColumnPtr _evaluate_complex(const Columns& inputs) {
+        auto num_rows = inputs[0]->size();
+        Columns columns;
+        for (const auto& col : inputs) {
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
+        }
+        auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
         NullColumnPtr null = nullptr;
 
@@ -186,9 +190,13 @@ private:
         return result.build(ColumnHelper::is_all_const(columns));
     }
 
-    ColumnPtr _evaluate_complex(const Columns& columns) {
-        auto num_rows = columns[0]->size();
-        auto res = ColumnHelper::cast_to_nullable_column(columns[0]->clone_empty());
+    ColumnPtr _evaluate_complex(const Columns& inputs) {
+        auto num_rows = inputs[0]->size();
+        Columns columns;
+        for (const auto& col : inputs) {
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
+        }
+        auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
         auto right_data = columns[1];
         NullColumnPtr right_nulls = nullptr;
@@ -198,7 +206,7 @@ private:
         }
         for (int row = 0; row < num_rows; ++row) {
             if ((right_nulls == nullptr || !right_nulls->get_data()[row]) &&
-                columns[0]->equals(row, *right_data, row)) {
+                columns[0]->equals(row, *right_data, row, false) == 1) {
                 res->append_nulls(1);
             } else {
                 res->append(*columns[0], row, 1);
@@ -334,10 +342,14 @@ private:
     }
 
     template <bool check_null>
-    ColumnPtr _evaluate_complex(const Columns& columns) {
+    ColumnPtr _evaluate_complex(const Columns& inputs) {
+        auto num_rows = inputs[0]->size();
+        Columns columns;
+        for (const auto& col : inputs) {
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
+        }
         ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
-        auto num_rows = columns[0]->size();
-        ColumnPtr res = ColumnHelper::cast_to_nullable_column(columns[1]->clone_empty());
+        ColumnPtr res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
         if constexpr (check_null) {
             for (int row = 0; row < num_rows; ++row) {
@@ -436,18 +448,22 @@ private:
         return builder.build(ColumnHelper::is_all_const(columns));
     }
 
-    StatusOr<ColumnPtr> _evaluate_complex(const Columns& columns) { // without only-null columns
-        int size = columns[0]->size();
+    StatusOr<ColumnPtr> _evaluate_complex(const Columns& inputs) { // without only-null columns
+        int size = inputs[0]->size();
+        Columns columns;
+        for (const auto& col : inputs) {
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), size, col));
+        }
         int col_size = columns.size();
-        auto res = ColumnHelper::cast_to_nullable_column(columns[0]->clone_empty());
+        auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(size);
         NullColumns nullColumns;
-        nullColumns.reserve(col_size);
+        nullColumns.resize(col_size);
         for (auto i = 0; i < col_size; ++i) {
             if (columns[i]->is_nullable()) {
-                nullColumns.emplace_back(down_cast<NullableColumn*>(columns[i].get())->null_column());
+                nullColumns[i] = down_cast<NullableColumn*>(columns[i].get())->null_column();
             } else {
-                nullColumns.emplace_back(nullptr);
+                nullColumns[i] = nullptr;
             }
         }
         for (int row = 0; row < size; ++row) {

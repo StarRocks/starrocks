@@ -14,9 +14,10 @@
 
 package com.starrocks.qe;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -31,10 +32,8 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class HDFSBackendSelectorTest {
     @Mocked
@@ -69,22 +68,20 @@ public class HDFSBackendSelectorTest {
         return ans;
     }
 
-    private List<ComputeNode> createComputeNodes(int number) {
-        List<ComputeNode> ans = new ArrayList<>();
+    private ImmutableMap<Long, ComputeNode> createComputeNodes(int number) {
+        Map<Long, ComputeNode> ans = new HashMap<>();
         for (int i = 0; i < number; i++) {
             ComputeNode node = new ComputeNode(i, String.format(hostFormat, i), computeNodePort);
             node.setBePort(computeNodePort);
             node.setAlive(true);
-            ans.add(node);
+            ans.put((long) i, node);
         }
-        return ans;
+        return ImmutableMap.copyOf(ans);
     }
 
-    private Map<TNetworkAddress, Long> computeHostReadBytes(
-            FragmentScanRangeAssignment assignment,
-            int scanNodeId) {
-        Map<TNetworkAddress, Long> stats = new HashMap<>();
-        for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
+    private Map<Long, Long> computeWorkerIdToReadBytes(FragmentScanRangeAssignment assignment, int scanNodeId) {
+        Map<Long, Long> stats = new HashMap<>();
+        for (Map.Entry<Long, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
             List<TScanRangeParams> scanRangeParams = entry.getValue().get(scanNodeId);
             for (TScanRangeParams params : scanRangeParams) {
                 THdfsScanRange scanRange = params.scan_range.hdfs_scan_range;
@@ -109,21 +106,24 @@ public class HDFSBackendSelectorTest {
         int scanRangeSize = 10000;
         int hostNumber = 3;
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
-        FragmentScanRangeAssignment assignment =
-                new FragmentScanRangeAssignment();
-        Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
-        Set<Long> usedBackendIDs = new HashSet<>();
-        List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
 
         HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
-                        ImmutableList.copyOf(computeNodes), false, false, false);
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
         selector.computeScanRangeAssignment();
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
         int variance = 5 * scanRangeSize;
-        Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);
-        for (Map.Entry<TNetworkAddress, Long> entry : stats.entrySet()) {
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
             Assert.assertTrue(Math.abs(entry.getValue() - avg) < variance);
         }
@@ -158,20 +158,23 @@ public class HDFSBackendSelectorTest {
             }
         }
 
-        FragmentScanRangeAssignment assignment =
-                new FragmentScanRangeAssignment();
-        Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
-        Set<Long> usedBackendIDs = new HashSet<>();
-        List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
 
         HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
-                        ImmutableList.copyOf(computeNodes), true, true, false);
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, true, false);
         selector.computeScanRangeAssignment();
 
-        Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);
+        Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
         Assert.assertEquals(stats.size(), localHostNumber);
-        for (Map.Entry<TNetworkAddress, Long> entry : stats.entrySet()) {
+        for (Map.Entry<Long, Long> entry : stats.entrySet()) {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
         }
     }

@@ -271,7 +271,6 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
-    | setWarehouseStatement
 
     // Storage Volume Statement
     | createStorageVolumeStatement
@@ -515,7 +514,11 @@ descTableStatement
     ;
 
 createTableLikeStatement
-    : CREATE (EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName LIKE qualifiedName
+    : CREATE (EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName
+        partitionDesc?
+        distributionDesc?
+        properties?
+        LIKE qualifiedName
     ;
 
 showIndexStatement
@@ -1643,10 +1646,10 @@ showSnapshotStatement
     ;
 
 createRepositoryStatement
-    : CREATE (READ ONLY)? REPOSITORY identifier
-    WITH BROKER identifier?
-    ON LOCATION string
-    PROPERTIES propertyList
+    : CREATE (READ ONLY)? REPOSITORY repoName=identifier
+    WITH BROKER brokerName=identifierOrString?
+    ON LOCATION location=string
+    (PROPERTIES propertyList)?
     ;
 
 dropRepositoryStatement
@@ -1796,10 +1799,6 @@ roleList
     : identifierOrString (',' identifierOrString)*
     ;
 
-setWarehouseStatement
-    : SET WAREHOUSE identifierOrString
-    ;
-
 executeScriptStatement
     : ADMIN EXECUTE ON (FRONTEND | INTEGER_VALUE) string
     ;
@@ -1929,7 +1928,7 @@ relationPrimary
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | TABLE '(' qualifiedName '(' expressionList ')' ')'
         (AS? alias=identifier columnAliases?)?                                          #normalizedTableFunction
-    | TABLE propertyList
+    | FILES propertyList
         (AS? alias=identifier columnAliases?)?                                          #fileTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
     ;
@@ -2254,11 +2253,11 @@ restoreTableDesc
     ;
 
 explainDesc
-    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
+    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | ANALYZE |VERBOSE | COSTS)?
     ;
 
 optimizerTrace
-    : TRACE OPTIMIZER
+    : TRACE (OPTIMIZER | REWRITE)
     ;
 
 partitionDesc
@@ -2553,7 +2552,7 @@ nonReserved
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
     | PERCENT_RANK | PRECEDING | PROC | PROCESSLIST | PRIVILEGES | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUEUE | QUOTA | QUALIFY
-    | REMOVE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
+    | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
     | SAMPLE | SCHEDULER | SECOND | SECURITY | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START

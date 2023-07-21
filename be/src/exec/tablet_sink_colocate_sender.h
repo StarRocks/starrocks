@@ -14,53 +14,19 @@
 
 #pragma once
 
-#include <memory>
-#include <queue>
-#include <set>
-#include <string>
-#include <thread>
-#include <unordered_map>
-#include <utility>
-#include <vector>
-
-#include "common/object_pool.h"
-#include "common/status.h"
-#include "common/tracer.h"
-#include "exec/data_sink.h"
-#include "exec/tablet_info.h"
-#include "exec/tablet_sink_index_channel.h"
 #include "exec/tablet_sink_sender.h"
-#include "gen_cpp/Types_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
-#include "gen_cpp/internal_service.pb.h"
-#include "runtime/mem_tracker.h"
-#include "util/compression/block_compression.h"
-#include "util/raw_container.h"
-#include "util/ref_count_closure.h"
-#include "util/reusable_closure.h"
-#include "util/threadpool.h"
 
-namespace starrocks {
+namespace starrocks::stream_load {
 
-class MemTracker;
-class RuntimeProfile;
-class RowDescriptor;
-class TupleDescriptor;
-class ExprContext;
-class TExpr;
-
-namespace stream_load {
 // TabletSinkColocateSender will control one index/table's send chunks.
 class TabletSinkColocateSender final : public TabletSinkSender {
 public:
-    TabletSinkColocateSender(PUniqueId load_id, int64_t txn_id, OlapTableLocationParam* location,
+    TabletSinkColocateSender(PUniqueId load_id, int64_t txn_id, IndexIdToTabletBEMap index_id_to_tablet_be_map,
                              OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
                              std::unordered_map<int64_t, NodeChannel*> node_channels,
                              std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
-                             TWriteQuorumType::type write_quorum_type, int num_repicas)
-            : TabletSinkSender(load_id, txn_id, location, vectorized_partition, std::move(channels),
-                               std::move(node_channels), std::move(output_expr_ctxs), enable_replicated_storage,
-                               write_quorum_type, num_repicas) {}
+                             TWriteQuorumType::type write_quorum_type, int num_repicas);
+
     ~TabletSinkColocateSender() = default;
 
 public:
@@ -81,9 +47,12 @@ public:
     bool is_close_done() override;
 
 private:
+    Status _send_chunks(const OlapTableSchemaParam* schema, Chunk* chunk,
+                        const std::vector<std::vector<int64_t>>& index_tablet_ids,
+                        const std::vector<uint16_t>& selection_idx);
+
     bool _colocate_mv_index{true};
     std::vector<std::vector<int64_t>> _index_tablet_ids;
 };
 
-} // namespace stream_load
-} // namespace starrocks
+} // namespace starrocks::stream_load

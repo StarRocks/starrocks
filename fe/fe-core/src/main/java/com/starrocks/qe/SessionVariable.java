@@ -147,6 +147,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
+    // enable table pruning(RBO) in cardinality-preserving joins
+    public static final String ENABLE_RBO_TABLE_PRUNE = "enable_rbo_table_prune";
+
+    // enable table pruning(CBO) in cardinality-preserving joins
+    public static final String ENABLE_CBO_TABLE_PRUNE = "enable_cbo_table_prune";
+    // if set to true, some of stmt will be forwarded to leader FE to get result
+
     // if set to true, some of stmt will be forwarded to leader FE to get result
     public static final String FORWARD_TO_LEADER = "forward_to_leader";
     public static final String FORWARD_TO_MASTER = "forward_to_master";
@@ -367,6 +374,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
             "enable_materialized_view_single_table_view_delta_rewrite";
     public static final String ANALYZE_FOR_MV = "analyze_mv";
+    public static final String QUERY_EXCLUDING_MV_NAMES = "query_excluding_mv_names";
+    public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -402,6 +411,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // Used by full sort inorder to permute only order-by columns in cascading merging phase, after
     // that, non-order-by output columns are permuted according to the ordinal column.
+    public static final String FULL_SORT_LATE_MATERIALIZATION_V2 = "full_sort_late_materialization_v2";
     public static final String FULL_SORT_LATE_MATERIALIZATION = "full_sort_late_materialization";
 
     // For group-by-count-distinct query like select a, count(distinct b) from t group by a, if group-by column a
@@ -431,6 +441,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
 
     public static final String DISABLE_FUNCTION_FOLD_CONSTANTS = "disable_function_fold_constants";
+
+    public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
+
+    public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -643,7 +657,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final int PIPELINE_BATCH_SIZE = 4096;
 
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
-    private String streamingPreaggregationMode = "auto"; // auto, force_streaming, force_preaggregation
+    private String streamingPreaggregationMode = SessionVariableConstants.AUTO; // auto, force_streaming, force_preaggregation
 
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
@@ -749,6 +763,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SPILL_ENCODE_LEVEL)
     private int spillEncodeLevel = 7;
 
+    @VarAttr(name = ENABLE_RBO_TABLE_PRUNE)
+    private boolean enableRboTablePrune = false;
+
+    @VarAttr(name = ENABLE_CBO_TABLE_PRUNE)
+    private boolean enableCboTablePrune = false;
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -1063,6 +1082,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewSingleTableViewDeltaRewrite = false;
 
+    @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
+    private String queryExcludingMVNames = "";
+
+    @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
+    private String queryincludingMVNames = "";
+
     @VarAttr(name = ANALYZE_FOR_MV)
     private String analyzeTypeForMV = "sample";
 
@@ -1115,8 +1140,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
     private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
 
-    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
-    private boolean fullSortLateMaterialization = false;
+    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION_V2, alias = FULL_SORT_LATE_MATERIALIZATION,
+            show = FULL_SORT_LATE_MATERIALIZATION)
+    private boolean fullSortLateMaterialization = true;
 
     @VariableMgr.VarAttr(name = DISTINCT_COLUMN_BUCKETS)
     private int distinctColumnBuckets = 1024;
@@ -1144,6 +1170,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = DISABLE_FUNCTION_FOLD_CONSTANTS, flag = VariableMgr.INVISIBLE)
     private boolean disableFunctionFoldConstants = false;
+
+    @VarAttr(name = ENABLE_SIMPLIFY_CASE_WHEN, flag = VariableMgr.INVISIBLE)
+    private boolean enableSimplifyCaseWhen = true;
+
+    @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
+    private boolean enableCountStarOptimization = true;
 
     private int exprChildrenLimit = -1;
 
@@ -1440,6 +1472,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSpillMode(String spillMode) {
         this.spillMode = spillMode;
+    }
+
+    public void setEnableRboTablePrune(boolean enableRboTablePrune) {
+        this.enableRboTablePrune = enableRboTablePrune;
+    }
+
+    public void setEnableCboTablePrune(boolean enableCboTablePrune) {
+        this.enableCboTablePrune = enableCboTablePrune;
+    }
+
+    public boolean isEnableRboTablePrune() {
+        return enableRboTablePrune;
+    }
+
+    public boolean isEnableCboTablePrune() {
+        return enableCboTablePrune;
     }
 
     public int getSpillMemTableSize() {
@@ -1754,8 +1802,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return runtimeProfileReportInterval;
     }
 
+    public void setProfileLimitFold(boolean profileLimitFold) {
+        this.profileLimitFold = profileLimitFold;
+    }
+
     public boolean isProfileLimitFold() {
         return profileLimitFold;
+    }
+
+    public void setPipelineProfileLevel(int pipelineProfileLevel) {
+        this.pipelineProfileLevel = pipelineProfileLevel;
     }
 
     public int getPipelineProfileLevel() {
@@ -2050,6 +2106,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewSingleTableViewDeltaRewrite = enableMaterializedViewSingleTableViewDeltaRewrite;
     }
 
+    public String getQueryExcludingMVNames() {
+        return queryExcludingMVNames;
+    }
+
+    public void setQueryExcludingMVNames(String queryExcludingMVNames) {
+        this.queryExcludingMVNames = queryExcludingMVNames;
+    }
+
+    public String getQueryincludingMVNames() {
+        return queryincludingMVNames;
+    }
+
+    public void setQueryincludingMVNames(String queryincludingMVNames) {
+        this.queryincludingMVNames = queryincludingMVNames;
+    }
+
     public String getAnalyzeForMV() {
         return analyzeTypeForMV;
     }
@@ -2208,6 +2280,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setDisableFunctionFoldConstants(boolean disableFunctionFoldConstants) {
         this.disableFunctionFoldConstants = disableFunctionFoldConstants;
+    }
+
+    public boolean isEnableSimplifyCaseWhen() {
+        return enableSimplifyCaseWhen;
+    }
+
+    public void setEnableSimplifyCaseWhen(boolean enableSimplifyCaseWhen) {
+        this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
+    }
+
+    public boolean isEnableCountStarOptimization() {
+        return enableCountStarOptimization;
+    }
+
+    public void setEnableCountStarOptimization(boolean v) {
+        enableCountStarOptimization = v;
     }
 
     // Serialize to thrift object

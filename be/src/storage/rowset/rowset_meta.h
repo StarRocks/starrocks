@@ -208,6 +208,12 @@ public:
     }
 
     const TabletSchemaCSPtr tablet_schema() { return _schema; }
+  
+    void set_partial_schema_change(bool partial_schema_change) {
+        _rowset_meta_pb->set_partial_schema_change(partial_schema_change);
+    }
+
+    bool partial_schema_change() { return _rowset_meta_pb->partial_schema_change(); }
 
 private:
     bool _deserialize_from_pb(std::string_view value) {

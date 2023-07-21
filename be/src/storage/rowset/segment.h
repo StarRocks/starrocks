@@ -104,7 +104,7 @@ public:
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg);
+    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx);
 
     uint64_t id() const { return _segment_id; }
 
@@ -150,6 +150,8 @@ public:
     FileSystem* file_system() const { return _fs.get(); }
 
     bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
+
+    const TabletSchema& tablet_schema() const { return *_tablet_schema; }
 
     const std::string& file_name() const { return _fname; }
 

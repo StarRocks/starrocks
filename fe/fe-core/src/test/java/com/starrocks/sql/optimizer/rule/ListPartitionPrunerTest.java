@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -23,8 +24,13 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -34,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.junit.Assert;
 import org.junit.Before;
@@ -44,12 +51,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
-
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 public class ListPartitionPrunerTest {
-    private Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap;
+    private Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap;
     private Map<ColumnRefOperator, Set<Long>> columnToNullPartitions;
     private List<ScalarOperator> conjuncts;
     private ColumnRefOperator dateColumn;
@@ -73,13 +81,13 @@ public class ListPartitionPrunerTest {
         intColumn = new ColumnRefOperator(2, Type.INT, "int_col", true);
 
         // column -> partition values
-        columnToPartitionValuesMap = Maps.newHashMap();
-        TreeMap<LiteralExpr, Set<Long>> datePartitionValuesMap = Maps.newTreeMap();
+        columnToPartitionValuesMap = Maps.newConcurrentMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> datePartitionValuesMap = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(dateColumn, datePartitionValuesMap);
         datePartitionValuesMap.put(new DateLiteral(2021, 1, 1), Sets.newHashSet(0L, 1L, 2L));
         datePartitionValuesMap.put(new DateLiteral(2021, 1, 2), Sets.newHashSet(3L, 4L, 5L));
         datePartitionValuesMap.put(new DateLiteral(2021, 1, 3), Sets.newHashSet(6L, 7L, 8L));
-        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap = Maps.newTreeMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intColumn, intPartitionValuesMap);
         intPartitionValuesMap.put(new IntLiteral(0, Type.INT), Sets.newHashSet(0L, 3L, 6L));
         intPartitionValuesMap.put(new IntLiteral(1, Type.INT), Sets.newHashSet(1L, 4L, 7L));
@@ -173,8 +181,8 @@ public class ListPartitionPrunerTest {
         ColumnRefOperator stringColumn = new ColumnRefOperator(1, Type.STRING, "string_col", true);
 
         // column -> partition values
-        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
-        TreeMap<LiteralExpr, Set<Long>> stringPartitionValuesMap = Maps.newTreeMap();
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> stringPartitionValuesMap = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(stringColumn, stringPartitionValuesMap);
         stringPartitionValuesMap.put(new StringLiteral("2021-01-01"), Sets.newHashSet(1L));
         stringPartitionValuesMap.put(new StringLiteral("2021-01-02"), Sets.newHashSet(2L));
@@ -224,8 +232,9 @@ public class ListPartitionPrunerTest {
         ColumnRefOperator stringColumn = new ColumnRefOperator(1, Type.STRING, "string_col", true);
 
         // column -> partition values
-        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
-        TreeMap<LiteralExpr, Set<Long>> stringPartitionValuesMap = Maps.newTreeMap();
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
+                Maps.newConcurrentMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> stringPartitionValuesMap = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(stringColumn, stringPartitionValuesMap);
         stringPartitionValuesMap.put(new StringLiteral("01"), Sets.newHashSet(1L));
         stringPartitionValuesMap.put(new StringLiteral("02"), Sets.newHashSet(2L));
@@ -287,8 +296,8 @@ public class ListPartitionPrunerTest {
         ColumnRefOperator intColumn = new ColumnRefOperator(1, Type.INT, "int_col", true);
 
         // column -> partition values
-        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
-        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap = Maps.newTreeMap();
+        Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intColumn, intPartitionValuesMap);
         intPartitionValuesMap.put(new IntLiteral(1), Sets.newHashSet(1L));
         intPartitionValuesMap.put(new IntLiteral(2), Sets.newHashSet(2L));
@@ -332,8 +341,6 @@ public class ListPartitionPrunerTest {
         Assert.assertEquals(Lists.newArrayList(1L, 4L, 5L, 6L), pruner.prune());
     }
 
-
-
     @Test
     public void testSpecifyPartition() throws AnalysisException {
         // 2 partition columns
@@ -347,11 +354,11 @@ public class ListPartitionPrunerTest {
 
         // column -> partition values
         columnToPartitionValuesMap = Maps.newHashMap();
-        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap1 = Maps.newTreeMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap1 = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intCol1, intPartitionValuesMap1);
         intPartitionValuesMap1.put(new IntLiteral(0, Type.INT), Sets.newHashSet(0L, 1L));
         intPartitionValuesMap1.put(new IntLiteral(1, Type.INT), Sets.newHashSet(2L));
-        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap2 = Maps.newTreeMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap2 = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intCol2, intPartitionValuesMap2);
         intPartitionValuesMap2.put(new IntLiteral(10, Type.INT), Sets.newHashSet(0L, 2L));
         intPartitionValuesMap2.put(new IntLiteral(11, Type.INT), Sets.newHashSet(1L));
@@ -381,11 +388,11 @@ public class ListPartitionPrunerTest {
 
         // column -> partition values
         columnToPartitionValuesMap = Maps.newHashMap();
-        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap1 = Maps.newTreeMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap1 = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intCol1, intPartitionValuesMap1);
         intPartitionValuesMap1.put(new IntLiteral(0, Type.INT), Sets.newHashSet(0L, 1L));
         intPartitionValuesMap1.put(new IntLiteral(1, Type.INT), Sets.newHashSet(2L));
-        TreeMap<LiteralExpr, Set<Long>> intPartitionValuesMap2 = Maps.newTreeMap();
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap2 = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intCol2, intPartitionValuesMap2);
         intPartitionValuesMap2.put(new IntLiteral(10, Type.INT), Sets.newHashSet(0L, 2L));
         intPartitionValuesMap2.put(new IntLiteral(11, Type.INT), Sets.newHashSet(1L));
@@ -532,6 +539,39 @@ public class ListPartitionPrunerTest {
                         new InPredicateOperator(false, Lists.newArrayList(intColumn, ConstantOperator.createInt(0)))
                 )));
         Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L, 3L, 6L, 9L), pruner.prune());
+
+        // date_col != "2021-01-02" and int_col is not null
+        conjuncts.clear();
+        conjuncts.add(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND,
+                new BinaryPredicateOperator(BinaryType.NE, dateColumn,
+                        ConstantOperator.createDate(LocalDateTime.of(2021, 1, 2, 0, 0, 0))),
+                new IsNullPredicateOperator(true, intColumn)));
+        Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L, 6L, 7L, 8L), pruner.prune());
+    }
+
+    @Test
+    public void testGetEffectivePartitionPredicate() {
+        Column dateCol = new Column("date_col", Type.DATE);
+        Column intCol = new Column("int_col", Type.INT);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dateCol, dateColumn);
+        columnMetaToColRefMap.put(intCol, intColumn);
+
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(new HiveTable(), Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        conjuncts.clear();
+        conjuncts.add(new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND,
+                new BinaryPredicateOperator(BinaryType.NE, dateColumn,
+                        ConstantOperator.createDate(LocalDateTime.of(2021, 1, 2, 0, 0, 0))),
+                new IsNullPredicateOperator(true, intColumn)));
+
+        List<Optional<ScalarOperator>> result = OptExternalPartitionPruner.getEffectivePartitionPredicate(scanOperator, 
+                ImmutableList.of(dateCol, intCol), Utils.compoundAnd(conjuncts));
+        Assert.assertEquals(2, result.size());
     }
 
     @Test
@@ -598,7 +638,7 @@ public class ListPartitionPrunerTest {
     public void testBinaryPredicateWithEmptyPartition() throws AnalysisException {
         ColumnRefOperator operator = new ColumnRefOperator(5, Type.VARCHAR, "ds", true);
         columnToPartitionValuesMap = Maps.newHashMap();
-        columnToPartitionValuesMap.put(operator, new TreeMap<>());
+        columnToPartitionValuesMap.put(operator, new ConcurrentSkipListMap<>());
         columnToNullPartitions = new HashMap<>();
         columnToNullPartitions.put(operator, new HashSet<>());
         conjuncts = Lists.newArrayList();
@@ -612,7 +652,7 @@ public class ListPartitionPrunerTest {
     public void testInPredicateWithEmptyPartition() throws AnalysisException {
         ColumnRefOperator operator = new ColumnRefOperator(5, Type.VARCHAR, "ds", true);
         columnToPartitionValuesMap = Maps.newHashMap();
-        columnToPartitionValuesMap.put(operator, new TreeMap<>());
+        columnToPartitionValuesMap.put(operator, new ConcurrentSkipListMap<>());
         columnToNullPartitions = new HashMap<>();
         columnToNullPartitions.put(operator, new HashSet<>());
         conjuncts = Lists.newArrayList();

@@ -531,6 +531,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return Collections.emptyList();
     }
 
+    public PhysicalPartition getPhysicalPartition(long partitionId) {
+        return null;
+    }
+
     public Set<String> getDistributionColumnNames() {
         return Collections.emptySet();
     }

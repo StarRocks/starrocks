@@ -29,6 +29,7 @@
 #include "util/phmap/phmap.h"
 #include "util/stack_util.h"
 #include "util/time.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -144,6 +145,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
 }
 
 Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("rowset_update_state_load");
     auto span = Tracer::Instance().start_trace_txn_tablet("rowset_update_state_load", rowset->txn_id(),
                                                           tablet->tablet_id());
     _tablet_id = tablet->tablet_id();
@@ -381,7 +383,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
 
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx,
                                                                         EditVersion latest_applied_version,
-                                                                        std::vector<uint32_t> column_id) {
+                                                                        const std::vector<uint32_t>& column_id) {
     if (_auto_increment_partial_update_states.size() == 0) {
         _auto_increment_partial_update_states.resize(rowset->num_segments());
     }
@@ -398,8 +400,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
         schema = TabletSchema::create(tablet->tablet_schema(), update_column_ids);
     }
 
-    _auto_increment_partial_update_states[idx].init(rowset, schema != nullptr ? schema : tablet->tablet_schema(),
-                                                    column_id[0], idx);
+    _auto_increment_partial_update_states[idx].init(
+            rowset, schema != nullptr ? schema : tablet->tablet_schema(),
+            rowset_meta_pb.txn_meta().auto_increment_partial_update_column_id(), idx);
     _auto_increment_partial_update_states[idx].src_rss_rowids.resize(_upserts[idx]->size());
 
     auto column = ChunkHelper::column_from_field(*read_column_schema.field(0).get());
@@ -557,7 +560,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
             std::unique_ptr<Column> new_write_column =
                     _partial_update_states[segment_id].write_columns[col_idx]->clone_empty();
             new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
-            RETURN_IF_ERROR(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
+            RETURN_IF_EXCEPTION(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
                     *new_write_column, conflict_idxes.data()));
         }
     }
@@ -608,9 +611,16 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
 
     if (txn_meta.has_auto_increment_partial_update_column_id()) {
-        uint32_t id = txn_meta.auto_increment_partial_update_column_id();
-        RETURN_IF_ERROR(_prepare_auto_increment_partial_update_states(
-                tablet, rowset, segment_id, latest_applied_version, std::vector<uint32_t>(1, id)));
+        uint32_t id = 0;
+        for (int i = 0; i < tablet->tablet_schema().num_columns(); ++i) {
+            if (tablet->tablet_schema().column(i).is_auto_increment()) {
+                id = i;
+                break;
+            }
+        }
+        std::vector<uint32_t> column_id(1, id);
+        RETURN_IF_ERROR(_prepare_auto_increment_partial_update_states(tablet, rowset, segment_id,
+                                                                      latest_applied_version, column_id));
     }
 
     auto src_path = Rowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), segment_id);

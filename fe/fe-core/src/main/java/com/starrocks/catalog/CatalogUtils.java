@@ -24,6 +24,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
@@ -116,21 +117,25 @@ public class CatalogUtils {
         for (Partition partition : partitionList) {
             if (!listMap.isEmpty()) {
                 List<LiteralExpr> currentPartitionValueList = listMap.get(partition.getId());
-                simpleSet.addAll(currentPartitionValueList);
-                for (LiteralExpr literalExpr : currentPartitionValueList) {
-                    simpleValueSet.add(literalExpr.getRealObjectValue());
+                if (currentPartitionValueList != null) {
+                    simpleSet.addAll(currentPartitionValueList);
+                    for (LiteralExpr literalExpr : currentPartitionValueList) {
+                        simpleValueSet.add(literalExpr.getRealObjectValue());
+                    }
+                    continue;
                 }
-                continue;
             }
             if (!multiListMap.isEmpty()) {
                 List<List<LiteralExpr>> currentMultiplePartitionValueList = multiListMap.get(partition.getId());
-                multiSet.addAll(currentMultiplePartitionValueList);
-                for (List<LiteralExpr> list : currentMultiplePartitionValueList) {
-                    List<Object> valueList = new ArrayList<>();
-                    for (LiteralExpr literalExpr : list) {
-                        valueList.add(literalExpr.getRealObjectValue());
+                if (currentMultiplePartitionValueList != null) {
+                    multiSet.addAll(currentMultiplePartitionValueList);
+                    for (List<LiteralExpr> list : currentMultiplePartitionValueList) {
+                        List<Object> valueList = new ArrayList<>();
+                        for (LiteralExpr literalExpr : list) {
+                            valueList.add(literalExpr.getRealObjectValue());
+                        }
+                        multiValueSet.add(valueList);
                     }
-                    multiValueSet.add(valueList);
                 }
             }
         }
@@ -299,6 +304,11 @@ public class CatalogUtils {
 
     public static int calBucketNumAccordingToBackends() {
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+        }
+
         // When POC, the backends is not greater than three most of the time.
         // The bucketNum will be given a small multiplier factor for small backends.
         int bucketNum = 0;

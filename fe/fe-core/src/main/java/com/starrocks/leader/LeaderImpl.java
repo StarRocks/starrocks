@@ -1121,7 +1121,7 @@ public class LeaderImpl {
                 TBackendMeta backendMeta = new TBackendMeta();
                 backendMeta.setBackend_id(backend.getId());
                 backendMeta.setHost(backend.getHost());
-                backendMeta.setBe_port(backend.getBeRpcPort());
+                backendMeta.setBe_port(backend.getBePort());
                 backendMeta.setRpc_port(backend.getBrpcPort());
                 backendMeta.setHttp_port(backend.getHttpPort());
                 backendMeta.setAlive(backend.isAlive());

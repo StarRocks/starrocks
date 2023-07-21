@@ -48,7 +48,14 @@ ScalarColumnIterator::~ScalarColumnIterator() = default;
 
 Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
-    RETURN_IF_ERROR(_reader->load_ordinal_index(_skip_fill_local_cache()));
+
+    IndexReadOptions index_opts;
+    index_opts.use_page_cache = config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache;
+    index_opts.kept_in_memory = config::enable_ordinal_index_memory_page_cache;
+    index_opts.skip_fill_data_cache = _skip_fill_data_cache();
+    index_opts.read_file = _opts.read_file;
+    index_opts.stats = _opts.stats;
+    RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
     _opts.stats->total_columns_data_page_count += _reader->num_data_pages();
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
@@ -173,12 +180,12 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
     return Status::OK();
 }
 
-Status ScalarColumnIterator::next_batch(const SparseRange& range, Column* dst) {
+Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     size_t prev_bytes = dst->byte_size();
-    SparseRangeIterator iter = range.new_iterator();
+    SparseRangeIterator<> iter = range.new_iterator();
     size_t end_ord = _page->first_ordinal() + _page->num_rows();
     bool contain_deleted_row = (dst->delete_state() != DEL_NOT_SATISFIED);
-    SparseRange read_range;
+    SparseRange<> read_range;
     // range is empty should only occur when array column is nullable
     DCHECK(range.empty() || (range.begin() == _current_ordinal));
 
@@ -208,8 +215,8 @@ Status ScalarColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         if (end_ord > _current_ordinal) {
             // the data of current_range is in current page
             // add current_range into read_range
-            Range r = iter.next(end_ord - _current_ordinal);
-            read_range.add(Range(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
+            Range<> r = iter.next(end_ord - _current_ordinal);
+            read_range.add(Range<>(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
             _current_ordinal += r.span_size();
         }
 
@@ -298,11 +305,18 @@ Status ScalarColumnIterator::_read_data_page(const OrdinalPageIndexIterator& ite
 }
 
 Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                                        const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
+                                                        const ColumnPredicate* del_predicate,
+                                                        SparseRange<>* row_ranges) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
+        IndexReadOptions opts;
+        opts.use_page_cache = config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache;
+        opts.kept_in_memory = config::enable_zonemap_index_memory_page_cache;
+        opts.skip_fill_data_cache = _skip_fill_data_cache();
+        opts.read_file = _opts.read_file;
+        opts.stats = _opts.stats;
         RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages,
-                                                 row_ranges, _skip_fill_local_cache()));
+                                                 row_ranges, opts));
     } else {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     }
@@ -310,14 +324,21 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
 }
 
 Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                            SparseRange* row_ranges) {
+                                                            SparseRange<>* row_ranges) {
     RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
     bool support = false;
     for (const auto* pred : predicates) {
         support = support | pred->support_bloom_filter();
     }
     RETURN_IF(!support, Status::OK());
-    RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, _skip_fill_local_cache()));
+
+    IndexReadOptions opts;
+    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.kept_in_memory = !config::disable_storage_page_cache;
+    opts.skip_fill_data_cache = _skip_fill_data_cache();
+    opts.read_file = _opts.read_file;
+    opts.stats = _opts.stats;
+    RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, opts));
     return Status::OK();
 }
 
@@ -331,7 +352,7 @@ Status ScalarColumnIterator::next_dict_codes(size_t* n, Column* dst) {
     return (this->*_next_dict_codes_func)(n, dst);
 }
 
-Status ScalarColumnIterator::next_dict_codes(const SparseRange& range, Column* dst) {
+Status ScalarColumnIterator::next_dict_codes(const SparseRange<>& range, Column* dst) {
     DCHECK(all_page_dict_encoded());
     return (this->*_next_batch_dict_codes_func)(range, dst);
 }
@@ -397,11 +418,11 @@ Status ScalarColumnIterator::_do_next_dict_codes(size_t* n, Column* dst) {
 }
 
 template <LogicalType Type>
-Status ScalarColumnIterator::_do_next_batch_dict_codes(const SparseRange& range, Column* dst) {
+Status ScalarColumnIterator::_do_next_batch_dict_codes(const SparseRange<>& range, Column* dst) {
     bool contain_deleted_row = false;
-    SparseRangeIterator iter = range.new_iterator();
+    SparseRangeIterator<> iter = range.new_iterator();
     size_t end_ord = _page->first_ordinal() + _page->num_rows();
-    SparseRange read_range;
+    SparseRange<> read_range;
 
     DCHECK_EQ(range.begin(), _current_ordinal);
     // similar to ScalarColumnIterator::next_batch
@@ -422,8 +443,8 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const SparseRange& range,
 
         _current_ordinal = iter.begin();
         if (end_ord > _current_ordinal) {
-            Range r = iter.next(end_ord - _current_ordinal);
-            read_range.add(Range(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
+            Range<> r = iter.next(end_ord - _current_ordinal);
+            read_range.add(Range<>(r.begin() - _page->first_ordinal(), r.end() - _page->first_ordinal()));
             _current_ordinal += r.span_size();
         }
 

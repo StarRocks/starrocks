@@ -207,6 +207,11 @@ public:
     }
 
     template <LogicalType LT>
+    static AggregateFunctionPtr MakeSessionNumberWindowFunction() {
+        return std::make_shared<SessionNumberWindowFunction<LT>>();
+    }
+
+    template <LogicalType LT>
     static AggregateFunctionPtr MakeHistogramAggregationFunction() {
         return std::make_shared<HistogramAggregationFunction<LT>>();
     }

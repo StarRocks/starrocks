@@ -6,7 +6,7 @@ This topic describes FE, BE, and system parameters. It also provides suggestions
 
 FE parameters are classified into dynamic parameters and static parameters.
 
-- Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid after you restart your FE.
+- Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid if you restart your FE. Therefore, we recommend that you also modify the configuration items in the `fe.conf` file to prevent the loss of modifications.
 
 - Static parameters can only be configured and adjusted in the FE configuration file **fe.conf**. **After you modify this file, you must restart your FE for the changes to take effect.**
 
@@ -35,6 +35,10 @@ You can configure or modify the settings of FE dynamic parameters using [ADMIN S
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
 ```
+
+> **NOTE**
+>
+> The configurations will be restored to the default values in the `fe.conf` file after the FE restarts. Therefore, we recommend that you also modify the configuration items in `fe.conf` to prevent the loss of modifications.
 
 #### Logging
 
@@ -70,6 +74,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | max_partitions_in_one_batch              | -    | 4096         | The maximum number of partitions that can be created when you bulk create partitions. |
 | max_query_retry_time                     | -    | 2            | The maximum number of query retries on an FE.                |
 | max_create_table_timeout_second          | s    | 600          | The maximum timeout duration for creating a table, in seconds. |
+| create_table_max_serial_replicas         | -    | 128          | The maximum number of replicas to create serially. If actual replica count exceeds this, replicas will be created concurrently. Try to reduce this config if table creation is taking a long time to complete. |
 | max_running_rollup_job_num_per_table     | -    | 1            | The maximum number of rollup jobs can run in parallel for a table. |
 | max_planner_scalar_rewrite_num           | -    | 100000       | The maximum number of times that the optimizer can rewrite a scalar operator. |
 | enable_statistic_collect                 | -    | TRUE         | Whether to collect statistics for the CBO. This feature is enabled by default. |
@@ -97,11 +102,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 | Parameter                               | Unit | Default                                         | Description                                                  |
 | --------------------------------------- | ---- | ----------------------------------------------- | ------------------------------------------------------------ |
+| max_broker_load_job_concurrency         | -    | 2                                               | The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `2`. The alias of this parameter is `async_load_task_pool_size`.|
 | load_straggler_wait_second              | s    | 300                                             | The maximum loading lag that can be tolerated by a BE replica. If this value is exceeded, cloning is performed to clone data from other replicas. Unit: seconds. |
 | desired_max_waiting_jobs                | -    | 1024                                            | The maximum number of pending jobs in an FE. The number refers to all jobs, such as table creation, loading, and schema change jobs. If the number of pending jobs in an FE reaches this value, the FE will reject new load requests. This parameter takes effect only for asynchronous loading. From v2.5 onwards, the default value is changed from 100 to 1024.|
 | max_load_timeout_second                 | s    | 259200                                          | The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs. Unit: seconds. |
 | min_load_timeout_second                 | s    | 1                                               | The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs. Unit: seconds. |
-| max_running_txn_num_per_db              | -    | 100                                             | The maximum number of load jobs that can run in parallel for each database in a StarRocks cluster. The default value is 100. If this value is exceeded, incoming load jobs will not be executed. If the incoming load job is a synchronous load job, it will be rejected. If it is an asynchronous load job, it will be put into the waiting queue. We do not recommend you increase this value because this will increase system load. |
+| max_running_txn_num_per_db              | -    | 100                                             | The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `100`.<br>When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load. |
 | load_parallel_instance_num              | -    | 1                                               | The maximum number of concurrent loading instances for each load job on a BE. |
 | disable_load_job                        | -    | FALSE                                           | Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled. |
 | history_job_keep_max_second             | s    | 604800                                          | The maximum duration a historical job can be retained, such as schema change jobs, in seconds. |
@@ -122,10 +128,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | insert_load_default_timeout_second      | s    | 3600                                            | The timeout duration for the INSERT INTO statement that is used to load data, in seconds. |
 | broker_load_default_timeout_second      | s    | 14400                                           | The timeout duration for a Broker Load job, in seconds.      |
 | min_bytes_per_broker_scanner            | Byte | 67108864                                        | The minimum allowed amount of data that can be processed by a Broker Load instance, in bytes. |
+| max_broker_concurrency                  | -    | 100                                             | The maximum number of concurrent instances for a Broker Load task. This parameter is deprecated from v3.1 onwards. |
 | export_max_bytes_per_be_per_task        | Byte | 268435456                                       | The maximum amount of data that can be exported from a single BE by a single data unload task, in bytes. |
 | export_running_job_num_limit            | -    | 5                                               | The maximum number of data exporting tasks that can run in parallel. |
 | export_task_default_timeout_second      | s    | 7200                                            | The timeout duration for a data exporting task, in seconds.  |
 | empty_load_as_error                     | -    | TRUE                                            | Whether to return an error message "all partitions have no load data" if no data is loaded. Values:<br> - TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data". <br> - FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error. |
+| external_table_commit_timeout_ms        | ms    | 10000                                          | The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration. |
 
 #### Storage
 
@@ -169,6 +177,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | authentication_ldap_simple_server_host   |  -  | Empty string |  The host on which the LDAP server runs.                               |
 | authentication_ldap_simple_server_port   |  -  | 389     | The port of the LDAP server.                                       |
 | authentication_ldap_simple_user_search_attr|  -  | uid     | The name of the attribute that identifies users in LDAP objects.|
+|max_upload_task_per_be                    |  -  | 0       | In each BACKUP operation, the maximum number of upload tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.1.0 onwards.     |
+|max_download_task_per_be                  |  -  | 0       | In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.1.0 onwards.     |
 
 ### Configure FE static parameters
 
@@ -252,7 +262,6 @@ This section provides an overview of the static parameters that you can configur
 
 | Parameter                         | Default                                                      | Description                                                  |
 | --------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| max_broker_load_job_concurrency   | 2                                                            | The size of the load task thread pool. This parameter is valid only for Broker Load. The value must be less than `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from 10 to 2.
 | load_checker_interval_second      | 5                                                            | The time interval at which load jobs are processed on a rolling basis. Unit: second. |
 | transaction_clean_interval_second | 30                                                           | The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner. |
 | label_clean_interval_second       | 14400                                                        | The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner. |
@@ -272,6 +281,27 @@ This section provides an overview of the static parameters that you can configur
 | tablet_sched_balancer_strategy       | disk_and_tablet | The policy based on which load balancing is implemented among tablets. The alias of this parameter is `tablet_balancer_strategy`. Valid values: `disk_and_tablet` and `be_load_score`. |
 | tablet_sched_storage_cooldown_second | -1              | The latency of automatic cooling starting from the time of table creation. The alias of this parameter is `storage_cooldown_second`. Unit: second. The default value `-1` specifies that automatic cooling is disabled. If you want to enable automatic cooling, set this parameter to a value greater than `-1`. |
 | tablet_stat_update_interval_second   | 300             | The time interval at which the FE retrieves tablet statistics from each BE. Unit: second. |
+
+#### StarRocks shared-data cluster
+
+| Parameter                           | Default         | Description                                                  |
+| ----------------------------------- | --------------- | ------------------------------------------------------------ |
+| run_mode                            | shared_nothing  | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
+| cloud_native_meta_port              | 6090            | The cloud-native meta service RPC port. Default: `6090`.     |
+| cloud_native_storage_type           | S3              | The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (Preview feature, supported from v3.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default) and `AZBLOB`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. |
+| aws_s3_path                         | N/A             | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`. |
+| aws_s3_endpoint                     | N/A             | The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. |
+| aws_s3_region                       | N/A             | The region in which your S3 bucket resides, for example, `us-west-2`. |
+| aws_s3_use_aws_sdk_default_behavior | false           | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
+| aws_s3_use_instance_profile         | false           | Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values: `true` and `false` (Default). <ul><li>If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws_s3_access_key` and `aws_s3_secret_key`. </li><li>If you use Instance Profile to access S3, you must specify this item as `true`. </li><li>If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws_s3_iam_role_arn`. </li><li>And if you use an external AWS account,  you must also specify `aws_s3_external_id`.</li></ul> |
+| aws_s3_access_key                   | N/A             | The Access Key ID used to access your S3 bucket.             |
+| aws_s3_secret_key                   | N/A             | The Secret Access Key used to access your S3 bucket.         |
+| aws_s3_iam_role_arn                 | N/A             | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
+| aws_s3_external_id                  | N/A             | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
+| azure_blob_path                     | N/A             | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
+| azure_blob_endpoint                 | N/A             | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
+| azure_blob_shared_key               | N/A             | The Shared Key used to authorize requests for your Azure Blob Storage.                     |
+| azure_blob_sas_token                | N/A             | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.                |
 
 #### Other FE static parameters
 
@@ -349,11 +379,12 @@ BE dynamic parameters are as follows.
 | cumulative_compaction_check_interval_seconds | 1 | Second | The time interval of thread polling for a Cumulative Compaction. |
 | update_compaction_check_interval_seconds | 60 | Second | The time interval at which to check the Update Compaction of the Primary Key table. |
 | min_compaction_failure_interval_sec | 120 | Second | The minimum time interval that a Tablet Compaction can be scheduled since the last compaction failure. |
+| max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | periodic_counter_update_period_ms | 500 | ms | The time interval at which to collect the Counter statistics. |
 | load_error_log_reserve_hours | 48 | Hour | The time for which data loading logs are reserved. |
 | streaming_load_max_mb | 10240 | MB | The maximum size of a file that can be streamed into StarRocks. |
 | streaming_load_max_batch_size_mb | 100 | MB | The maximum size of a JSON file that can be streamed into StarRocks. |
-| memory_maintenance_sleep_time_s | 10 | Second | The time interval at which TCMalloc GC is triggered. StarRocks executes GC periodically, and returns the released memory memory to the operating system. |
+| memory_maintenance_sleep_time_s | 10 | Second | The time interval at which ColumnPool GC is triggered. StarRocks executes GC periodically, and returns the released memory memory to the operating system. |
 | write_buffer_size | 104857600 | Byte | The buffer size of MemTable in the memory. This configuration item is the threshold to trigger a flush. |
 | tablet_stat_cache_update_interval_second | 300 | Second | The time interval at which to update Tablet Stat Cache. |
 | result_buffer_cancelled_interval_time | 300 | Second | The wait time before BufferControlBlock release data. |
@@ -370,7 +401,8 @@ BE dynamic parameters are as follows.
 | tablet_meta_checkpoint_min_new_rowsets_num | 10 | N/A | The minimum number of rowsets to create since the last TabletMeta Checkpoint. |
 | tablet_meta_checkpoint_min_interval_secs | 600 | Second | The time interval of thread polling for a TabletMeta Checkpoint. |
 | max_runnings_transactions_per_txn_map | 100 | N/A | The maximum number of transactions that can run concurrently in each partition. |
-| tablet_max_pending_versions | 1000 | N/A | The maximum number of pending versions that are tolerable in a Primary Key table. Pending versions refer to versions that are committed but not applied yet. |
+| tablet_max_pending_versions | 1000 | N/A | The maximum number of pending versions that are tolerable on a Primary Key tablet. Pending versions refer to versions that are committed but not applied yet. |
+| tablet_max_versions | 1000 | N/A | The maximum number of versions allowed on a tablet. If the number of versions exceeds this value, new write requests will fail. |
 | max_hdfs_file_handle | 1000 | N/A | The maximum number of HDFS file descriptors that can be opened. |
 | be_exit_after_disk_write_hang_second | 60 | second | The length of time that the BE waits to exit after the disk hangs. |
 | min_cumulative_compaction_failure_interval_sec | 30 | second | The minimum time interval at which Cumulative Compaction retries upon failures. |
@@ -393,6 +425,7 @@ BE static parameters are as follows.
 | brpc_num_threads | -1 | N/A | The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads. |
 | priority_networks | Empty string | N/A | The CIDR-formatted IP address that is used to specify the priority IP address of a BE node if the machine that hosts the BE node has multiple IP addresses. |
 | heartbeat_service_port | 9050 | N/A | The BE heartbeat service port, which is used to receive heartbeats from FEs. |
+| starlet_port | 9070 | N/A | The BE heartbeat service port for the StarRocks shared-data cluster. |
 | heartbeat_service_thread_count | 1 | N/A | The thread count of the BE heartbeat service. |
 | create_tablet_worker_count | 3 | N/A | The number of threads used to create a tablet. |
 | drop_tablet_worker_count | 3 | N/A | The number of threads used to drop a tablet. |
@@ -428,7 +461,6 @@ BE static parameters are as follows.
 | disable_storage_page_cache | FALSE | N/A | The boolean value to control if to disable PageCache. When PageCache is enabled, StarRocks caches the query results. PageCache can significantly improve the query performance when similar queries are repeated frequently. `true` indicates to disable PageCache. The value of this item has been changed from `true` to `false` since StarRocks v2.4.|
 | base_compaction_num_threads_per_disk | 1 | N/A | The number of threads used for Base Compaction on each storage volume. |
 | base_cumulative_delta_ratio | 0.3 | N/A | The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction. |
-| max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | compaction_trace_threshold | 60 | Second | The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace. |
 | be_http_port | 8040 | N/A | The HTTP server port. |
 | be_http_num_workers | 48 | N/A | The number of threads used by the HTTP server. |
@@ -522,9 +554,6 @@ BE static parameters are as follows.
 | jaeger_endpoint | | N/A | |
 | jdbc_connection_pool_size | 8 | N/A | |
 | l0_l1_merge_ratio | 10 | N/A | |
-| lake_gc_metadata_check_interval | 1800 | N/A | |
-| lake_gc_metadata_max_versions | 10 | N/A | |
-| lake_gc_segment_check_interval | 3600 | N/A | |
 | lake_gc_segment_expire_seconds | 259200 | N/A | |
 | lake_metadata_cache_limit | 2147483648 | N/A | |
 | late_materialization_ratio | 10 | N/A | |

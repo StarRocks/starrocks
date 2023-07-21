@@ -2,15 +2,17 @@
 
 Updates rows in a Primary Key table.
 
-In versions earlier than version 3.0, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTEs. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE.
+In versions earlier than version 3.0, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTEs. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE. Since version 3.1, the UPDATE statement supports the partial updates in column mode, which is suitable for scenarios involving a small number of columns but a large number of rows, resulting in faster update speeds.
+
+This command requires the UPDATE privilege on the table you want to update.
 
 ## Usage notes
 
-When executing the UPDATE statement, StarRocks converts the table expression in the FROM clause of the UPDATE statement into an equivalent JOIN query statement. Therefore, make sure that the table expression that you specify in the FROM clause of the UPDATE statement supports this conversion. For example, the UPDATE statement is 'UPDATE t0 SET v1=t1.v1 FROM t1 WHERE t0.pk = t1.pk;'. The table expression in the FROM clause can be converted to 't0 JOIN t1 ON t0.pk=t1.pk;'. StarRocks matches the data rows to be updated based on the result set of the JOIN query. It is possible that multiple rows in the result set match a certain row in the table to be updated. In this scenario, that row is updated based on the value of a random row among these multiple rows.
+When executing the UPDATE statement involving multiple tables, StarRocks converts the table expression in the FROM clause of the UPDATE statement into an equivalent JOIN query statement. Therefore, make sure that the table expression that you specify in the FROM clause of the UPDATE statement supports this conversion. For example, the UPDATE statement is 'UPDATE t0 SET v1=t1.v1 FROM t1 WHERE t0.pk = t1.pk;'. The table expression in the FROM clause can be converted to 't0 JOIN t1 ON t0.pk=t1.pk;'. StarRocks matches the data rows to be updated based on the result set of the JOIN query. It is possible that multiple rows in the result set match a certain row in the table to be updated. In this scenario, that row is updated based on the value of a random row among these multiple rows.
 
 ## Syntax
 
-**Single-table UPDATE**
+### Single-table UPDATE
 
 If the data rows of the table to be updated meet the WHERE condition, the specified columns of these data rows are assigned new values.
 
@@ -21,7 +23,7 @@ UPDATE <table_name>
     WHERE <where_condition>
 ```
 
-**Multi-table UPDATE**
+### Multi-table UPDATE
 
 The result set from the multi-table join is matched against the table to be updated. If the data rows of the table to be updated match the result set and meet the WHERE condition, the specified columns of these data rows are assigned new values.
 
@@ -57,7 +59,22 @@ One or more other tables in the database. These tables can be joined with the ta
 
 `where_condition`
 
-The condition based on which you want to update rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'.
+The condition based on which you want to update rows. Only rows that meet the WHERE condition can be updated. This parameter is required, because it helps prevent you from accidentally updating the entire table. If you want to update the entire table, you can use 'WHERE true'. However, this parameter is not mandatory for [partial updates in column mode](#partial-updates-in-column-mode-since-v31).
+
+## Partial updates in column mode (since v3.1)
+
+Partial updates in column mode are suitable for scenarios where only a small number of columns, but a large number of rows need to be updated. In such scenarios, enabing the column mode offers faster update speeds. For example, in a table with 100 columns, if only 10 columns (10% of the total) are updated for all rows, the update speed of the column mode is 10 times faster.
+
+The system variable `partial_update_mode` controls the mode of partial updates and supports the following values:
+
+- `auto` (default): The system automatically determines the mode of partial updates by analyzing the UPDATE statement and the columns involved. If the following criteria are met, the system automatically uses the column mode:
+  - The percentage of updated columns compared to the total number of columns is less than 30%, and the number of updated columns is fewer than 4.
+  - The update statement does not use a WHERE condition.
+Otherwise, the system automatically uses the regular mode.
+
+- `column`: The column mode is used for the partial updates, which is particularly suitable for the partial updates which involve a small number of columns and a large number of rows.
+
+You can use `EXPLAIN UPDATE xxx` to view the mode of partial updates.
 
 ## Examples
 

@@ -129,21 +129,27 @@ public class LakeMaterializedViewTest {
         };
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
+            S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
+                    .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
+                    .setCredential(AwsCredentialInfo.newBuilder()
+                            .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
+            FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
+                    .setFsKey("1").setFsType(FileStoreType.S3)
+                    .setS3FsInfo(s3FileStoreInfo).build();
+
             @Mock
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
-                S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
-                        .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
-                        .setCredential(AwsCredentialInfo.newBuilder()
-                                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
-                FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
-                        .setFsKey("1").setFsType(FileStoreType.S3)
-                        .setS3FsInfo(s3FileStoreInfo).build();
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
 
             @Mock
-            public boolean bindTableToStorageVolume(String svId, long tableId) {
-                return true;
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
             }
         };
 
@@ -255,7 +261,7 @@ public class LakeMaterializedViewTest {
         Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
         FileCacheInfo cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         Partition p1 = newMv.getPartition(partitionId);
@@ -275,7 +281,7 @@ public class LakeMaterializedViewTest {
         Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
         cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         // Test appendUniqueProperties
@@ -311,7 +317,7 @@ public class LakeMaterializedViewTest {
         // check table default cache info
         FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(0L);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         // replication num
@@ -323,6 +329,7 @@ public class LakeMaterializedViewTest {
         Assert.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
         Assert.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"true\""));
+        Assert.assertTrue(ddlStmt.contains("\"storage_volume\" = \"builtin_storage_volume\""));
 
         // check task
         String mvTaskName = "mv-" + mv.getId();

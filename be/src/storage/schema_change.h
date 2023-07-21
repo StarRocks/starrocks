@@ -43,6 +43,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_handler.h"
+#include "storage/delta_column_group.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema_change_utils.h"
@@ -88,6 +89,11 @@ public:
     Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                    TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
                    TabletSchemaCSPtr base_tablet_schema = nullptr) override;
+
+    static Status generate_delta_column_group_and_cols(const Tablet* new_tablet, const Tablet* base_tablet,
+                                                       const RowsetSharedPtr& src_rowset, RowsetId rid, int64_t version,
+                                                       ChunkChanger* chunk_changer, DeltaColumnGroupList& dcgs,
+                                                       std::vector<int> last_dcg_counts);
 
 private:
     ChunkChanger* _chunk_changer = nullptr;

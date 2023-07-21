@@ -100,8 +100,65 @@ E: (1064, "Getting syntax error at line 5, column 0. Detail message: Unexpected 
 -- !result
 select * from duplicate_table_with_null1;
 -- result:
-2020-08-04	2020-08-04 00:00:00	char4	varchar4	0
-2020-08-01	2020-08-01 00:00:00	char1	varchar1	1
 2020-08-02	2020-08-02 00:00:00	char2	varchar2	0
 2020-08-03	2020-08-03 00:00:00	char3	varchar3	1
+2020-08-01	2020-08-01 00:00:00	char1	varchar1	1
+2020-08-04	2020-08-04 00:00:00	char4	varchar4	0
+-- !result
+CREATE TABLE t_recharge_detail (
+    id bigint,
+    user_id bigint,
+    recharge_money decimal(32,2),
+    province varchar(20) not null,
+    dt varchar(20) not null
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+PARTITION BY (dt,province)
+DISTRIBUTED BY HASH(`id`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+-- result:
+-- !result
+insert overwrite t_recharge_detail PARTITION(dt='2022-04-02', province='beijing')
+select 2 as id, 2 as user_id, 2 as recharge_money, 'beijing' as province, '2022-04-02' as dt from dual;
+-- result:
+-- !result
+select * from t_recharge_detail;
+-- result:
+2	2	2.00	beijing	2022-04-02
+-- !result
+insert overwrite t_recharge_detail PARTITION(dt='2022-04-02', province='beijing')
+select 3 as id, 2 as user_id, 2 as recharge_money, 'beijing' as province, '2022-04-02' as dt from dual;
+-- result:
+-- !result
+select * from t_recharge_detail;
+-- result:
+3	2	2.00	beijing	2022-04-02
+-- !result
+drop table if exists duplicate_table_with_null1;
+-- result:
+-- !result
+drop table if exists duplicate_table_with_null2;
+-- result:
+-- !result
+CREATE TABLE `duplicate_table_with_null1` ( `k1`  date not null, `k2`  datetime,`k3`  char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY (k1) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) PROPERTIES (  "replication_num" = "1", "storage_format" = "v2");
+-- result:
+-- !result
+CREATE TABLE `duplicate_table_with_null2` ( `k1`  date not null, `k2`  datetime,`k3`  char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY (k1) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) PROPERTIES (  "replication_num" = "1", "storage_format" = "v2");
+-- result:
+-- !result
+insert into duplicate_table_with_null1 values('2020-01-01', '2020-01-01 12:30:30', 'asfgrgte', 'wergergqer', 'stringaaa', 0, 11, 111, 1111, 11111, 111111, 11.11, 1), ('2020-01-02', '0000-01-01 00:00:00', 'asfgrgtf', 'wergergqes', 'stringbbb',1, -128, -32768, -2147483648, -9223372036854775808, -170141183460469231731687303715884105728, 22.22, 2), ('2020-01-03', '9999-12-31 23:59:59', 'asfgrgtf', 'wergergqes', 'stringbbb',1, 127, 32767, 2147483647, 9223372036854775807, 170141183460469231731687303715884105727, 22.22, 2);
+-- result:
+-- !result
+insert into duplicate_table_with_null2 values('2021-01-01', '2020-01-01 12:30:30', 'asfgrgte', 'wergergqer', 'stringaaa', 0, 11, 111, 1111, 11111, 111111, 11.11, 1), ('2021-01-02', '0000-01-01 00:00:00', 'asfgrgtf', 'wergergqes', 'stringbbb',1, -128, -32768, -2147483648, -9223372036854775808, -170141183460469231731687303715884105728, 22.22, 2), ('2021-01-03', '9999-12-31 23:59:59', 'asfgrgtf', 'wergergqes', 'stringbbb',1, 127, 32767, 2147483647, 9223372036854775807, 170141183460469231731687303715884105727, 22.22, 2);
+-- result:
+-- !result
+insert overwrite duplicate_table_with_null1 select * from duplicate_table_with_null2;
+-- result:
+-- !result
+select count(1) from duplicate_table_with_null1;
+-- result:
+3
 -- !result

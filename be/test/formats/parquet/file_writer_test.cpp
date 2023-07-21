@@ -631,4 +631,46 @@ TEST_F(FileWriterTest, TestWriteNestedArray) {
     Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+TEST_F(FileWriterTest, TestVarbinaryNotSupport) {
+    auto type_varbinary = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> type_descs{type_varbinary};
+
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema == nullptr);
+}
+
+TEST_F(FileWriterTest, TestFieldIdWithStruct) {
+    std::vector<TypeDescriptor> type_descs;
+    auto type_int_struct = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    auto type_int_a = TypeDescriptor::from_logical_type(TYPE_SMALLINT);
+    auto type_int_b = TypeDescriptor::from_logical_type(TYPE_INT);
+
+    type_int_struct.children = {type_int_a, type_int_b};
+    type_int_struct.field_names = {"a", "b"};
+    type_descs.push_back(type_int_struct);
+
+    FileColumnId group_file_id;
+    std::vector<FileColumnId> children_file_ids = {{.field_id = 22}, {.field_id = 33}};
+    group_file_id.field_id = 11;
+    group_file_id.children = children_file_ids;
+
+    auto schema = ParquetBuildHelper::make_schema(std::vector<std::string>{"column"}, type_descs,
+                                                  std::vector<FileColumnId>{group_file_id});
+    auto root_group_node = schema.ValueOrDie();
+    ASSERT_TRUE(root_group_node->is_group());
+    ASSERT_EQ(root_group_node->field_count(), 1);
+
+    auto struct_node = root_group_node->field(0);
+    ASSERT_TRUE(struct_node->is_group());
+    ASSERT_EQ(struct_node->field_id(), 11);
+    ASSERT_EQ(struct_node->name(), "column");
+
+    auto struct_group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(struct_node);
+    ASSERT_EQ(struct_group_node->field_count(), 2);
+    ASSERT_EQ(struct_group_node->field(0)->field_id(), 22);
+    ASSERT_EQ(struct_group_node->field(1)->field_id(), 33);
+    ASSERT_EQ(struct_group_node->field(0)->name(), "a");
+    ASSERT_EQ(struct_group_node->field(1)->name(), "b");
+}
+
 } // namespace starrocks::parquet

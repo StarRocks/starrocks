@@ -40,7 +40,7 @@ public:
 
     ColumnPredicateRewriter(const ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
                             const Schema& schema, std::vector<uint8_t>& need_rewrite, int column_size,
-                            SparseRange& scan_range)
+                            SparseRange<>& scan_range)
             : _column_iterators(column_iterators),
               _predicates(pushdown_predicates),
               _schema(schema),
@@ -63,20 +63,20 @@ private:
     const Schema& _schema;
     std::vector<uint8_t>& _need_rewrite;
     const int _column_size;
-    SparseRange& _scan_range;
+    SparseRange<>& _scan_range;
 };
 
 // For global dictionary columns, predicates can be rewriten
-// ConjunctivePredicatesRewriter was a helper class, won't acquire any resource
-// ConjunctivePredicatesRewriter will rewrite ConjunctivePredicates in TabletScanner
+// GlobalDictPredicatesRewriter was a helper class, won't acquire any resource
+// GlobalDictPredicatesRewriter will rewrite ConjunctivePredicates in TabletScanner
 //
-// TODO: refactor ConjunctivePredicatesRewriter and ColumnPredicateRewriter
-class ConjunctivePredicatesRewriter {
+// TODO: refactor GlobalDictPredicatesRewriter and ColumnPredicateRewriter
+class GlobalDictPredicatesRewriter {
 public:
-    ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps)
-            : ConjunctivePredicatesRewriter(predicates, dict_maps, nullptr) {}
-    ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps,
-                                  std::vector<uint8_t>* disable_rewrite)
+    GlobalDictPredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps)
+            : GlobalDictPredicatesRewriter(predicates, dict_maps, nullptr) {}
+    GlobalDictPredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps,
+                                 std::vector<uint8_t>* disable_rewrite)
             : _predicates(predicates), _dict_maps(dict_maps), _disable_dict_rewrite(disable_rewrite) {}
 
     Status rewrite_predicate(ObjectPool* pool);

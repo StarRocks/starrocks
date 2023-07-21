@@ -116,7 +116,8 @@ public:
                     }
                 }
 
-                if (current > stop || overflow) {
+                bool done = (step > 0 && current > stop) || (step < 0 && current < stop);
+                if (done || overflow) {
                     move_to_next_row();
                 } else {
                     state->set_offset(current - start);

@@ -15,15 +15,16 @@
 #pragma once
 
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 
 namespace starrocks {
 class ColumnAccessPath;
 
 class MapColumnIterator final : public ColumnIterator {
 public:
-    MapColumnIterator(std::unique_ptr<ColumnIterator> nulls, std::unique_ptr<ColumnIterator> offsets,
-                      std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values,
-                      std::vector<ColumnAccessPath*> paths);
+    MapColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> nulls,
+                      std::unique_ptr<ColumnIterator> offsets, std::unique_ptr<ColumnIterator> keys,
+                      std::unique_ptr<ColumnIterator> values, const ColumnAccessPath* path);
 
     ~MapColumnIterator() override = default;
 
@@ -31,7 +32,7 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const SparseRange& range, Column* dst) override;
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     Status seek_to_first() override;
 
@@ -41,19 +42,18 @@ public:
 
     /// for vectorized engine
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
-        CHECK(false) << "array column does not has zone map index";
-        return Status::OK();
-    }
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) override;
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
 private:
+    ColumnReader* _reader;
+
     std::unique_ptr<ColumnIterator> _nulls;
     std::unique_ptr<ColumnIterator> _offsets;
     std::unique_ptr<ColumnIterator> _keys;
     std::unique_ptr<ColumnIterator> _values;
-    std::vector<ColumnAccessPath*> _paths;
+    const ColumnAccessPath* _path;
 
     bool _access_keys;
     bool _access_values;

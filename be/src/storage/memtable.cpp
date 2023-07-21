@@ -287,7 +287,7 @@ Status MemTable::flush(SegmentPB* seg_info) {
     }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
     StarRocksMetrics::instance()->memtable_flush_duration_us.increment(duration_ns / 1000);
-    VLOG(1) << "memtable flush: " << duration_ns / 1000 << "us";
+    VLOG(1) << "memtable of tablet " << _tablet_id << " flush: " << duration_ns / 1000 << "us";
     return Status::OK();
 }
 

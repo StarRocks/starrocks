@@ -128,16 +128,10 @@ int main(int argc, char** argv) {
             as_cn = true;
         }
     }
+    google::ParseCommandLineFlags(&argc, &argv, true);
 
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
-        exit(-1);
-    }
-
-    if (getenv("TCMALLOC_HEAP_LIMIT_MB") == nullptr) {
-        fprintf(stderr,
-                "Environment variable TCMALLOC_HEAP_LIMIT_MB is not set,"
-                " maybe you forgot to replace bin directory\n");
         exit(-1);
     }
 
@@ -188,22 +182,6 @@ int main(int argc, char** argv) {
 #if defined(ENABLE_STATUS_FAILED)
     // read range of source code for inject errors.
     starrocks::Status::access_directory_of_inject();
-#endif
-
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
-    // Aggressive decommit is required so that unused pages in the TCMalloc page heap are
-    // not backed by physical pages and do not contribute towards memory consumption.
-    //
-    //  2020-08-31: Disable aggressive decommit,  which will decrease the performance of
-    //  memory allocation and deallocation.
-    // MallocExtension::instance()->SetNumericProperty("tcmalloc.aggressive_memory_decommit", 1);
-
-    // Change the total TCMalloc thread cache size if necessary.
-    if (!MallocExtension::instance()->SetNumericProperty("tcmalloc.max_total_thread_cache_bytes",
-                                                         starrocks::config::tc_max_total_thread_cache_bytes)) {
-        fprintf(stderr, "Failed to change TCMalloc total thread cache size.\n");
-        return -1;
-    }
 #endif
 
     Aws::SDKOptions aws_sdk_options;
@@ -261,7 +239,7 @@ int main(int argc, char** argv) {
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
     std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
-    daemon->init(argc, argv, paths);
+    daemon->init(as_cn, paths);
 
     // init jdbc driver manager
     EXIT_IF_ERROR(starrocks::JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) +
@@ -271,15 +249,17 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
+    auto* global_env = starrocks::GlobalEnv::GetInstance();
+    EXIT_IF_ERROR(global_env->init());
+
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    EXIT_IF_ERROR(exec_env->init_mem_tracker());
 
     // Init and open storage engine.
     starrocks::EngineOptions options;
     options.store_paths = paths;
     options.backend_uid = starrocks::UniqueId::gen_uid();
-    options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
-    options.update_mem_tracker = exec_env->update_mem_tracker();
+    options.compaction_mem_tracker = global_env->compaction_mem_tracker();
+    options.update_mem_tracker = global_env->update_mem_tracker();
     options.need_write_cluster_id = !as_cn;
     starrocks::StorageEngine* engine = nullptr;
 
@@ -290,8 +270,7 @@ int main(int argc, char** argv) {
     }
 
     // Init exec env.
-    EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths));
-    engine->set_heartbeat_flags(exec_env->heartbeat_flags());
+    EXIT_IF_ERROR(exec_env->init(paths, as_cn));
 
     // Start all background threads of storage engine.
     // SHOULD be called after exec env is initialized.
@@ -384,10 +363,10 @@ int main(int argc, char** argv) {
 
     exec_env->agent_server()->stop();
 
-    starrocks::ExecEnv::stop(exec_env);
+    exec_env->stop();
     engine->stop();
     delete engine;
-    starrocks::ExecEnv::destroy(exec_env);
+    exec_env->destroy();
 
     return 0;
 }

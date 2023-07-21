@@ -71,8 +71,8 @@ public class RuntimeProfile {
 
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
     private static final String ROOT_COUNTER = "";
-    private static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
-    private static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
+    public static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
+    public static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
 
     private final Counter counterTotalTime;
 
@@ -343,7 +343,14 @@ public class RuntimeProfile {
         return formater.format(this);
     }
 
-    private String printCounter(long value, TUnit type) {
+    public static String printCounter(Counter counter) {
+        if (counter == null) {
+            return null;
+        }
+        return printCounter(counter.getValue(), counter.getType());
+    }
+
+    private static String printCounter(long value, TUnit type) {
         StringBuilder builder = new StringBuilder();
         long tmpValue = value;
         switch (type) {
@@ -477,13 +484,15 @@ public class RuntimeProfile {
     }
 
     // Copy all info strings from src profile
-    public void copyAllInfoStringsFrom(RuntimeProfile srcProfile) {
+    public void copyAllInfoStringsFrom(RuntimeProfile srcProfile, Set<String> excludedInfoStrings) {
         if (srcProfile == null || this == srcProfile) {
             return;
         }
 
         srcProfile.infoStrings.forEach((key, value) -> {
-            if (!this.infoStrings.containsKey(key)) {
+            if (CollectionUtils.isNotEmpty(excludedInfoStrings) && excludedInfoStrings.contains(key)) {
+                return;
+            } else if (!this.infoStrings.containsKey(key)) {
                 this.infoStrings.put(key, value);
             } else if (!Objects.equals(value, this.infoStrings.get(key))) {
                 String originalKey = key;
@@ -531,7 +540,8 @@ public class RuntimeProfile {
 
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
-    public static RuntimeProfile mergeIsomorphicProfiles(List<RuntimeProfile> profiles) {
+    public static RuntimeProfile mergeIsomorphicProfiles(List<RuntimeProfile> profiles,
+                                                         Set<String> excludedInfoStrings) {
         if (CollectionUtils.isEmpty(profiles)) {
             return null;
         }
@@ -539,7 +549,7 @@ public class RuntimeProfile {
         RuntimeProfile mergedProfile = new RuntimeProfile(profiles.get(0).getName());
 
         for (RuntimeProfile runtimeProfile : profiles) {
-            mergedProfile.copyAllInfoStringsFrom(runtimeProfile);
+            mergedProfile.copyAllInfoStringsFrom(runtimeProfile, excludedInfoStrings);
         }
 
         // Find all counters, although these profiles are expected to be isomorphic,
@@ -704,7 +714,7 @@ public class RuntimeProfile {
                 RuntimeProfile child = profile.childList.get(i).first;
                 subProfiles.add(child);
             }
-            RuntimeProfile mergedChild = mergeIsomorphicProfiles(subProfiles);
+            RuntimeProfile mergedChild = mergeIsomorphicProfiles(subProfiles, excludedInfoStrings);
             mergedProfile.addChild(mergedChild);
         }
 

@@ -985,9 +985,9 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
                                                {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
                                                {""}};
 
-    const std::string timzone_datetime_shanghai_orc_file =
+    const std::string timezone_datetime_shanghai_orc_file =
             "./be/test/exec/test_data/orc_scanner/writer_tz_shanghai.orc";
-    const std::string timzone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
+    const std::string timezone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
 
     struct Case {
         std::string file;
@@ -996,12 +996,12 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
         int exp;
     };
     std::vector<Case> cases = {
-            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
-            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 0},
-            {timzone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 1},
-            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 0},
-            {timzone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 1},
-            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "UTC", 1},
+            {timezone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
+            {timezone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 0},
+            {timezone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 1},
+            {timezone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 0},
+            {timezone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 1},
+            {timezone_datetime_utc_orc_file, "2022-04-09 07:13:00", "UTC", 1},
     };
 
     for (const Case& c : cases) {

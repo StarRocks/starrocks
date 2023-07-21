@@ -2,14 +2,13 @@
 
 This topic describes how to deploy and use a shared-data StarRocks cluster.
 
-The shared-data StarRocks cluster is specifically engineered for the cloud on the premise of separation of storage and compute. It allows data to be stored in object storage that is compatible with the S3 protocol (for example, AWS S3 and MinIO). You can achieve not only cheaper storage and better resource isolation, but elastic scalability for your cluster. The query performance of the shared-data StarRocks cluster aligns with that of a classic cluster in case of local cache hits.
+The shared-data StarRocks cluster is specifically engineered for the cloud on the premise of separation of storage and compute. It allows data to be stored in object storage that is compatible with the S3 protocol (for example, AWS S3 and MinIO). You can achieve not only cheaper storage and better resource isolation, but elastic scalability for your cluster. The query performance of the shared-data StarRocks cluster aligns with that of a classic cluster (shared-nothing) when the local disk cache is hit.
 
 Compared to the classic StarRocks architecture, separation of storage and compute offers a wide range of benefits. By decoupling these components, StarRocks provides:
 
 - Inexpensive and seamlessly scalable storage.
 - Elastic scalable compute. Because data is no longer stored in BE nodes, scaling can be done without data migration or shuffling across nodes.
 - Local disk cache for hot data to boost query performance.
-- Adjustable time-to-live (TTL) for cached hot data. StarRocks automatically removes the expired cached data to save the local disk space.
 - Asynchronous data ingestion into object storage, allowing a significant improvement in loading performance.
 
 The architecture of the shared-data StarRocks cluster is as follows:
@@ -30,8 +29,8 @@ Before starting FEs, add the following configuration items in the FE configurati
 | ----------------------------------- | ------------------------------------------------------------ |
 | run_mode                            | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
 | cloud_native_meta_port              | The cloud-native meta service RPC port. Default: `6090`.     |
-| cloud_native_storage_type           | The type of object storage you use. Valid value: `S3` (Default). |
-| aws_s3_path                         | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it. |
+| cloud_native_storage_type           | The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (Preview feature, supported from v3.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default) and `AZBLOB`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. |
+| aws_s3_path                         | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`. |
 | aws_s3_endpoint                     | The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. |
 | aws_s3_region                       | The region in which your S3 bucket resides, for example, `us-west-2`. |
 | aws_s3_use_aws_sdk_default_behavior | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
@@ -40,79 +39,154 @@ Before starting FEs, add the following configuration items in the FE configurati
 | aws_s3_secret_key                   | The Secret Access Key used to access your S3 bucket.         |
 | aws_s3_iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
 | aws_s3_external_id                  | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
+| azure_blob_path                     | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
+| azure_blob_endpoint                 | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
+| azure_blob_shared_key               | The Shared Key used to authorize requests for your Azure Blob Storage.                     |
+| azure_blob_sas_token                | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.                |
 
 - If you use AWS S3
 
   - If you use the default authentication credential of AWS SDK to access S3, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_aws_sdk_default_behavior = true
     ```
 
   - If you use IAM user-based credential (Access Key and Secret Key) to access S3, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_access_key = <access_key>
     aws_s3_secret_key = <secret_key>
     ```
 
   - If you use Instance Profile to access S3, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     ```
 
   - If you use Assumed Role to access S3, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     aws_s3_iam_role_arn = <role_arn>
     ```
 
   - If you use Assumed Role to access S3 from an external AWS account, add the following configuration items:
 
-    ```Plain
+    ```Properties
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
+
+    # For example, testbucket/subpath
     aws_s3_path = <s3_path>
+
+    # For example, us-west-2
     aws_s3_region = <region>
+
+    # For example, https://s3.us-west-2.amazonaws.com
     aws_s3_endpoint = <endpoint_url>
+
     aws_s3_use_instance_profile = true
     aws_s3_iam_role_arn = <role_arn>
     aws_s3_external_id = <external_id>
     ```
 
+- If you use Azure Blob Storage (Preview feature, supported from v3.1 onwards):
+
+  - If you use Shared Key to access Azure Blob Storage, add the following configuration items:
+
+    ```Properties
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = AZBLOB
+
+    # For example, testcontainer/subpath
+    azure_blob_path = <blob_path>
+
+    # For example, https://test.blob.core.windows.net
+    azure_blob_endpoint = <endpoint_url>
+
+    azure_blob_shared_key = <shared_key>
+    ```
+
+  - If you use shared access signatures (SAS) to access Azure Blob Storage, add the following configuration items:
+
+    ```Properties
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = AZBLOB
+
+    # For example, testcontainer/subpath
+    azure_blob_path = <blob_path>
+
+    # For example, https://test.blob.core.windows.net
+    azure_blob_endpoint = <endpoint_url>
+
+    azure_blob_sas_token = <sas_token>
+    ```
+
 - If you use GCP Cloud Storage:
 
-  ```Plain
+  ```Properties
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # For example, testbucket/subpath
   aws_s3_path = <s3_path>
 
   # For example: us-east-1
@@ -127,10 +201,12 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 - If you use MinIO:
 
-  ```Plain
+  ```Properties
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
+
+  # For example, testbucket/subpath
   aws_s3_path = <s3_path>
 
   # For example: us-east-1
@@ -147,14 +223,14 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 **Before starting BEs**, add the following configuration items in the BE configuration file **be.conf**:
 
-```Plain
+```Properties
 starlet_port = <starlet_port>
 storage_root_path = <storage_root_path>
 ```
 
 | **Configuration item** | **Description**                |
 | ---------------------- | ------------------------------ |
-| starlet_port           | The BE heartbeat service port. Default value: `9070`.|
+| starlet_port           | The BE heartbeat service port for the StarRocks shared-data cluster. Default value: `9070`.|
 | storage_root_path      | The storage volume directory that the local cached data depends on and the medium type of the storage. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. Default value: `${STARROCKS_HOME}/storage`. |
 
 > **NOTE**
@@ -172,12 +248,9 @@ After connecting to your shared-data StarRocks cluster, create a database and th
 - Duplicate Key table
 - Aggregate table
 - Unique Key table
+- Primary Key table (Currently, the primary key persistent index is not supported.)
 
-> **NOTE**
->
-> Currently, Primary Key table is not supported on StarRocks shared-data clusters.
-
-The following example creates a database `cloud_db` and a table `detail_demo` based on Duplicate Key table type, enables the local disk cache, sets the cache expiration time to 30 days, and disables asynchronous data ingestion into object storage:
+The following example creates a database `cloud_db` and a table `detail_demo` based on Duplicate Key table type, enables the local disk cache, sets the hot data validity duration to one month, and disables asynchronous data ingestion into object storage:
 
 ```SQL
 CREATE DATABASE cloud_db;
@@ -196,22 +269,18 @@ CREATE TABLE IF NOT EXISTS detail_demo (
 DUPLICATE KEY(recruit_date, region_num)
 DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
-    "enable_storage_cache" = "true",
-    "storage_cache_ttl" = "2592000",
+    "datacache.enable" = "true",
+    "datacache.partition_duration" = "1 MONTH",
     "enable_async_write_back" = "false"
 );
 ```
-
-> **NOTICE**
->
-> Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 In addition to the regular table PROPERTIES, you need to specify the following PROPERTIES when creating a table for shared-data StarRocks cluster:
 
 | **Property**            | **Description**                                              |
 | ----------------------- | ------------------------------------------------------------ |
-| enable_storage_cache    | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `starlet_cache_dir`. |
-| storage_cache_ttl       | The duration for which StarRocks caches the loaded data in the local disk if the local disk cache is enabled. The expired data is deleted from the local disk. If the value is set to `-1`, the cached data does not expire. Default: `2592000` (30 days).<br />**CAUTION**<br />If you disabled the local disk cache, you do not need to set this configuration item. Setting this item to a value other than `0` when the local disk cache is disabled will cause unexpected behaviors of StarRocks. |
+| datacache.enable        | Whether to enable the local disk cache. Default: `true`.<ul><li>When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).</li><li>When this property is set to `false`, the data is loaded only into the object storage.</li></ul>**NOTE**<br />To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. |
+| datacache.partition_duration | The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.<br />**NOTE**<br />This property is available only when `datacache.enable` is set to `true`. |
 | enable_async_write_back | Whether to allow data to be written into object storage asynchronously. Default: `false`.<ul><li>When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.</li><li>When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.</li></ul> |
 
 ### View table information

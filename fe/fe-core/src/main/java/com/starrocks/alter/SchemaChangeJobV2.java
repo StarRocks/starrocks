@@ -62,6 +62,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
@@ -487,7 +488,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
-                Partition partition = tbl.getPartition(partitionId);
+                PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
 
                 // the schema change task will transform the data before visible version(included).
@@ -700,11 +701,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(tbl);
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
-                Partition partition = tbl.getPartition(partitionId);
+                PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
 
                 long visiableVersion = partition.getVisibleVersion();
-                short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getId());
+                short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getParentId());
 
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
@@ -832,45 +833,48 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : tbl.getPartitions()) {
-            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium();
+            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
             // drop the origin index from partitions
             for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
                 long shadowIdxId = entry.getKey();
                 long originIdxId = entry.getValue();
-                // get index from globalStateMgr, not from 'partitionIdToRollupIndex'.
-                // because if this alter job is recovered from edit log, index in 'partitionIndexMap'
-                // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
-                // in globalStateMgr.
-                MaterializedIndex shadowIdx = partition.getIndex(shadowIdxId);
-                Preconditions.checkNotNull(shadowIdx, shadowIdxId);
-                MaterializedIndex droppedIdx = null;
-                if (originIdxId == partition.getBaseIndex().getId()) {
-                    droppedIdx = partition.getBaseIndex();
-                } else {
-                    droppedIdx = partition.deleteRollupIndex(originIdxId);
-                }
-                Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
-                // Add to TabletInvertedIndex.
-                // Even thought we have added the tablet to TabletInvertedIndex on pending state, but the pending state
-                // log may be replayed to the image, and the image will not persist the TabletInvertedIndex. So we
-                // should add the tablet to TabletInvertedIndex again on finish state.
-                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId,
-                        indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
-                for (Tablet tablet : shadowIdx.getTablets()) {
-                    invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
-                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                        // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
-                        replica.setState(ReplicaState.NORMAL);
-                        invertedIndex.addReplica(tablet.getId(), replica);
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    // get index from globalStateMgr, not from 'partitionIdToRollupIndex'.
+                    // because if this alter job is recovered from edit log, index in 'partitionIndexMap'
+                    // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
+                    // in globalStateMgr.
+                    MaterializedIndex shadowIdx = physicalPartition.getIndex(shadowIdxId);
+                    Preconditions.checkNotNull(shadowIdx, shadowIdxId);
+                    MaterializedIndex droppedIdx = null;
+                    if (originIdxId == physicalPartition.getBaseIndex().getId()) {
+                        droppedIdx = physicalPartition.getBaseIndex();
+                    } else {
+                        droppedIdx = physicalPartition.deleteRollupIndex(originIdxId);
                     }
-                }
+                    Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
-                partition.visualiseShadowIndex(shadowIdxId, originIdxId == partition.getBaseIndex().getId());
+                    // Add to TabletInvertedIndex.
+                    // Even thought we have added the tablet to TabletInvertedIndex on pending state, but the pending state
+                    // log may be replayed to the image, and the image will not persist the TabletInvertedIndex. So we
+                    // should add the tablet to TabletInvertedIndex again on finish state.
+                    TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, physicalPartition.getId(), shadowIdxId,
+                            indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
+                    for (Tablet tablet : shadowIdx.getTablets()) {
+                        invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                            // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
+                            replica.setState(ReplicaState.NORMAL);
+                            invertedIndex.addReplica(tablet.getId(), replica);
+                        }
+                    }
 
-                // the origin tablet created by old schema can be deleted from FE meta data
-                for (Tablet originTablet : droppedIdx.getTablets()) {
-                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(originTablet.getId());
+                    physicalPartition.visualiseShadowIndex(shadowIdxId, originIdxId == physicalPartition.getBaseIndex().getId());
+
+                    // the origin tablet created by old schema can be deleted from FE meta data
+                    for (Tablet originTablet : droppedIdx.getTablets()) {
+                        GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(originTablet.getId());
+                    }
                 }
             }
         }

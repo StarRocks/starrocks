@@ -28,7 +28,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
                        bool is_dest_merge)
         : _fragment_ctx(fragment_ctx),
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
-          _brpc_timeout_ms(std::min(3600, fragment_ctx->runtime_state()->query_options().query_timeout) * 1000),
+          _brpc_timeout_ms(fragment_ctx->runtime_state()->query_options().query_timeout * 1000),
           _is_dest_merge(is_dest_merge),
           _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()) {
     for (const auto& dest : destinations) {
@@ -133,11 +133,6 @@ bool SinkBuffer::is_finished() const {
 }
 
 void SinkBuffer::update_profile(RuntimeProfile* profile) {
-    bool flag = false;
-    if (!_is_profile_updated.compare_exchange_strong(flag, true)) {
-        return;
-    }
-
     auto* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
     auto* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
     auto* network_timer = ADD_TIMER(profile, "NetworkTime");
@@ -153,7 +148,7 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     // WaitTime consists two parts
     // 1. buffer full time
     // 2. pending finish time
-    COUNTER_UPDATE(wait_timer, _full_time);
+    COUNTER_SET(wait_timer, _full_time);
     COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
 
     auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
@@ -368,7 +363,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
         // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
         _mem_tracker->release(request.attachment_physical_bytes);
-        ExecEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
+        GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
@@ -416,7 +411,7 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         if (!res.ok()) {
             return res.status();
         }
-        res.value()->transmit_chunk_via_http(&closure->cntl, NULL, &closure->result, closure);
+        res.value()->transmit_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
     } else {
         closure->cntl.request_attachment().append(request.attachment);
         request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);

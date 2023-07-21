@@ -220,6 +220,8 @@ public class ColocateTableIndex implements Writable {
     public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId,
                                    boolean isReplay)
             throws DdlException {
+        Preconditions.checkArgument(tbl.getDefaultDistributionInfo().supportColocate(),
+                "colocate not supported");
         writeLock();
         try {
             boolean groupAlreadyExist = true;
@@ -953,33 +955,17 @@ public class ColocateTableIndex implements Writable {
             // set this group as unstable
             markGroupUnstable(groupId, false /* edit log is along with modify table log */);
             table.setColocateGroup(colocateGroup);
-            table.setInColocateMvGroup(false);
         } else {
             // unset colocation group
             if (Strings.isNullOrEmpty(oldGroup)) {
                 // this table is not a colocate table, do nothing
                 return;
             }
-
-            // there is not any colocate mv related to the table
-            // just remove the table from colocate group
-            if (table.getColocateMaterializedViewNames().isEmpty()) {
-                // when replayModifyTableColocate, we need the groupId info
-                String fullGroupName = db.getId() + "_" + oldGroup;
-                groupId = getGroupSchema(fullGroupName).getGroupId();
-                removeTable(table.getId(), table, isReplay);
-                table.setColocateGroup(null);
-                table.setInColocateMvGroup(false);
-            } else {
-                // change the table's group from oldGroup to a new colocate group
-                // which is named by dbName + ":" + mvName
-                Optional<String> anyMvName = table.getColocateMaterializedViewNames().stream().findAny();
-                Preconditions.checkState(anyMvName.isPresent());
-                String groupName = db.getFullName() + ":" + anyMvName.get();
-                groupId = changeGroup(db.getId(), table, oldGroup, groupName, assignedGroupId, isReplay);
-                table.setColocateGroup(groupName);
-                table.setInColocateMvGroup(true);
-            }
+            // when replayModifyTableColocate, we need the groupId info
+            String fullGroupName = db.getId() + "_" + oldGroup;
+            groupId = getGroupSchema(fullGroupName).getGroupId();
+            removeTable(table.getId(), table, isReplay);
+            table.setColocateGroup(null);
         }
 
         if (!isReplay) {

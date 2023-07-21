@@ -404,22 +404,6 @@ using IntGauge = AtomicGauge<int64_t>;
 using UIntGauge = AtomicGauge<uint64_t>;
 using DoubleGauge = LockGauge<double>;
 
-class TcmallocMetric final : public UIntGauge {
-public:
-    TcmallocMetric(std::string tcmalloc_var) : UIntGauge(MetricUnit::BYTES), _tcmalloc_var(std::move(tcmalloc_var)) {}
-
-    uint64_t value() const override {
-        uint64_t val = 0;
-#if !defined(ADDRESS_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(USE_JEMALLOC)
-        MallocExtension::instance()->GetNumericProperty(_tcmalloc_var.c_str(), reinterpret_cast<size_t*>(&val));
-#endif
-        return val;
-    }
-
-private:
-    const std::string _tcmalloc_var;
-};
-
 } // namespace starrocks
 
 // Convenience macros to metric
@@ -443,6 +427,3 @@ private:
 
 #define METRIC_DEFINE_DOUBLE_GAUGE(metric_name, unit) \
     starrocks::DoubleGauge metric_name { unit }
-
-#define METRIC_DEFINE_TCMALLOC_GAUGE(metric_name, tcmalloc_var) \
-    starrocks::TcmallocMetric metric_name { tcmalloc_var }

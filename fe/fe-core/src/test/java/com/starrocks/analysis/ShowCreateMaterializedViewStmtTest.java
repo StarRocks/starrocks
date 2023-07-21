@@ -94,7 +94,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv9");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9` (k1, k2)\n" +
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9` (`k1`, `k2`)\n" +
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
@@ -122,18 +122,18 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv10");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10` (c1, c2)\n" +
-                "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
-                "REFRESH MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"replicated_storage\" = \"true\",\n" +
-                "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\",\n" +
-                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) REFERENCES hive0.partitioned_db2.t2(c2)\",\n" +
-                "\"storage_medium\" = \"HDD\"\n" +
-                ")\n" +
-                "AS SELECT `hive0`.`partitioned_db2`.`t2`.`c1`, `hive0`.`partitioned_db`.`t1`.`c2`\n" +
-                "FROM `hive0`.`partitioned_db`.`t1` INNER JOIN `hive0`.`partitioned_db2`.`t2` ON `hive0`.`partitioned_db`.`t1`.`c2` = `hive0`.`partitioned_db2`.`t2`.`c2`;",
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10` (`c1`, `c2`)\n" +
+                        "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\",\n" +
+                        "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) REFERENCES hive0.partitioned_db2.t2(c2)\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `hive0`.`partitioned_db2`.`t2`.`c1`, `hive0`.`partitioned_db`.`t1`.`c2`\n" +
+                        "FROM `hive0`.`partitioned_db`.`t1` INNER JOIN `hive0`.`partitioned_db2`.`t2` ON `hive0`.`partitioned_db`.`t1`.`c2` = `hive0`.`partitioned_db2`.`t2`.`c2`;",
                 createTableStmt.get(0));
     }
 
@@ -164,7 +164,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv1");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv1` (k1, k2)\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv1` (`k1`, `k2`)\n" +
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
@@ -191,7 +191,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv2");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv2` (k3, k2)\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv2` (`k3`, `k2`)\n" +
                 "PARTITION BY (`k3`)\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -219,7 +219,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv3");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv3` (k1, k3)\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv3` (`k1`, `k3`)\n" +
                 "PARTITION BY (date_trunc('month', `k1`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -248,7 +248,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv4");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv4` (k3, k2)\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv4` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -282,7 +282,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv5");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv5` (k3, k2)\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv5` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH ASYNC START(\"2122-12-31 00:00:00\") EVERY(INTERVAL 1 HOUR)\n" +
@@ -317,7 +317,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv6");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv6` (k3, k2)\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv6` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH ASYNC\n" +
@@ -352,7 +352,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv7");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv7` (k3, k2)\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv7` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH ASYNC EVERY(INTERVAL 1 HOUR)\n" +
@@ -382,7 +382,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv8");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv8` (l_orderkey, l_partkey, l_shipdate)\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv8` (`l_orderkey`, `l_partkey`, `l_shipdate`)\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
@@ -408,7 +408,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("deferred_mv4");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `deferred_mv4` (k3, k2)\n" +
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `deferred_mv4` (`k3`, `k2`)\n" +
                 "PARTITION BY (date_trunc('month', `k3`))\n" +
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10 \n" +
                 "REFRESH DEFERRED MANUAL\n" +
@@ -428,5 +428,36 @@ public class ShowCreateMaterializedViewStmtTest {
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No Exception throws.");
+    }
+
+    @Test
+    public void testShowCreateMVWithStaleness() throws Exception {
+        String createMvSql = "create materialized view mv_with_staleness " +
+                "distributed by hash(k1) buckets 10 " +
+                "refresh manual " +
+                "PROPERTIES (\n" +
+                "\"mv_rewrite_staleness_second\" = \"60\"\n" +
+                ")\n" +
+                "as select k1, k2 from tbl1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getDb("test").getTable("mv_with_staleness");
+        List<String> createTableStmt = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv_with_staleness` (`k1`, `k2`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"mv_rewrite_staleness_second\" = \"60\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `tbl1`.`k1`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
+        String copySql = createTableStmt.get(0).replaceAll("mv_with_staleness", "mv_with_staleness_copy");
+        currentState.createMaterializedView(
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
+
     }
 }

@@ -37,6 +37,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -610,7 +611,7 @@ public class MaterializedViewTest {
         Assert.assertTrue(Strings.isNullOrEmpty(connectContext.getState().getErrorMessage()));
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = SemanticException.class)
     public void testNonPartitionMvSupportedProperties() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();

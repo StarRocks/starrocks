@@ -248,6 +248,35 @@ public class CreateTableTest {
                         "    \"replication_num\" = \"1\"\n" +
                         ");"));
 
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("CREATE TABLE test.dynamic_partition_without_prefix (\n" +
+                        "event_day DATE,\n" +
+                        "site_id INT DEFAULT '10',\n" +
+                        "city_code VARCHAR(\n" +
+                        "100\n" +
+                        "),\n" +
+                        "user_name VARCHAR(\n" +
+                        "32\n" +
+                        ") DEFAULT '',\n" +
+                        "pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY RANGE(event_day)(\n" +
+                        "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                        "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                        "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                        "PARTITION p20200324 VALUES LESS THAN (\"2020-03-25\")\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                        "PROPERTIES(\n" +
+                        "\t\"replication_num\" = \"1\",\n" +
+                        "    \"dynamic_partition.enable\" = \"true\",\n" +
+                        "    \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                        "    \"dynamic_partition.start\" = \"-3\",\n" +
+                        "    \"dynamic_partition.end\" = \"3\",\n" +
+                        "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
+                        ");"));
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
         Assert.assertTrue(tbl6.getColumn("k1").isKey());
@@ -408,6 +437,25 @@ public class CreateTableTest {
                         "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
                         "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
                         "\"datacache.enable\" = \"true\",\"asd\" = \"true\");"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Unknown properties: {abc=def}",
+                () -> createTable("CREATE TABLE test.lake_table\n" +
+                        "(\n" +
+                        "    k1 DATE,\n" +
+                        "    k2 INT,\n" +
+                        "    k3 SMALLINT,\n" +
+                        "    v1 VARCHAR(2048),\n" +
+                        "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(k1, k2, k3)\n" +
+                        "PARTITION BY RANGE (k1, k2, k3)\n" +
+                        "(\n" +
+                        "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
+                        "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 32\n" +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"abc\" = \"def\");"));
     }
 
     @Test
@@ -1367,7 +1415,7 @@ public class CreateTableTest {
     @Test
     public void testCreateTableInSystemDb() {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Can't create table 'goods' (errno: create denied)",
+                "Can't create table 'goods' (errno: cannot create table in system database)",
                 () -> createTable(
                         "CREATE TABLE information_schema.goods(\n" +
                                 "    item_id1          INT,\n" +
@@ -1464,5 +1512,20 @@ public class CreateTableTest {
         System.out.println(groupIds);
         // colocate groups in different db should have same `GroupId.grpId`
         Assert.assertEquals(groupIds.get(0).split("\\.")[1], groupIds.get(1).split("\\.")[1]);
+    }
+
+    @Test
+    public void testRandomColocateTable() {
+        String sql1 = "CREATE TABLE dwd.dwd_site_scan_dtl_test (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY RANDOM " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"ship_id_public\"" +
+                ");";
+        Assert.assertThrows(AnalysisException.class, () -> starRocksAssert.withTable(sql1));
     }
 }

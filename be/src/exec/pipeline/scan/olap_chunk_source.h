@@ -100,7 +100,7 @@ private:
     // slot descriptors for each one of |output_columns|.
     std::vector<SlotDescriptor*> _query_slots;
 
-    std::unordered_map<uint32_t, ColumnAccessPathPtr> _column_access_paths;
+    std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
@@ -123,6 +123,11 @@ private:
     RuntimeProfile::Counter* _get_delvec_timer = nullptr;
     RuntimeProfile::Counter* _get_delta_column_group_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
+    RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
+    RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
+    RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _bf_filter_timer = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;

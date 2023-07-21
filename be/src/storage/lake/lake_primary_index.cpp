@@ -14,11 +14,16 @@
 
 #include "storage/lake/lake_primary_index.h"
 
+#include <bvar/bvar.h>
+
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
+
+static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
 
 Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
@@ -28,6 +33,7 @@ Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadat
     }
     _status = _do_lake_load(tablet, metadata, base_version, builder);
     _loaded = true;
+    TRACE("end load pk index");
     if (!_status.ok()) {
         LOG(WARNING) << "load LakePrimaryIndex error: " << _status << " tablet:" << _tablet_id;
     }
@@ -111,9 +117,10 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     }
     _tablet_id = tablet->id();
     _data_version = base_version;
-    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
-        LOG(INFO) << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
-    }
+    auto cost_ns = watch.elapsed_time();
+    g_load_pk_index_latency << cost_ns / 1000;
+    LOG_IF(INFO, cost_ns >= /*10ms=*/10 * 1000 * 1000)
+            << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
     return Status::OK();
 }
 
