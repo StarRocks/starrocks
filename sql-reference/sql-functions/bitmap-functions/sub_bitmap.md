@@ -4,6 +4,8 @@
 
 根据 `offset` 指定的起始位置，从 BITMAP 类型的 `src` 中截取 `len` 个元素，返回的元素为 `src` 的子集。该函数主要用于分页查询相关场景。该函数从 2.5 版本开始支持。
 
+该函数与 [bitmap_subset_limit](./bitmap_subset_limit.md) 功能相似，不同之处在于 bitmap_subset_limit 指定的是起始值，sub_bitmap 指定的是 offset。
+
 ## 语法
 
 ```Haskell
@@ -28,7 +30,7 @@ BITMAP sub_bitmap(BITMAP src, BIGINT offset, BIGINT len)
 
 ## 示例
 
-在以下示例中，sub_bitmap() 函数的输入值为 bitmap_from_string() 函数计算后的结果。比如示例中的 `bitmap_from_string('1,1,3,1,5,3,5,7,7,9')` 实际输出的 BITMAP 值为 1, 3, 5, 7, 9。sub_bitmap() 会基于这个值进行计算。关于 bitmap_from_string() 的更多信息，参见[bitmap_from_string](./bitmap_from_string.md)。
+在以下示例中，sub_bitmap() 函数的输入值为 [bitmap_from_string](./bitmap_from_string.md) 函数计算后的结果。比如示例中的 `bitmap_from_string('1,1,3,1,5,3,5,7,7,9')` 实际输出的 BITMAP 值为 1, 3, 5, 7, 9。sub_bitmap() 会基于这个值进行计算。
 
 示例一：从偏移量 0 开始，截取 BITMAP 值中 2 个元素。
 
