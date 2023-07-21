@@ -756,7 +756,7 @@ public class AnalyzerUtils {
             public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
                 if (expr.isNondeterministicBuiltinFnName()) {
                     throw new SemanticException("Materialized view query statement select item " +
-                            expr.toSql() + " not supported nondeterministic function");
+                            expr.toSql() + " not supported nondeterministic function.");
                 }
                 return null;
             }
