@@ -184,7 +184,7 @@ public class MvUtils {
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
                         LogicalJoinOperator joinOperator = optExpression.getOp().cast();
                         TableScanDesc tableScanDesc = new TableScanDesc(
-                                table, id, scanOperator, joinOperator.getJoinType(), i == 0);
+                                table, id, scanOperator, optExpression, i == 0);
                         context.getTableScanDescs().add(tableScanDesc);
                         scanContext.getTableIdMap().put(table, ++id);
                     } else {
@@ -431,7 +431,7 @@ public class MvUtils {
     }
 
     private static void collectValidPredicates(List<ScalarOperator> conjuncts, List<ScalarOperator> predicates) {
-        conjuncts.stream().filter(x -> !x.isRedundant()).forEach(predicates::add);
+        conjuncts.stream().filter(x -> !x.isRedundant() && !x.isPushdown()).forEach(predicates::add);
     }
 
     private static void getAllPredicates(OptExpression root, List<ScalarOperator> predicates) {
@@ -887,7 +887,7 @@ public class MvUtils {
         }
         return o.toString();
     }
-    
+
     /**
      * Return the max refresh timestamp of all partition infos.
      */
@@ -899,5 +899,30 @@ public class MvUtils {
                 .max(Long::compareTo)
                 .filter(Objects::nonNull)
                 .orElse(System.currentTimeMillis());
+    }
+
+    public static List<ScalarOperator> collectOnPredicate(OptExpression optExpression) {
+        List<ScalarOperator> onPredicates = Lists.newArrayList();
+        collectOnPredicate(optExpression, onPredicates, false);
+        return onPredicates;
+    }
+
+    public static List<ScalarOperator> collectOuterAntiJoinOnPredicate(OptExpression optExpression) {
+        List<ScalarOperator> onPredicates = Lists.newArrayList();
+        collectOnPredicate(optExpression, onPredicates, true);
+        return onPredicates;
+    }
+
+    public static void collectOnPredicate(OptExpression optExpression, List<ScalarOperator> onPredicates, boolean isOuterAntiJoin) {
+        for (OptExpression child : optExpression.getInputs()) {
+            collectOnPredicate(child, onPredicates, isOuterAntiJoin);
+        }
+        if (optExpression.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = optExpression.getOp().cast();
+            if (isOuterAntiJoin && !(joinOperator.getJoinType().isOuterJoin() || joinOperator.getJoinType().isAntiJoin())) {
+                return;
+            }
+            onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
+        }
     }
 }
