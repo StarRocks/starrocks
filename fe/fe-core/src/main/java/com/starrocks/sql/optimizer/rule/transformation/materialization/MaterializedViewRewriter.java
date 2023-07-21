@@ -146,7 +146,6 @@ public class MaterializedViewRewriter {
         // from top-down iteration.
         if (matchMode == MatchMode.COMPLETE) {
             if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
-                logMVRewrite(mvRewriteContext, "MV is not Applicable in complete mode: join type are not matched");
                 return false;
             }
         } else if (matchMode == MatchMode.VIEW_DELTA) {
@@ -159,7 +158,7 @@ public class MaterializedViewRewriter {
             }
             if (!MvUtils.getAllJoinOperators(queryExpression).stream().allMatch(joinOperator ->
                     joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin())) {
-                logMVRewrite(mvRewriteContext, "MV is not Applicable in view delta mode: " +
+                logMVRewrite(mvRewriteContext, "MV is not applicable in view delta mode: " +
                         "only support inner/left outer join type for now");
                 return false;
             }
@@ -172,7 +171,7 @@ public class MaterializedViewRewriter {
             for (TableScanDesc queryScanDesc : queryTableScanDescs) {
                 if (queryScanDesc.getParentJoinType() != null
                         && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isMatch(queryScanDesc))) {
-                    logMVRewrite(mvRewriteContext, "MV is not Applicable in view delta mode: " +
+                    logMVRewrite(mvRewriteContext, "MV is not applicable in view delta mode: " +
                             "at least one same join type should be existed");
                     return false;
                 }
@@ -182,13 +181,13 @@ public class MaterializedViewRewriter {
         }
 
         if (!isValidPlan(mvExpression)) {
-            logMVRewrite(mvRewriteContext, "MV is not Applicable in complete mode: mv expression is not valid");
+            logMVRewrite(mvRewriteContext, "MV is not applicable: mv expression is not valid");
             return false;
         }
 
         // If table lists do not intersect, can not be rewritten
         if (Collections.disjoint(queryTables, mvTables)) {
-            logMVRewrite(mvRewriteContext, "MV is not Applicable in complete mode: query tables are disjoint with mvs' tables");
+            logMVRewrite(mvRewriteContext, "MV is not applicable: query tables are disjoint with mvs' tables");
             return false;
         }
         return true;
