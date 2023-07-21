@@ -589,6 +589,14 @@ The following parameters are supported:
 
   The sum of the values returned for `dpp.abnorm.ALL` and `dpp.norm.ALL` is the total number of rows to be loaded.
 
+- `log_rejected_record_num`
+
+  Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.
+  
+  - The value `0` specifies that no data rows that are filtered out will be logged.
+  - The value `-1` specifies that all data rows that are filtered out will be logged.
+  - A non-zero positive integer such as `n` specifies that up to `n` data rows that are filtered out can be logged on each BE.
+
 - `load_mem_limit`
 
   Specifies the maximum amount of memory that can be provided to the load job. Unit: bytes: The default memory limit is 2 GB.
