@@ -259,7 +259,7 @@ where empid < 5;
 
 ### 基于派生 Join 场景改写查询
 
-自 v3.1.0 起，StarRocks 支持基于派生 Join 场景改写查询，即基于某种 Join 模式构建的异步物化视图可以改写使用不同 Join 的查询，只要满足以下条件：Join 表和 Join 列相同，并且 Join 模式满足一些要求。
+自 v2.5.9 起，StarRocks 支持基于派生 Join 场景改写查询，即基于某种 Join 模式构建的异步物化视图可以改写使用不同 Join 的查询，只要满足以下条件：Join 表和 Join 列相同，并且 Join 模式满足一些要求。
 
 下表列出了物化视图中的 Join 模式与可改写查询中的 Join 模式的对应关系（其中 `A` 和 `B` 表示需要 Join 的表，`a1` 表示 `A` 中的 Join 列，`b1` 表示 `B` 中的 Join 列）：
 
