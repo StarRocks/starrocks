@@ -22,6 +22,7 @@
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 
@@ -114,6 +115,9 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* runtime_state = runtime_state_ptr.get();
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
+#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
+            FAIL_POINT_SCOPE(mem_alloc_error);
+#endif
             if (fragment_ctx->is_canceled()) {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {

@@ -77,6 +77,7 @@
 #include "service/brpc.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
+#include "util/failpoint/fail_point.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 #include "util/time.h"
@@ -1092,6 +1093,42 @@ void PInternalServiceImplBase<T>::execute_command(google::protobuf::RpcControlle
         LOG(WARNING) << "execute_command failed, errmsg=" << st.to_string();
     }
     st.to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::update_fail_point_status(google::protobuf::RpcController* controller,
+                                                           const PUpdateFailPointStatusRequest* request,
+                                                           PUpdateFailPointStatusResponse* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+#ifdef FIU_ENABLE
+    const auto name = request->fail_point_name();
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(name);
+    if (fp == nullptr) {
+        Status::InvalidArgument(fmt::format("FailPoint {} is not existed.", name))
+                .to_protobuf(response->mutable_status());
+        return;
+    }
+    fp->setMode(request->trigger_mode());
+    Status::OK().to_protobuf(response->mutable_status());
+#else
+    Status::NotSupported("FailPoint is not supported, need re-compile BE with ENABLE_FAULT_INJECTION")
+            .to_protobuf(response->mutable_status());
+#endif
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::list_fail_point(google::protobuf::RpcController* controller,
+                                                  const PListFailPointRequest* request,
+                                                  PListFailPointResponse* response, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+#ifdef FIU_ENABLE
+    starrocks::failpoint::FailPointRegistry::GetInstance()->iterate([&](starrocks::failpoint::FailPoint* fp) {
+        auto fp_info = response->add_fail_points();
+        *fp_info = fp->to_pb();
+    });
+#endif
+    Status::OK().to_protobuf(response->mutable_status());
 }
 
 template class PInternalServiceImplBase<PInternalService>;
