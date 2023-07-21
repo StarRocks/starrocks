@@ -2084,21 +2084,22 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
 }
 
 std::string StringFunctions::url_encode_func(const std::string& value) {
-    std::ostringstream escaped;
-    escaped.fill('0');
-    escaped << std::hex;
-
+    std::string escaped;
+    raw::stl_string_resize_uninitialized(&escaped, value.size() * 3);
+    char* p = escaped.data();
+    static constexpr char const* alphabet = "0123456789ABCDEF";
     for (auto c : value) {
         if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-            escaped << c;
+            *p++ = c;
             continue;
         }
-
-        escaped << std::uppercase;
-        escaped << '%' << std::setw(2) << int((unsigned char)c);
-        escaped << std::nouppercase;
+        int ci = static_cast<unsigned char>(c);
+        *p++ = '%';
+        *p++ = alphabet[ci >> 4];
+        *p++ = alphabet[ci & 0xf];
     }
-    return escaped.str();
+    escaped.resize(p - escaped.data());
+    return escaped;
 }
 
 StatusOr<ColumnPtr> StringFunctions::url_encode(FunctionContext* context, const starrocks::Columns& columns) {
