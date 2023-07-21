@@ -313,6 +313,8 @@ vectorized_functions = [
 
     [30410, 'parse_url', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::parse_url',
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
+    [30411, 'url_extract_parameter', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::url_extract_parameter',
+     'StringFunctions::url_extract_parameter_prepare', 'StringFunctions::url_extract_parameter_close'],
     [30420, 'strcmp', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strcmp'],
 
     # Binary Functions
