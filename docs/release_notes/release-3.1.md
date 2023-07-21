@@ -1,5 +1,26 @@
 # StarRocks version 3.1
 
+## 3.1.0-RC02
+
+Release date: July 21, 2023
+
+### New Features
+
+#### Shared-data cluster
+
+Supports abstraction of storage volumes, which makes it easier for users to configure storage location and authentication information in StarRocks shared-data clusters.
+
+#### Storage engine, data ingestion, and query
+
+- Upgraded automatic partitioning to expression partitioning. Users only need to specify a simple partition expression (either a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is easier to use and more user-friendly.
+- Supports list partitioning. Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.
+- Supports using the files() function in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3.
+
+#### SQL reference
+
+- Added the following storage volume-related statements: [CREATE STORAGE VOLUME](/sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md), [ALTER STORAGE VOLUME](/sql-reference/sql-statements/Administration/ALTER%20STORAGE%20VOLUME.md), [DROP STORAGE VOLUME](/sql-reference/sql-statements/Administration/DROP%20STORAGE%20VOLUME.md), [SET DEFAULT STORAGE VOLUME](/sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md), [DESC STORAGE VOLUME](/sql-reference/sql-statements/Administration/DESC%20STORAGE%20VOLUME.md), [SHOW STORAGE VOLUMES](/sql-reference/sql-statements/Administration/SHOW%20STORAGE%20VOLUMES.md)
+- Added the following table function: [files](../sql-reference/sql-functions/table-functions/files.md).
+
 ## 3.1.0-RC01
 
 Release date: July 7, 2023
@@ -12,7 +33,7 @@ Release date: July 7, 2023
 - Supports the [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md) column attribute, which enables a globally unique ID for each data row and thus simplifies data management.
 - Supports [automatically creating partitions during loading and using partitioning expressions to define partitioning rules](../table_design/automatic_partitioning.md), thereby making partition creation easier to use and more flexible.
 - [Preview] Supports storing data on Azure Blob Storage.
-- Supports abstraction of storage volumes, which makes it easier for users to configure storage location and authentication information in StarRocks shared-data clusters.
+<!--- Supports abstraction of storage volumes, which makes it easier for users to configure storage location and authentication information in StarRocks shared-data clusters.-->
 
 #### Data Lake analytics
 
@@ -22,10 +43,10 @@ Release date: July 7, 2023
 
 #### Storage engine, data ingestion, and query
 
-- Upgraded automatic partitioning to expression partitioning. Users only need to specify a simple partition expression (either a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is easier to use and more user-friendly.
-- Supports list partitioning. Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.
+<!--- Upgraded automatic partitioning to expression partitioning. Users only need to specify a simple partition expression (either a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is easier to use and more user-friendly.
+- Supports list partitioning. Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.-->
 - Supports [random bucketing](../table_design/Data_distribution.md#choose-bucketing-columns), which relieves the need to configure bucketing columns at table creation. In big data and high performance-demanding scenarios, we recommend that you continue using hash bucketing.
-- Supports using the files() function in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3.
+- Supports using the the TABLE keyword in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3.
 - Supports [generated columns](../sql-reference/sql-statements/generated_columns.md). With the generated column feature, StarRocks can automatically generate and store the values of column expressions and automatically rewrite queries to improve query performance.
 - Supports loading data from Spark to StarRocks by using [Spark connector](../loading/Spark-connector-starrocks.md). Compared to [Spark Load](../loading/SparkLoad.md), the Spark connector provides more comprehensive capabilities. You can define a Spark job to perform ETL operations on the data, and the Spark connector serves as the sink in the Spark job.
 - Supports loading data into columns of the [MAP](../sql-reference/sql-statements/data-types/Map.md) and [STRUCT](../sql-reference/sql-statements/data-types/STRUCT.md) data types, and supports nesting Fast Decimal values in ARRAY, MAP, and STRUCT.
@@ -42,7 +63,7 @@ Release date: July 7, 2023
   - Array functions: [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) supports `ORDER BY`, [array_generate](../sql-reference/sql-functions/array-functions/array_generate.md), [element_at](../sql-reference/sql-functions/array-functions/element_at.md), [cardinality](../sql-reference/sql-functions/array-functions/cardinality.md)
   - Higher-order Array functions: [all_match](../sql-reference/sql-functions/array-functions/all_match.md), [any_match](../sql-reference/sql-functions/array-functions/any_match.md)
   - Aggregate functions: [min_by](../sql-reference/sql-functions/aggregate-functions/min_by.md), [percentile_disc](../sql-reference/sql-functions/aggregate-functions/percentile_disc.md)
-  - Table functions: [generate_series](../sql-reference/sql-functions/table-functions/generate_series.md), files
+  - Table functions: [generate_series](../sql-reference/sql-functions/table-functions/generate_series.md)
 
 ### Improvements
 
