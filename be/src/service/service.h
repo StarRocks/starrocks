@@ -28,4 +28,3 @@ void wait_for_fragments_finish(ExecEnv* exec_env, size_t max_loop_cnt_cfg);
 
 void start_be();
 } // namespace starrocks
-
