@@ -48,7 +48,14 @@ ScalarColumnIterator::~ScalarColumnIterator() = default;
 
 Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
-    RETURN_IF_ERROR(_reader->load_ordinal_index(_skip_fill_local_cache()));
+
+    IndexReadOptions index_opts;
+    index_opts.use_page_cache = !config::disable_storage_page_cache;
+    index_opts.kept_in_memory = false;
+    index_opts.skip_fill_data_cache = _skip_fill_data_cache();
+    index_opts.read_file = _opts.read_file;
+    index_opts.stats = _opts.stats;
+    RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
     _opts.stats->total_columns_data_page_count += _reader->num_data_pages();
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
@@ -301,8 +308,14 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
                                                         const ColumnPredicate* del_predicate, SparseRange* row_ranges) {
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
+        IndexReadOptions opts;
+        opts.use_page_cache = !config::disable_storage_page_cache;
+        opts.kept_in_memory = false;
+        opts.skip_fill_data_cache = _skip_fill_data_cache();
+        opts.read_file = _opts.read_file;
+        opts.stats = _opts.stats;
         RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages,
-                                                 row_ranges, _skip_fill_local_cache()));
+                                                 row_ranges, opts));
     } else {
         row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     }
@@ -317,7 +330,14 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
         support = support | pred->support_bloom_filter();
     }
     RETURN_IF(!support, Status::OK());
-    RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, _skip_fill_local_cache()));
+
+    IndexReadOptions opts;
+    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.kept_in_memory = false;
+    opts.skip_fill_data_cache = _skip_fill_data_cache();
+    opts.read_file = _opts.read_file;
+    opts.stats = _opts.stats;
+    RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, opts));
     return Status::OK();
 }
 

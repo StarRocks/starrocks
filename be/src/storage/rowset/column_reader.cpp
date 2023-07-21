@@ -263,9 +263,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     }
 }
 
-Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& options, BitmapIndexIterator** iterator) {
-    RETURN_IF_ERROR(_load_bitmap_index(options));
-    RETURN_IF_ERROR(_bitmap_index->new_iterator(iterator, options));
+Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator) {
+    RETURN_IF_ERROR(_load_bitmap_index(opts));
+    RETURN_IF_ERROR(_bitmap_index->new_iterator(opts, iterator));
     return Status::OK();
 }
 
@@ -310,11 +310,11 @@ Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail)
 
 // prerequisite: at least one predicate in |predicates| support bloom filter.
 Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange* row_ranges,
-                                  bool skip_fill_local_cache) {
-    RETURN_IF_ERROR(_load_bloom_filter_index(skip_fill_local_cache));
+                                  const IndexReadOptions& opts) {
+    RETURN_IF_ERROR(_load_bloom_filter_index(opts));
     SparseRange bf_row_ranges;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
-    RETURN_IF_ERROR(_bloom_filter_index->new_iterator(&bf_iter));
+    RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
     size_t range_size = row_ranges->size();
     // get covered page ids
     std::set<int32_t> page_ids;
@@ -342,19 +342,9 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
     return Status::OK();
 }
 
-Status ColumnReader::load_ordinal_index(bool skip_fill_local_cache) {
-    return _load_ordinal_index(skip_fill_local_cache);
-}
-
-Status ColumnReader::_load_ordinal_index(bool skip_fill_local_cache) {
+Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
     if (_ordinal_index == nullptr || _ordinal_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    IndexReadOptions opts;
-    opts.fs = file_system();
-    opts.file_name = file_name();
-    opts.use_page_cache = !config::disable_storage_page_cache;
-    opts.kept_in_memory = keep_in_memory();
-    opts.skip_fill_local_cache = skip_fill_local_cache;
     auto meta = _ordinal_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(opts, *meta, num_rows()));
     if (UNLIKELY(first_load)) {
@@ -365,15 +355,9 @@ Status ColumnReader::_load_ordinal_index(bool skip_fill_local_cache) {
     return Status::OK();
 }
 
-Status ColumnReader::_load_zonemap_index(bool skip_fill_local_cache) {
+Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
     if (_zonemap_index == nullptr || _zonemap_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    IndexReadOptions opts;
-    opts.fs = file_system();
-    opts.file_name = file_name();
-    opts.use_page_cache = !config::disable_storage_page_cache;
-    opts.kept_in_memory = keep_in_memory();
-    opts.skip_fill_local_cache = skip_fill_local_cache;
     auto meta = _zonemap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
@@ -384,11 +368,11 @@ Status ColumnReader::_load_zonemap_index(bool skip_fill_local_cache) {
     return Status::OK();
 }
 
-Status ColumnReader::_load_bitmap_index(const IndexReadOptions& options) {
+Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
     if (_bitmap_index == nullptr || _bitmap_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     auto meta = _bitmap_index_meta.get();
-    ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(options, *meta));
+    ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
@@ -397,15 +381,9 @@ Status ColumnReader::_load_bitmap_index(const IndexReadOptions& options) {
     return Status::OK();
 }
 
-Status ColumnReader::_load_bloom_filter_index(bool skip_fill_local_cache) {
+Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
     if (_bloom_filter_index == nullptr || _bloom_filter_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    IndexReadOptions opts;
-    opts.fs = file_system();
-    opts.file_name = file_name();
-    opts.use_page_cache = !config::disable_storage_page_cache;
-    opts.kept_in_memory = keep_in_memory();
-    opts.skip_fill_local_cache = skip_fill_local_cache;
     auto meta = _bloom_filter_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _bloom_filter_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
@@ -435,8 +413,8 @@ Status ColumnReader::seek_at_or_before(ordinal_t ordinal, OrdinalPageIndexIterat
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange* row_ranges,
-                                     bool skip_fill_local_cache) {
-    RETURN_IF_ERROR(_load_zonemap_index(skip_fill_local_cache));
+                                     const IndexReadOptions& opts) {
+    RETURN_IF_ERROR(_load_zonemap_index(opts));
     std::vector<uint32_t> page_indexes;
     RETURN_IF_ERROR(_zone_map_filter(predicates, del_predicate, del_partial_filtered_pages, &page_indexes));
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));

@@ -106,7 +106,7 @@ public:
 
     // Caller should free returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()
-    Status new_bitmap_index_iterator(const IndexReadOptions& options, BitmapIndexIterator** iterator);
+    Status new_bitmap_index_iterator(const IndexReadOptions& opts, BitmapIndexIterator** iterator);
 
     // Seek to the first entry in the column.
     Status seek_to_first(OrdinalPageIndexIterator* iter);
@@ -139,7 +139,7 @@ public:
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                            const ::starrocks::ColumnPredicate* del_predicate,
                            std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange* row_ranges,
-                           bool skip_fill_local_cache);
+                           const IndexReadOptions& opts);
 
     // segment-level zone map filter.
     // Return false to filter out this segment.
@@ -148,16 +148,14 @@ public:
 
     // prerequisite: at least one predicate in |predicates| support bloom filter.
     Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange* ranges,
-                        bool skip_fill_local_cache);
+                        const IndexReadOptions& opts);
 
-    Status load_ordinal_index(bool skip_fill_local_cache);
+    Status load_ordinal_index(const IndexReadOptions& opts);
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
 private:
     const std::string& file_name() const { return _segment->file_name(); }
-
-    FileSystem* file_system() const { return _segment->file_system(); }
 
     bool keep_in_memory() const { return _segment->keep_in_memory(); }
 
@@ -171,10 +169,9 @@ private:
 
     Status _init(ColumnMetaPB* meta);
 
-    Status _load_zonemap_index(bool skip_fill_local_cache);
-    Status _load_ordinal_index(bool skip_fill_local_cache);
-    Status _load_bitmap_index(const IndexReadOptions& options);
-    Status _load_bloom_filter_index(bool skip_fill_local_cache);
+    Status _load_zonemap_index(const IndexReadOptions& opts);
+    Status _load_bitmap_index(const IndexReadOptions& opts);
+    Status _load_bloom_filter_index(const IndexReadOptions& opts);
 
     Status _parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 
