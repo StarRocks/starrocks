@@ -255,7 +255,6 @@ public class PlanFragmentBuilder {
 
         DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds, true,
                 view.writeQuorum(), view.enableReplicatedStorage(), false, false,
-                connectContext.getCurrentWarehouse(),
                 connectContext.getCurrentWarehouse());
         execPlan.getTopFragment().setSink(tableSink);
 
