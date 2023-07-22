@@ -145,8 +145,24 @@ public class MaterializedViewRewriter {
         // because optimizer will match MV's pattern which is subset of query opt tree
         // from top-down iteration.
         if (matchMode == MatchMode.COMPLETE) {
-            if (!isJoinMatch(queryExpression, mvExpression, queryTables, mvTables)) {
-                return false;
+            // If all join types are inner/cross, no need check join orders: eg a inner join b or b inner join a.
+            boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
+            boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
+            if (isQueryAllEqualInnerJoin && isMVAllEqualInnerJoin) {
+                // do nothing.
+            } else {
+                // If not all join types are InnerJoin, need to check whether MV's join tables' order
+                // matches Query's join tables' order.
+                // eg. MV   : a left join b inner join c
+                //     Query: b left join a inner join c (cannot rewrite)
+                //     Query: a left join b inner join c (can rewrite)
+                //     Query: c inner join a left join b (can rewrite)
+                // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
+                // order for now.
+                // Use traverse order to check whether all joins' order and operator are exactly matched.
+                if (!computeCompatibility(queryExpression, mvExpression)) {
+                    return false;
+                }
             }
         } else if (matchMode == MatchMode.VIEW_DELTA) {
             if (!optimizerContext.getSessionVariable().isEnableMaterializedViewViewDeltaRewrite()) {
@@ -198,7 +214,7 @@ public class MaterializedViewRewriter {
         LogicalOperator queryOp = (LogicalOperator) queryExpr.getOp();
         LogicalOperator mvOp = (LogicalOperator) mvExpr.getOp();
         if (!queryOp.getOpType().equals(mvOp.getOpType())) {
-            logMVRewrite(mvRewriteContext, "join type is different {} != {}", queryOp.getOpType(), mvOp.getOpType());
+            logMVRewrite(mvRewriteContext, "join type is different %s != %s", queryOp.getOpType(), mvOp.getOpType());
             return false;
         }
         if (queryOp instanceof LogicalJoinOperator) {
@@ -214,8 +230,11 @@ public class MaterializedViewRewriter {
             LogicalJoinOperator mvJoin = (LogicalJoinOperator) mvExpr.getOp();
             JoinOperator mvJoinType = mvJoin.getJoinType();
 
+            // Rewrite non-inner/cross join's on-predicates, all on-predicates should not compensate.
+            // For non-inner/cross join, we must ensure all on-predicates are not compensated, otherwise there may
+            // be some correctness bugs.
             if (!ScalarOperator.isEquivalent(queryJoin.getOnPredicate(), (mvJoin.getOnPredicate()))) {
-                logMVRewrite(mvRewriteContext, "join predicate is different {} != {}", queryJoin.getOnPredicate(),
+                logMVRewrite(mvRewriteContext, "join predicate is different %s != %s", queryJoin.getOnPredicate(),
                         mvJoin.getOnPredicate());
                 return false;
             }
@@ -225,7 +244,7 @@ public class MaterializedViewRewriter {
             }
 
             if (!JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
-                logMVRewrite(mvRewriteContext, "join type is not compatible {} not contains {}", mvJoinType,
+                logMVRewrite(mvRewriteContext, "join type is not compatible %s not contains %s", mvJoinType,
                         queryJoinType);
                 return false;
             }
@@ -238,7 +257,7 @@ public class MaterializedViewRewriter {
             boolean isSupported =
                     isSupportedPredicate(queryOnPredicate, materializationContext.getQueryRefFactory(), joinColumns);
             if (!isSupported) {
-                logMVRewrite(mvRewriteContext, "join predicate is not supported {}", queryOnPredicate);
+                logMVRewrite(mvRewriteContext, "join predicate is not supported %s", queryOnPredicate);
                 return false;
             }
             // use join columns from query
@@ -253,7 +272,7 @@ public class MaterializedViewRewriter {
             boolean isCompatible =
                     isJoinCompatible(usedColumnsToTable, queryJoinType, mvJoinType, leftColumns, rightColumns, joinColumnRefs);
             if (!isCompatible) {
-                logMVRewrite(mvRewriteContext, "join columns not compatible {} != {}", leftColumns, rightColumns);
+                logMVRewrite(mvRewriteContext, "join columns not compatible %s != %s", leftColumns, rightColumns);
                 return false;
             }
             JoinDeriveContext joinDeriveContext = new JoinDeriveContext(queryJoinType, mvJoinType, joinColumnRefs);
@@ -928,36 +947,6 @@ public class MaterializedViewRewriter {
         return columnRef.isPresent() ? columnRef.get() : null;
     }
 
-    private boolean isJoinMatch(OptExpression queryExpression,
-                                OptExpression mvExpression,
-                                List<Table> queryTables,
-                                List<Table> mvTables) {
-        // If all join types are inner/cross, no need check join orders: eg a inner join b or b inner join a.
-        boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
-        boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
-        if (isQueryAllEqualInnerJoin && isMVAllEqualInnerJoin) {
-            return true;
-        }
-
-        // If exact match (all join types are the same), return true directly.
-        List<JoinOperator> queryJoinOperators = MvUtils.getAllJoinOperators(queryExpression);
-        List<JoinOperator> mvJoinOperators = MvUtils.getAllJoinOperators(mvExpression);
-        if (queryTables.equals(mvTables) && queryJoinOperators.equals(mvJoinOperators)) {
-            return true;
-        }
-
-        // If not all join types are InnerJoin, need to check whether MV's join tables' order
-        // matches Query's join tables' order.
-        // eg. MV   : a left join b inner join c
-        //     Query: b left join a inner join c (cannot rewrite)
-        //     Query: a left join b inner join c (can rewrite)
-        //     Query: c inner join a left join b (can rewrite)
-        // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
-        // order for now.
-        // Use traverse order to check whether all joins' order and operator are exactly matched.
-        return computeCompatibility(queryExpression, mvExpression);
-    }
-
     private ScalarOperator collectMvPrunePredicate(MaterializationContext mvContext) {
         final OptExpression mvExpression = mvContext.getMvExpression();
         final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
@@ -1061,76 +1050,6 @@ public class MaterializedViewRewriter {
             // add projection
             return viewBasedRewrite(rewriteContext, mvScanOptExpression);
         }
-    }
-
-    // Rewrite non-inner/cross join's on-predicates, all on-predicates should not compensate.
-    // For non-inner/cross join, we must ensure all on-predicates are not compensated, otherwise there may
-    // be some correctness bugs.
-    private ScalarOperator rewriteJoinOnPredicates(ColumnRewriter columnRewriter,
-                                                   Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns,
-                                                   List<ScalarOperator> srcJoinOnPredicates,
-                                                   List<ScalarOperator> targetJoinOnPredicates,
-                                                   boolean isQueryToMV) {
-        if (srcJoinOnPredicates.isEmpty() && targetJoinOnPredicates.isEmpty()) {
-            return ConstantOperator.TRUE;
-        }
-        if (srcJoinOnPredicates.isEmpty() && !targetJoinOnPredicates.isEmpty()) {
-            return ConstantOperator.TRUE;
-        }
-        if (!srcJoinOnPredicates.isEmpty() && targetJoinOnPredicates.isEmpty()) {
-            return null;
-        }
-        final PredicateSplit srcJoinOnPredicateSplit =
-                PredicateSplit.splitPredicate(Utils.compoundAnd(srcJoinOnPredicates));
-        final PredicateSplit targetJoinOnPredicateSplit =
-                PredicateSplit.splitPredicate(Utils.compoundAnd(targetJoinOnPredicates));
-
-        EquivalenceClasses sourceEquivalenceClasses;
-        EquivalenceClasses targetEquivalenceClasses;
-        if (isQueryToMV) {
-            sourceEquivalenceClasses =
-                    createEquivalenceClasses(srcJoinOnPredicateSplit.getEqualPredicates());
-            targetEquivalenceClasses = createQueryBasedEquivalenceClasses(columnRewriter,
-                    targetJoinOnPredicateSplit.getEqualPredicates());
-        } else {
-            sourceEquivalenceClasses =
-                    createQueryBasedEquivalenceClasses(columnRewriter,
-                            srcJoinOnPredicateSplit.getEqualPredicates());
-            targetEquivalenceClasses =
-                    createEquivalenceClasses(targetJoinOnPredicateSplit.getEqualPredicates());
-        }
-
-        // NOTE: For view-delta mode, we still need add extra join-compensations equal predicates.
-        if (compensationJoinColumns != null) {
-            if (!addCompensationJoinColumnsIntoEquivalenceClasses(columnRewriter,
-                    sourceEquivalenceClasses, compensationJoinColumns)) {
-                return null;
-            }
-            if (!addCompensationJoinColumnsIntoEquivalenceClasses(columnRewriter,
-                    targetEquivalenceClasses, compensationJoinColumns)) {
-                return null;
-            }
-        }
-
-        final PredicateSplit compensationPredicates = getCompensationPredicates(columnRewriter,
-                sourceEquivalenceClasses,
-                targetEquivalenceClasses,
-                srcJoinOnPredicateSplit,
-                targetJoinOnPredicateSplit,
-                isQueryToMV);
-        if (compensationPredicates == null) {
-            return null;
-        }
-        if (!ScalarOperator.isTrue(compensationPredicates.getEqualPredicates())) {
-            return null;
-        }
-        if (!ScalarOperator.isTrue(compensationPredicates.getRangePredicates())) {
-            return null;
-        }
-        if (!ScalarOperator.isTrue(compensationPredicates.getResidualPredicates())) {
-            return null;
-        }
-        return ConstantOperator.TRUE;
     }
 
     private ScalarOperator getMVCompensationPredicate(RewriteContext rewriteContext,
@@ -2166,21 +2085,6 @@ public class MaterializedViewRewriter {
             ColumnRewriter columnRewriter,
             RewriteContext rewriteContext,
             Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
-        if (mvRewriteContext.getJoinDeriveContexts().isEmpty()) {
-            // decide whether Join onPredicate if it is not join derivability rewrite
-            // because for join derivability rewrite, onPredicate must be the same
-            final List<ScalarOperator> queryJoinOnPredicates = mvRewriteContext.getQueryJoinOnPredicates();
-            final List<ScalarOperator> mvJoinOnPredicates = mvRewriteContext.getMvJoinOnPredicates();
-            final ScalarOperator queryJoinOnPredicateCompensations =
-                    rewriteJoinOnPredicates(columnRewriter, compensationJoinColumns,
-                            queryJoinOnPredicates, mvJoinOnPredicates, true);
-            if (queryJoinOnPredicateCompensations == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite query to view failed: on-predicates cannot be compensated and " +
-                        "should be totally the same");
-                return null;
-            }
-        }
-
         return getCompensationPredicates(columnRewriter,
                 rewriteContext.getQueryEquivalenceClasses(),
                 rewriteContext.getQueryBasedViewEquivalenceClasses(),
@@ -2193,17 +2097,6 @@ public class MaterializedViewRewriter {
             ColumnRewriter columnRewriter,
             RewriteContext rewriteContext,
             Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
-        final List<ScalarOperator> queryJoinOnPredicates = mvRewriteContext.getQueryJoinOnPredicates();
-        final List<ScalarOperator> mvJoinOnPredicates = mvRewriteContext.getMvJoinOnPredicates();
-        final ScalarOperator queryJoinOnPredicateCompensations =
-                rewriteJoinOnPredicates(columnRewriter, compensationJoinColumns,
-                        mvJoinOnPredicates, queryJoinOnPredicates, false);
-        if (queryJoinOnPredicateCompensations == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite view to query failed: on-predicates cannot be compensated and " +
-                    "should be totally the same");
-            return null;
-        }
-
         return getCompensationPredicates(columnRewriter,
                 rewriteContext.getQueryBasedViewEquivalenceClasses(),
                 rewriteContext.getQueryEquivalenceClasses(),

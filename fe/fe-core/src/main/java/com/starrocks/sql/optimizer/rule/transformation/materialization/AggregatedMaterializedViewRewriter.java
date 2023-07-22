@@ -129,10 +129,16 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         boolean isRollup = isRollupAggregate(mvGroupingKeys, queryGroupingKeys, queryRangePredicate);
 
         // Cannot ROLLUP distinct
-        if (isRollup && mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct())) {
-            logMVRewrite(mvRewriteContext, "Rewrite aggregate failed: don't support distinct aggregate functions for rollup " +
-                    "aggregate");
-            return null;
+        if (isRollup) {
+            boolean mvHasDistinctAggFunc = 
+                    mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct());
+            boolean queryHasDistinctAggFunc = 
+                    queryAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct());
+            if (mvHasDistinctAggFunc && queryHasDistinctAggFunc) {
+                logMVRewrite(mvRewriteContext, "Rollup aggregate cannot contain distinct aggregate functions," +
+                        "mv:%s, query:%s", mvAggOp.getAggregations().values(), queryAggOp.getAggregations().values());
+                return null;
+            }
         }
 
         // normalize mv's aggs by using query's table ref and query ec
