@@ -1283,6 +1283,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new CreateViewStmt(
                 context.IF() != null,
+                context.REPLACE() != null,
                 targetTableName,
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
