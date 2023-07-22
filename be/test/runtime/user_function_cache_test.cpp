@@ -125,6 +125,7 @@ public:
     }
     static void TearDownTestCase() {
         s_server->stop();
+        s_server->join();
         delete s_server;
         system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
         system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");

@@ -111,6 +111,7 @@ void FragmentContext::count_down_pipeline(size_t val) {
     query_ctx->count_down_fragments();
 }
 
+<<<<<<< HEAD
 bool FragmentContext::need_report_exec_state() {
     auto* state = runtime_state();
     auto* query_ctx = state->query_ctx();
@@ -123,6 +124,8 @@ bool FragmentContext::need_report_exec_state() {
     return now - last_report_ns >= interval_ns;
 }
 
+=======
+>>>>>>> 5fdc408d8d ([Refactor] Add join/stop interface for HttpServer (#27734))
 void FragmentContext::report_exec_state_if_necessary() {
     auto* state = runtime_state();
     auto* query_ctx = state->query_ctx();
@@ -198,8 +201,7 @@ void FragmentContext::cancel(const Status& status) {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
-                                                                                             _fragment_instance_id);
+        ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id, _fragment_instance_id);
     }
 
     if (_stream_load_contexts.size() > 0) {
@@ -246,7 +248,7 @@ Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, Fragme
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        RETURN_IF_ERROR(starrocks::ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
+        RETURN_IF_ERROR(ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
                 fragment_ctx->query_id(), fragment_id));
     }
     _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
@@ -275,8 +277,8 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
              query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
              query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
             !it->second->runtime_state()->is_cancelled()) {
-            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
-                                                                                                 fragment_id);
+            ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
+                                                                                      fragment_id);
         }
         const auto& stream_load_contexts = it->second->_stream_load_contexts;
 

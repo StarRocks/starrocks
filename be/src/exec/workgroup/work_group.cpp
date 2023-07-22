@@ -169,10 +169,15 @@ void WorkGroup::init() {
     _memory_limit_bytes = _memory_limit == ABSENT_MEMORY_LIMIT
                                   ? GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit()
                                   : GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
+<<<<<<< HEAD
     _spill_mem_limit_bytes = _spill_mem_limit_threshold * _memory_limit_bytes;
     _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
                                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
     _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
+=======
+    _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
+                                                GlobalEnv::GetInstance()->query_pool_mem_tracker());
+>>>>>>> 5fdc408d8d ([Refactor] Add join/stop interface for HttpServer (#27734))
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
@@ -286,36 +291,39 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
         unique_lock.unlock();
 
         // cpu limit.
-        auto resource_group_cpu_limit_ratio = std::make_unique<starrocks::DoubleGauge>(MetricUnit::PERCENT);
+        auto resource_group_cpu_limit_ratio = std::make_unique<DoubleGauge>(MetricUnit::PERCENT);
         bool cpu_limit_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_cpu_limit_ratio", MetricLabels().add("name", wg->name()),
                 resource_group_cpu_limit_ratio.get());
         // cpu use ratio.
+<<<<<<< HEAD
         auto inuse_cpu_cores = std::make_unique<DoubleGauge>(MetricUnit::NOUNIT);
         bool inuse_cpu_cores_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_inuse_cpu_cores", MetricLabels().add("name", wg->name()), inuse_cpu_cores.get());
         // cpu use ratio.
+=======
+>>>>>>> 5fdc408d8d ([Refactor] Add join/stop interface for HttpServer (#27734))
         auto resource_group_cpu_use_ratio = std::make_unique<DoubleGauge>(MetricUnit::PERCENT);
         bool cpu_ratio_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_cpu_use_ratio", MetricLabels().add("name", wg->name()),
                 resource_group_cpu_use_ratio.get());
         // scan use ratio.
-        auto resource_group_scan_use_ratio = std::make_unique<starrocks::DoubleGauge>(MetricUnit::PERCENT);
+        auto resource_group_scan_use_ratio = std::make_unique<DoubleGauge>(MetricUnit::PERCENT);
         bool scan_ratio_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_scan_use_ratio", MetricLabels().add("name", wg->name()),
                 resource_group_scan_use_ratio.get());
         // connector scan use ratio.
-        auto resource_group_connector_scan_use_ratio = std::make_unique<starrocks::DoubleGauge>(MetricUnit::PERCENT);
+        auto resource_group_connector_scan_use_ratio = std::make_unique<DoubleGauge>(MetricUnit::PERCENT);
         bool connector_scan_ratio_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_connector_scan_use_ratio", MetricLabels().add("name", wg->name()),
                 resource_group_connector_scan_use_ratio.get());
         // mem limit.
-        auto resource_group_mem_limit_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
+        auto resource_group_mem_limit_bytes = std::make_unique<IntGauge>(MetricUnit::BYTES);
         bool mem_limit_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_mem_limit_bytes", MetricLabels().add("name", wg->name()),
                 resource_group_mem_limit_bytes.get());
         // mem use bytes.
-        auto resource_group_mem_allocated_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
+        auto resource_group_mem_allocated_bytes = std::make_unique<IntGauge>(MetricUnit::BYTES);
         bool mem_inuse_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_mem_inuse_bytes", MetricLabels().add("name", wg->name()),
                 resource_group_mem_allocated_bytes.get());
@@ -582,6 +590,7 @@ std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
     return alive_workgroups;
 }
 
+<<<<<<< HEAD
 std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
     std::vector<TWorkGroup> workgroups;
     {
@@ -605,6 +614,8 @@ void WorkGroupManager::for_each_workgroup(WorkGroupConsumer consumer) const {
     }
 }
 
+=======
+>>>>>>> 5fdc408d8d ([Refactor] Add join/stop interface for HttpServer (#27734))
 size_t WorkGroupManager::normal_workgroup_cpu_hard_limit() const {
     static int num_hardware_cores = CpuInfo::num_cores();
     return std::max<int>(1, num_hardware_cores - _rt_cpu_limit);
