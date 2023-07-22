@@ -344,7 +344,7 @@ int main(int argc, char** argv) {
     }
 
     // cn need to support all ops for cloudnative table, so just start_be
-    start_be();
+    starrocks::start_be();
 
     if (starrocks::k_starrocks_exit_quick.load()) {
         LOG(INFO) << "BE is shutting down，will exit quickly";
