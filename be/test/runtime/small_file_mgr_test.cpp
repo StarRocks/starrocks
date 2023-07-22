@@ -95,6 +95,7 @@ public:
 
     static void TearDownTestCase() {
         s_server->stop();
+        s_server->join();
         delete s_server;
         std::stringstream ss;
         ss << g_download_path << "/" << g_file_12345 << "." << g_md5_12345;

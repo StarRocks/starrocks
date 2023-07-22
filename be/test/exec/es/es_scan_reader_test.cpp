@@ -230,6 +230,7 @@ public:
 
     static void TearDownTestCase() {
         mock_es_server->stop();
+        mock_es_server->join();
         delete mock_es_server;
     }
 };

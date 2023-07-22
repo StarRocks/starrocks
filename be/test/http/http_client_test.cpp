@@ -92,6 +92,7 @@ public:
 
     static void TearDownTestCase() {
         s_server->stop();
+        s_server->join();
         delete s_server;
     }
 };

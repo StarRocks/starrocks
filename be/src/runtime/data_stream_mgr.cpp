@@ -45,8 +45,8 @@
 namespace starrocks {
 
 DataStreamMgr::DataStreamMgr() {
-    REGISTER_GAUGE_STARROCKS_METRIC(data_stream_receiver_count, [this]() { return _receiver_count.load(); });
-    REGISTER_GAUGE_STARROCKS_METRIC(fragment_endpoint_count, [this]() { return _fragment_count.load(); });
+    REGISTER_GAUGE_STARROCKS_METRIC(data_stream_receiver_count, [this]() { return _receiver_count.load(); })
+    REGISTER_GAUGE_STARROCKS_METRIC(fragment_endpoint_count, [this]() { return _fragment_count.load(); })
 }
 
 inline uint32_t DataStreamMgr::get_bucket(const TUniqueId& fragment_instance_id) {
@@ -142,7 +142,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     TUniqueId t_finst_id;
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
-    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id);
+    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id)
     std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request.node_id());
     if (recvr == nullptr) {
         // The receiver may remove itself from the receiver map via deregister_recvr()
