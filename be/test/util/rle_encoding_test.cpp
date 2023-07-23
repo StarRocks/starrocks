@@ -484,7 +484,7 @@ TEST_F(TestRle, TestGetBatchWithDict) {
     std::vector<int> values;
     std::vector<int> dict;
     for (int i = 0; i < 1024; ++i) {
-        dict[i] = i % 5;
+        dict.push_back(i % 5);
         values.push_back(dict[i]);
         encoder.Put(i);
     }
