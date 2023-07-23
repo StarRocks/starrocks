@@ -102,8 +102,8 @@ public:
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
-            _index_batch_decoder = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
-                                                             static_cast<int>(data.size) - 1, bit_width);
+            _rle_batch_reader = RleDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
+                                                     static_cast<int>(data.size) - 1, bit_width);
         } else {
             return Status::Corruption("input encoded data size is 0");
         }
@@ -113,7 +113,7 @@ public:
     Status skip(size_t values_to_skip) override {
         //TODO(Smith) still heavy work load
         _indexes.reserve(values_to_skip);
-        _index_batch_decoder.GetBatch(&_indexes[0], values_to_skip);
+        _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
         return Status::OK();
     }
 
@@ -131,7 +131,7 @@ public:
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
 
-        _index_batch_decoder.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
+        _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
 
         return Status::OK();
     }
@@ -139,7 +139,7 @@ public:
 private:
     enum { SIZE_OF_TYPE = sizeof(T) };
 
-    RleBatchDecoder<uint32_t> _index_batch_decoder;
+    RleBatchDecoder<uint32_t> _rle_batch_reader;
     std::vector<T> _dict;
     std::vector<uint32_t> _indexes;
 };
@@ -271,8 +271,8 @@ public:
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
-            _index_batch_decoder = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
-                                                             static_cast<int>(data.size) - 1, bit_width);
+            _rle_batch_reader = RleDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
+                                                     static_cast<int>(data.size) - 1, bit_width);
         } else {
             return Status::Corruption("input encoded data size is 0");
         }
@@ -282,7 +282,7 @@ public:
     Status skip(size_t values_to_skip) override {
         //TODO(Smith) still heavy work load
         _indexes.reserve(values_to_skip);
-        _index_batch_decoder.GetBatch(&_indexes[0], values_to_skip);
+        _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
         return Status::OK();
     }
 
@@ -300,13 +300,16 @@ public:
             size_t cur_size = data_column->size();
             data_column->resize_uninitialized(cur_size + count);
             int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
-            _index_batch_decoder.GetBatch(reinterpret_cast<uint32_t*>(data), count);
+            _rle_batch_reader.GetBatch(reinterpret_cast<uint32_t*>(data), count);
             break;
         }
         case VALUE: {
             raw::stl_vector_resize_uninitialized(&_slices, count);
-            _index_batch_decoder.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
-            auto ret = dst->append_strings_overflow(_slices, _max_value_length);
+            auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
+            if (UNLIKELY(!ret)) {
+                return Status::InternalError("DictDecoder append strings to column failed");
+            }
+            ret = dst->append_strings_overflow(_slices, _max_value_length);
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("DictDecoder append strings to column failed");
             }
@@ -323,7 +326,7 @@ private:
     enum { SIZE_OF_DICT_CODE_TYPE = sizeof(int32_t) };
     std::unordered_map<Slice, int32_t, SliceHasher> _dict_code_by_value;
 
-    RleBatchDecoder<uint32_t> _index_batch_decoder;
+    RleBatchDecoder<uint32_t> _rle_batch_reader;
     std::vector<uint8_t> _dict_data;
     std::vector<Slice> _dict;
     std::vector<uint32_t> _indexes;

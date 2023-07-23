@@ -478,4 +478,25 @@ TEST_F(TestRle, TestBatch) {
     ASSERT_EQ(1024, n);
 }
 
+TEST_F(TestRle, TestGetBatchWithDict) {
+    faststring buffer;
+    RleEncoder<int> encoder(&buffer, 16);
+    std::vector<int> values;
+    std::vector<int> dict;
+    for (int i = 0; i < 1024; ++i) {
+        dict[i] = i % 5;
+        values.push_back(dict[i]);
+        encoder.Put(i);
+    }
+    encoder.Flush();
+
+    RleBatchDecoder<int> decoder(buffer.data(), buffer.size(), 16);
+    std::vector<int> to_check(2048);
+    auto n = decoder.GetBatchWithDict(dict.data(), dict.size(), &to_check[0], 2048);
+    for (int i = 0; i < values.size(); i++) {
+        ASSERT_EQ(to_check[i], values[i]);
+    }
+    ASSERT_EQ(1024, n);
+}
+
 } // namespace starrocks
