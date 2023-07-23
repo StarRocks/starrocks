@@ -102,8 +102,8 @@ public:
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
-            _rle_batch_reader = RleDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
-                                                     static_cast<int>(data.size) - 1, bit_width);
+            _rle_batch_reader = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
+                                                          static_cast<int>(data.size) - 1, bit_width);
         } else {
             return Status::Corruption("input encoded data size is 0");
         }
@@ -271,8 +271,8 @@ public:
     Status set_data(const Slice& data) override {
         if (data.size > 0) {
             uint8_t bit_width = *data.data;
-            _rle_batch_reader = RleDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
-                                                     static_cast<int>(data.size) - 1, bit_width);
+            _rle_batch_reader = RleBatchDecoder<uint32_t>(reinterpret_cast<uint8_t*>(data.data) + 1,
+                                                          static_cast<int>(data.size) - 1, bit_width);
         } else {
             return Status::Corruption("input encoded data size is 0");
         }

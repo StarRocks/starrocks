@@ -904,9 +904,8 @@ static inline bool IndexInRange(T idx, int32_t dictionary_length) {
 
 template <typename T>
 static inline bool IndicesInRange(const T* values, int32_t length, int32_t dictionary_length) {
-    using IndexType = int32_t;
-    IndexType min_index = std::numeric_limits<IndexType>::max();
-    IndexType max_index = std::numeric_limits<IndexType>::min();
+    T min_index = std::numeric_limits<T>::max();
+    T max_index = std::numeric_limits<T>::min();
     for (int x = 0; x < length; x++) {
         min_index = std::min(values[x], min_index);
         max_index = std::max(values[x], max_index);
