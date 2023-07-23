@@ -86,7 +86,7 @@ public class CreateViewTest {
     public void createReplace() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.useDatabase("test");
-        starRocksAssert.withTable("CREATE TABLE `site_access` (\n" +
+        starRocksAssert.withTable("CREATE TABLE `test_replace_site_access` (\n" +
                 "  `event_day` date NULL COMMENT \"\",\n" +
                 "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
                 "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
@@ -104,13 +104,16 @@ public class CreateViewTest {
                 ");");
 
         // create non existed view
-        starRocksAssert.withView("create or replace view test_null_view as select event_day from site_access;");
+        starRocksAssert.withView("create or replace view test_null_view as select event_day " +
+                "from test_replace_site_access;");
         Assert.assertNotNull(starRocksAssert.getTable("test", "test_null_view"));
 
         // replace existed view
-        starRocksAssert.withView("create or replace view test_null_view as select site_id from site_access;");
+        starRocksAssert.withView("create or replace view test_null_view as select site_id " +
+                "from test_replace_site_access;");
         View view = (View) starRocksAssert.getTable("test", "test_null_view");
-        Assert.assertEquals("SELECT `test`.`site_access`.`site_id`\nFROM `test`.`site_access`",
+        Assert.assertEquals(
+                "SELECT `test`.`test_replace_site_access`.`site_id`\nFROM `test`.`test_replace_site_access`",
                 view.getInlineViewDef());
         Assert.assertNotNull(view.getColumn("site_id"));
     }
