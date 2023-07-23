@@ -82,6 +82,8 @@ Status DirManager::init() {
         for (const auto& storage_path : storage_paths) {
             if (is_same_disk(spill_dir_path, storage_path)) {
                 max_dir_size = max_dir_size * max_dir_size_ratio;
+                // do not consider multi spill directory on the same disk
+                break;
             }
         }
         _dirs.emplace_back(std::make_shared<Dir>(spill_dir_path, std::move(fs), max_dir_size));
