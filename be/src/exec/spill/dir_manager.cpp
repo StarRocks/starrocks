@@ -76,15 +76,18 @@ Status DirManager::init() {
             }
             return true;
         }));
-        _dirs.emplace_back(std::make_shared<Dir>(spill_dir_path, std::move(fs)));
+        // init priority
+        _dirs.push_back(std::make_shared<Dir>(spill_dir_path, std::move(fs)));
     }
     return Status::OK();
 }
 
 StatusOr<Dir*> DirManager::acquire_writable_dir(const AcquireDirOptions& opts) {
-    // @TODO(silverbullet233): refine the strategy for dir selection
-    size_t idx = _idx++ % _dirs.size();
-    return _dirs[idx].get();
+    // we assume that spill dir number is limited so reorder for priority will not be too slow
+    Dir dir = _dirs.top();
+    _dirs.pop();
+    _dirs.push_back(dir)
+    return _dirs.top();
 }
 
 } // namespace starrocks::spill
