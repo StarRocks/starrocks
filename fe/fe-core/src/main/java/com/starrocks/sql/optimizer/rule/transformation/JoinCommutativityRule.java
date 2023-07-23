@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.join.JoinReorderProperty;
 
 import java.util.Collections;
 import java.util.List;
@@ -62,7 +63,9 @@ public class JoinCommutativityRule extends TransformationRule {
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {
-        return ((LogicalJoinOperator) input.getOp()).getJoinHint().isEmpty();
+        LogicalJoinOperator joinOperator = input.getOp().cast();
+        return joinOperator.getJoinHint().isEmpty() &&
+                (joinOperator.getTransformMask() != JoinReorderProperty.COMMUTATIVITY_MASK);
     }
 
     public static OptExpression commuteRightSemiAntiJoin(OptExpression input) {
@@ -83,7 +86,9 @@ public class JoinCommutativityRule extends TransformationRule {
         List<OptExpression> newChildren = Lists.newArrayList(input.inputAt(1), input.inputAt(0));
 
         LogicalJoinOperator newJoin = new LogicalJoinOperator.Builder().withOperator(oldJoin)
-                .setJoinType(commuteMap.get(oldJoin.getJoinType())).build();
+                .setJoinType(commuteMap.get(oldJoin.getJoinType()))
+                .setTransformMask(oldJoin.getTransformMask() | JoinReorderProperty.COMMUTATIVITY_MASK)
+                .build();
         OptExpression result = OptExpression.create(newJoin, newChildren);
         return Lists.newArrayList(result);
     }

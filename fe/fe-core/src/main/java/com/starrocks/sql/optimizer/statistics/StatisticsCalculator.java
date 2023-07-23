@@ -202,10 +202,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Projection projection = node.getProjection();
         if (projection != null) {
             Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
-            for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
-                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
-                statisticsBuilder.addColumnStatistic(columnRefOperator,
-                        ExpressionStatisticCalculator.calculate(mapOperator, statisticsBuilder.build()));
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                statisticsBuilder.addColumnStatistic(entry.getKey(),
+                        ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
             }
 
         }

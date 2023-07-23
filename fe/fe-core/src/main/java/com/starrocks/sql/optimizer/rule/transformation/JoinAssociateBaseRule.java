@@ -75,6 +75,8 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
     public abstract OptExpression createNewTopJoinExpr(LogicalJoinOperator newTopJoin, OptExpression newTopJoinChild,
                                                        OptExpression newBotJoinExpr);
 
+    public abstract int createTransformMask(boolean isTop);
+
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator.Builder newTopJoinBuilder = new LogicalJoinOperator.Builder();
@@ -159,6 +161,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
                 .setPredicate(newBotPredicate)
                 .setOnPredicate(newBotOnCondition)
                 .setProjection(newBotJoinProjection)
+                .setTransformMask(createTransformMask(false))
                 .build();
         OptExpression newBotJoinExpr = OptExpression.create(newBotJoin, newBotJoinLeftChild, newBotJoinRightChild);
         Projection newTopJoinProjection = null;
@@ -172,6 +175,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
                 .setProjection(newTopJoinProjection)
                 .setOnPredicate(newTopOnCondition)
                 .setPredicate(newTopPredicate)
+                .setTransformMask(topJoin.getTransformMask() | createTransformMask(true))
                 .build();
 
         OptExpression newTopJoinExpr = createNewTopJoinExpr(newTopJoin, newTopJoinChild, newBotJoinExpr);

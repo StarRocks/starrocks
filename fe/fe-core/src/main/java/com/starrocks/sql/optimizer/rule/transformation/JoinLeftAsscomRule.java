@@ -41,24 +41,32 @@ import org.apache.commons.lang3.StringUtils;
  */
 public class JoinLeftAsscomRule extends JoinAssociateBaseRule {
 
-    private JoinLeftAsscomRule() {
-        super(RuleType.TF_JOIN_LEFT_ASSCOM, Pattern.create(OperatorType.LOGICAL_JOIN)
+    public static final JoinLeftAsscomRule INNER_JOIN_LEFT_ASSCOM_RULE = new JoinLeftAsscomRule(
+            RuleType.TF_JOIN_LEFT_ASSCOM_INNER, true);
+
+    public static final JoinLeftAsscomRule OUTER_JOIN_LEFT_ASSCOM_RULE = new JoinLeftAsscomRule(
+            RuleType.TF_JOIN_LEFT_ASSCOM_OUTER, false);
+
+    private final boolean isInnerMode;
+
+    private JoinLeftAsscomRule(RuleType ruleType, boolean isInnerMode) {
+        super(ruleType, Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF))
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)))
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)), JoinAssociateBaseRule.LEFTASSCOM_MODE);
-    }
-
-    private static final JoinLeftAsscomRule INSTANCE = new JoinLeftAsscomRule();
-
-    public static JoinLeftAsscomRule getInstance() {
-        return INSTANCE;
+        this.isInnerMode = isInnerMode;
     }
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator bottomJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
+        if ((topJoin.getTransformMask() & JoinReorderProperty.LEFT_ASSCOM_TOP_MASK) > 0
+                && (bottomJoin.getTransformMask() & JoinReorderProperty.LEFT_ASSCOM_BOTTOM_MASK) > 0) {
+            return false;
+        }
+
         if (StringUtils.isNotEmpty(topJoin.getJoinHint()) || StringUtils.isNotEmpty(bottomJoin.getJoinHint())) {
             return false;
         }
@@ -67,7 +75,7 @@ public class JoinLeftAsscomRule extends JoinAssociateBaseRule {
             return false;
         }
 
-        if (JoinReorderProperty.getLeftAsscomProperty(bottomJoin.getJoinType(), topJoin.getJoinType())
+        if (JoinReorderProperty.getLeftAsscomProperty(bottomJoin.getJoinType(), topJoin.getJoinType(), isInnerMode)
                 != JoinReorderProperty.SUPPORTED) {
             return false;
         }
@@ -86,5 +94,10 @@ public class JoinLeftAsscomRule extends JoinAssociateBaseRule {
     public OptExpression createNewTopJoinExpr(LogicalJoinOperator newTopJoin, OptExpression newTopJoinChild,
                                               OptExpression newBotJoinExpr) {
         return OptExpression.create(newTopJoin, newBotJoinExpr, newTopJoinChild);
+    }
+
+    @Override
+    public int createTransformMask(boolean isTop) {
+        return isTop ? JoinReorderProperty.LEFT_ASSCOM_TOP_MASK : JoinReorderProperty.LEFT_ASSCOM_BOTTOM_MASK;
     }
 }
