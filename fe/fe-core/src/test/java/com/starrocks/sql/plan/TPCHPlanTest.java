@@ -53,6 +53,13 @@ public class TPCHPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void test() throws Exception {
+        String sql = "select v1, v4 in (select t1a from test_all_type where t1a + v1 = v4 + t1c and v2 = 1 and v5 = 1) from t0, t1;";
+        String plan = getCostExplain(sql);
+        System.out.println(plan);
+    }
+
+    @Test
     public void testExists() {
         runFileUnitTest("subquery/exists-subquery");
     }

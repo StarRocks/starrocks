@@ -60,9 +60,7 @@ public class DeriveStatsTask extends OptimizerTask {
         // @Todo: update choose algorithm, like choose the least predicate statistics
         // choose best statistics
         // do set group statistics when the groupExpression is a materialized view scan
-        if (currentStatistics == null ||
-                (expressionContext.getStatistics().getOutputRowCount() < currentStatistics.getOutputRowCount() &&
-                        !isMaterializedView())) {
+        if (needUpdateGroupStatistics(currentStatistics, expressionContext.getStatistics())) {
             groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
         }
         if (currentStatistics != null && !currentStatistics.equals(expressionContext.getStatistics())) {
@@ -79,5 +77,18 @@ public class DeriveStatsTask extends OptimizerTask {
     private boolean isMaterializedView() {
         return groupExpression.getOp() instanceof LogicalOlapScanOperator
                 && ((LogicalOlapScanOperator) groupExpression.getOp()).getTable().isMaterializedView();
+    }
+
+
+    private boolean needUpdateGroupStatistics(Statistics currentStatistics, Statistics newStatistics) {
+        if (currentStatistics == null) {
+            return true;
+        }
+
+        if (isMaterializedView()) {
+            return false;
+        }
+
+        return newStatistics.getComputeSize() < currentStatistics.getComputeSize();
     }
 }
