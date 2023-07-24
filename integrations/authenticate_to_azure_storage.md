@@ -13,7 +13,7 @@ StarRocks 支持通过以下类型的 Azure 存储账号来访问 Azure Storage�
 - Azure Data Lake Storage Gen1
 - Azure Data Lake Storage Gen2
 
-本文档以 Hive catalog、文件外部表和 Broker Load 为例，介绍 StarRocks 在各应用场景下如何通过不同类型的存储账号来访问 Azure Storage。有关下面示例中出现的参数详解，参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[文件外部表](../data_source/file_external_table.md)和 [Broker Load](../loading/BrokerLoad.md)。
+本文档以 Hive catalog、文件外部表和 Broker Load 为例，介绍 StarRocks 在各应用场景下如何通过不同类型的存储账号来访问 Azure Storage。有关下面示例中出现的参数详解，参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[文件外部表](../data_source/file_external_table.md)和 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
 
 ## Blob Storage
 

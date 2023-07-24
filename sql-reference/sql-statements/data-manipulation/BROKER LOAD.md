@@ -2,7 +2,7 @@
 
 ## 功能
 
-Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 curl 命令来查看导入作业的结果。有关 Broker Load 的背景信息、前提条件、基本原理、支持的数据文件格式和外部存储系统、以及如何执行单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load) 操作等，请参见[从 HDFS 或外部云存储系统导入数据](/loading/BrokerLoad.md)。
+Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 curl 命令来查看导入作业的结果。有关 Broker Load 的背景信息、前提条件、基本原理、支持的数据文件格式和外部存储系统、以及如何执行单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load) 操作等，请参见[从 HDFS 导入](../../../loading/hdfs_load.md)和[从云存储导入](../../../loading/cloud_storage_load.md)。
 
 > **注意**
 >
@@ -196,7 +196,7 @@ INTO TABLE <table_name>
 
 ### WITH BROKER
 
-在 v2.4 及以前版本，您需要在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。自 v2.5 起，您不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。参见[从 HDFS 或外部云存储系统导入数据 > 背景信息](../../../loading/BrokerLoad.md#背景信息)。
+在 v2.4 及以前版本，您需要在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。自 v2.5 起，您不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
 
 ### StorageCredentialParams
 

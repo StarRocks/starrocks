@@ -196,7 +196,7 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### 通过 Broker Load 批量导入 ORC 或 Parquet 文件中的数组
 
-StarRocks 中的数组类型，与 ORC 或 Parquet 格式中的 List 结构相对应，所以无需额外指定。具体导入方法请参考 [Broker load](../../../loading/BrokerLoad.md)。
+StarRocks 中的数组类型，与 ORC 或 Parquet 格式中的 List 结构相对应，所以无需额外指定。具体导入方法请参考 [Broker load](../data-manipulation/BROKER%20LOAD.md)。
 
 当前 StarRocks 支持直接导入 ORC 文件的 List 结构。Parquet 格式导入正在开发中。
 

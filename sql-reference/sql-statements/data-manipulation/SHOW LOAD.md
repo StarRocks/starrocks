@@ -2,7 +2,7 @@
 
 ## 功能
 
-查看数据库中指定导入作业的相关信息，包括 [Broker Load](../data-manipulation/BROKER%20LOAD.md)、[Spark Load](../data-manipulation/SPARK%20LOAD.md) 和 [INSERT](../data-manipulation/insert.md) 。您还可以使用 `curl` 命令查看这些导入作业的相关信息。详请参见[从 HDFS 或外部云存储系统导入数据](../../../loading/BrokerLoad.md)，[使用 Apache Spark™ 批量导入](../../../loading/SparkLoad.md)和[通过 INSERT 语句导入数据](../../../loading/InsertInto.md)。
+查看数据库中指定导入作业的相关信息，包括 [Broker Load](../data-manipulation/BROKER%20LOAD.md)、[Spark Load](../data-manipulation/SPARK%20LOAD.md) 和 [INSERT](../data-manipulation/insert.md) 。您还可以使用 `curl` 命令查看这些导入作业的相关信息。详请参见[从 HDFS 导入](../../../loading/hdfs_load.md)、[从云存储导入](../../../loading/cloud_storage_load.md)、[使用 Apache Spark™ 批量导入](../../../loading/SparkLoad.md)和[通过 INSERT 语句导入数据](../../../loading/InsertInto.md)。
 
 除了以上三种导入方式， StarRocks 还支持 Stream Load 和 Routine Load，其中 Stream Load 是同步操作，会直接返回结果，不会通过 SHOW LOAD 展示。Routine Load 可通过 [SHOW ROUTINE LOAD](../data-manipulation/SHOW%20ROUTINE%20LOAD.md) 查看导入作业的相关信息。
 

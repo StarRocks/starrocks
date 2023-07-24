@@ -49,7 +49,7 @@
 
 ## 设置严格模式
 
-使用 [Stream Load](../../loading/StreamLoad.md)、[Broker Load](../../loading/BrokerLoad.md)、[Routine Load](../../loading/RoutineLoad.md) 和 [Spark Load](../../loading/SparkLoad.md) 执行数据导入时，需要通过参数 `strict_mode` 来设置严格模式。参数取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。
+使用 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) 执行数据导入时，需要通过参数 `strict_mode` 来设置严格模式。参数取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。
 
 使用 [INSERT](../../loading/InsertInto.md) 执行数据导入时，需要通过会话变量 `enable_insert_strict` 来设置严格模式。变量取值范围：`true` 和 `false`。默认值：`true`。`true` 表示开启，`false` 表示关闭。
 

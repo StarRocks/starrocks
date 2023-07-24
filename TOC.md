@@ -49,7 +49,8 @@
     + [严格模式](/loading/load_concept/strict_mode.md)
   + [导入总览](/loading/Loading_intro.md)
   + [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
-  + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
+  + [从 HDFS 导入](/loading/hdfs_load.md)
+  + [从云存储导入](/loading/cloud_storage_load.md)
   + [从 Apache Kafka® 持续导入](/loading/RoutineLoad.md)
   + 通过 Apache Spark™ 导入
     + [使用 Spark connector（推荐）](/loading/Spark-connector-starrocks.md)

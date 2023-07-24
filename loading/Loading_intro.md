@@ -102,7 +102,7 @@ Routine Load 导入作业的执行流程描述如下：
 
 ## 导入方式
 
-StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../loading/BrokerLoad.md)、 [Routine Load](../loading/RoutineLoad.md)、[Spark Load](../loading/SparkLoad.md) 和 [INSERT](../loading/InsertInto.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
+StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)、 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)、[Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
 
 | 导入方式            | 数据源                                                                                          | 业务场景                                                                                                     | 数据量（单作业）      | 数据格式                                            | 同步模式    | 协议   |
 | ------------------ | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------- | ---------- | ------ |
@@ -137,7 +137,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 您可以通过设置参数来限制单个导入作业的内存使用，以防止导入作业占用过多内存，特别是在导入并发较高的情况下。同时，您也需要注意避免设置过小的内存使用上限，因为内存使用上限过小，导入过程中可能会因为内存使用量达到上限而频繁地将内存中的数据刷出到磁盘，进而可能影响导入效率。建议您根据具体的业务场景要求，合理地设置内存使用上限。
 
-不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../loading/BrokerLoad.md)、[Routine Load](../loading/RoutineLoad.md)、[Spark Load](../loading/SparkLoad.md) 和 [INSERT](../loading/InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
+不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../loading/hdfs_load.md)、[Routine Load](../loading/RoutineLoad.md)、[Spark Load](../loading/SparkLoad.md) 和 [INSERT](../loading/InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
 
 您还可以通过设置一些参数来限制在单个 BE 上运行的所有导入作业的总的内存使用上限。可参考本文“[系统配置](../loading/Loading_intro.md#系统配置)”章节。
 
@@ -149,7 +149,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 - 如果您在创建 StarRocks 表时使用 `DEFAULT` 关键字给该字段对应的目标列指定了默认值，则 StarRocks 在导入时该行数据时会自动往该列填充 `DEFAULT` 中指定的默认值。
 
-  [Stream Load](../loading/StreamLoad.md)、[Broker Loa](../loading/BrokerLoad.md)、[Routine Load](../loading/RoutineLoad.md) 和 [INSERT](../loading/InsertInto.md) 四种导入方式当前支持 `DEFAULT current_timestamp`、`DEFAULT <默认值>` 和 `DEFAULT (<表达式>)`。[Spark Load](../loading/SparkLoad.md) 导入方式当前仅支持 `DEFAULT current_timestamp` 和 `DEFAULT <默认值>`，不支持 `DEFAULT (<表达式>)`。
+  [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)、[Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) 四种导入方式当前支持 `DEFAULT current_timestamp`、`DEFAULT <默认值>` 和 `DEFAULT (<表达式>)`。[Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) 导入方式当前仅支持 `DEFAULT current_timestamp` 和 `DEFAULT <默认值>`，不支持 `DEFAULT (<表达式>)`。
 
   > **说明**
   >
@@ -161,7 +161,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
   >
   > 如果该列在建表时定义该列为 `NOT NULL`，则导入会报错，作业失败。
 
-  对于 [Stream Load](../loading/StreamLoad.md)、[Broker Loa](../loading/BrokerLoad.md)、[Routine Load](../loading/RoutineLoad.md) 和 [Spark Load](../loading/SparkLoad.md)，您还可以在指定待导入列的参数里通过函数来给该列指定要填充的值。
+  对于 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)、[Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) 和 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)，您还可以在指定待导入列的参数里通过函数来给该列指定要填充的值。
 
 有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。
 
