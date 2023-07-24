@@ -152,7 +152,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         String plan10 = getFragmentPlan(query10);
         PlanTestBase.assertContains(plan10, "partial_mv_6", "UNION", "TABLE: test_base_part\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: (10: c3 > 1999) OR (10: c3 IS NULL)\n");
+                "     PREDICATES: (10: c3 >= 2000) OR (10: c3 IS NULL)");
 
         String query12 = "select c1, c3, c2 from test_base_part where c3 < 2000";
         String plan12 = getFragmentPlan(query12);

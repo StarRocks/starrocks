@@ -3515,6 +3515,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
     }
 
+    @Test
     public void testNestedAggregateBelowJoin2() throws Exception {
         {
             String mv1 = "create materialized view mv1 \n" +
