@@ -485,9 +485,11 @@ public class Optimizer {
         PushDownSubfieldRule pushDownRule = new PushDownSubfieldRule();
         tree = pushDownRule.rewrite(tree, rootTaskContext);
 
-        rootTaskContext.setRequiredColumns(requiredColumns.clone());
-        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new PruneSubfieldRule());
+        if (pushDownRule.hasRewrite()) {
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new PruneSubfieldRule());
+        }
 
         return tree;
     }

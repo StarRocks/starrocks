@@ -51,10 +51,16 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
     private ColumnRefFactory factory = null;
 
+    private boolean hasRewrite = false;
+
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         factory = taskContext.getOptimizerContext().getColumnRefFactory();
         return root.getOp().accept(new PushDowner(), root, new Context());
+    }
+
+    public boolean hasRewrite() {
+        return hasRewrite;
     }
 
     private static class Context {
@@ -140,6 +146,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 return optExpression;
             }
 
+            hasRewrite = true;
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
             ColumnRefSet output = optExpression.getOutputColumns();
             output.getStream().map(o -> factory.getColumnRef(o)).forEach(k -> newProjectMap.put(k, k));
