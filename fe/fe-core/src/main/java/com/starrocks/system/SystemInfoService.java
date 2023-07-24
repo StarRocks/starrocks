@@ -669,6 +669,10 @@ public class SystemInfoService implements GsonPostProcessable {
         return Lists.newArrayList(idToBackendRef.values());
     }
 
+    public List<ComputeNode> getComputeNodes() {
+        return Lists.newArrayList(idToComputeNodeRef.values());
+    }
+
     public Stream<ComputeNode> backendAndComputeNodeStream() {
         return Stream.concat(idToBackendRef.values().stream(), idToComputeNodeRef.values().stream());
     }
