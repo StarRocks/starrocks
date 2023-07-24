@@ -526,13 +526,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionRefreshNumber();
         buildExcludedTriggerTables();
         buildReplicatedStorage();
-<<<<<<< HEAD
-        buildForceExternalTableQueryRewrite();
-=======
         buildQueryRewrite();
-        buildBinlogConfig();
-        buildBinlogAvailableVersion();
->>>>>>> 9c52a3664c ([BugFix] fix table property restore (#27789))
         buildConstraint();
     }
 }
