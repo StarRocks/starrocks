@@ -117,6 +117,10 @@ public class ResultSink extends DataSink {
         return brokerName;
     }
 
+    public TResultSinkType getSinkType() {
+        return sinkType;
+    }
+
     public void setOutfileInfo(OutFileClause outFileClause, List<String> columnOutputNames) {
         sinkType = TResultSinkType.FILE;
         fileSinkOptions = outFileClause.toSinkOptions(columnOutputNames);
