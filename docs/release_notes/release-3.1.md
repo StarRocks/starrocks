@@ -18,7 +18,7 @@ Supports abstraction of storage volumes, which makes it easier for users to conf
 
 #### SQL reference
 
-- Added the following storage volume-related statements: [CREATE STORAGE VOLUME](/sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md), [ALTER STORAGE VOLUME](/sql-reference/sql-statements/Administration/ALTER%20STORAGE%20VOLUME.md), [DROP STORAGE VOLUME](/sql-reference/sql-statements/Administration/DROP%20STORAGE%20VOLUME.md), [SET DEFAULT STORAGE VOLUME](/sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md), [DESC STORAGE VOLUME](/sql-reference/sql-statements/Administration/DESC%20STORAGE%20VOLUME.md), [SHOW STORAGE VOLUMES](/sql-reference/sql-statements/Administration/SHOW%20STORAGE%20VOLUMES.md)
+- Added the following storage volume-related statements: [CREATE STORAGE VOLUME](/sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md), [ALTER STORAGE VOLUME](/sql-reference/sql-statements/Administration/ALTER%20STORAGE%20VOLUME.md), [DROP STORAGE VOLUME](/sql-reference/sql-statements/Administration/DROP%20STORAGE%20VOLUME.md), [SET DEFAULT STORAGE VOLUME](/sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md), [DESC STORAGE VOLUME](/sql-reference/sql-statements/Administration/DESC%20STORAGE%20VOLUME.md), [SHOW STORAGE VOLUMES](/sql-reference/sql-statements/Administration/SHOW%20STORAGE%20VOLUMES.md).
 - Added the following table function: [files](../sql-reference/sql-functions/table-functions/files.md).
 
 ## 3.1.0-RC01
