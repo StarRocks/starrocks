@@ -64,7 +64,7 @@ struct LevelInfo {
     int16_t immediate_repeated_ancestor_def_level = 0;
 
     int16_t increment_repeated() {
-        auto origin_ancestor_rep_levels = immediate_repeated_ancestor_def_level;
+        auto origin_ancestor_def_levels = immediate_repeated_ancestor_def_level;
 
         // Repeated fields add both a repetition and definition level. This is used
         // to distinguish between an empty list and a list with an item in it.
@@ -77,7 +77,7 @@ struct LevelInfo {
         // values. For levels < current_def_level no slots are added
         // to arrays.
         immediate_repeated_ancestor_def_level = max_def_level;
-        return origin_ancestor_rep_levels;
+        return origin_ancestor_def_levels;
     }
 
     void increment_optional() { max_def_level++; }
