@@ -421,6 +421,8 @@ public class TabletInvertedIndex {
                     } else {
                         backendTabletNumReport.get(backendId).first++;
                     }
+
+                    tabletMeta.resetToBeCleanedTime();
                 } finally {
                     database.readUnlock();
                 }
