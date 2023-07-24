@@ -102,6 +102,21 @@ public class TabletMeta {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public Long getToBeCleanedTime() {
+        return toBeCleanedTimeMs;
+    }
+
+    public void setToBeCleanedTime(Long time) {
+        toBeCleanedTimeMs = time;
+    }
+
+    public void resetToBeCleanedTime() {
+        toBeCleanedTimeMs = null;
+    }
+
+>>>>>>> f66d1ed5a9 ([Enhancement] Make tablet checker blockingly add tablet to scheduler (#27648))
     public boolean containsSchemaHash(int schemaHash) {
         lock.readLock().lock();
         try {
