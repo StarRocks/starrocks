@@ -301,6 +301,11 @@ statement
     | updateFailPointStatusStatement
     | showFailPointStatement
 
+    // prepare_stmt
+    | prepareStatement
+    | executeStatement
+    | deallocateStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -2041,6 +2046,23 @@ tabletList
     : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
+prepareStatement
+    : PREPARE identifier FROM prepareSql
+    ;
+
+prepareSql
+    : statement
+    | SINGLE_QUOTED_TEXT
+    ;
+
+executeStatement
+    : EXECUTE identifier (USING  '@'identifierOrString (',' '@'identifierOrString)*)?
+    ;
+
+deallocateStatement
+    : (DEALLOCATE | DROP) PREPARE identifier
+    ;
+
 replicaList
     : REPLICA '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
@@ -2177,6 +2199,7 @@ literalExpression
     | interval                                                                            #intervalLiteral
     | unitBoundary                                                                        #unitBoundaryLiteral
     | binary                                                                              #binaryLiteral
+    | PARAMETER                                                                           #Parameter
     ;
 
 functionCall
@@ -2594,7 +2617,7 @@ nonReserved
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED
+    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS

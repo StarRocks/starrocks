@@ -131,6 +131,14 @@ public class SqlParser {
         return parse(originSql, sqlMode).get(0);
     }
 
+    public static StatementBase parseSingleStatement(String originSql, long sqlMode) {
+        List<StatementBase> statements = parse(originSql, sqlMode);
+        if (statements.size() > 1) {
+            throw new ParsingException("only single statement is supported");
+        }
+        return statements.get(0);
+    }
+
     public static StatementBase parseOneWithStarRocksDialect(String originSql, SessionVariable sessionVariable) {
         return parseWithStarRocksDialect(originSql, sessionVariable).get(0);
     }

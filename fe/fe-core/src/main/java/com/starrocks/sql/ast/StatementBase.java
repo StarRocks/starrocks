@@ -35,11 +35,14 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.List;
 
 public abstract class StatementBase implements ParseNode {
 
@@ -73,6 +76,9 @@ public abstract class StatementBase implements ParseNode {
 
     // Original statement to further usage, eg: enable_sql_blacklist.
     protected OriginStatement origStmt;
+
+    // use for prepareStmt
+    protected List<Parameter> parameters;
 
     public void setIsExplain(boolean isExplain, ExplainLevel explainLevel) {
         this.isExplain = isExplain;
@@ -114,6 +120,14 @@ public abstract class StatementBase implements ParseNode {
 
     public OriginStatement getOrigStmt() {
         return origStmt;
+    }
+
+    public List<Parameter> getParameters() {
+        return parameters;
+    }
+
+    public void setParameters(List<Parameter> parameters) {
+        this.parameters = parameters;
     }
 
     // Override this method and return true

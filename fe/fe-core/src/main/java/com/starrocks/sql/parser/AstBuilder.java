@@ -62,6 +62,7 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OdbcScalarFunctionCall;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.OutFileClause;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
@@ -182,6 +183,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
@@ -217,6 +219,7 @@ import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -262,6 +265,7 @@ import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
@@ -445,6 +449,10 @@ import static java.util.stream.Collectors.toList;
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private final long sqlMode;
 
+    private int placeHolderSlotId = 0;
+
+    private List<Parameter> parameters;
+
     private static final BigInteger LONG_MAX = new BigInteger("9223372036854775807"); // 2^63 - 1
 
     private static final BigInteger LARGEINT_MAX_ABS =
@@ -459,6 +467,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public AstBuilder(long sqlMode) {
         this.sqlMode = sqlMode;
+    }
+
+    public List<Parameter> getParameters() {
+        return parameters;
     }
 
     @Override
@@ -6512,6 +6524,50 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new UserIdentity(user.getValue(), "%", false, createPos(context), false);
     }
 
+    @Override
+    public ParseNode visitPrepareStatement(StarRocksParser.PrepareStatementContext context) {
+        String stmtName = context.identifier().getText();
+        if (context.prepareSql().statement() != null) {
+            StatementBase statement = (StatementBase) visitStatement(context.prepareSql().statement());
+            return new PrepareStmt(stmtName, statement, parameters);
+        } else if (context.prepareSql().SINGLE_QUOTED_TEXT() != null) {
+            String sql = context.prepareSql().SINGLE_QUOTED_TEXT().getText();
+            StatementBase statement = SqlParser.parseSingleStatement(sql.substring(1, sql.length() - 1), sqlMode);
+            return new PrepareStmt(stmtName, statement, statement.getParameters());
+        } else {
+            throw new ParsingException("error prepare sql");
+        }
+    }
+
+    @Override
+    public ParseNode visitDeallocateStatement(StarRocksParser.DeallocateStatementContext ctx) {
+        return new DeallocateStmt(ctx.identifier().getText());
+    }
+
+    @Override
+    public ParseNode visitExecuteStatement(StarRocksParser.ExecuteStatementContext context) {
+        String stmtName = context.identifier().getText();
+        List<StarRocksParser.IdentifierOrStringContext> queryStatementContext = context.identifierOrString();
+        List<Expr> variableExprs = new ArrayList<>();
+        if (context.identifierOrString() != null) {
+            queryStatementContext.forEach(varNameContext -> {
+                Identifier identifier = (Identifier) visit(varNameContext);
+                variableExprs.add(new VariableExpr(identifier.getValue(), SetType.USER));
+            });
+        }
+        return new ExecuteStmt(stmtName, variableExprs);
+    }
+
+    @Override
+    public ParseNode visitParameter(StarRocksParser.ParameterContext ctx) {
+        if (parameters == null) {
+            parameters = new ArrayList<>();
+        }
+        Parameter parameter = new Parameter(placeHolderSlotId++);
+        parameters.add(parameter);
+        return parameter;
+    }
+    
     // ------------------------------------------- Util Functions -------------------------------------------
 
     private <T> List<T> visit(List<? extends ParserRuleContext> contexts, Class<T> clazz) {
