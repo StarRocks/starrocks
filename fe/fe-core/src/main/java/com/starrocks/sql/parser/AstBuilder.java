@@ -1770,9 +1770,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         if (context.explainDesc() != null) {
             queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
-            if (StatementBase.ExplainLevel.ANALYZE.equals(queryStatement.getExplainLevel())) {
-                throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
-            }
         }
 
         return new InsertStmt(targetTableName, partitionNames,
