@@ -10,7 +10,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -35,7 +34,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TabletSchedulerTest {
     @Mocked
@@ -91,7 +89,8 @@ public class TabletSchedulerTest {
                     systemInfoService));
         }
 
-        TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
+        TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService,
+                tabletInvertedIndex, tabletSchedulerStat);
 
         long almostExpireTime = now + (Config.catalog_trash_expire_second - 1) * 1000L;
         for (int i = 0; i != allCtxs.size(); ++ i) {
@@ -106,10 +105,56 @@ public class TabletSchedulerTest {
         Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(3), recycleBin, expireTime));
     }
 
-    private void updateSlotWithNewConfig(int new_slot_per_path, Method updateWorkingSlotsMethod,
+    @Test
+    public void testPendingAddTabletCtx() throws InterruptedException {
+        int oldVal = Config.max_scheduling_tablets;
+        Config.max_scheduling_tablets = 8;
+
+        TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService,
+                tabletInvertedIndex, tabletSchedulerStat);
+        Database goodDB = new Database(2, "bueno");
+        Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
+        Partition goodPartition = new Partition(6, "bueno", null, null);
+
+        List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            TabletSchedCtx ctx = new TabletSchedCtx(
+                    TabletSchedCtx.Type.REPAIR,
+                    "default_cluster",
+                    goodDB.getId(),
+                    goodTable.getId(),
+                    goodPartition.getId(),
+                    1,
+                    i,
+                    System.currentTimeMillis(),
+                    systemInfoService);
+            tabletSchedCtxList.add(ctx);
+        }
+
+        new Thread(() -> {
+            for (int i = 0; i < 10; i++) {
+                tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
+                try {
+                    goodDB.readLock();
+                    tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
+                } finally {
+                    goodDB.readUnlock();
+                }
+            }
+        }, "testAddCtx").start();
+
+        Thread.sleep(2000);
+        tabletScheduler.removeOneFromPendingQ();
+        Thread.sleep(1000);
+        Assert.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
+
+        Config.max_scheduling_tablets = oldVal;
+    }
+
+    private void updateSlotWithNewConfig(int newSlotPerPath, Method updateWorkingSlotsMethod,
                                          TabletScheduler tabletScheduler)
             throws InvocationTargetException, IllegalAccessException {
-        Config.schedule_slot_num_per_path = new_slot_per_path;
+        Config.schedule_slot_num_per_path = newSlotPerPath;
         updateWorkingSlotsMethod.invoke(tabletScheduler, null);
     }
 
@@ -130,6 +175,7 @@ public class TabletSchedulerTest {
     @Test
     public void testUpdateWorkingSlots() throws NoSuchMethodException, InvocationTargetException,
             IllegalAccessException, SchedException {
+        Config.schedule_slot_num_per_path = 2;
         TDisk td11 = new TDisk("/path11", 1L, 2L, true);
         td11.setPath_hash(11);
         TDisk td12 = new TDisk("/path12", 1L, 2L, true);
@@ -203,6 +249,9 @@ public class TabletSchedulerTest {
 
         freeSlotNTimes(2, bslots.get(1L), 11L);
         Assert.assertEquals(bslots.get(1L).peekSlot(11), bslots.get(1L).getSlotTotal(11));
+
+        // restore default value
+        Config.schedule_slot_num_per_path = 8;
     }
 
     @Test

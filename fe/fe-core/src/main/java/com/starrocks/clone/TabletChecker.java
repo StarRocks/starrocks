@@ -39,7 +39,6 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -255,6 +254,7 @@ public class TabletChecker extends MasterDaemon {
         long tabletNotReady = 0;
 
         long lockTotalTime = 0;
+        long waitTotalTime = 0;
         long lockStart;
         List<Long> dbIds = globalStateMgr.getDbIdsIncludeRecycleBin();
         DATABASE:
@@ -380,14 +380,10 @@ public class TabletChecker extends MasterDaemon {
                                     continue;
                                 }
 
-                                // ignore the scheduler queue length limitation if it's an urgent repair
-                                AddResult res = tabletScheduler.addTablet(tabletCtx,
-                                        isPartitionUrgent /* force or not */);
-                                if (res == AddResult.LIMIT_EXCEED) {
-                                    LOG.info("number of scheduling tablets in tablet scheduler"
-                                            + " exceed to limit. stop tablet checker");
-                                    break DATABASE;
-                                } else if (res == AddResult.ADDED) {
+                                Pair<Boolean, Long> result =
+                                        tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx, isPartitionUrgent);
+                                waitTotalTime += result.second;
+                                if (result.first) {
                                     addToSchedulerTabletNum++;
                                 }
                             }
@@ -419,9 +415,9 @@ public class TabletChecker extends MasterDaemon {
 
         LOG.info("finished to check tablets. isUrgent: {}, " +
                         "unhealthy/total/added/in_sched/not_ready: {}/{}/{}/{}/{}, " +
-                        "cost: {} ms, in lock time: {} ms",
+                        "cost: {} ms, in lock time: {} ms, wait time: {}ms",
                 isUrgent, unhealthyTabletNum, totalTabletNum, addToSchedulerTabletNum,
-                tabletInScheduler, tabletNotReady, cost, lockTotalTime);
+                tabletInScheduler, tabletNotReady, cost, lockTotalTime - waitTotalTime, waitTotalTime);
     }
 
     public boolean isUrgentTable(long dbId, long tblId) {

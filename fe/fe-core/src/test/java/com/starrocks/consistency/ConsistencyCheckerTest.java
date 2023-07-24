@@ -74,4 +74,13 @@ public class ConsistencyCheckerTest {
         table.setState(OlapTable.OlapTableState.RESTORE);
         Assert.assertEquals(0, new ConsistencyChecker().chooseTablets().size());
     }
+
+    @Test
+    public void testResetToBeCleanedTime() {
+        TabletMeta tabletMeta = new TabletMeta(1, 2, 3,
+                4, 5, TStorageMedium.HDD);
+        tabletMeta.setToBeCleanedTime(123L);
+        tabletMeta.resetToBeCleanedTime();
+        Assert.assertNull(tabletMeta.getToBeCleanedTime());
+    }
 }

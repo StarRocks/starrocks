@@ -1044,7 +1044,7 @@ public class Config extends ConfigBase {
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
     @ConfField(mutable = true)
-    public static int schedule_slot_num_per_path = 2;
+    public static int schedule_slot_num_per_path = 8;
 
     @ConfField
     public static String tablet_balancer_strategy = "disk_and_tablet";
@@ -1078,12 +1078,12 @@ public class Config extends ConfigBase {
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
     @ConfField(mutable = true)
-    public static int max_scheduling_tablets = 2000;
+    public static int max_scheduling_tablets = 10000;
 
     // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
     // no more balance check
     @ConfField(mutable = true)
-    public static int max_balancing_tablets = 100;
+    public static int max_balancing_tablets = 500;
 
     /**
      * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
