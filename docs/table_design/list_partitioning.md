@@ -47,7 +47,7 @@ value_item ::=
     { <value> | ( <value> [, <value>, [, ...] ] ) }    
 ```
 
-### Parameter descriptions
+### Parameters
 
 - `partition_columns`: the name of the partition column or columns. The partition column can be of the STRING  (BINARY not supported), DATE or DATETIME, and INTEGER data type. The values of partition columns can not be `NULL`.
 - `partition_name`: Partition name. It is recommended to set appropriate partition names based on the business scenario to differentiate the data categories contained in different partitions.
