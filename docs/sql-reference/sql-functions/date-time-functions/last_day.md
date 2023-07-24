@@ -2,19 +2,21 @@
 
 ## Description
 
-Returns the last day of the specified date part for a date or datetime.
+Returns the last day of an input DATE or DATETIME expression based on the specified date part.
+
+This function is supported from v3.1.
 
 ## Syntax
 
 ```SQL
-DATE last_day(DATETIME|DATE expr1, [VARCHAR expr2])
+DATE last_day(DATETIME|DATE date_expr[, VARCHAR unit])
 ```
 
 ## Parameters
 
-- `expr1`: is a date or datetime expression.
+- `date_expr`: a DATE or DATETIME expression, required.
 
-- `expr2`: is an optional parameter. can be `month`, `quarter`,`year`, default to `month`.
+- `unit`: the date part, optional. Valid values include `month`, `quarter`, and `year`, default to `month`. If `unit` is invalid, an error is returned.
 
 ## Return value
 
@@ -29,6 +31,13 @@ MySQL > select last_day('2023-05-10', 'month');
 +----------------------------------+
 | 2023-05-31                       |
 +----------------------------------+
+
+MySQL > select last_day('2023-05-10');
++------------------------+
+| last_day('2023-05-10') |
++------------------------+
+| 2023-05-31             |
++------------------------+
 
 MySQL > select last_day('2023-05-10', 'quarter');
 +-------------------------------+

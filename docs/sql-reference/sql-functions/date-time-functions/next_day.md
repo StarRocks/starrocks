@@ -2,21 +2,20 @@
 
 ## Description
 
-Returns the date of the first specified DOW(day of week) that occurs after the input date (DATE, DATETIME).
+Returns the date of the first specified day of week (DOW) that occurs after the input date (DATE or DATETIME).
 
-Returns NULL if an invalid date or a NULL argument is passed in.
+This function is supported from v3.1. It is the opposite of [previous_day](./previous_day.md).
 
 ## Syntax
 
 ```SQL
-DATE next_day(DATETIME|DATE expr1, VARCHAR expr2)
+DATE next_day(DATETIME|DATE date_expr, VARCHAR dow)
 ```
 
 ## Parameters
 
-- `expr1`: It must be a valid date or datetime expression.
-
-- `expr2`: The day of week. Validvalues include a number of abbreviations:
+- `date_expr`: the input date. It must be a valid DATE or DATETIME expression.
+- `dow`: the day of week. Valid values include a number of abbreviations which are case-sensitive:
   
   | DOW_FULL  | DOW_2 | DOW_3 |
   | --------- | ----- |:-----:|
@@ -30,11 +29,17 @@ DATE next_day(DATETIME|DATE expr1, VARCHAR expr2)
 
 ## Return value
 
-Returns a DATE value. 
+Returns a DATE value.
+
+Any invalid `dow` will cause an error. `dow` is case-sensitive.
+
+Returns NULL if an invalid date or a NULL argument is passed in.
 
 ## Examples
 
 ```Plain
+-- Return the date of the next Monday that occurred after 2023-04-06. 2023-04-06 is Thursday and the date of the next Monday is 2023-04-10.
+
 MySQL > select next_day('2023-04-06', 'Monday');
 +----------------------------------+
 | next_day('2023-04-06', 'Monday') |

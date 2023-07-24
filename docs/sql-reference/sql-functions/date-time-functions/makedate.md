@@ -2,7 +2,9 @@
 
 ## Description
 
-Returns a date, given year and day-of-year values.
+Creates and returns a date based on the given year and day of year values.
+
+This function is supported from v3.1.
 
 ## Syntax
 
@@ -12,16 +14,18 @@ DATE makedate(INT year, INT dayOfYear);
 
 ## Parameters
 
-* `year`: Year ranges from 0 to 9999.The supported data type is INT. 
+- `year`: It ranges from 0 to 9999. NULL is returned if this range is exceeded. The supported data type is INT.
 
-* `dayOfYear`: The second parameter is day of year. In order to maintain the same semantics as the function dayofyear, if this number is greater than 366 or is 366 in a non-leap year, then it is not a day of year
-  . The supported data type is INT.
+- `dayOfYear`: the day of year. The supported data type is INT. In order to maintain the same semantics as the function dayofyear, if this number is greater than 366 or is 366 in a non-leap year, it is not a day of year.
 
 ## Return value
 
-Returns the date on the dayOfYear-th day of the given year
-day-of-year must be between 1 and the number of days in the current year (365 in normal years, 366 in leap years), otherwise the result is NULL.
-The result is also NULL if either argument is NULL.
+Returns the date on the dayOfYear-th day of the given year.
+
+- `year` must be in the range of [0,9999]. Otherwise, NULL is returned.
+- `dayOfYear` must be between 1 and the number of days in the current year (365 in normal years, 366 in leap years). Otherwise, NULL is returned.
+-The result is also NULL if either argument is NULL.
+
 ## Examples
 
 ```Plain Text

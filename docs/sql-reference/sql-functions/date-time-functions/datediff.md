@@ -2,16 +2,18 @@
 
 ## Description
 
-Calculates the date from `expr1` to `expr2` and returns a result in days.
+Calculates the difference between two DATETIME values (`expr1 - expr2`) and returns a result in days.
 
 `expr1` and `expr2` are valid DATE or DATETIME expressions.
 
 Note: Only the date parts of the values are used in the calculation.
 
+
+
 ## Syntax
 
 ```Haskell
-INT DATEDIFF(DATETIME expr1,DATETIME expr2)`
+INT DATEDIFF(DATETIME expr1,DATETIME expr2)
 ```
 
 ## Examples
@@ -31,3 +33,7 @@ MySQL > select datediff(CAST('2010-11-30 23:59:59' AS DATETIME), CAST('2010-12-3
 |                                                                               -31 |
 +-----------------------------------------------------------------------------------+
 ```
+
+## References
+
+[date_diff](./date_diff.md)
