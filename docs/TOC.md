@@ -50,7 +50,8 @@
     + [Strict mode](./loading/load_concept/strict_mode.md)
   + [Overview of data loading](./loading/Loading_intro.md)
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
-  + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
+  + [Load data from HDFS](./loading/hdfs_load.md)
+  + [Load data from cloud storage](./loading/cloud_storage_load.md)
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
   + Load data using Apache Spark™
     + [Load data using Spark Connector](./loading/Spark-connector-starrocks.md)
