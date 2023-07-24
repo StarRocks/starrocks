@@ -2788,8 +2788,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         {
             String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
                     " left join locations on emps.locationid = locations.locationid where emps.deptno != 10";
+
             testRewriteOK(mv, "select count(*) from " +
                     "emps  left join locations on emps.locationid = locations.locationid where emps.deptno != 10");
+
             testRewriteFail(mv, "select count(*) from " +
                     "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 10");
             testRewriteOK(mv, "select count(*) from " +
@@ -2825,7 +2827,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select c1, c2, c3 from t1 where c1 > 0 or c2 > 0 or c3 > 0";
             String query = "select c1, c2, c3 from t1 where c1 > 0 or c2 > 5";
             // TODO multi column OR predicate as range
-            testRewriteFail(mv, query);
+            testRewriteOK(mv, query);
         }
 
         // multi range same column
@@ -2835,11 +2837,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteOK(mv, query);
         }
 
-        // TODO support IN
+        // test IN
         {
             String mv = "select c1, c2 from t1 where c1 IN (1, 2, 3)";
             String query = "select c1, c2 from t1 where c1 IN (1, 2)";
-            testRewriteFail(mv, query);
+            testRewriteOK(mv, query);
         }
 
     }
@@ -3541,6 +3543,123 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     .match("mv2");
             starRocksAssert.dropMaterializedView("mv1");
             starRocksAssert.dropMaterializedView("mv2");
+        }
+    }
+
+    @Test
+    public void testOrPredicates() {
+        {
+            String mv = "select * from lineorder where not (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey <= 10000 and lo_linenumber <= 5000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where not (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey <= 1000 and lo_linenumber <= 500";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: 18: lo_orderkey <= 1000, 19: lo_linenumber <= 500");
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
+            String query = "select * from lineorder where not( lo_orderkey <= 10000 and lo_linenumber <= 5000)";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
+            String query = "select * from lineorder where not( lo_orderkey <= 20000 and lo_linenumber <= 10000)";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: (18: lo_orderkey >= 20001) OR (19: lo_linenumber >= 10001)");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("lo_orderkey >= 10001");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.notContain("PREDICATES");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 15000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10001";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 9999";
+            testRewriteFail(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey >= 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey >= 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey >= 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey >= 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey = 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber > 6000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 10000";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber > 6000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber > 6000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey < 1000 and lo_linenumber < 2000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: 18: lo_orderkey <= 999, 19: lo_linenumber <= 1999");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000) and (lo_orderkey < 1000 or lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("PREDICATES: 18: lo_orderkey >= 15001, 19: lo_linenumber <= 999");
+        }
+
+        {
+            String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_orderkey < 5000) and (lo_linenumber > 10000 or lo_linenumber < 2000)";
+            String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
+            testRewriteOK(mv, query);
         }
     }
 }
