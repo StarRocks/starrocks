@@ -79,6 +79,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.BaseAction;
@@ -271,6 +272,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -545,34 +547,30 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         FileListTableRepo.RepoAccessor repo = FileListTableRepo.RepoAccessor.getInstance();
         List<PipeFile> files = repo.listAllFiles();
-        // FIXME
+        String now = LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX);
         for (PipeFile fileRecord : files) {
             TListPipeFilesInfo file = new TListPipeFilesInfo();
             file.setPipe_id(10);
             file.setDatabase_name("fake");
-            file.setFilename(fileRecord.getPath());
-            file.setFile_version(0);
-            file.setState(fileRecord.getState().toString());
+            file.setPipe_name("fake");
+
+            file.setFile_name(fileRecord.getPath());
+            file.setFile_version("UNKNOWN");
+            file.setFile_rows(0L);
             file.setFile_size(fileRecord.getSize());
+            file.setLast_modified(now);
+
+            file.setState(fileRecord.getState().toString());
+            file.setStaged_time(now);
+            file.setStart_load(now);
+            file.setFinish_load(now);
+
+            file.setFirst_error_msg("");
+            file.setError_count(0L);
+            file.setError_line(0L);
+
             result.addToPipe_files(file);
         }
-        /*
-        for (Pipe pipe : pipes.values()) {
-            String databaseName = GlobalStateMgr.getCurrentState().mayGetDb(pipe.getPipeId().getDbId())
-                    .map(Database::getOriginName)
-                    .orElse(null);
-            for (PipeFile pipeFile : pipe.getPipeSource().getFileListRepo().listFiles()) {
-                TListPipeFilesInfo file = new TListPipeFilesInfo();
-                file.setPipe_id(pipe.getId());
-                file.setDatabase_name(databaseName);
-                file.setFilename(pipeFile.path);
-                file.setFile_version(0);
-                file.setState(pipeFile.getState().toString());
-                file.setFile_size(pipeFile.getSize());
-                result.addToPipe_files(file);
-            }
-        }
-        */
 
         return result;
     }

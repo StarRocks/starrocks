@@ -62,7 +62,7 @@ public class FileListTableRepo extends FileListRepo {
             "CREATE TABLE IF NOT EXISTS %s (" +
                     "pipe_id bigint, " +
                     "filename string, " +
-                    "file_version int, " +
+                    "file_version string, " +
                     "file_size bigint, " +
                     "state string, " +
                     "last_modified  datetime, " +

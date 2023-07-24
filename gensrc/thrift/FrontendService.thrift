@@ -425,8 +425,8 @@ struct TListPipeFilesInfo {
     
 
     // file entity
-    10: optional string filename
-    11: optional i64 file_version
+    10: optional string file_name
+    11: optional string file_version
     12: optional string state
     13: optional i64 file_size
     14: optional i64 file_rows
@@ -440,6 +440,7 @@ struct TListPipeFilesInfo {
     // error information
     30: optional string first_error_msg
     31: optional i64 error_count
+    32: optional i64 error_line
 }
 
 struct TListPipeFilesResult {

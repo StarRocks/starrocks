@@ -27,14 +27,21 @@ SchemaScanner::ColumnDesc SchemaTablePipeFiles::_s_columns[] = {
         {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"PIPE_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"PIPE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+
         {"FILE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"FILE_VERSION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"FILE_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
         {"FILE_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
+        {"LAST_MODIFIED", TYPE_VARCHAR, sizeof(StringValue), false},
+
         {"LOAD_STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"LOAD_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"STAGED_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"START_LOAD_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"FINISH_LOAD_TIME", TYPE_VARCHAR, sizeof(StringValue), false},
+
         {"ERROR_MSG", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ERROR_LINE_NUMBER", TYPE_BIGINT, sizeof(int64_t), false},
-        {"ERROR_COLUMN", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"ERROR_COUNT", TYPE_BIGINT, sizeof(int64_t), false},
+        {"ERROR_LINE", TYPE_BIGINT, sizeof(int64_t), false},
 };
 
 SchemaTablePipeFiles::SchemaTablePipeFiles()
@@ -78,14 +85,21 @@ DatumArray SchemaTablePipeFiles::_build_row() {
             Slice(pipe_file.database_name),
             pipe_file.pipe_id,
             Slice(pipe_file.pipe_name),
-            Slice(pipe_file.filename),
+
+            Slice(pipe_file.file_name),
+            Slice(pipe_file.file_version),
             pipe_file.file_rows,
             pipe_file.file_size,
+            Slice(pipe_file.last_modified),
+
             Slice(pipe_file.state),
-            Slice("load_time"),    // TODO
-            Slice("error_msg"),    // TODO
-            (int64_t)0,            // TODO
-            Slice("error_column"), // TODO
+            Slice(pipe_file.staged_time),
+            Slice(pipe_file.start_load),
+            Slice(pipe_file.finish_load),
+
+            Slice(pipe_file.first_error_msg),
+            (int64_t)pipe_file.error_count,
+            (int64_t)pipe_file.error_line,
     };
 }
 
