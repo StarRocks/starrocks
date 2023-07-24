@@ -29,7 +29,6 @@ set(EXEC_FILES
     internal_service.cpp
     staros_worker.cpp
     mem_hook.cpp
-    service.cpp
 )
 
 add_library(Service

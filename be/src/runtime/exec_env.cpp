@@ -565,6 +565,27 @@ void ExecEnv::destroy() {
     _metrics = nullptr;
 }
 
+void ExecEnv::_wait_for_fragments_finish() {
+    size_t max_loop_cnt_cfg = config::loop_count_wait_fragments_finish;
+    if (max_loop_cnt_cfg == 0) {
+        return;
+    }
+
+    size_t running_fragments = _fragment_mgr->running_fragment_count();
+    size_t loop_cnt = 0;
+
+    while (running_fragments && loop_cnt < max_loop_cnt_cfg) {
+        DLOG(INFO) << running_fragments << " fragment(s) are still running...";
+        sleep(10);
+        running_fragments = _fragment_mgr->running_fragment_count();
+        loop_cnt++;
+    }
+}
+
+void ExecEnv::wait_for_finish() {
+    _wait_for_fragments_finish();
+}
+
 int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
     if (pipeline_dop > 0) {
         return pipeline_dop;
