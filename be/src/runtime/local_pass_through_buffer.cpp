@@ -138,7 +138,7 @@ void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& quer
     }
 }
 
-void PassThroughChunkBufferManager::clear() {
+void PassThroughChunkBufferManager::close() {
     std::unique_lock lock(_mutex);
     for (auto it = _query_id_to_buffer.begin(); it != _query_id_to_buffer.end();) {
         delete it->second;

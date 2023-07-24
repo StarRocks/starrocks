@@ -219,7 +219,7 @@ void DataStreamMgr::close() {
             }
         }
     }
-    _pass_through_chunk_buffer_manager.clear();
+    _pass_through_chunk_buffer_manager.close();
 }
 
 void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
