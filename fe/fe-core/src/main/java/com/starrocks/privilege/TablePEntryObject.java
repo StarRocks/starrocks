@@ -115,7 +115,7 @@ public class TablePEntryObject implements PEntryObject {
             if (Objects.equals(tokens.get(1), "*")) {
                 tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
             } else {
-                Table table = mgr.getMetadataMgr().getTable(catalogName, database.getOriginName(), tokens.get(1));
+                Table table = mgr.getMetadataMgr().getTable(catalogName, tokens.get(0), tokens.get(1));
                 if (table == null || table.isView() || table.isMaterializedView()) {
                     throw new PrivObjNotFoundException("cannot find table " +
                             tokens.get(1) + " in db " + tokens.get(0));
