@@ -15,7 +15,7 @@ DATE makedate(INT year, INT dayOfYear);
 ## Parameters
 
 - `year`: It ranges from 0 to 9999. NULL is returned if this range is exceeded. The supported data type is INT.
-- `dayOfYear`: the day of year. The supported data type is INT. In order to maintain the same semantics as the function dayofyear, if this number is greater than 366 or is 366 in a non-leap year, it is not a day of year.
+- `dayOfYear`: the day of year. The supported data type is INT. In order to maintain the same semantics as the function [dayofyear](./dayofyear.md), if this number is greater than 366 or is 366 in a non-leap year, it is not a day of year.
 
 ## Return value
 
