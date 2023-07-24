@@ -26,6 +26,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
@@ -382,6 +383,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             [[maybe_unused]] std::string category;
             category = fmt::sprintf("chunk_source_%d_0x%x", get_plan_node_id(), query_trace_ctx.id);
             QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
+#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
+            FAIL_POINT_SCOPE(mem_alloc_error);
+#endif
 
             DeferOp timer_defer([chunk_source]() {
                 COUNTER_SET(chunk_source->scan_timer(),

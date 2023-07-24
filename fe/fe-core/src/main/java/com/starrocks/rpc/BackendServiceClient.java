@@ -45,6 +45,7 @@ import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PProxyRequest;
@@ -53,6 +54,8 @@ import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -288,6 +291,29 @@ public class BackendServiceClient {
         } catch (Throwable e) {
             LOG.warn("execute command exception, address={}:{} command:{}",
                     address.getHostname(), address.getPort(), request.command, e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(
+            TNetworkAddress address, PUpdateFailPointStatusRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.updateFailPointStatusAsync(request);
+        } catch (Throwable e) {
+            LOG.warn("update failpoint status exception, address={}:{}",
+                    address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<PListFailPointResponse> listFailPointAsync(
+            TNetworkAddress address, PListFailPointRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.listFailPointAsync(request);
+        } catch (Throwable e) {
+            LOG.warn("list failpoint exception, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
     }
