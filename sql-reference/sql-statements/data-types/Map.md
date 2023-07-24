@@ -177,7 +177,7 @@ mysql> select map{1:map{2:1},3:NULL}[1][2];
 +----------------------------------+
 ```
 
-## 参考文档
+## 相关参考
 
 - [Map 函数](../../sql-functions/map-functions/map_values.md)
 - [element_at](../../sql-functions/array-functions/element_at.md)

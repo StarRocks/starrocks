@@ -77,6 +77,6 @@ select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,1,3,1,5,3,5
 +-------+
 ```
 
-## 参考文档
+## 相关参考
 
 [sub_bitmap](./sub_bitmap.md), [bitmap_subset_in_range](./bitmap_subset_in_range.md)

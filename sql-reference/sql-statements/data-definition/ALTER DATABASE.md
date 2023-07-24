@@ -61,7 +61,7 @@ ALTER DATABASE db_name SET REPLICA QUOTA <quota>
     ALTER DATABASE example_db SET REPLICA QUOTA 102400;
     ```
 
-## 参考文档
+## 相关参考
 
 - [CREATE DATABASE](CREATE%20DATABASE.md)
 - [USE](../data-definition/USE.md)

@@ -703,7 +703,7 @@ ALTER TABLE [database.]table COMMENT = "<new table comment>";
 ALTER TABLE table1 SWAP WITH table2;
 ```
 
-## 参考文档
+## 相关参考
 
 * [CREATE TABLE](CREATE%20TABLE.md)
 * [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)

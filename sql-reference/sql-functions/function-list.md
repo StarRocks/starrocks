@@ -39,6 +39,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [current_timestamp](/sql-reference/sql-functions/date-time-functions/current_timestamp.md)      |  获取当前时间，以 DATETIME 类型返回。   |
 |  [date](/sql-reference/sql-functions/date-time-functions/date.md)      |  从日期或时间日期表达式中截取日期部分。  |
 |  [date_add](/sql-reference/sql-functions/date-time-functions/date_add.md)      |  向日期添加指定的时间间隔。    |
+|[date_diff](/sql-reference/sql-functions/date-time-functions/date_diff.md)| 根据指定的时间单位返回两个日期的差值。 |
 |  [date_format](/sql-reference/sql-functions/date-time-functions/date_format.md)      |  按照 format 指定的格式来显示日期/时间数据。   |
 |  [date_slice](/sql-reference/sql-functions/date-time-functions/date_slice.md)      |  根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。  |
 |  [date_sub, subdate](/sql-reference/sql-functions/date-time-functions/date_sub.md)    |    从日期中减去指定的时间间隔。   |
@@ -58,6 +59,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [hours_add](/sql-reference/sql-functions/date-time-functions/hours_add.md)| 给指定的日期时间增加指定的小时数。  |
 | [hours_diff](/sql-reference/sql-functions/date-time-functions/hours_diff.md)|  计算开始时间和结束时间相差多少个小时。 |
 | [hours_sub](/sql-reference/sql-functions/date-time-functions/hours_sub.md)| 从指定的日期时间中减少指定的小时数。  |
+|[last_day](/sql-reference/sql-functions/date-time-functions/last_day.md)| 根据指定的时间单位，返回输入的日期对应的最后一天。|
+|[makedate](/sql-reference/sql-functions/date-time-functions/makedate.md)| 根据给定的年份和天数值，构造一个日期值。 |
 | [microseconds_add](/sql-reference/sql-functions/date-time-functions/microseconds_add.md)| 向一个日期时间添加指定的时间间隔，单位为微秒。  |
 | [microseconds_sub](/sql-reference/sql-functions/date-time-functions/microseconds_sub.md)| 从一个日期时间中减去指定的时间间隔，单位为微秒。  |
 | [minute](/sql-reference/sql-functions/date-time-functions/minute.md)| 获得日期中的分钟的信息，返回值范围为 0~59。  |
@@ -69,7 +72,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [months_add](/sql-reference/sql-functions/date-time-functions/months_add.md)| 给日期添加指定的月数。  |
 | [months_diff](/sql-reference/sql-functions/date-time-functions/months_diff.md)| 计算开始时间和结束时间相差几个月。  |
 | [months_sub](/sql-reference/sql-functions/date-time-functions/months_sub.md)|  从日期中减去指定的月数。 |
+|[next_day](/sql-reference/sql-functions/date-time-functions/next_day.md)|根据输入的日期值，返回它之后的那个星期几所对应的日期。 |
 | [now](/sql-reference/sql-functions/date-time-functions/now.md)| 获取当前的时间，以 DATETIME 类型返回。  |
+| [previous_day](/sql-reference/sql-functions/date-time-functions/previous_day.md) | 根据输入的日期值，返回它之前的那个星期几所对应的日期。 |
 | [quarter](/sql-reference/sql-functions/date-time-functions/quarter.md)| 返回给定的日期值对应的季度，范围 1~4。  |
 | [second](/sql-reference/sql-functions/date-time-functions/second.md)|  获得日期中的秒的信息，返回值范围 0~59。 |
 | [seconds_add](/sql-reference/sql-functions/date-time-functions/seconds_add.md)| 向一个日期时间添加指定的时间间隔，单位为秒。  |
