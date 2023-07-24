@@ -1143,7 +1143,7 @@ public class Config extends ConfigBase {
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
     @ConfField(mutable = true, aliases = {"max_scheduling_tablets"})
-    public static int tablet_sched_max_scheduling_tablets = 2000;
+    public static int tablet_sched_max_scheduling_tablets = 10000;
 
     /**
      * if set to true, TabletScheduler will not do balance.
@@ -1215,7 +1215,7 @@ public class Config extends ConfigBase {
     // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
     // no more balance check
     @ConfField(mutable = true, aliases = {"max_balancing_tablets"})
-    public static int tablet_sched_max_balancing_tablets = 100;
+    public static int tablet_sched_max_balancing_tablets = 500;
 
     /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).

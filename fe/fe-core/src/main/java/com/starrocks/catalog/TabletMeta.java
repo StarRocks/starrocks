@@ -51,6 +51,8 @@ public class TabletMeta {
 
     private final boolean isLakeTablet;
 
+    private Long toBeCleanedTimeMs = null;
+
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
@@ -113,6 +115,18 @@ public class TabletMeta {
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    public Long getToBeCleanedTime() {
+        return toBeCleanedTimeMs;
+    }
+
+    public void setToBeCleanedTime(Long time) {
+        toBeCleanedTimeMs = time;
+    }
+
+    public void resetToBeCleanedTime() {
+        toBeCleanedTimeMs = null;
     }
 
     public boolean containsSchemaHash(int schemaHash) {
