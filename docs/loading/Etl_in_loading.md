@@ -2,7 +2,7 @@
 
 StarRocks supports data transformation at loading.
 
-This feature supports [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), and [Routine Load](../loading/RoutineLoad.md) but does not support [Spark Load](../loading/SparkLoad.md).
+This feature supports [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) but does not support [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md).
 
 > **NOTICE**
 >
@@ -38,7 +38,7 @@ When you load a data file into a StarRocks table, the data of the data file may 
 
 ### Broker Load
 
-See the "Background information" section in [Load data from HDFS or cloud storage](../loading/BrokerLoad.md).
+See the "Background information" section in [Load data from HDFS](../loading/hdfs_load.md) or [Load data from cloud storage](../loading/cloud_storage_load.md).
 
 ### Routine load
 
@@ -148,7 +148,7 @@ For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-referen
 
 #### Load data from an HDFS cluster
 
-If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job:
+If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job:
 
 ```SQL
 LOAD LABEL test_db.label1
@@ -244,7 +244,7 @@ For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-referen
 
 #### Load data from an HDFS cluster
 
-If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job:
+If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job:
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -337,7 +337,7 @@ For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-referen
 
 #### Load data from an HDFS cluster
 
-If `file2.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job:
+If `file2.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job:
 
 ```SQL
 LOAD LABEL test_db.label3
@@ -418,7 +418,7 @@ The four data files are stored in the `/user/starrocks/data/input/` path of your
 
 ### Load data from an HDFS cluster
 
-Execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job, which enables you to extract the `date` partition field values from the `/user/starrocks/data/input/` file path and use a wildcard (*) to specify that you want to load all data files in the file path to `table1`:
+Execute the following statement to create a [Broker Load](../loading/hdfs_load.md) job, which enables you to extract the `date` partition field values from the `/user/starrocks/data/input/` file path and use a wildcard (*) to specify that you want to load all data files in the file path to `table1`:
 
 ```SQL
 LOAD LABEL test_db.label4

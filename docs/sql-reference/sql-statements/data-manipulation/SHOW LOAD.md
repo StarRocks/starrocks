@@ -2,7 +2,7 @@
 
 ## Description
 
-Displays information of all load jobs or given load jobs in a database. This statement can only display load jobs that are created by using [Broker Load](../data-manipulation/BROKER%20LOAD.md), [Spark Load](../data-manipulation/SPARK%20LOAD.md), or [INSERT](../data-manipulation/insert.md). You can also view information of load jobs via the `curl` command. For more information, see [Load data from HDFS or cloud storage](../../../loading/BrokerLoad.md), [Bulk load using Apache Spark™](../../../loading/SparkLoad.md), and [Load data using INSERT](../../../loading/InsertInto.md).
+Displays information of all load jobs or given load jobs in a database. This statement can only display load jobs that are created by using [Broker Load](../data-manipulation/BROKER%20LOAD.md), [Spark Load](../data-manipulation/SPARK%20LOAD.md), or [INSERT](../data-manipulation/insert.md). You can also view information of load jobs via the `curl` command. For more information, see [Load data from HDFS](../../../loading/hdfs_load.md), [Load data from cloud storage](../../../loading/cloud_storage_load.md), [Bulk load using Apache Spark™](../../../loading/SparkLoad.md), and [Load data using INSERT](../../../loading/InsertInto.md).
 
 In addition to the preceding loading methods, StarRocks supports using Stream Load and Routine Load to load data. Stream Load is a synchronous operation and will directly return information of Stream Load jobs. Routine Load is an asynchronous operation where you can use the [SHOW ROUTINE LOAD](../data-manipulation/SHOW%20ROUTINE%20LOAD.md) statement to display information of Routine Load jobs.
 

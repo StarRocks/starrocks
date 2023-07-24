@@ -1,5 +1,26 @@
 # StarRocks version 3.1
 
+## 3.1.0-RC02
+
+Release date: July 21, 2023
+
+### New Features
+
+#### Shared-data cluster
+
+Supports abstraction of storage volumes, which makes it easier for users to configure storage location and authentication information in StarRocks shared-data clusters.
+
+#### Storage engine, data ingestion, and query
+
+- Upgraded automatic partitioning to expression partitioning. Users only need to specify a simple partition expression (either a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is more flexible and user-friendly.
+- Supports list partitioning. Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.
+- Supports using the files() function in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3.
+
+#### SQL reference
+
+- Added the following storage volume-related statements: [CREATE STORAGE VOLUME](/sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md), [ALTER STORAGE VOLUME](/sql-reference/sql-statements/Administration/ALTER%20STORAGE%20VOLUME.md), [DROP STORAGE VOLUME](/sql-reference/sql-statements/Administration/DROP%20STORAGE%20VOLUME.md), [SET DEFAULT STORAGE VOLUME](/sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md), [DESC STORAGE VOLUME](/sql-reference/sql-statements/Administration/DESC%20STORAGE%20VOLUME.md), [SHOW STORAGE VOLUMES](/sql-reference/sql-statements/Administration/SHOW%20STORAGE%20VOLUMES.md).
+- Added the following table function: [files](../sql-reference/sql-functions/table-functions/files.md).
+
 ## 3.1.0-RC01
 
 Release date: July 7, 2023
@@ -18,11 +39,12 @@ Release date: July 7, 2023
 
 - Supports accessing Parquet-formatted Iceberg v2 tables.
 - [Preview] Supports sinking data to Iceberg tables in Parquet format.
-- Supports accessing data stored in Elasticsearch by using [Elasticsearch catalogs](../data_source/catalog/elasticsearch_catalog.md). This simplifies the creation of Elasticsearch external tables.
+- [Preview] Supports accessing data stored in Elasticsearch by using [Elasticsearch catalogs](../data_source/catalog/elasticsearch_catalog.md). This simplifies the creation of Elasticsearch external tables.
 
 #### Storage engine, data ingestion, and query
 
-<!--- Supports [list partitioning](../table_design/).-->
+<!--- Upgraded automatic partitioning to expression partitioning. Users only need to specify a simple partition expression (either a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is easier to use and more user-friendly.
+- Supports list partitioning. Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.-->
 - Supports [random bucketing](../table_design/Data_distribution.md#choose-bucketing-columns), which relieves the need to configure bucketing columns at table creation. In big data and high performance-demanding scenarios, we recommend that you continue using hash bucketing.
 - Supports using the TABLE keyword in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3.
 - Supports [generated columns](../sql-reference/sql-statements/generated_columns.md). With the generated column feature, StarRocks can automatically generate and store the values of column expressions and automatically rewrite queries to improve query performance.
@@ -79,9 +101,9 @@ Release date: July 7, 2023
 #### Storage engine, data ingestion, and query
 
 - Supports partial updates in column mode. Users can enable the column mode when they perform partial updates on Primary Key tables by using the [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) statement. The column mode is suitable for updating a small number of columns but a large number of rows, and can improve the updating performance by up to 10 times.
-- Optimized the collection of statistics for the CBO. This reduces the impact of statistics collection on data ingestion and increases statistics collection performance.
+<!--- Optimized the collection of statistics for the CBO. This reduces the impact of statistics collection on data ingestion and increases statistics collection performance.
 - Optimized the merge algorithm to increase the overall performance by up to 2 times in permutation scenarios.
-- Optimized the query logic to reduce dependency on database locks.
+- Optimized the query logic to reduce dependency on database locks.-->
 
 #### SQL reference
 

@@ -13,7 +13,7 @@ StarRocks supports the following types of Azure Storage accounts:
 - Azure Data Lake Storage Gen1
 - Azure Data Lake Storagee Gen2
 
-In this topic, Hive catalog, file external table, and Broker Load are used as examples to show how StarRocks integrates with Azure Storage by using these types of Azure Storage accounts. For information about the parameters in the examples, see [Hive catalog](../data_source/catalog/hive_catalog.md), [File external table](../data_source/file_external_table.md), and [Broker Load](../loading/BrokerLoad.md).
+In this topic, Hive catalog, file external table, and Broker Load are used as examples to show how StarRocks integrates with Azure Storage by using these types of Azure Storage accounts. For information about the parameters in the examples, see [Hive catalog](../data_source/catalog/hive_catalog.md), [File external table](../data_source/file_external_table.md), and [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 ## Blob Storage
 
