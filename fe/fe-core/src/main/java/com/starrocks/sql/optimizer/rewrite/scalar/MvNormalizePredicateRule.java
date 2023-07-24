@@ -146,6 +146,9 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             BinaryType op =
                     isIn ? BinaryType.EQ : BinaryType.NE;
             result.add(new BinaryPredicateOperator(op, lhs, constants.get(0)));
+        } else if (constants.size() > 1024) {
+            // add a size limit to protect in with large number of children
+            return predicate;
         } else if (!constants.isEmpty()) {
             for (ScalarOperator constant : constants) {
                 BinaryType op =
