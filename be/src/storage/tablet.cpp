@@ -335,10 +335,22 @@ RowsetSharedPtr Tablet::rowset_with_max_version() const {
 }
 
 // add inc rowset should not persist tablet meta, because it will be persisted when publish txn.
-Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
+Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     CHECK(!_updates) << "updatable tablet should not call add_inc_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
+    // TODO(ygl): rowset is already set version here, memory is changed, if save failed
+    // it maybe a fatal error
+    rowset->make_visible({version, version});
+    auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    Status st = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to save committed rowset. "
+                     << "tablet_id: " << tablet_id() << ", txn_id: " << rowset->txn_id()
+                     << ", rowset_id: " << rowset->rowset_id();
+        return Status::InternalError(
+                fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}", tablet_id(), rowset->txn_id()));
+    }
     RETURN_IF_ERROR(_contains_version(rowset->version()));
     RETURN_IF_ERROR(_tablet_meta->add_rs_meta(rowset->rowset_meta()));
     RETURN_IF_ERROR(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
@@ -352,7 +364,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
     }
 
     // warm-up this rowset
-    auto st = rowset->load();
+    st = rowset->load();
     // ignore this error, only log load failure
     LOG_IF(WARNING, !st.ok()) << "ignore load rowset error tablet:" << tablet_id() << " rowset:" << rowset->rowset_id()
                               << " " << st;

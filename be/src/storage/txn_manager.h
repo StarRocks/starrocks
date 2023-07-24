@@ -167,8 +167,6 @@ private:
 
     txn_partition_map_t& _get_txn_partition_map(TTransactionId transactionId);
 
-    std::mutex& _get_txn_lock(TTransactionId transactionId);
-
     // insert or remove (transaction_id, partition_id) from _txn_partition_map
     // get _txn_map_lock before calling
     void _insert_txn_partition_map_unlocked(int64_t transaction_id, int64_t partition_id);
@@ -189,8 +187,6 @@ private:
 
     std::unique_ptr<std::shared_mutex[]> _txn_map_locks;
 
-    std::unique_ptr<std::mutex[]> _txn_mutex;
-
     // Dynamic thread pool used to concurrently flush WAL to disk
     std::unique_ptr<ThreadPool> _flush_thread_pool;
 
@@ -208,10 +204,6 @@ inline TxnManager::txn_tablet_map_t& TxnManager::_get_txn_tablet_map(TTransactio
 
 inline TxnManager::txn_partition_map_t& TxnManager::_get_txn_partition_map(TTransactionId transactionId) {
     return _txn_partition_maps[transactionId & (_txn_map_shard_size - 1)];
-}
-
-inline std::mutex& TxnManager::_get_txn_lock(TTransactionId transactionId) {
-    return _txn_mutex[transactionId & (_txn_shard_size - 1)];
 }
 
 } // namespace starrocks
