@@ -18,21 +18,21 @@
 ```SQL
 # System 相关
 
-REVOKE  
+REVOKE
     { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
     ON SYSTEM
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 
 # Resource group 相关
 
-REVOKE  
+REVOKE
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resourcegroup_name> [, <resourcegroup_name>,...] ｜ ALL RESOURCE GROUPS} 
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 
 # Resource 相关
 
-REVOKE 
+REVOKE
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, <resource_name>,...] ｜ ALL RESOURCES} 
     FROM { ROLE | USER} {<role_name>|<user_identity>}
@@ -77,8 +77,8 @@ REVOKE
 REVOKE  
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
-       | ALL TABLES IN 
-           { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
+       | ALL TABLES} IN 
+           { DATABASE <database_name> | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 
 * 注意：需要执行 set catalog 之后才能使用。
@@ -87,11 +87,11 @@ REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
 
 # View 相关
 
-REVOKE  
+REVOKE
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
-       ｜ ALL VIEWS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+       ｜ ALL VIEWS} IN 
+           { DATABASE <database_name> | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
     
 * 注意：需要执行 set catalog 之后才能使用。 
@@ -103,8 +103,8 @@ REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
 REVOKE { 
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
-       ｜ ALL MATERIALIZED VIEWS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL [DATABASES] }
+       ｜ ALL MATERIALIZED VIEWS} IN 
+           { DATABASE <database_name> | ALL [DATABASES] }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
     
 * 注意：需要执行 set catalog 之后才能使用。  
@@ -116,8 +116,8 @@ REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_ide
 REVOKE { 
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
-       ｜ ALL FUNCTIONS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+       ｜ ALL FUNCTIONS } IN 
+           { DATABASE <database_name> | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
     
 * 注意：需要执行 set catalog 之后才能使用。 
