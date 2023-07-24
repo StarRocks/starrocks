@@ -100,6 +100,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                     task.st = Status::NotFound(
                             fmt::format("rowset not found  of tablet: {}, txn_id: {}", task.tablet_id, task.txn_id));
                     LOG(WARNING) << task.st;
+                    LOG(WARNING) << task.st;
                     return;
                 }
                 TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(task.tablet_id);
