@@ -8,7 +8,7 @@
 
 ### Broker Load
 
-[Broker Load](/loading/BrokerLoad.md) 模式是一种异步数据导入模式，通过 Broker 进程访问并读取外部数据源，然后采用 MySQL 协议向 StarRocks 创建导入作业。
+Broker Load（参见 [从 HDFS 导入](../loading/hdfs_load.md)和[从云存储导入](../loading/cloud_storage_load.md)）是一种异步数据导入模式，通过 Broker 进程访问并读取外部数据源，然后采用 MySQL 协议向 StarRocks 创建导入作业。
 
 Broker Load 模式适用于源数据在 Broker 进程可访问的存储系统（如 HDFS，S3）中的情景，可以支撑数据量达数百 GB 的导入作业。该导入方式支持的数据源有 Apache Hive™ 等。
 

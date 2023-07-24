@@ -109,7 +109,8 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 
 > **说明**
 >
-> 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+> - 如果账号没有设置密码，这里只需要传入 `<username>:`。
+> - 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
 
 `example1.csv` 文件中包含三列，跟 `table1` 表的 `id`、`name`、`score` 三列一一对应，并用逗号 (,) 作为列分隔符。因此，需要通过 `column_separator` 参数指定列分隔符为逗号 (,)，并且在 `columns` 参数中按顺序把 `example1.csv` 文件中的三列临时命名为 `id`、`name`、`score`。`columns` 参数中声明的三列，按名称对应 `table1` 表中的三列。
 

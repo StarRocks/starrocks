@@ -80,7 +80,7 @@
 
 ### Broker
 
-- 添加 Broker。添加后，您可以使用 Broker Load 将 HDFS 或外部云存储系统中的数据导入到 StarRocks 中。详情参见[从 HDFS 或外部云存储系统导入数据](../../../loading/BrokerLoad.md)。
+- 添加 Broker。添加后，您可以使用 Broker Load 将 HDFS 或外部云存储系统中的数据导入到 StarRocks 中。详情参见[从 HDFS 导入](../../../loading/hdfs_load.md)或[从云存储导入](../../../loading/cloud_storage_load.md)。
 
     ```SQL
     ALTER SYSTEM ADD BROKER broker_name "host:port"[, ...]

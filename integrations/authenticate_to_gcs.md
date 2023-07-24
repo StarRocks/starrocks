@@ -25,7 +25,7 @@ StarRocks 支持在以下场景中集成 GCS：
 - 查询 GCS 中的 Parquet 或 ORC 格式的数据文件。
 - 查询 GCS 中的 [Hive](../data_source/catalog/hive_catalog.md)、[Iceberg](../data_source/catalog/iceberg_catalog.md)、[Hudi](../data_source/catalog/hudi_catalog.md)、或 [Delta Lake](../data_source/catalog/deltalake_catalog.md) 表。
 
-本文档以 [Hive catalog](../data_source/catalog/hive_catalog.md)、[文件外部表](../data_source/file_external_table.md) 和 [Broker Load](../loading/BrokerLoad.md) 为例，介绍 StarRocks 在各应用场景下如何集成 GCS。有关下面示例中出现的 `StorageCredentialParams` 详解，参见本文档“[参数配置](../integrations/authenticate_to_gcs.md#参数配置)”小节。
+本文档以 [Hive catalog](../data_source/catalog/hive_catalog.md)、[文件外部表](../data_source/file_external_table.md) 和 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 为例，介绍 StarRocks 在各应用场景下如何集成 GCS。有关下面示例中出现的 `StorageCredentialParams` 详解，参见本文档“[参数配置](../integrations/authenticate_to_gcs.md#参数配置)”小节。
 
 > **说明**
 >

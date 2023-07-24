@@ -76,7 +76,7 @@ select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- 返回 {"a":1
 
 ## 导入 STRUCT 类型数据
 
-可以使用两种方式导入 STRUCT 数据到 StarRocks：[INSERT INTO](../../../loading/InsertInto.md) 和 [ORC/Parquet 文件导入](../../../loading/BrokerLoad.md)。
+可以使用两种方式导入 STRUCT 数据到 StarRocks：[INSERT INTO](../data-manipulation/insert.md) 和 [ORC/Parquet 文件导入](../data-manipulation/BROKER%20LOAD.md)。
 
 导入过程中 StarRocks 会对重复的 Key 值进行删除。
 
@@ -101,7 +101,7 @@ SELECT * FROM t0;
 
 ### 从 ORC 和 Parquet 文件导入
 
-StarRocks 的 STRUCT 类型对应 ORC 和 Parquet 格式中的嵌套列 (nested columns structure)，无需您做额外的转换或定义。具体导入操作，参考 [Broker Load 文档](../../../loading/BrokerLoad.md)。
+StarRocks 的 STRUCT 类型对应 ORC 和 Parquet 格式中的嵌套列 (nested columns structure)，无需您做额外的转换或定义。具体导入操作，参考 [Broker Load 文档](../data-manipulation/BROKER%20LOAD.md)。
 
 ## 查询 STRUCT 数据
 

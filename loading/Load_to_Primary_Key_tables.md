@@ -1,6 +1,6 @@
 # 通过导入实现数据变更
 
-StarRocks 的[主键模型](/table_design/table_types/primary_key_table.md)支持通过 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/BrokerLoad.md) 或 [Routine Load](/loading/RoutineLoad.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../loading/SparkLoad.md) 导入作业或 [INSERT](../loading/InsertInto.md) 语句对 StarRocks 表进行数据变更。
+StarRocks 的[主键模型](/table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) 导入作业或 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) 语句对 StarRocks 表进行数据变更。
 
 StarRocks 还支持部分更新 (Partial Update) 和条件更新 (Conditional Update)。
 
@@ -50,7 +50,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 ### Broker Load
 
-参见[从 HDFS 或外部云存储系统导入数据](../loading/BrokerLoad.md)中的“背景信息”小节。
+参见[从 HDFS 导入](../loading/hdfs_load.md)或[从云存储导入](../loading/cloud_storage_load.md)中的“背景信息”小节。
 
 ### Routine Load
 

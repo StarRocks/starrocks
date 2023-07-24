@@ -1,5 +1,26 @@
 # StarRocks version 3.1
 
+## 3.1.0-RC02
+
+发布日期：2023 年 7 月 21 日
+
+### 新增特性
+
+#### 存算分离架构
+
+支持存储卷（Storage Volume）抽象，方便在存算分离架构中配置存储位置及鉴权等相关信息。
+
+#### 存储、导入与查询
+
+- 自动创建分区功能升级为表达式分区，建表时只需要使用简单的分区表达式（时间函数表达式或列表达式），数据导入时 StarRocks 会根据数据和分区表达式的定义规则自动创建分区。这种创建分区的方式，更加灵活易用，能满足大部分场景。
+- 支持 LIST 分区方式。数据按照分区列枚举值列表进行分区，可以加速查询和高效管理分类明确的数据。
+- 支持在 [INSERT INTO](../loading/InsertInto.md) 语句中使用 files() 函数，从 AWS S3 或 HDFS 直接导入 Parquet 或 ORC 格式文件的数据，简化导入过程。
+
+#### SQL 语句和函数
+
+- Storage Volume 相关 SQL 语句：[CREATE STORAGE VOLUME](/sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md)、[ALTER STORAGE VOLUME](/sql-reference/sql-statements/Administration/ALTER%20STORAGE%20VOLUME.md)、[DROP STORAGE VOLUME](/sql-reference/sql-statements/Administration/DROP%20STORAGE%20VOLUME.md)、[SET DEFAULT STORAGE VOLUME](/sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md)、[DESC STORAGE VOLUME](/sql-reference/sql-statements/Administration/DESC%20STORAGE%20VOLUME.md)、[SHOW STORAGE VOLUMES](/sql-reference/sql-statements/Administration/SHOW%20STORAGE%20VOLUMES.md)。
+- 增加如下表格函数 (Table function)：[files](/sql-reference/sql-functions/table-functions/files.md)。
+
 ## 3.1.0-RC01
 
 发布日期：2023 年 7 月 7 日
@@ -18,11 +39,12 @@
 
 - 支持访问 Parquet 格式的 Iceberg v2 数据表。
 - 【公测中】支持写出数据到 Parquet 格式的 Iceberg 表。
-- 支持通过外部 Catalog（External Catalog）访问 [Elasticsearch](../data_source/catalog/elasticsearch_catalog.md) 和 [Apache Paimon](../data_source/catalog/paimon_catalog.md)，简化外表创建等过程。
+- 【公测中】支持通过外部 Catalog（External Catalog）访问 [Elasticsearch](../data_source/catalog/elasticsearch_catalog.md) 和 [Apache Paimon](../data_source/catalog/paimon_catalog.md)，简化外表创建等过程。
 
 #### 存储、导入与查询
 
-<!--- 支持 [LIST 分区方式](...)。-->
+<!--- 自动创建分区功能升级为表达式分区，建表时只需要使用简单的分区表达式（时间函数表达式或列表达式），数据导入时 StarRocks 会根据数据和分区表达式的定义规则自动创建分区。这种创建分区的方式，更加灵活易用，能满足大部分场景。
+- 支持 LIST 分区方式。数据按照分区列枚举值列表进行分区，可以加速查询和高效管理分类明确的数据。-->
 - 支持[随机分桶](../table_design/Data_distribution.md#设置分桶)（Random Bucketing）功能，建表时无需选择分桶键，可以简化建表语句。然而在大数据、高性能要求场景中，建议继续使用 Hash 分桶方式。
 - 支持在 [INSERT INTO](../loading/InsertInto.md) 语句中使用 Table Function 功能，从 AWS S3 或 HDFS 直接导入 Parquet 或 ORC 格式文件的数据，简化导入过程。
 - 支持[生成列（Generated Column）](../sql-reference/sql-statements/generated_columns.md)功能，自动计算生成列表达式的值并存储，且在查询时可自动改写，以提升查询性能。
@@ -79,9 +101,9 @@
 #### 存储、导入与查询
 
 - 执行 [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) 语句对主键模型表进行部分更新时支持启用列模式，适用于更新少部分列但是大量行的场景，更新性能可提升十倍。
-- 优化统计信息收集，以降低对导入影响，提高收集性能。
+<!---- 优化统计信息收集，以降低对导入影响，提高收集性能。
 - 优化并行 Merge 算法，在全排序场景下整体性能最高可提升 2 倍。
-- 优化查询逻辑以不再依赖 DB 锁。
+- 优化查询逻辑以不再依赖 DB 锁。-->
 
 #### SQL 语句和函数
 
