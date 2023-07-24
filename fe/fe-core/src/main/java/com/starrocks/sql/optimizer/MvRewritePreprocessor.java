@@ -218,7 +218,8 @@ public class MvRewritePreprocessor {
         }
 
         MaterializedView.MVRewriteContextCache mvRewriteContextCache = mv.getPlanContext();
-        if (mvRewriteContextCache == null) {
+        if (!connectContext.getSessionVariable().isEnableMaterializedViewRewriteFastWithDraw() ||
+                mvRewriteContextCache == null) {
             // build mv query logical plan
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
             // optimize the sql by rule and disable rule based materialized view rewrite

@@ -91,11 +91,8 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -484,7 +481,7 @@ public class MvUtils {
     public static ScalarOperator getCompensationPredicateForDisjunctive(ScalarOperator src, ScalarOperator target) {
         List<ScalarOperator> srcItems = Utils.extractDisjunctive(src);
         List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);
-        if (!new HashSet<>(targetItems).containsAll(srcItems)) {
+        if (!Sets.newHashSet(targetItems).containsAll(srcItems)) {
             return null;
         }
         targetItems.removeAll(srcItems);
@@ -1023,43 +1020,11 @@ public class MvUtils {
         return o.toString();
     }
 
-    /**
-     * Return the max refresh timestamp of all partition infos.
-     */
-    public static long  getMaxTablePartitionInfoRefreshTime(
-            Collection<Map<String, MaterializedView.BasePartitionInfo>> partitionInfos) {
-        return partitionInfos.stream()
-                .flatMap(x -> x.values().stream())
-                .map(x -> x.getLastRefreshTime())
-                .max(Long::compareTo)
-                .filter(Objects::nonNull)
-                .orElse(System.currentTimeMillis());
+    public static boolean isSupportViewDelta(OptExpression optExpression) {
+        return getAllJoinOperators(optExpression).stream().allMatch(x -> isSupportViewDelta(x));
     }
 
-    public static List<ScalarOperator> collectOnPredicate(OptExpression optExpression) {
-        List<ScalarOperator> onPredicates = Lists.newArrayList();
-        collectOnPredicate(optExpression, onPredicates, false);
-        return onPredicates;
-    }
-
-    public static List<ScalarOperator> collectOuterAntiJoinOnPredicate(OptExpression optExpression) {
-        List<ScalarOperator> onPredicates = Lists.newArrayList();
-        collectOnPredicate(optExpression, onPredicates, true);
-        return onPredicates;
-    }
-
-    public static void collectOnPredicate(
-            OptExpression optExpression, List<ScalarOperator> onPredicates, boolean onlyOuterAntiJoin) {
-        for (OptExpression child : optExpression.getInputs()) {
-            collectOnPredicate(child, onPredicates, onlyOuterAntiJoin);
-        }
-        if (optExpression.getOp() instanceof LogicalJoinOperator) {
-            LogicalJoinOperator joinOperator = optExpression.getOp().cast();
-            if (onlyOuterAntiJoin &&
-                    !(joinOperator.getJoinType().isOuterJoin() || joinOperator.getJoinType().isAntiJoin())) {
-                return;
-            }
-            onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
-        }
+    public static boolean isSupportViewDelta(JoinOperator joinOperator) {
+        return  joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
     }
 }
