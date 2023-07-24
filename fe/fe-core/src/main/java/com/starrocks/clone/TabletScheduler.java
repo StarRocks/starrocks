@@ -114,6 +114,8 @@ public class TabletScheduler extends MasterDaemon {
      */
     private static final double COLOCATE_BACKEND_RESET_RATIO = 0.3;
 
+    private static final int BLOCKING_ADD_SLEEP_DURATION_MS = 200;
+
     /*
      * Tablet is added to pendingTablets as well it's id in allTabletIds.
      * TabletScheduler will take tablet from pendingTablets but will not remove its id from allTabletIds when
@@ -286,6 +288,33 @@ public class TabletScheduler extends MasterDaemon {
         allTabletIds.add(tablet.getTabletId());
         pendingTablets.offer(tablet);
         return AddResult.ADDED;
+    }
+
+    public Pair<Boolean, Long> blockingAddTabletCtxToScheduler(Database db, TabletSchedCtx tabletSchedCtx,
+                                                               boolean forceAdd) {
+        // first: added or not, second: total sleep time in ms
+        Pair<Boolean, Long> result = new Pair<>(false, 0L);
+        try {
+            do {
+                AddResult res = addTablet(tabletSchedCtx, forceAdd /* force or not */);
+                if (res == AddResult.LIMIT_EXCEED) {
+                    db.readUnlock();
+                    // It's ok to sleep a relative long time here so that the scheduler will spare more
+                    // slots after the sleep and the following adding won't block.
+                    Thread.sleep(BLOCKING_ADD_SLEEP_DURATION_MS);
+                    result.second += BLOCKING_ADD_SLEEP_DURATION_MS;
+                    db.readLock();
+                } else {
+                    result.first = (res == AddResult.ADDED);
+                    break;
+                }
+            } while (true);
+        } catch (InterruptedException e) {
+            LOG.warn(e);
+            db.readLock();
+        }
+
+        return result;
     }
 
     public synchronized boolean containsTablet(long tabletId) {
@@ -1374,6 +1403,11 @@ public class TabletScheduler extends MasterDaemon {
         allTabletIds.remove(tabletCtx.getTabletId());
         schedHistory.add(tabletCtx);
         LOG.info("remove the tablet {}. because: {}", tabletCtx.getTabletId(), reason);
+    }
+
+    @VisibleForTesting
+    public void removeOneFromPendingQ() {
+        pendingTablets.poll();
     }
 
     // get next batch of tablets from queue.
