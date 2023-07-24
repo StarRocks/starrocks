@@ -57,7 +57,7 @@ public:
     }
     ~LoadStreamMgr() = default;
 
-    void clear() {
+    void close() {
         std::lock_guard<std::mutex> l(_lock);
         for (auto iter = _stream_map.begin(); iter != _stream_map.end();) {
             iter->second->close();

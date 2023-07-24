@@ -210,7 +210,7 @@ Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, Pl
     }
 }
 
-void DataStreamMgr::clear() {
+void DataStreamMgr::close() {
     for (size_t i = 0; i < _receiver_map->size(); i++) {
         std::lock_guard<Mutex> l(_lock[i]);
         for (auto& iter : _receiver_map[i]) {
