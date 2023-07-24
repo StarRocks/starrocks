@@ -2,7 +2,9 @@
 
 ## Description
 
-Returns the last day of an input DATE or DATETIME expression based on the specified date part.
+Returns the last day of an input DATE or DATETIME expression based on the specified date part. For example, `last_day('2023-05-10', 'month')` returns the last day of the month in which '2023-05-10' falls.
+
+If the date part is not specified, this function returns the last day of the month for a given date.
 
 This function is supported from v3.1.
 

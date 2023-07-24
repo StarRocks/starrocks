@@ -4,6 +4,8 @@
 
 Returns the difference between two DATETIME values in the specified unit. This function returns the value of `expr1 - expr2` expressed in terms of `unit`.
 
+For example, `date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'second')` returns the difference between the two date values in unit of seconds.
+
 This function is supported from v3.1.
 
 ## Syntax

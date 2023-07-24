@@ -2,7 +2,7 @@
 
 ## Description
 
-Returns the date of the first specified day of week (DOW) that occurs before the input date (DATE  or DATETIME).
+Returns the date of the first specified day of week (DOW) that occurs before the input date (DATE  or DATETIME). For example, `previous_day('2023-04-06', 'Monday')` returns the date of the previous Monday that occurred before '2023-04-06'.
 
 This function is supported from v3.1. It is the opposite of [next_day](./next_day.md).
 
@@ -18,7 +18,7 @@ DATE previous_day(DATETIME|DATE date_expr, VARCHAR dow)
 - `dow`: the day of week. Valid values include a number of abbreviations which are case-sensitive:
 
   | DOW_FULL  | DOW_2 | DOW_3 |
-    | --------- | ----- |:-----:|
+  | --------- | ----- |:-----:|
   | Sunday    | Su    | Sun   |
   | Monday    | Mo    | Mon   |
   | Tuesday   | Tu    | Tue   |
