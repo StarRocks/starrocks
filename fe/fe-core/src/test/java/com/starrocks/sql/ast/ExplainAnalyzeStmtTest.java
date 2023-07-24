@@ -42,15 +42,12 @@ public class ExplainAnalyzeStmtTest {
     }
 
     @Test
-    public void testNonsupportInsert() {
-        Exception exception = Assertions.assertThrows(ParsingException.class, () -> {
-            SessionVariable sessionVariable = new SessionVariable();
-            SqlParser.parse("explain analyze insert into t0(c1, c2) values(1, 2)", sessionVariable);
-        });
-
-        String expectedMessage = "Getting syntax error. Detail message: Unsupported operation analyze.";
-        String actualMessage = exception.getMessage();
-        Assert.assertEquals(expectedMessage, actualMessage);
+    public void testSupportInsert() {
+        SessionVariable sessionVariable = new SessionVariable();
+        List<StatementBase> statementBases =
+                SqlParser.parse("explain analyze insert into t0(c1, c2) values(1, 2)", sessionVariable);
+        Assert.assertEquals(statementBases.size(), 1);
+        Assert.assertNotNull(statementBases.get(0));
     }
 
     @Test

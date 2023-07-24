@@ -1477,6 +1477,10 @@ public class StmtExecutor {
             // TODO: Support write profile even dml aborted.
             if (context.getSessionVariable().isEnableProfile()) {
                 writeProfile(beginTimeInNanoSecond);
+                if (parsedStmt.isExplain() &&
+                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                    handleExplainStmt(ExplainAnalyzer.analyze(execPlan, profile));
+                }
             }
         } catch (Throwable t) {
             LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
@@ -1490,7 +1494,10 @@ public class StmtExecutor {
      * `handleDMLStmt` only executes DML statement and no write profile at the end.
      */
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-        if (stmt.isExplain()) {
+        boolean isExplainAnalyze = parsedStmt.isExplain()
+                && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
+
+        if (!isExplainAnalyze && stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;
         }
@@ -1517,11 +1524,15 @@ public class StmtExecutor {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-        Table targetTable;
+        final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
         } else {
             targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        }
+        if (isExplainAnalyze) {
+            Preconditions.checkState(targetTable instanceof OlapTable,
+                    "explain analyze only supports insert into olap native table");
         }
 
         if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
@@ -1772,7 +1783,11 @@ public class StmtExecutor {
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
             } else {
-                if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+                if (isExplainAnalyze) {
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                            .abortTransaction(database.getId(), transactionId, "Explain Analyze");
+                    txnStatus = TransactionStatus.ABORTED;
+                } else if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
