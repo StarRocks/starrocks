@@ -129,6 +129,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // Mapping from partition id to commit version
     private Map<Long, Long> commitVersionMap;
 
+    @SerializedName(value = "sortKeyIdxes")
+    private List<Integer> sortKeyIdxes;
+
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
@@ -149,6 +152,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     void setStartTime(long startTime) {
         this.startTime = startTime;
+    }
+
+    void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
+        this.sortKeyIdxes = sortKeyIdxes;
     }
 
     void addTabletIdMap(long partitionId, long shadowIdxId, long shadowTabletId, long originTabletId) {
@@ -189,7 +196,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         for (long shadowIdxId : indexIdMap.keySet()) {
             table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)));
+                    table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes);
         }
 
         table.rebuildFullSchema();
