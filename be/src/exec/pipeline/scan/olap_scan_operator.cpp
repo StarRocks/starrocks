@@ -28,9 +28,17 @@ namespace starrocks::pipeline {
 // ==================== OlapScanOperatorFactory ====================
 
 OlapScanOperatorFactory::OlapScanOperatorFactory(int32_t id, ScanNode* scan_node, OlapScanContextFactoryPtr ctx_factory)
-        : ScanOperatorFactory(id, scan_node), _ctx_factory(std::move(ctx_factory)) {}
+        : ScanOperatorFactory(id, scan_node), _ctx_factory(std::move(ctx_factory)) {
+}
 
 Status OlapScanOperatorFactory::do_prepare(RuntimeState* state) {
+    auto olap_scan_node = dynamic_cast<OlapScanNode*>(_scan_node);
+    DCHECK(olap_scan_node != nullptr);
+    const TOlapScanNode& thrift_olap_scan_node = olap_scan_node->thrift_olap_scan_node();
+    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
+    DCHECK(tuple_desc != nullptr);
+    LOG(INFO) << "scan table id: " << tuple_desc->table_desc()->table_id();
+    _ctx_factory->set_scan_table_id(tuple_desc->table_desc()->table_id());
     return Status::OK();
 }
 
@@ -98,6 +106,10 @@ ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t c
     auto* olap_scan_node = down_cast<OlapScanNode*>(_scan_node);
     return std::make_shared<OlapChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
                                              olap_scan_node, _ctx.get());
+}
+
+int64_t OlapScanOperator::get_scan_table_id() const {
+    return _ctx->get_scan_table_id();
 }
 
 void OlapScanOperator::attach_chunk_source(int32_t source_index) {

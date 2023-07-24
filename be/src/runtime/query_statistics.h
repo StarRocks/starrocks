@@ -66,6 +66,10 @@ public:
     int64_t get_scan_rows() const { return scan_rows; }
     int64_t get_mem_bytes() const { return mem_cost_bytes; }
 
+    std::vector<QueryStatisticsItemPB>& get_stats_items() {
+        return _stats_items;
+    }
+
     void clear();
 
 private:

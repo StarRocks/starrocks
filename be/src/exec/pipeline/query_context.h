@@ -32,6 +32,7 @@
 #include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
 #include "util/time.h"
+#include "util/spinlock.h"
 
 namespace starrocks {
 
@@ -144,6 +145,9 @@ public:
         _total_scan_bytes += scan_bytes;
         _delta_scan_bytes += scan_bytes;
     }
+
+    void update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes);
+
     int64_t cpu_cost() const { return _total_cpu_cost_ns; }
     int64_t cur_scan_rows_num() const { return _total_scan_rows_num; }
     int64_t get_scan_bytes() const { return _total_scan_bytes; }
@@ -213,6 +217,17 @@ private:
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
+
+    struct ScanStats {
+        std::atomic<int64_t> total_scan_rows_num = 0;
+        std::atomic<int64_t> total_scan_bytes = 0;
+        std::atomic<int64_t> delta_scan_rows_num = 0;
+        std::atomic<int64_t> delta_scan_bytes = 0;
+    };
+    SpinLock _scan_stats_lock;
+    // table id => ScanStats
+    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>> _scan_stats;
+
     bool _is_result_sink = false;
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
