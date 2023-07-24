@@ -44,7 +44,15 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     statistics->set_cpu_cost_ns(cpu_ns);
     statistics->set_mem_cost_bytes(mem_cost_bytes);
     statistics->set_spill_bytes(spill_bytes);
-    *statistics->mutable_stats_items() = {_stats_items.begin(), _stats_items.end()};
+    {
+        std::lock_guard l(_lock);
+        for (const auto& [table_id, stats_item] : _stats_items) {
+            auto new_stats_item = statistics->add_stats_items();
+            new_stats_item->set_table_id(table_id);
+            new_stats_item->set_scan_rows(stats_item->scan_rows);
+            new_stats_item->set_scan_bytes(stats_item->scan_bytes);
+        }
+    }
 }
 
 void QueryStatistics::clear() {
@@ -56,9 +64,20 @@ void QueryStatistics::clear() {
     _stats_items.clear();
 }
 
+void QueryStatistics::update_stats_item(int64_t table_id, int64_t scan_rows, int64_t scan_bytes) {
+    auto iter = _stats_items.find(table_id);
+    if (iter == _stats_items.end()) {
+        _stats_items.insert({table_id, std::make_shared<ScanStats>(scan_rows, scan_bytes)});
+    } else {
+        iter->second->scan_rows += scan_rows;
+        iter->second->scan_bytes += scan_bytes;
+    }
+}
+
 void QueryStatistics::add_stats_item(QueryStatisticsItemPB& stats_item) {
     if (stats_item.table_id() > 0) {
-        this->_stats_items.emplace_back(stats_item);
+        std::lock_guard l(_lock);
+        update_stats_item(stats_item.table_id(), stats_item.scan_rows(), stats_item.scan_bytes());
     }
     this->scan_rows += stats_item.scan_rows();
     this->scan_bytes += stats_item.scan_bytes();
@@ -90,7 +109,13 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     this->spill_bytes += spill_bytes;
     other.spill_bytes -= spill_bytes;
 
-    _stats_items.insert(_stats_items.end(), other._stats_items.begin(), other._stats_items.end());
+    {
+        std::lock_guard l(_lock);
+        for (const auto& [table_id, stats_item] : other._stats_items) {
+            update_stats_item(table_id, stats_item->scan_rows, stats_item->scan_bytes);
+        }
+        other._stats_items.clear();
+    }
 }
 
 void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
@@ -99,7 +124,13 @@ void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
     cpu_ns += statistics.cpu_cost_ns();
     spill_bytes += statistics.spill_bytes();
     mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
-    _stats_items.insert(_stats_items.end(), statistics.stats_items().begin(), statistics.stats_items().end());
+    {
+        std::lock_guard l(_lock);
+        for (int i = 0; i < statistics.stats_items_size(); ++i) {
+            const auto& stats_item = statistics.stats_items(i);
+            update_stats_item(stats_item.table_id(), stats_item.scan_rows(), stats_item.scan_bytes());
+        }
+    }
 }
 
 void QueryStatisticsRecvr::insert(const PQueryStatistics& statistics, int sender_id) {
