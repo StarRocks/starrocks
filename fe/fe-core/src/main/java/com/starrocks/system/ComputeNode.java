@@ -87,7 +87,7 @@ public class ComputeNode implements IComputable, Writable {
 
     // port of starlet on BE
     @SerializedName("starletPort")
-    private volatile int starletPort;
+    private volatile int starletPort = 0;
 
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;

@@ -33,6 +33,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,11 +44,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class ShardDeleter extends FrontendDaemon {
-    private static final Logger LOG = LogManager.getLogger(ShardDeleter.class);
+public class StarMgrMetaSyncer extends FrontendDaemon {
+    private static final Logger LOG = LogManager.getLogger(StarMgrMetaSyncer.class);
 
-    public ShardDeleter() {
-        super("ShardDeleter", Config.shard_deleter_run_interval_sec * 1000L);
+    public StarMgrMetaSyncer() {
+        super("StarMgrMetaSyncer", Config.star_mgr_meta_sync_interval_sec * 1000L);
     }
 
     private List<Long> getAllPartitionShardGroupId() {
@@ -188,8 +189,45 @@ public class ShardDeleter extends FrontendDaemon {
         }
     }
 
+    // get snapshot of star mgr workers and fe backend/compute node,
+    // if worker not found in backend/compute node, remove it from star mgr
+    public int deleteUnusedWorker() {
+        int cnt = 0;
+        try {
+            List<String> workerAddresses = GlobalStateMgr.getCurrentStarOSAgent().listDefaultWorkerGroupIpPort();
+
+            // filter backend
+            List<Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getBackends();
+            for (Backend backend : backends) {
+                if (backend.getStarletPort() != 0) {
+                    String workerAddr = backend.getHost() + ":" + backend.getStarletPort();
+                    workerAddresses.remove(workerAddr);
+                }
+            }
+
+            // filter compute node
+            List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentSystemInfo().getComputeNodes();
+            for (ComputeNode computeNode : computeNodes) {
+                if (computeNode.getStarletPort() != 0) {
+                    String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
+                    workerAddresses.remove(workerAddr);
+                }
+            }
+
+            for (String unusedWorkerAddress : workerAddresses) {
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorker(unusedWorkerAddress);
+                LOG.info("unused worker {} removed from star mgr", unusedWorkerAddress);
+                cnt++;
+            }
+        } catch (Exception e) {
+            LOG.warn("fail to delete unused worker, {}", e);
+        }
+        return cnt;
+    }
+
     @Override
     protected void runAfterCatalogReady() {
         deleteUnusedShardAndShardGroup();
+        deleteUnusedWorker();
     }
 }
