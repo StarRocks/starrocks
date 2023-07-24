@@ -13,21 +13,21 @@ Grants roles to users or other roles.
 ```SQL
 # System
 
-GRANT  
+GRANT
     { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
     ON SYSTEM
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
 # resource group
 
-GRANT  
+GRANT
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resource_name> [, < resource_name >,...] ｜ ALL RESOURCE GROUPS} 
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
 # resource
 
-GRANT 
+GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
@@ -42,21 +42,21 @@ GRANT {
 
 # internal catalog
 
-GRANT 
+GRANT
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
 # external catalog
 
-GRANT  
+GRANT
    { USAGE | DROP | ALL [PRIVILEGES] } 
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
 # Database
 
-GRANT 
+GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
     ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ] ;
@@ -65,12 +65,18 @@ GRANT
 
 # Table
 
-GRANT  
+GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
+<<<<<<< HEAD
        | ALL TABLES IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+=======
+       | ALL TABLES} IN 
+           { DATABASE <database_name> | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+>>>>>>> 9d2fab7583 ([Doc] grant/revoke does not support multiple dbs (#27836))
 
 * You must first run SET CATALOG before you run this command. 
 * You can also use db.tbl to represent a table.
@@ -81,9 +87,15 @@ GRANT <priv> ON TABLE db.tbl TO {ROLE <rolename> | USER <username>};
 GRANT  
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
+<<<<<<< HEAD
        ｜ ALL VIEWS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+=======
+       ｜ ALL VIEWS} IN 
+           {  DATABASE <database_name> | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+>>>>>>> 9d2fab7583 ([Doc] grant/revoke does not support multiple dbs (#27836))
     
 * You must first run SET CATALOG before you run this command. 
 * You can also use db.view to represent a view.
@@ -94,9 +106,15 @@ GRANT <priv> ON VIEW db.view TO {ROLE <rolename> | USER <username>};
 GRANT { 
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
+<<<<<<< HEAD
        ｜ ALL MATERIALIZED VIEWS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+=======
+       ｜ ALL MATERIALIZED VIEWS} IN 
+           { DATABASE <database_name> | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+>>>>>>> 9d2fab7583 ([Doc] grant/revoke does not support multiple dbs (#27836))
     
 * You must first run SET CATALOG before you run this command. 
 * You can also use db.mv to represent an mv.
@@ -107,9 +125,15 @@ GRANT <priv> ON MATERIALIZED_VIEW db.mv TO {ROLE <rolename> | USER <username>};
 GRANT { 
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
+<<<<<<< HEAD
        ｜ ALL FUNCTIONS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+=======
+       ｜ ALL FUNCTIONS} IN 
+           {  DATABASE <database_name>  | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+>>>>>>> 9d2fab7583 ([Doc] grant/revoke does not support multiple dbs (#27836))
     
 * You must first run SET CATALOG before you run this command. 
 * You can also use db.function to represent a function.
