@@ -449,6 +449,12 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    // ---------------------------------------- Analyze Profile Statement ----------------------------------------------
+
+    public R visitAnalyzeProfileStatement(AnalyzeProfileStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ---------------------------------------- Resource Group Statement -----------------------------------------------
 
     public R visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, C context) {
@@ -536,6 +542,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowProcesslistStatement(ShowProcesslistStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowProfilelistStatement(ShowProfilelistStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

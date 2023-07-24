@@ -43,6 +43,11 @@ void AggregateBlockingSinkOperator::close(RuntimeState* state) {
 }
 
 Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::Cancelled("runtime state is cancelled");
+    }
+
     if (!_aggregator->is_none_group_by_exprs()) {
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
         // If hash map is empty, we don't need to return value

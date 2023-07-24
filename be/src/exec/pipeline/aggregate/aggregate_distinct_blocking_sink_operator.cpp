@@ -34,6 +34,11 @@ void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
 Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) return Status::OK();
 
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::Cancelled("runtime state is cancelled");
+    }
+
     _is_finished = true;
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());

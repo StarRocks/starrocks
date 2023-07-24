@@ -77,6 +77,7 @@ import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
@@ -95,6 +96,7 @@ import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -182,7 +184,8 @@ public class DefaultCoordinator extends Coordinator {
     private boolean thriftServerHighLoad;
 
     private Supplier<RuntimeProfile> topProfileSupplier;
-    private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(0L);
+    private Supplier<ExecPlan> execPlanSupplier;
+    private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis() - 1000);
 
     public static class Factory implements Coordinator.Factory {
 
@@ -407,6 +410,11 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
         this.topProfileSupplier = topProfileSupplier;
+    }
+
+    @Override
+    public void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier) {
+        this.execPlanSupplier = execPlanSupplier;
     }
 
     @Override
@@ -1245,18 +1253,19 @@ public class DefaultCoordinator extends Coordinator {
         // So the profile update strategy looks like this: During a short time interval, each instance will report
         // its execState information. However, when receiving the information reported by the first instance of the
         // current batch, the previous reported state will be synchronized to the profile manager.
-        if (!execState.isFinished()) {
-            long now = System.currentTimeMillis();
-            long lastTime = lastRuntimeProfileUpdateTime.get();
-            if (topProfileSupplier != null &&
-                    connectContext != null &&
-                    connectContext.getSessionVariable().isEnableProfile() &&
-                    now - lastTime > connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 1000L &&
-                    lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
-                RuntimeProfile profile = topProfileSupplier.get();
-                profile.addChild(buildMergedQueryProfile(null));
-                ProfileManager.getInstance().pushProfile(profile);
-            }
+        long now = System.currentTimeMillis();
+        long lastTime = lastRuntimeProfileUpdateTime.get();
+        if (topProfileSupplier != null && execPlanSupplier != null && connectContext != null &&
+                connectContext.getSessionVariable().isEnableProfile() &&
+                // If it's the last done report, avoiding duplicate trigger
+                (!execState.isFinished() || profileDoneSignal.getLeftMarks().size() > 1) &&
+                // Interval * 0.95 * 1000 to allow a certain range of deviation
+                now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
+                lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
+            RuntimeProfile profile = topProfileSupplier.get();
+            ExecPlan execPlan = execPlanSupplier.get();
+            profile.addChild(buildMergedQueryProfile(null));
+            ProfileManager.getInstance().pushProfile(execPlan, profile);
         }
 
         lock();
@@ -1459,9 +1468,15 @@ public class DefaultCoordinator extends Coordinator {
                     .collect(Collectors.toList());
 
             Set<String> backendAddresses = Sets.newHashSet();
+            Set<String> instanceIds = Sets.newHashSet();
+            Set<String> missingInstanceIds = Sets.newHashSet();
             for (RuntimeProfile instanceProfile : instanceProfiles) {
-                // Setup backend address infos
+                // Setup backend meta infos
                 backendAddresses.add(instanceProfile.getInfoString("Address"));
+                instanceIds.add(instanceProfile.getInfoString("InstanceId"));
+                if (CollectionUtils.isEmpty(instanceProfile.getChildList())) {
+                    missingInstanceIds.add(instanceProfile.getInfoString("InstanceId"));
+                }
 
                 // Get query level peak memory usage and cpu cost
                 Counter toBeRemove = instanceProfile.getCounter("QueryCumulativeCpuTime");
@@ -1477,6 +1492,10 @@ public class DefaultCoordinator extends Coordinator {
                 instanceProfile.removeCounter("QueryPeakMemoryUsage");
             }
             newFragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+            newFragmentProfile.addInfoString("InstanceIds", String.join(",", instanceIds));
+            if (!missingInstanceIds.isEmpty()) {
+                newFragmentProfile.addInfoString("MissingInstanceIds", String.join(",", missingInstanceIds));
+            }
             Counter backendNum = newFragmentProfile.addCounter("BackendNum", TUnit.UNIT, null);
             backendNum.setValue(backendAddresses.size());
 
@@ -1485,7 +1504,7 @@ public class DefaultCoordinator extends Coordinator {
             counter.setValue(instanceProfiles.size());
 
             RuntimeProfile mergedInstanceProfile =
-                    RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles, Sets.newHashSet("Address"));
+                    RuntimeProfile.mergeIsomorphicProfiles(instanceProfiles, Sets.newHashSet("Address", "InstanceId"));
             Preconditions.checkState(mergedInstanceProfile != null);
 
             newFragmentProfile.copyAllInfoStringsFrom(mergedInstanceProfile, null);
@@ -1537,10 +1556,13 @@ public class DefaultCoordinator extends Coordinator {
                                 newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
                         executionTotalTime.setValue(executionWallTime);
 
-                        long resultDeliverTime = pipelineProfile.getCounter("OutputFullTime").getValue();
-                        Counter resultDeliverTimer =
-                                newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
-                        resultDeliverTimer.setValue(resultDeliverTime);
+                        Counter outputFullTime = pipelineProfile.getCounter("OutputFullTime");
+                        if (outputFullTime != null) {
+                            long resultDeliverTime = outputFullTime.getValue();
+                            Counter resultDeliverTimer =
+                                    newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
+                            resultDeliverTimer.setValue(resultDeliverTime);
+                        }
 
                         foundResultSink = true;
                     }
