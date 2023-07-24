@@ -90,6 +90,7 @@ import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.transaction.BeginTransactionException;
@@ -264,7 +265,10 @@ public class DeleteMgr implements Writable {
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         stmt.setJobId(jobId);
 
-        String warehouseName = ConnectContext.get().getCurrentWarehouse();
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (ConnectContext.get() != null) {
+            warehouseName = ConnectContext.get().getCurrentWarehouse();
+        }
         Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
 
