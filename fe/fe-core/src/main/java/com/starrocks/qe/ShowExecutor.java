@@ -1423,25 +1423,25 @@ public class ShowExecutor {
         }
 
         if (routineLoadJob.getColumnDescs() != null) {
-            createRoutineLoadSql.append("\nCOLUMNS (");
+            createRoutineLoadSql.append(",\nCOLUMNS (");
             List<ImportColumnDesc> descs = routineLoadJob.getColumnDescs();
             for (int i = 0; i < descs.size(); i++) {
                 ImportColumnDesc desc = descs.get(i);
                 createRoutineLoadSql.append(desc.toString());
                 if (descs.size() == 1 || i == descs.size() - 1) {
-                    createRoutineLoadSql.append(")\n");
+                    createRoutineLoadSql.append(")");
                 } else {
                     createRoutineLoadSql.append(", ");
                 }
             }
         }
         if (routineLoadJob.getPartitions() != null) {
-            createRoutineLoadSql.append("\n")
-                            .append(routineLoadJob.getPartitions().toString()).append("\n");
+            createRoutineLoadSql.append(",\n");
+            createRoutineLoadSql.append(routineLoadJob.getPartitions().toString());
         }
         if (routineLoadJob.getWhereExpr() != null) {
-            createRoutineLoadSql.append("\n")
-                    .append(routineLoadJob.getWhereExpr().toSql()).append("\n");
+            createRoutineLoadSql.append(",\nWHERE ");
+            createRoutineLoadSql.append(routineLoadJob.getWhereExpr().toSql());
         }
 
         createRoutineLoadSql.append("\nPROPERTIES\n").append(routineLoadJob.jobPropertiesToSql());

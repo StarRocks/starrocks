@@ -7,13 +7,23 @@ create table herbavro (
 	advertiser_id int not null,
     advertiser_ad_type int not null,
     advertiser_ad_width int not null,
-    advertiser_currency_type varchar(60) not null
+    advertiser_currency_type varchar(60) not null,
+    event_day DATE
 )
 DUPLICATE KEY(advertiser_id) COMMENT "OLAP" 
+PARTITION BY RANGE (event_day) (
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2030-03-31")
+)
 DISTRIBUTED BY HASH(advertiser_id) BUCKETS 3 
 PROPERTIES ( "replication_num" = "1", "storage_format" = "v2" );
 
-CREATE ROUTINE LOAD test_show_create_routine_load.testherbavro on herbavro COLUMNS TERMINATED BY '\t' 
+CREATE ROUTINE LOAD test_show_create_routine_load.testherbavro on herbavro 
+COLUMNS TERMINATED BY '\t',
+COLUMNS (advertiser_id, advertiser_ad_type, advertiser_ad_width, advertiser_currency_type),
+PARTITIONS (p1, p2, p3),
+WHERE advertiser_id > -10
 PROPERTIES (
 "desired_concurrent_number"="1",
 "max_error_number"="1000",
