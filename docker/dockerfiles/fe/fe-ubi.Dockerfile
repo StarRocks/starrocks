@@ -33,22 +33,24 @@ RUN yum install -y java-1.8.0-openjdk-devel tzdata openssl curl vim ca-certifica
     yum remove -y mysql57-community-release-el7
 ENV JAVA_HOME=/usr/lib/jvm/java-openjdk
 
+RUN touch /.dockerenv
+
 WORKDIR $STARROCKS_ROOT
-
-# Copy all artifacts to the runtime container image
-COPY --from=artifacts /release/fe_artifacts/ $STARROCKS_ROOT/
-
-# Copy fe k8s scripts to the runtime container image
-COPY docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
-
-# Create directory for FE metadata
-RUN touch /.dockerenv && mkdir -p /opt/starrocks/fe/meta
 
 # Run as starrocks user
 ARG USER=starrocks
 ARG GROUP=starrocks
-RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000 \
-             --shell /usr/sbin/nologin $USER  \
-    && chown -R $USER:$GROUP /opt/starrocks
+RUN groupadd --gid 1000 $GROUP && useradd --home-dir /nonexistent --uid 1000 --gid 1000 \
+             --shell /usr/sbin/nologin $USER && \
+    chown -R $USER:$GROUP $STARROCKS_ROOT
+ENV USER $USER
 USER $USER
-ENV USER=$USER
+
+# Copy all artifacts to the runtime container image
+COPY --from=artifacts --chown=starrocks:starrocks /release/fe_artifacts/ $STARROCKS_ROOT/
+
+# Copy fe k8s scripts to the runtime container image
+COPY --chown=starrocks:starrocks docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
+
+# Create directory for FE metadata
+RUN mkdir -p /opt/starrocks/fe/meta
