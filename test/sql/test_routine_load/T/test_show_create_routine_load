@@ -28,3 +28,5 @@ FROM KAFKA (
 );
 
 SHOW CREATE ROUTINE LOAD FOR testherbavro;
+
+STOP ROUTINE LOAD for testherbavro;

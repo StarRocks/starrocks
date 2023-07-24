@@ -11,17 +11,17 @@ create table herbavro (
     advertiser_ad_width int not null,
     advertiser_currency_type varchar(60) not null
 )
-DUPLICATE KEY(advertiser_id) COMMENT "OLAP"
-DISTRIBUTED BY HASH(advertiser_id) BUCKETS 3
+DUPLICATE KEY(advertiser_id) COMMENT "OLAP" 
+DISTRIBUTED BY HASH(advertiser_id) BUCKETS 3 
 PROPERTIES ( "replication_num" = "1", "storage_format" = "v2" );
 -- result:
 -- !result
-CREATE ROUTINE LOAD test_show_create_routine_load.testherbavro on herbavro COLUMNS TERMINATED BY '\t'
+CREATE ROUTINE LOAD test_show_create_routine_load.testherbavro on herbavro COLUMNS TERMINATED BY '\t' 
 PROPERTIES (
 "desired_concurrent_number"="1",
 "max_error_number"="1000",
 "max_batch_interval"="5",
-"format"="avro")
+"format"="avro") 
 FROM KAFKA (
 "confluent.schema.registry.url"="http://172.26.194.240:8081",
 "kafka_broker_list"="172.26.194.239:9092",
@@ -64,4 +64,7 @@ FROM KAFKA
 "kafka_offsets"="OFFSET_BEGINNING",
 "confluent.schema.registry.url"="http://172.26.194.240:8081"
 );
+-- !result
+STOP ROUTINE LOAD for testherbavro;
+-- result:
 -- !result
