@@ -15,6 +15,7 @@
 
 package com.starrocks.load.pipe;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -32,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -79,8 +81,8 @@ public class FileListTableRepo extends FileListRepo {
                     "staged_time datetime, " +
                     "start_load datetime, " +
                     "finish_load datetime" +
-                    " ) PRIMARY KEY(pipe_id, filename, file_version) " +
-                    "DISTRIBUTED BY HASH(pipe_id, filename) BUCKETS 8 " +
+                    " ) PRIMARY KEY(pipe_id, file_name, file_version) " +
+                    "DISTRIBUTED BY HASH(pipe_id, file_name) BUCKETS 8 " +
                     "properties('replication_num' = '%d') ";
 
     private static final String CORRECT_FILE_LIST_REPLICATION_NUM =
@@ -142,7 +144,7 @@ public class FileListTableRepo extends FileListRepo {
 
     @Override
     public void destroy() {
-
+        RepoAccessor.getInstance().deleteByPipe(pipeId.getId());
     }
 
     /**
@@ -207,23 +209,32 @@ public class FileListTableRepo extends FileListRepo {
             return DateUtils.parseDatTimeString(str);
         }
 
-        public static String dateTimeString(LocalDateTime dt) {
+        public static String toSQLString(LocalDateTime dt) {
             if (dt == null) {
-                return "";
+                return "''";
             }
             return Strings.quote(DateUtils.formatDateTimeUnix(dt));
         }
 
+        public static String toSQLString(String str) {
+            if (str == null) {
+                return "NULL";
+            } else {
+                return Strings.quote(str);
+            }
+        }
+
         public String toValueList() {
-            return String.format(FILE_RECORD_VALUES, pipeId,
-                    Strings.quote(fileName),
-                    Strings.quote(fileVersion),
+            return String.format(FILE_RECORD_VALUES,
+                    pipeId,
+                    toSQLString(fileName),
+                    toSQLString(fileVersion),
                     fileSize,
-                    Strings.quote(loadState.toString()),
-                    dateTimeString(lastModified),
-                    dateTimeString(stagedTime),
-                    dateTimeString(startLoadTime),
-                    dateTimeString(finishLoadTime)
+                    toSQLString(loadState.toString()),
+                    toSQLString(lastModified),
+                    toSQLString(stagedTime),
+                    toSQLString(startLoadTime),
+                    toSQLString(finishLoadTime)
             );
         }
 
@@ -310,7 +321,7 @@ public class FileListTableRepo extends FileListRepo {
                 StringBuilder sb = new StringBuilder();
                 sb.append(INSERT_FILES);
                 sb.append(records.stream().map(PipeFileRecord::toValueList).collect(Collectors.joining(",")));
-                RepoExecutor.executeDQL(sb.toString());
+                RepoExecutor.executeDML(sb.toString());
                 LOG.info("addFiles into repo: {}", records);
             } catch (Exception e) {
                 LOG.error("addFiles {} failed", records, e);
@@ -325,7 +336,7 @@ public class FileListTableRepo extends FileListRepo {
             try {
                 String sql = UPDATE_FILES_STATE +
                         records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR "));
-                RepoExecutor.executeDQL(sql);
+                RepoExecutor.executeDML(sql);
                 LOG.info("update files state to {}: {}", state, records);
             } catch (Exception e) {
                 LOG.error("update files state failed: {}", records, e);
@@ -336,7 +347,7 @@ public class FileListTableRepo extends FileListRepo {
         public void deleteByPipe(long pipeId) {
             try {
                 String sql = String.format(DELETE_BY_PIPE, pipeId);
-                RepoExecutor.executeDQL(sql);
+                RepoExecutor.executeDML(sql);
                 LOG.info("delete pipe files {}", pipeId);
             } catch (Exception e) {
                 LOG.error("delete file of pipe {} failed", pipeId, e);
@@ -350,6 +361,27 @@ public class FileListTableRepo extends FileListRepo {
      * Execute SQL
      */
     static class RepoExecutor {
+
+        public static void executeDML(String sql) {
+            try {
+                ConnectContext context = StatisticUtils.buildConnectContext();
+                context.setThreadLocalInfo();
+
+                StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+                Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement shoulod be dml");
+                DmlStmt dmlStmt = (DmlStmt) parsedStmt;
+                ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.HTTP_PROTOCAL);
+                StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+                context.setExecutor(executor);
+                context.setQueryId(UUIDUtil.genUUID());
+                executor.handleDMLStmt(execPlan, dmlStmt);
+            } catch (Exception e) {
+                LOG.error("Repo execute SQL failed {}", sql, e);
+                throw new SemanticException("execute sql failed with exception", e);
+            } finally {
+                ConnectContext.remove();
+            }
+        }
 
         public static List<TResultBatch> executeDQL(String sql) {
             try {

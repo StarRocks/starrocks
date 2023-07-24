@@ -32,5 +32,17 @@ public class FileListRepoTest {
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01')",
                 valueList);
+
+        // contains null value
+        json = "{\"data\": [1, \"a.parquet\", \"\", 1024, \"UNLOADED\", " +
+                "\"\", \"2023-07-01 01:01:01\", " +
+                "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\" " +
+                "]}";
+        record = FileListTableRepo.PipeFileRecord.fromJson(json);
+        valueList = record.toValueList();
+        Assert.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
+                        "'', '2023-07-01 01:01:01', " +
+                        "'2023-07-01 01:01:01', '2023-07-01 01:01:01')",
+                valueList);
     }
 }
