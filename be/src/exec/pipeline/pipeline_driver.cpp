@@ -465,10 +465,25 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 
 void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
                                           const ChunkPtr& chunk) {
+<<<<<<< HEAD
     // a simple spill stragety
+=======
+>>>>>>> 84c68fc993 ([Feature] support spill operator by given memory size (#25822))
     auto& mem_resource_mgr = op->mem_resource_manager();
-    if (state->enable_spill() && mem_resource_mgr.releaseable() &&
-        op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
+
+    if (!state->enable_spill() || !mem_resource_mgr.releaseable()) return;
+
+    // try to release buffer if memusage > mid level threhold
+    _try_to_release_buffer(state, op);
+
+    // force mark operator to low memory mode
+    if (state->spill_revocable_max_bytes() > 0 && op->revocable_mem_bytes() > state->spill_revocable_max_bytes()) {
+        mem_resource_mgr.to_low_memory_mode();
+        return;
+    }
+
+    // convert to low-memory mode if reserve memory failed
+    if (mem_resource_mgr.releaseable() && op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
         int64_t request_reserved = 0;
         if (chunk == nullptr) {
             request_reserved = op->estimated_memory_reserved();

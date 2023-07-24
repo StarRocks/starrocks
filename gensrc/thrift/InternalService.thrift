@@ -117,7 +117,8 @@ enum TPipelineProfileLevel {
 
 enum TSpillMode {
   AUTO,
-  FORCE
+  FORCE,
+  NONE
 }
 
 enum TSpillableOperatorType {
@@ -244,6 +245,7 @@ struct TQueryOptions {
   76: optional i64 spill_operator_min_bytes;
   77: optional i64 spill_operator_max_bytes;
   78: optional i32 spill_encode_level;
+  79: optional i64 spill_revocable_max_bytes;
 
   85: optional TSpillMode spill_mode;
   
