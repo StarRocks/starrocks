@@ -78,6 +78,26 @@ public class ColumnFilterConverter {
         return result;
     }
 
+<<<<<<< HEAD
+=======
+    public static void convertColumnFilterWithoutExpr(ScalarOperator predicate, Map<String,
+            PartitionColumnFilter> result, Table table) {
+        if (predicate.getChildren().size() <= 0) {
+            return;
+        }
+
+        if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {
+            return;
+        }
+
+        if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
+            return;
+        }
+
+        predicate.accept(COLUMN_FILTER_VISITOR, result);
+    }
+
+>>>>>>> e1ee806fa8 ([BugFix] Revert invalid date partition prune (#27780))
     public static void convertColumnFilter(ScalarOperator predicate, Map<String, PartitionColumnFilter> result,
                                            Table table) {
         if (predicate.getChildren().size() <= 0) {
@@ -88,14 +108,11 @@ public class ColumnFilterConverter {
             return;
         }
 
-        // rewrite invalid date cast expr to NullLiteral
-        ScalarOperator rewritePredicate = rewriteInvalidDateCast(predicate);
-
-        if (rewritePredicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
+        if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
             return;
         }
 
-        rewritePredicate.accept(COLUMN_FILTER_VISITOR, result);
+        predicate.accept(COLUMN_FILTER_VISITOR, result);
     }
 
     private static boolean checkColumnRefCanPartition(ScalarOperator right, Table table) {
@@ -180,31 +197,6 @@ public class ColumnFilterConverter {
                 (Objects.equals(exprTimeArg, callTimeArg) ||
                         (TIME_MAP.containsKey(exprTimeArg) && TIME_MAP.containsKey(callTimeArg) &&
                                 TIME_MAP.get(exprTimeArg) > TIME_MAP.get(callTimeArg)));
-    }
-
-    // only rewrite cast invalid date value to null like cast('abc' as date)
-    private static ScalarOperator rewriteInvalidDateCast(ScalarOperator scalarOperator) {
-        ScalarOperator copy = scalarOperator.clone();
-        List<ScalarOperator> children = copy.getChildren();
-
-        for (int i = 1; i < children.size(); i++) {
-            ScalarOperator child = children.get(i);
-            if (child instanceof CastOperator) {
-                CastOperator cast = (CastOperator) child;
-                Type toType = cast.getType();
-                if (cast.getChildren().size() == 1
-                        && cast.getChildren().get(0).isConstantRef()
-                        && toType.isDateType()) {
-                    ConstantOperator value = (ConstantOperator) cast.getChildren().get(0);
-                    try {
-                        value.castTo(toType);
-                    } catch (Exception e) {
-                        children.set(i, ConstantOperator.createNull(toType));
-                    }
-                }
-            }
-        }
-        return copy;
     }
 
     private static class ColumnFilterVisitor
