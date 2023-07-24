@@ -16,7 +16,6 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
