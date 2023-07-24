@@ -208,6 +208,10 @@ inline auto operator<=>(const JsonValue& lhs, const JsonValue& rhs) {
     return lhs.compare(rhs) <=> 0;
 }
 
+inline bool operator==(const JsonValue& lhs, const JsonValue& rhs) {
+    return lhs.compare(rhs) == 0;
+}
+
 } // namespace starrocks
 
 // fmt::format
