@@ -3368,13 +3368,13 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
         Schema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
-        ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
         for (auto& seg_iterator : seg_iterators) {
             if (seg_iterator.get() == nullptr) {
                 continue;
             }
             while (true) {
+                ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
                 base_chunk->reset();
                 Status status = seg_iterator->get_next(base_chunk.get());
                 if (!status.ok()) {
