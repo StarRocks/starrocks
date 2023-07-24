@@ -768,10 +768,7 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     if (ScanOperator* scan = source_scan_operator()) {
         int64_t scan_rows = scan->get_last_scan_rows_num();
         int64_t scan_bytes = scan->get_last_scan_bytes();
-        int64_t table_id = -1;
-        if (OlapScanOperator* olap_scan = dynamic_cast<OlapScanOperator*>(scan)) {
-            table_id = olap_scan->get_scan_table_id();
-        }
+        int64_t table_id = scan->get_scan_table_id();
         query_ctx()->incr_cur_scan_rows_num(scan_rows);
         query_ctx()->incr_cur_scan_bytes(scan_bytes);
         query_ctx()->update_scan_stats(table_id, scan_rows, scan_bytes);

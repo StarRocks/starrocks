@@ -61,7 +61,7 @@ public:
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
-    int64_t get_scan_table_id() const;
+    int64_t get_scan_table_id() const override;
 
 protected:
     void attach_chunk_source(int32_t source_index) override;

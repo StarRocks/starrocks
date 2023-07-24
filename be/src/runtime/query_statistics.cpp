@@ -57,8 +57,9 @@ void QueryStatistics::clear() {
 }
 
 void QueryStatistics::add_stats_item(QueryStatisticsItemPB& stats_item) {
-    LOG(INFO) << "add stats item: " << stats_item.DebugString();
-    this->_stats_items.emplace_back(stats_item);
+    if (stats_item.table_id() > 0) {
+        this->_stats_items.emplace_back(stats_item);
+    }
     this->scan_rows += stats_item.scan_rows();
     this->scan_bytes += stats_item.scan_bytes();
 }

@@ -42,8 +42,12 @@ using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
 class OlapScanContext final : public ContextWithDependency {
 public:
-    explicit OlapScanContext(OlapScanNode* scan_node, int64_t scan_table_id, int32_t dop, bool shared_scan, BalancedChunkBuffer& chunk_buffer)
-            : _scan_node(scan_node), _scan_table_id(scan_table_id), _chunk_buffer(chunk_buffer), _shared_scan(shared_scan) {}
+    explicit OlapScanContext(OlapScanNode* scan_node, int64_t scan_table_id, int32_t dop, bool shared_scan,
+                             BalancedChunkBuffer& chunk_buffer)
+            : _scan_node(scan_node),
+              _scan_table_id(scan_table_id),
+              _chunk_buffer(chunk_buffer),
+              _shared_scan(shared_scan) {}
     ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
@@ -124,9 +128,7 @@ public:
 
     OlapScanContextPtr get_or_create(int32_t driver_sequence);
 
-    void set_scan_table_id(int64_t scan_table_id) {
-        _scan_table_id = scan_table_id;
-    }
+    void set_scan_table_id(int64_t scan_table_id) { _scan_table_id = scan_table_id; }
 
 private:
     OlapScanNode* const _scan_node;

@@ -194,7 +194,6 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     }
     _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
     return query_statistic;
-
 }
 
 std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
