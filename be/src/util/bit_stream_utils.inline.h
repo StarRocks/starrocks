@@ -205,20 +205,6 @@ inline bool BitReader::GetAligned(int num_bytes, T* v) {
     return true;
 }
 
-//inline bool BitReader::GetVlqInt(uint32_t* v) {
-//    *v = 0;
-//    int shift = 0;
-//    [[maybe_unused]] int num_bytes = 0;
-//    uint8_t byte = 0;
-//    do {
-//        if (!GetAligned<uint8_t>(1, &byte)) return false;
-//        *v |= (byte & 0x7F) << shift;
-//        shift += 7;
-//        DCHECK_LE(++num_bytes, MAX_VLQ_BYTE_LEN);
-//    } while ((byte & 0x80) != 0);
-//    return true;
-//}
-
 // Copy the same logic from arrow, we need to return false instead of DCHECK(false) when facing corrupted files
 inline bool BitReader::GetVlqInt(uint32_t* v) {
     uint32_t tmp = 0;
