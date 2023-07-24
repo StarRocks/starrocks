@@ -156,7 +156,7 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
         row_num = chunk_dst->num_rows();
         chunk_src->reset();
     }
-    _accumulator.push(std::move(chunk_dst));
+    RETURN_IF_ERROR(_accumulator.push(std::move(chunk_dst)));
     _accumulator.finalize();
     *chunk = _accumulator.pull();
     return Status::OK();

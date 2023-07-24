@@ -31,12 +31,13 @@
 
 namespace starrocks::pipeline {
 
-void NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
+Status NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
     if (build_chunk == nullptr || build_chunk->is_empty()) {
-        return;
+        return Status::OK();
     }
     _num_rows += build_chunk->num_rows();
-    _accumulator.push(std::move(build_chunk));
+    RETURN_IF_ERROR(_accumulator.push(std::move(build_chunk)));
+    return Status::OK();
 }
 
 Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk,
@@ -46,7 +47,7 @@ Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, C
     }
 
     _num_rows += build_chunk->num_rows();
-    _accumulator.push(std::move(build_chunk));
+    RETURN_IF_ERROR(_accumulator.push(std::move(build_chunk)));
     if (auto chunk = _accumulator.pull()) {
         RETURN_IF_ERROR(_spiller->spill(state, chunk, executor, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
     }
@@ -216,8 +217,8 @@ const std::vector<uint8_t> NLJoinContext::get_shared_build_match_flag() const {
     return _shared_build_match_flag;
 }
 
-void NLJoinContext::append_build_chunk(int32_t sinker_id, const ChunkPtr& chunk) {
-    _input_channel[sinker_id]->add_chunk(chunk);
+Status NLJoinContext::append_build_chunk(int32_t sinker_id, const ChunkPtr& chunk) {
+    return _input_channel[sinker_id]->add_chunk(chunk);
 }
 
 size_t NLJoinContext::channel_num_rows(int32_t sinker_id) {
