@@ -282,7 +282,7 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk_ptr->num_rows();
             _selection.resize(nrows);
-            _not_push_down_predicates.evaluate(chunk_ptr, _selection.data(), 0, nrows);
+            RETURN_IF_ERROR(_not_push_down_predicates.evaluate(chunk_ptr, _selection.data(), 0, nrows));
             chunk_ptr->filter(_selection);
             DCHECK_CHUNK(chunk_ptr);
         }
@@ -406,7 +406,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
                                                                      *_params.global_dictmaps);
-        not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool);
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool));
     }
 
     // Range
