@@ -33,7 +33,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
@@ -139,11 +138,12 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
         @Override
         public OptExpression visit(OptExpression optExpression, Context context) {
-            optExpression = generatePushDownProject(optExpression, context);
+            optExpression = generatePushDownProject(optExpression, EMPTY_COLUMN_SET, context);
             return visitChildren(optExpression, new Context());
         }
 
-        private OptExpression generatePushDownProject(OptExpression optExpression, Context context) {
+        private OptExpression generatePushDownProject(OptExpression optExpression, ColumnRefSet subfieldRefs,
+                                                      Context context) {
             if (context.pushDownExprRefs.isEmpty()) {
                 return optExpression;
             }
@@ -152,6 +152,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
             ColumnRefSet output = optExpression.getOutputColumns();
             output.getStream().map(o -> factory.getColumnRef(o)).forEach(k -> newProjectMap.put(k, k));
+            subfieldRefs.getStream().map(o -> factory.getColumnRef(o)).forEach(k -> newProjectMap.put(k, k));
             newProjectMap.putAll(context.pushDownExprRefs);
 
             return OptExpression.create(new LogicalProjectOperator(newProjectMap, optExpression.getOp().getLimit()),
@@ -253,20 +254,19 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
             ColumnRefSet leftOutput = optExpression.inputAt(0).getOutputColumns();
             ColumnRefSet rightOutput = optExpression.inputAt(1).getOutputColumns();
+            ColumnRefSet childSubfieldOutputs = new ColumnRefSet();
 
-            boolean isLeftOuter = join.getJoinType().isLeftOuterJoin() || join.getJoinType().isFullOuterJoin();
-            boolean isRightOuter = join.getJoinType().isRightOuterJoin() || join.getJoinType().isFullOuterJoin();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.pushDownExprRefs.entrySet()) {
                 ColumnRefOperator index = entry.getKey();
                 ScalarOperator subfieldExpr = entry.getValue();
                 ColumnRefSet subfieldUseColumns = context.pushDownExprUseColumns.get(subfieldExpr);
 
-                boolean isNullFn = subfieldExpr instanceof IsNullPredicateOperator;
-
-                if (leftOutput.isIntersect(subfieldUseColumns) && !(isRightOuter && isNullFn)) {
+                if (leftOutput.isIntersect(subfieldUseColumns)) {
                     leftContext.put(index, subfieldExpr);
-                } else if (rightOutput.isIntersect(subfieldUseColumns) && !(isLeftOuter && isNullFn)) {
+                    childSubfieldOutputs.union(index);
+                } else if (rightOutput.isIntersect(subfieldUseColumns)) {
                     rightContext.put(index, subfieldExpr);
+                    childSubfieldOutputs.union(index);
                 } else {
                     localContext.put(index, subfieldExpr);
                 }
@@ -279,7 +279,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 visitChild(optExpression, 1, rightContext);
             }
             if (!localContext.pushDownExprRefs.isEmpty()) {
-                optExpression = generatePushDownProject(optExpression, localContext);
+                optExpression = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
             }
             return optExpression;
         }
@@ -354,6 +354,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
             Context localContext = new Context();
             Context childContext = new Context();
+            ColumnRefSet childSubfieldOutputs = new ColumnRefSet();
 
             for (Map.Entry<ScalarOperator, ColumnRefSet> entry : context.pushDownExprUseColumns.entrySet()) {
                 ScalarOperator expr = entry.getKey();
@@ -363,11 +364,12 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                     localContext.put(context.pushDownExprRefsIndex.get(expr), expr);
                 } else {
                     childContext.put(context.pushDownExprRefsIndex.get(expr), expr);
+                    childSubfieldOutputs.union(context.pushDownExprRefsIndex.get(expr));
                 }
             }
 
             if (!localContext.pushDownExprRefs.isEmpty()) {
-                optExpression = generatePushDownProject(optExpression, localContext);
+                optExpression = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
             }
 
             Optional<ScalarOperator> predicate = pushDownPredicate(optExpression, context, windowUseColumns);
@@ -495,14 +497,6 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 return subfieldExprRefs.get(operator);
             }
             return super.visitSubfield(operator, context);
-        }
-
-        @Override
-        public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-            if (subfieldExprRefs.containsKey(predicate)) {
-                return subfieldExprRefs.get(predicate);
-            }
-            return super.visitIsNullPredicate(predicate, context);
         }
     }
 

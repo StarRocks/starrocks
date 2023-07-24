@@ -189,11 +189,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select 1 from pc0 where map1 is null";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "[/map1/OFFSET]");
-
-        sql = "select 1 from sc0 where st1 is null";
-        plan = getVerboseExplain(sql);
-        System.out.println(plan);
-        assertContains(plan, "[/st1/s1]");
     }
 
     @Test
