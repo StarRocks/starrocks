@@ -92,7 +92,6 @@ import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.pipe.FileListTableRepo;
 import com.starrocks.load.pipe.Pipe;
-import com.starrocks.load.pipe.PipeFile;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -272,13 +271,13 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -546,25 +545,34 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         FileListTableRepo.RepoAccessor repo = FileListTableRepo.RepoAccessor.getInstance();
-        List<PipeFile> files = repo.listAllFiles();
-        String now = LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX);
-        for (PipeFile fileRecord : files) {
+        List<FileListTableRepo.PipeFileRecord> files = repo.listAllFiles();
+        for (FileListTableRepo.PipeFileRecord record : files) {
             TListPipeFilesInfo file = new TListPipeFilesInfo();
-            file.setPipe_id(10);
-            file.setDatabase_name("fake");
-            file.setPipe_name("fake");
+            Optional<Pipe> mayPipe = pm.mayGetPipe(record.pipeId);
+            if (!mayPipe.isPresent()) {
+                LOG.warn("Pipe not found with id {}", record.pipeId);
+            }
 
-            file.setFile_name(fileRecord.getPath());
-            file.setFile_version("UNKNOWN");
-            file.setFile_rows(0L);
-            file.setFile_size(fileRecord.getSize());
-            file.setLast_modified(now);
+            file.setPipe_id(record.pipeId);
+            file.setDatabase_name(
+                    mayPipe.flatMap(p ->
+                                    GlobalStateMgr.getCurrentState().mayGetDb(p.getDbAndName().first)
+                                            .map(Database::getOriginName))
+                            .orElse(""));
+            file.setPipe_name(mayPipe.map(Pipe::getName).orElse(""));
 
-            file.setState(fileRecord.getState().toString());
-            file.setStaged_time(now);
-            file.setStart_load(now);
-            file.setFinish_load(now);
+            file.setFile_name(record.fileName);
+            file.setFile_version(record.fileVersion);
+            file.setFile_rows(0L); // TODO(murphy)
+            file.setFile_size(record.fileSize);
+            file.setLast_modified(DateUtils.formatDateTimeUnix(record.lastModified));
 
+            file.setState(record.loadState.toString());
+            file.setStaged_time(DateUtils.formatDateTimeUnix(record.stagedTime));
+            file.setStart_load(DateUtils.formatDateTimeUnix(record.startLoadTime));
+            file.setFinish_load(DateUtils.formatDateTimeUnix(record.finishLoadTime));
+
+            // TODO(murphy
             file.setFirst_error_msg("");
             file.setError_count(0L);
             file.setError_line(0L);

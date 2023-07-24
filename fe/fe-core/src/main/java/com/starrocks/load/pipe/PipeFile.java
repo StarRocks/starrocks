@@ -15,10 +15,6 @@
 
 package com.starrocks.load.pipe;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
-
 import java.util.Objects;
 
 public class PipeFile {
@@ -46,24 +42,6 @@ public class PipeFile {
 
     public FileListRepo.PipeFileState getState() {
         return state;
-    }
-
-    /**
-     * The json should come from the HTTP/JSON protocol, which looks like {"data": [col1, col2, col3]}
-     */
-    public static PipeFile fromJson(String json) {
-        try {
-            JsonElement object = JsonParser.parseString(json);
-            JsonArray dataArray = object.getAsJsonObject().get("data").getAsJsonArray();
-
-            PipeFile file = new PipeFile();
-            file.path = dataArray.get(1).getAsString();
-            file.size = dataArray.get(3).getAsLong();
-            file.state = FileListRepo.PipeFileState.valueOf(dataArray.get(4).getAsString());
-            return file;
-        } catch (Exception e) {
-            throw new RuntimeException("convert json to PipeFile failed due to malformed json data: " + json, e);
-        }
     }
 
     @Override

@@ -218,6 +218,11 @@ public class PipeManager {
         return pipeMap;
     }
 
+    public Optional<Pipe> mayGetPipe(long id) {
+        // TODO: optimize performance
+        return pipeMap.values().stream().filter(x -> x.getId() == id).findAny();
+    }
+
     public Optional<Pipe> mayGetPipe(PipeName name) {
         try {
             lock.readLock().lock();

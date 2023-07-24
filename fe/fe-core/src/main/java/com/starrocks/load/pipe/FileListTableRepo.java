@@ -15,10 +15,14 @@
 
 package com.starrocks.load.pipe;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -38,11 +42,13 @@ import com.starrocks.thrift.TResultSinkType;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -107,6 +113,47 @@ public class FileListTableRepo extends FileListRepo {
     }
 
     /**
+     * Record stored in the pipe_files table
+     */
+    public static class PipeFileRecord {
+        public long pipeId;
+        public String fileName;
+        public String fileVersion;
+        public long fileSize;
+
+        public PipeFileState loadState;
+        public LocalDateTime lastModified;
+        public LocalDateTime stagedTime;
+        public LocalDateTime startLoadTime;
+        public LocalDateTime finishLoadTime;
+
+        /**
+         * The json should come from the HTTP/JSON protocol, which looks like {"data": [col1, col2, col3]}
+         */
+        public static PipeFileRecord fromJson(String json) {
+            try {
+                JsonElement object = JsonParser.parseString(json);
+                JsonArray dataArray = object.getAsJsonObject().get("data").getAsJsonArray();
+
+                PipeFileRecord file = new PipeFileRecord();
+                file.pipeId = dataArray.get(0).getAsLong();
+                file.fileName = dataArray.get(1).getAsString();
+                file.fileVersion = dataArray.get(2).getAsString();
+                file.fileSize = dataArray.get(3).getAsLong();
+                file.loadState = EnumUtils.getEnumIgnoreCase(PipeFileState.class, dataArray.get(4).getAsString());
+                file.lastModified = DateUtils.parseDatTimeString(dataArray.get(5).getAsString());
+                file.stagedTime = DateUtils.parseDatTimeString(dataArray.get(6).getAsString());
+                file.startLoadTime = DateUtils.parseDatTimeString(dataArray.get(7).getAsString());
+                file.finishLoadTime = DateUtils.parseDatTimeString(dataArray.get(8).getAsString());
+                return file;
+            } catch (Exception e) {
+                throw new RuntimeException("convert json to PipeFile failed due to malformed json data: " + json, e);
+            }
+        }
+
+    }
+
+    /**
      * Query the repo
      */
     public static class RepoAccessor {
@@ -117,17 +164,17 @@ public class FileListTableRepo extends FileListRepo {
             return INSTANCE;
         }
 
-        public List<PipeFile> listAllFiles() {
+        public List<PipeFileRecord> listAllFiles() {
             ConnectContext connect = StatisticUtils.buildConnectContext();
             connect.setThreadLocalInfo();
-            List<PipeFile> res = new ArrayList<>();
+            List<PipeFileRecord> res = new ArrayList<>();
             try {
                 List<TResultBatch> batch = RepoExecutor.executeDQL(connect, SELECT_FILES);
                 for (TResultBatch rows : ListUtils.emptyIfNull(batch)) {
                     for (ByteBuffer buffer : rows.getRows()) {
                         ByteBuf copied = Unpooled.copiedBuffer(buffer);
                         String jsonString = copied.toString(Charset.defaultCharset());
-                        res.add(PipeFile.fromJson(jsonString));
+                        res.add(PipeFileRecord.fromJson(jsonString));
                     }
                 }
             } catch (Exception e) {

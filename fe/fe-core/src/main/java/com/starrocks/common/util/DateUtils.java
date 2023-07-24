@@ -87,6 +87,17 @@ public class DateUtils {
         DATETIME_FORMATTERS[1][1][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s.%f", false);
     }
 
+    public static String formatDateTimeUnix(LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return dateTime.format(DATE_TIME_FORMATTER_UNIX);
+    }
+
+    public static LocalDateTime parseUnixDateTime(String str) {
+        return LocalDateTime.parse(str, DATE_TIME_FORMATTER_UNIX);
+    }
+
     public static LocalDateTime parseStrictDateTime(String str) {
         if (str == null || str.length() < 5) {
             throw new IllegalArgumentException("Invalid datetime string: " + str);
