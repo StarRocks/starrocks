@@ -36,7 +36,7 @@
 namespace starrocks::pipeline {
 
 Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
-    HashJoinBuildOperator::prepare(state);
+    RETURN_IF_ERROR(HashJoinBuildOperator::prepare(state));
     _join_builder->spiller()->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     RETURN_IF_ERROR(_join_builder->spiller()->prepare(state));

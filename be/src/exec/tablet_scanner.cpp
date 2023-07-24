@@ -160,7 +160,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     }
 
     GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
-    not_pushdown_predicate_rewriter.rewrite_predicate(&_pool);
+    RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool));
 
     // Range
     for (auto key_range : *key_ranges) {
@@ -277,7 +277,7 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            _predicates.evaluate(chunk, _selection.data(), 0, nrows);
+            RETURN_IF_ERROR(_predicates.evaluate(chunk, _selection.data(), 0, nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }
