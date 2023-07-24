@@ -17,10 +17,42 @@ package com.starrocks.load;
 
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.ImportWhereStmt;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class RoutineLoadDescTest {
+    @Test
+    public void testWhereStmt() throws Exception {
+        {
+            RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement("CREATE ROUTINE LOAD job ON tbl " +
+                    "COLUMNS TERMINATED BY ';', " +
+                    "ROWS TERMINATED BY '\n', " +
+                    "COLUMNS(`a`, `b`, `c`=1), " +
+                    "TEMPORARY PARTITION(`p1`, `p2`), " +
+                    "WHERE a = 1 " +
+                    "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                    "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+            ImportWhereStmt whereStmt = originLoad.getWherePredicate();
+            System.out.println(whereStmt.isContainSubquery());
+            System.out.println("yzr1");
+        }
+
+        {
+            RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement("CREATE ROUTINE LOAD job ON tbl " +
+                    "COLUMNS TERMINATED BY ';', " +
+                    "ROWS TERMINATED BY '\n', " +
+                    "COLUMNS(`a`, `b`, `c`=1), " +
+                    "TEMPORARY PARTITION(`p1`, `p2`), " +
+                    "WHERE a in (SELECT 1) " +
+                    "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+                    "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", 0), null);
+            ImportWhereStmt whereStmt = originLoad.getWherePredicate();
+            System.out.println(whereStmt.isContainSubquery());
+            System.out.println("yzr2");
+        }
+    }
+
     @Test
     public void testToSql() throws Exception {
         RoutineLoadDesc originLoad = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement("CREATE ROUTINE LOAD job ON tbl " +
