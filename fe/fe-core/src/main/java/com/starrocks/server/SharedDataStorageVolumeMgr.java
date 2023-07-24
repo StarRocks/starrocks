@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
+
     @Override
     public StorageVolume getStorageVolumeByName(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
@@ -181,7 +182,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                     if (Config.enable_load_volume_from_conf) {
                         LOG.error("Failed to get builtin storage volume, svName: {}, dbId: {}, current stack trace: {}",
                                 svName, dbId, LogUtil.getCurrentStackTrace());
-                        throw new DdlException("Internal error");
+                        throw new DdlException(String.format("Failed to get builtin storage volume, svName: %s, dbId: %d",
+                                svName, dbId));
                     } else {
                         throw new DdlException("Cannot find a suitable storage volume. " +
                                 "Try setting 'enable_load_volume_from_conf' to true " +
