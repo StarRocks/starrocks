@@ -7,20 +7,6 @@ When you create a table, you can specify the data distribution method by configu
 > - Since v3.1, you do not need to specify the bucketing key when creating a table or adding partitions. StarRocks supports random bucketing, which randomly distributes data across all buckets. For more information, see [Random bucketing](#random-bucketing-since-v31).
 > - Since v2.5.7, you no longer need to manually set the number of buckets when you create a table or add a partition. StarRocks can automatically set the number of buckets (BUCKETS). However, if the performance does not meet your expectations after StarRocks automatically sets the number of buckets and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
 
-## Basic concepts
-
-Before you dive into the details of designing and managing data distribution, familiarize yourself with the following concepts:
-
-- Partitioning
-
-  Partitioning divides a table into multiple segments called partitions based on the partitioning column you specified. You can set a storage strategy for partitions, including the number of replicas, strategy of storing hot or cold data, and storage medium. StarRocks allows you to use multiple storage mediums within a cluster. For example, you can store the latest data on solid-state drives (SSD) to improve query performance, and historical data on SATA hard drives to reduce storage costs.
-
-- Bucketing
-
-  Bucketing divides a partition into multiple more manageable parts called tablets, which is the smallest unit of storage that you can use and allocate. StarRocks uses a hash algorithm to bucket data. Data with the same hash value of the bucketing column is distributed to the same tablet. StarRocks creates multiple replicas (three by default) for each tablet to prevent data loss. These replicas are managed by a separate local storage engine.
-  
-  **You must specify the bucketing column when you create a table.** Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](#determine-the-number-of-buckets).
-
 ## Distribution methods
 
 ### Distribution methods in general
@@ -181,7 +167,7 @@ Partitioning divides a table into multiple segments called partitions based on t
 
 Bucketing divides a partition into multiple more manageable parts called buckets or tablets, which is the smallest unit of storage that you can use and allocate. StarRocks uses a hash algorithm to bucket data. Data with the same hash value of the bucketing column is distributed to the same tablet. StarRocks creates multiple replicas (three by default) for each tablet to prevent data loss. These replicas are managed by a separate local storage engine.
 
-Since v3.1, StarRocks supports random bucketing, which means that you no longer need to set a bucketing key during table creation or when adding new partitions. Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [Design bucketing rules](#).
+Since v3.1, StarRocks supports random bucketing, which means that you no longer need to set a bucketing key during table creation or when adding new partitions. Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [Design bucketing rules](#design-bucketing-rules).
 
 ## Create and manage partitions
 
@@ -193,7 +179,7 @@ Since v3.1, StarRocks supports random bucketing, which means that you no longer 
 >
 > Since v3.1,  StarRocks's shared-data mode supports the time function expression and does not support the column expression.
 
-Since v3.0, StarRocks supports [expression partitioning](./) (previously known as automatic partitioning) which is more flexible and user-friendly. This partitioning method is suitable for most scenarios including querying and managing data based on continuous date ranges or emurated values.
+Since v3.0, StarRocks supports [expression partitioning](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and user-friendly. This partitioning method is suitable for most scenarios including querying and managing data based on continuous date ranges or emurated values.
 
 You only need to specify a partition expression (either a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions during data loading. You no longer need to manually create numerous partitions in advance, nor configure dynamic partition properties.
 
@@ -209,7 +195,7 @@ StarRocks supports [dynamic partitioning](./dynamic_partitioning.md), which can 
 
 **Manually create partitions**
 
-You can manually create range partitions one by one by using the LESS THAN clause to specify the upper bound of each partition. For more information, see [CREATE TABLE](../).
+You can manually create range partitions one by one by using the LESS THAN clause to specify the upper bound of each partition. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
 ```SQL
 PARTITION BY RANGE (k1, k2, ...)
@@ -220,7 +206,7 @@ PARTITION BY RANGE (k1, k2, ...)
 )
 ```
 
-You can manually create range partitions one by one by specifying the upper and lower bounds of each partition. The upper bound of each partition is an open interval while the lower bound is a closed interval. For more information, see [CREATE TABLE](../../).
+You can manually create range partitions one by one by specifying the upper and lower bounds of each partition. The upper bound of each partition is an open interval while the lower bound is a closed interval. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
 ```SQL
 PARTITION BY RANGE (k1, k2, k3, ...)
@@ -231,9 +217,9 @@ PARTITION BY RANGE (k1, k2, k3, ...)
 )
 ```
 
-**Create multiple partitions at a time (since v1.16)**
+**Create multiple partitions at a time**
 
-Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see [CREATE TABLE](../../).
+Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
 ```SQL
 PARTITION BY RANGE (k1, k2, ...) 
@@ -409,7 +395,7 @@ RECOVER PARTITION p1 FROM site_access;
 
 ## Design bucketing rules
 
-#### Hash bucketing
+### Hash bucketing
 
 Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and [the number of buckets](#determine-the-number-of-buckets).
 
@@ -480,7 +466,7 @@ AGGREGATE KEY(site_id, city_code, user_name)
 DISTRIBUTED BY HASH(site_id,city_code);
 ```
 
-#### Random bucketing (since v3.1)
+### Random bucketing (since v3.1)
 
 For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. Additionally, you do not need to set bucketing columns at the table creation, which simplifies the CREATE TABLE statement. It is suitable for scenarios with relatively small data sizes and requirement for high query performance.
 
