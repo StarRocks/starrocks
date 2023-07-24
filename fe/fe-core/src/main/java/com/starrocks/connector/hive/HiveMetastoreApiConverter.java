@@ -333,14 +333,19 @@ public class HiveMetastoreApiConverter {
         // https://issues.apache.org/jira/browse/HIVE-16922
         String collectionDelim;
         if (serdeParams.containsKey("colelction.delim")) {
-            collectionDelim = serdeParams.get("colelction.delim");
+            collectionDelim = serdeParams.getOrDefault("colelction.delim", "");
         } else {
-            collectionDelim = serdeParams.getOrDefault("collection.delim", DEFAULT_COLLECTION_DELIM);
+            collectionDelim = serdeParams.getOrDefault("collection.delim", "");
         }
 
-        String fieldDelim = serdeParams.getOrDefault("field.delim", DEFAULT_FIELD_DELIM);
-        String lineDelim = serdeParams.getOrDefault("line.delim", DEFAULT_LINE_DELIM);
-        String mapkeyDelim = serdeParams.getOrDefault("mapkey.delim", DEFAULT_MAPKEY_DELIM);
+        String fieldDelim = serdeParams.getOrDefault("field.delim", "");
+        if (fieldDelim.isEmpty()) {
+            // Support for hive org.apache.hadoop.hive.serde2.OpenCSVSerde
+            // https://cwiki.apache.org/confluence/display/hive/csv+serde
+            fieldDelim = serdeParams.getOrDefault("separatorChar", "");
+        }
+        String lineDelim = serdeParams.getOrDefault("line.delim", "");
+        String mapkeyDelim = serdeParams.getOrDefault("mapkey.delim", "");
 
         // check is empty
         fieldDelim = fieldDelim.isEmpty() ? DEFAULT_FIELD_DELIM : fieldDelim;
