@@ -31,7 +31,7 @@ mysql > show create database zj_test;
 +----------+---------------------------+
 ```
 
-## 参考文档
+## 相关参考
 
 - [CREATE DATABASE](../data-definition/CREATE%20DATABASE.md)
 - [SHOW DATABASES](SHOW%20DATABASES.md)

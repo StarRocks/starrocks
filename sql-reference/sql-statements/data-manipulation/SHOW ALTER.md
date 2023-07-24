@@ -37,7 +37,7 @@ SHOW ALTER TABLE {COLUMN | ROLLUP} [FROM db_name]
     SHOW ALTER TABLE ROLLUP FROM example_db;
     ````
 
-## 参考文档
+## 相关参考
 
 - [CREATE TABLE](CREATE%20TABLE.md)
 - [ALTER TABLE](ALTER%20TABLE.md)

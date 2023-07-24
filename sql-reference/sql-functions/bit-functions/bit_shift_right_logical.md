@@ -67,7 +67,7 @@ SELECT bit_shift_right_logical(cast('-2' AS INTEGER(32)), 1);
 +-----------------------------------------------+
 ```
 
-## 参考文档
+## 相关参考
 
 - [bit_shift_left](bit_shift_left.md)
 - [bit_shift_right](bit_shift_right.md)

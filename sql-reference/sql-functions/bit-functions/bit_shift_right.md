@@ -65,7 +65,7 @@ SELECT bit_shift_right(-2, 1);
 +------------------------+
 ```
 
-## 参考文档
+## 相关参考
 
 [bit_shift_left](bit_shift_left.md)
 
