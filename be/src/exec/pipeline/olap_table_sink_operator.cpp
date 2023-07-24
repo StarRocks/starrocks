@@ -23,7 +23,7 @@
 
 namespace starrocks::pipeline {
 Status OlapTableSinkOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    RETURN_IF_ERROR(Operator::prepare(state));
 
     state->set_per_fragment_instance_idx(_sender_id);
 
