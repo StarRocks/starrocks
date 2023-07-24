@@ -139,7 +139,7 @@ private:
                                  std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
 
     // row group meta
-    std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
+    const tparquet::RowGroup* _row_group_metadata = nullptr;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
