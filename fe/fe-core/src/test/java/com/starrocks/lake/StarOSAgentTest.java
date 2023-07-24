@@ -654,4 +654,23 @@ public class StarOSAgentTest {
                 "Failed to get file store, error: INVALID_ARGUMENT:mocked exception",
                 () -> starosAgent.getFileStore("test-fskey"));
     }
+
+    @Test
+    public void testListDefaultWorkerGroupIpPort() throws StarClientException, DdlException, UserException {
+        new MockUp<StarClient>() {
+            @Mock
+            public List<WorkerGroupDetailInfo> listWorkerGroup(String serviceId, List<Long> groupIds, boolean include) {
+                long workerId0 = 10000L;
+                WorkerInfo worker0 = newWorkerInfo(workerId0, "127.0.0.1:8090", 9050, 9060, 8040, 8060);
+                long workerId1 = 10001L;
+                WorkerInfo worker1 = newWorkerInfo(workerId1, "127.0.0.2:8091", 9051, 9061, 8041, 8061);
+                WorkerGroupDetailInfo group = WorkerGroupDetailInfo.newBuilder().addWorkersInfo(worker0)
+                        .addWorkersInfo(worker1).build();
+                return Lists.newArrayList(group);
+            }
+        };
+        List<String> addresses = starosAgent.listDefaultWorkerGroupIpPort();
+        Assert.assertEquals("127.0.0.1:8090", addresses.get(0));
+        Assert.assertEquals("127.0.0.2:8091", addresses.get(1));
+    }
 }
