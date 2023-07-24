@@ -24,6 +24,7 @@
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
+#include "simd/batch_run_counter.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_or_predicate.h"
@@ -527,22 +528,43 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
         RETURN_IF_ERROR(column_readers[slot_id]->get_dict_values(dict_value_column.get()));
         // append a null value to check if null is ok or not.
         dict_value_column->append_default();
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs_by_slot[slot_id], dict_value_chunk.get()));
-        dict_value_chunk->check_or_die();
+        Filter filter(dict_value_column->size(), 1);
+        int dict_values_after_filter = 0;
+        ASSIGN_OR_RETURN(
+                dict_values_after_filter,
+                ExecNode::eval_conjuncts_into_filter(_conjunct_ctxs_by_slot[slot_id], dict_value_chunk.get(), &filter));
 
         // dict column is empty after conjunct eval, file group can be skipped
-        if (dict_value_chunk->num_rows() == 0) {
+        if (dict_values_after_filter == 0) {
             *is_group_filtered = true;
             return Status::OK();
         }
 
         // ---------
         // get dict codes according to dict values.
-        auto* dict_nullable_column = down_cast<NullableColumn*>(dict_value_column.get());
-        auto* dict_value_binary_column = down_cast<BinaryColumn*>(dict_nullable_column->data_column().get());
         std::vector<int32_t> dict_codes;
-        RETURN_IF_ERROR(column_readers[slot_id]->get_dict_codes(dict_value_binary_column->get_data(),
-                                                                *dict_nullable_column, &dict_codes));
+        BatchRunCounter<32> batch_run(filter.data(), 0, filter.size() - 1);
+        BatchCount batch = batch_run.next_batch();
+        int index = 0;
+        while (batch.length > 0) {
+            if (batch.AllSet()) {
+                for (int32_t i = 0; i < batch.length; i++) {
+                    dict_codes.emplace_back(index + i);
+                }
+            } else if (batch.NoneSet()) {
+                // do nothing
+            } else {
+                for (int32_t i = 0; i < batch.length; i++) {
+                    if (filter[index + i]) {
+                        dict_codes.emplace_back(index + i);
+                    }
+                }
+            }
+            index += batch.length;
+            batch = batch_run.next_batch();
+        }
+
+        bool null_is_ok = filter[filter.size() - 1] == 1;
 
         // eq predicate is faster than in predicate
         // TODO: improve not eq and not in
@@ -561,8 +583,8 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
                     obj_pool->add(new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes));
         }
 
-        // check if NULL works or not.
-        if (dict_value_column->has_null()) {
+        // deal with if NULL works or not.
+        if (null_is_ok) {
             ColumnPredicate* old = _predicates[slot_id];
             // new = old or (is_null);
             ColumnPredicate* result = nullptr;
