@@ -39,9 +39,9 @@ GRANT
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
-# Global udf 相关
+# Global UDF 相关
 
-GRANT { 
+GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { GLOBAL FUNCTION <function_name> [, < function_name >,...]    
        | ALL GLOBAL FUNCTIONS }
@@ -75,8 +75,8 @@ GRANT
 GRANT  
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
-       | ALL TABLES IN 
-           { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
+       | ALL TABLES } IN 
+           { DATABASE <database_name> | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 *注意：需要执行 set catalog 之后才能使用。
@@ -88,34 +88,34 @@ GRANT <priv> ON TABLE db.tbl TO {ROLE <rolename> | USER <username>}
 GRANT  
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
-       ｜ ALL VIEWS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+       ｜ ALL VIEWS } IN 
+           { DATABASE <database_name> | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 *注意：需要执行 set catalog 之后才能使用。
-注意：view 还可以用db.view的方式来进行表示。
+注意：view 还可以用 db.view 的方式来进行表示。
 GRANT <priv> ON VIEW db.view TO {ROLE <rolename> | USER <username>}
 
 # Materialized view 相关
 
-GRANT { 
+GRANT
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
-       ｜ ALL MATERIALIZED VIEWS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+       ｜ ALL MATERIALIZED VIEWS } IN 
+           { DATABASE <database_name> | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * 注意：需要执行 set catalog 之后才能使用。 
-mv 还可以用db.mv的方式来进行表示。
+mv 还可以用 db.mv 的方式来进行表示。
 GRANT <priv> ON MATERIALIZED_VIEW db.mv TO {ROLE <rolename> | USER <username>}
 
 # Function 相关
 
-GRANT { 
+GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
-       ｜ ALL FUNCTIONS IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+       ｜ ALL FUNCTIONS } IN 
+           { DATABASE <database_name> | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 *注意：需要执行 set catalog 之后才能使用。
