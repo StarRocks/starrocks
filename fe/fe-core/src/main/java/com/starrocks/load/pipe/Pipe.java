@@ -404,6 +404,10 @@ public class Pipe implements GsonPostProcessable {
         }
     }
 
+    public void destroy() {
+        getPipeSource().getFileListRepo().destroy();
+    }
+
     public boolean isRunnable() {
         return this.state != null &&
                 this.state.equals(State.RUNNING);

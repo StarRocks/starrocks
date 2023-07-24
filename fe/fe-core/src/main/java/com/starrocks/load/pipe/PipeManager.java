@@ -80,6 +80,7 @@ public class PipeManager {
     }
 
     public void dropPipe(DropPipeStmt stmt) throws DdlException {
+        Pipe pipe = null;
         try {
             lock.writeLock().lock();
             Pair<Long, String> dbAndName = resolvePipeNameUnlock(stmt.getPipeName());
@@ -90,13 +91,16 @@ public class PipeManager {
                 }
                 ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PIPE, stmt.getPipeName());
             }
-            Pipe pipe = pipeMap.get(nameToId.get(dbAndName));
+            pipe = pipeMap.get(nameToId.get(dbAndName));
 
             pipe.pause();
+            pipe.destroy();
             removePipe(pipe);
 
             // persistence
             repo.deletePipe(pipe);
+        } catch (Throwable e) {
+            LOG.error("drop pipe {} failed", pipe, e);
         } finally {
             lock.writeLock().unlock();
         }
@@ -115,10 +119,13 @@ public class PipeManager {
                 Pipe pipe = pipeMap.get(id);
                 if (pipe != null) {
                     pipe.pause();
+                    pipe.destroy();
                     pipeMap.remove(id);
                 }
             }
             LOG.info("drop pipes in database " + dbName + ": " + removed);
+        } catch (Throwable e) {
+            LOG.error("drop pipes in database {}/{} failed", dbName, dbId, e);
         } finally {
             lock.writeLock().unlock();
         }

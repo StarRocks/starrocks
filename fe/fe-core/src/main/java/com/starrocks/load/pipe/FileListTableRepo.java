@@ -20,6 +20,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DateUtils;
@@ -43,14 +44,17 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Persist the file-list in an OLAP table
@@ -67,7 +71,7 @@ public class FileListTableRepo extends FileListRepo {
             // TODO: add md5/etag into the file list
             "CREATE TABLE IF NOT EXISTS %s (" +
                     "pipe_id bigint, " +
-                    "filename string, " +
+                    "file_name string, " +
                     "file_version string, " +
                     "file_size bigint, " +
                     "state string, " +
@@ -83,28 +87,57 @@ public class FileListTableRepo extends FileListRepo {
             "ALTER TABLE %s SET ('replication_num'='3')";
 
     private static final String SELECT_FILES =
-            "SELECT pipe_id, filename, file_version, file_size, state, last_modified, staged_time," +
+            "SELECT pipe_id, file_name, file_version, file_size, state, last_modified, staged_time," +
                     " start_load, finish_load" +
                     " FROM " + FILE_LIST_FULL_NAME;
 
+    private static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE pipe_id = %d AND state = %s";
+
+    private static final String UPDATE_FILES_STATE =
+            "UPDATE " + FILE_LIST_FULL_NAME +
+                    " SET state = %s " +
+                    " WHERE %s";
+
+    private static final String FILE_LOCATOR = "(pipe_id = %s AND file_name = %s AND file_version = %s)";
+
+    private static final String INSERT_FILES =
+            "INSERT INTO " + FILE_LIST_FULL_NAME + " VALUES ";
+
+    private static final String FILE_RECORD_VALUES = "(%d, %s, %s, %d, %s, %s, %s, %s, %s)";
+
+    private static final String DELETE_BY_PIPE = "DELETE FROM " + FILE_LIST_FULL_NAME + " WHERE pipe_id = %d";
+
     @Override
     public List<PipeFile> listUnloadedFiles() {
-        return null;
+        List<PipeFileRecord> records = RepoAccessor.getInstance().listUnloadedFiles(pipeId.getId());
+        return records.stream().map(PipeFileRecord::toPipeFile).collect(Collectors.toList());
     }
 
     @Override
     public void addFiles(List<TBrokerFileStatus> files) {
-
+        List<PipeFileRecord> records = new ArrayList<>();
+        for (TBrokerFileStatus file : files) {
+            PipeFileRecord record = PipeFileRecord.fromRawFile(file);
+            record.pipeId = pipeId.getId();
+            records.add(record);
+        }
+        RepoAccessor.getInstance().addFiles(records);
     }
 
     @Override
     public void updateFileState(List<PipeFile> files, PipeFileState state) {
-
+        List<PipeFileRecord> records = new ArrayList<>();
+        for (PipeFile file : files) {
+            PipeFileRecord record = PipeFileRecord.fromFile(file);
+            record.pipeId = pipeId.getId();
+            records.add(record);
+        }
+        RepoAccessor.getInstance().updateFilesState(records, state);
     }
 
     @Override
     public void cleanup() {
-
+        // TODO
     }
 
     @Override
@@ -127,6 +160,22 @@ public class FileListTableRepo extends FileListRepo {
         public LocalDateTime startLoadTime;
         public LocalDateTime finishLoadTime;
 
+        public static PipeFileRecord fromFile(PipeFile file) {
+            PipeFileRecord record = new PipeFileRecord();
+            record.fileName = file.path;
+            record.fileVersion = "";
+            return record;
+        }
+
+        public static PipeFileRecord fromRawFile(TBrokerFileStatus file) {
+            PipeFileRecord record = new PipeFileRecord();
+            record.fileName = file.getPath();
+            record.fileSize = file.getSize();
+            record.stagedTime = LocalDateTime.now();
+            record.loadState = PipeFileState.UNLOADED;
+            return record;
+        }
+
         /**
          * The json should come from the HTTP/JSON protocol, which looks like {"data": [col1, col2, col3]}
          */
@@ -141,16 +190,70 @@ public class FileListTableRepo extends FileListRepo {
                 file.fileVersion = dataArray.get(2).getAsString();
                 file.fileSize = dataArray.get(3).getAsLong();
                 file.loadState = EnumUtils.getEnumIgnoreCase(PipeFileState.class, dataArray.get(4).getAsString());
-                file.lastModified = DateUtils.parseDatTimeString(dataArray.get(5).getAsString());
-                file.stagedTime = DateUtils.parseDatTimeString(dataArray.get(6).getAsString());
-                file.startLoadTime = DateUtils.parseDatTimeString(dataArray.get(7).getAsString());
-                file.finishLoadTime = DateUtils.parseDatTimeString(dataArray.get(8).getAsString());
+                file.lastModified = parseDataTime(dataArray.get(5).getAsString());
+                file.stagedTime = parseDataTime(dataArray.get(6).getAsString());
+                file.startLoadTime = parseDataTime(dataArray.get(7).getAsString());
+                file.finishLoadTime = parseDataTime(dataArray.get(8).getAsString());
                 return file;
             } catch (Exception e) {
                 throw new RuntimeException("convert json to PipeFile failed due to malformed json data: " + json, e);
             }
         }
 
+        public static LocalDateTime parseDataTime(String str) throws AnalysisException {
+            if (StringUtils.isEmpty(str)) {
+                return null;
+            }
+            return DateUtils.parseDatTimeString(str);
+        }
+
+        public static String dateTimeString(LocalDateTime dt) {
+            if (dt == null) {
+                return "";
+            }
+            return Strings.quote(DateUtils.formatDateTimeUnix(dt));
+        }
+
+        public String toValueList() {
+            return String.format(FILE_RECORD_VALUES, pipeId,
+                    Strings.quote(fileName),
+                    Strings.quote(fileVersion),
+                    fileSize,
+                    Strings.quote(loadState.toString()),
+                    dateTimeString(lastModified),
+                    dateTimeString(stagedTime),
+                    dateTimeString(startLoadTime),
+                    dateTimeString(finishLoadTime)
+            );
+        }
+
+        public String toUniqueLocator() {
+            return String.format(FILE_LOCATOR,
+                    pipeId, Strings.quote(fileName), Strings.quote(fileVersion));
+        }
+
+        public PipeFile toPipeFile() {
+            PipeFile file = new PipeFile();
+            file.path = fileName;
+            file.state = loadState;
+            file.size = fileSize;
+            return file;
+        }
+
+        @Override
+        public String toString() {
+            return "PipeFileRecord{" +
+                    "pipeId=" + pipeId +
+                    ", fileName='" + fileName + '\'' +
+                    ", fileVersion='" + fileVersion + '\'' +
+                    ", fileSize=" + fileSize +
+                    ", loadState=" + loadState +
+                    ", lastModified=" + lastModified +
+                    ", stagedTime=" + stagedTime +
+                    ", startLoadTime=" + startLoadTime +
+                    ", finishLoadTime=" + finishLoadTime +
+                    '}';
+        }
     }
 
     /**
@@ -165,11 +268,9 @@ public class FileListTableRepo extends FileListRepo {
         }
 
         public List<PipeFileRecord> listAllFiles() {
-            ConnectContext connect = StatisticUtils.buildConnectContext();
-            connect.setThreadLocalInfo();
             List<PipeFileRecord> res = new ArrayList<>();
             try {
-                List<TResultBatch> batch = RepoExecutor.executeDQL(connect, SELECT_FILES);
+                List<TResultBatch> batch = RepoExecutor.executeDQL(SELECT_FILES);
                 for (TResultBatch rows : ListUtils.emptyIfNull(batch)) {
                     for (ByteBuffer buffer : rows.getRows()) {
                         ByteBuf copied = Unpooled.copiedBuffer(buffer);
@@ -179,11 +280,70 @@ public class FileListTableRepo extends FileListRepo {
                 }
             } catch (Exception e) {
                 LOG.error("listAllFiles failed", e);
-            } finally {
-                ConnectContext.remove();
+                throw e;
             }
             return res;
         }
+
+        public List<PipeFileRecord> listUnloadedFiles(long pipeId) {
+            List<PipeFileRecord> res = new ArrayList<>();
+            try {
+                String sql = String.format(SELECT_FILES_BY_STATE,
+                        pipeId, Strings.quote(PipeFileState.UNLOADED.toString()));
+                List<TResultBatch> batch = RepoExecutor.executeDQL(sql);
+                for (TResultBatch rows : ListUtils.emptyIfNull(batch)) {
+                    for (ByteBuffer buffer : rows.getRows()) {
+                        ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                        String jsonString = copied.toString(Charset.defaultCharset());
+                        res.add(PipeFileRecord.fromJson(jsonString));
+                    }
+                }
+            } catch (Exception e) {
+                LOG.error("listUnloadedFiles failed", e);
+                throw e;
+            }
+            return res;
+        }
+
+        public void addFiles(List<PipeFileRecord> records) {
+            try {
+                StringBuilder sb = new StringBuilder();
+                sb.append(INSERT_FILES);
+                sb.append(records.stream().map(PipeFileRecord::toValueList).collect(Collectors.joining(",")));
+                RepoExecutor.executeDQL(sb.toString());
+                LOG.info("addFiles into repo: {}", records);
+            } catch (Exception e) {
+                LOG.error("addFiles {} failed", records, e);
+                throw e;
+            }
+        }
+
+        /**
+         * pipe_id, file_name, file_version are required to locate unique file
+         */
+        public void updateFilesState(List<PipeFileRecord> records, PipeFileState state) {
+            try {
+                String sql = UPDATE_FILES_STATE +
+                        records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR "));
+                RepoExecutor.executeDQL(sql);
+                LOG.info("update files state to {}: {}", state, records);
+            } catch (Exception e) {
+                LOG.error("update files state failed: {}", records, e);
+                throw e;
+            }
+        }
+
+        public void deleteByPipe(long pipeId) {
+            try {
+                String sql = String.format(DELETE_BY_PIPE, pipeId);
+                RepoExecutor.executeDQL(sql);
+                LOG.info("delete pipe files {}", pipeId);
+            } catch (Exception e) {
+                LOG.error("delete file of pipe {} failed", pipeId, e);
+                throw e;
+            }
+        }
+
     }
 
     /**
@@ -191,8 +351,11 @@ public class FileListTableRepo extends FileListRepo {
      */
     static class RepoExecutor {
 
-        public static List<TResultBatch> executeDQL(ConnectContext context, String sql) {
+        public static List<TResultBatch> executeDQL(String sql) {
             try {
+                ConnectContext context = StatisticUtils.buildConnectContext();
+                context.setThreadLocalInfo();
+
                 // TODO: use json sink protocol, instead of statistic protocol
                 StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
                 ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.HTTP_PROTOCAL);
@@ -207,6 +370,8 @@ public class FileListTableRepo extends FileListRepo {
             } catch (Exception e) {
                 LOG.error("Repo execute SQL failed {}", sql, e);
                 throw new SemanticException("execute sql failed with exception", e);
+            } finally {
+                ConnectContext.remove();
             }
         }
 
