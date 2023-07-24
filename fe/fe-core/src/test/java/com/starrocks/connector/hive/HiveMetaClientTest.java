@@ -168,6 +168,15 @@ public class HiveMetaClientTest {
         Assert.assertEquals("\002", blankDesc.getCollectionDelim());
         Assert.assertEquals("\003", blankDesc.getMapkeyDelim());
 
+        // Check is using OpenCSVSerde
+        Map<String, String> openCSVParameters = new HashMap<>();
+        openCSVParameters.put("separatorChar", ",");
+        TextFileFormatDesc openCSVDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(openCSVParameters);
+        Assert.assertEquals(",", openCSVDesc.getFieldDelim());
+        Assert.assertEquals("\n", openCSVDesc.getLineDelim());
+        Assert.assertEquals("\002", openCSVDesc.getCollectionDelim());
+        Assert.assertEquals("\003", openCSVDesc.getMapkeyDelim());
+
         // Check is using custom delimiter
         Map<String, String> parameters = new HashMap<>();
         parameters.put("field.delim", ",");
