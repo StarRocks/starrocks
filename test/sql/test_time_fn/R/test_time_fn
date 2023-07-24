@@ -67,6 +67,22 @@ select date_diff('2010-11-30 23:59:59.000001', '2010-11-30 20:58:59.000001', 'da
 -- result:
 0
 -- !result
+select date_diff('2010-12-22 00:59:59.000001', '2010-11-30 20:58:59.000001', 'week');
+-- result:
+3
+-- !result
+select date_diff('2011-12-22 00:59:59.000001', '2010-11-30 20:58:59.000001', 'month');
+-- result:
+12
+-- !result
+select date_diff('2012-12-22 00:59:59.000001', '2010-11-30 20:58:59.000001', 'year');
+-- result:
+2
+-- !result
+select date_diff('2011-12-22 00:59:59.000001', '2010-11-30 20:58:59.000001', 'quarter');
+-- result:
+4
+-- !result
 select date_diff("2010-11-30 23:59:59", NULL, "hour");
 -- result:
 None
