@@ -8,6 +8,8 @@ For example, `date_diff('2010-11-30 23:59:59', '2010-11-30 20:58:59', 'second')`
 
 This function is supported from v3.1.
 
+The difference between date_diff and [datediff](./datediff.md) lies in that datediff() does not support the `unit` parameter.
+
 ## Syntax
 
 ```Haskell
