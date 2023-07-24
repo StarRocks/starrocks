@@ -6,6 +6,8 @@ Intercepts a specified number of elements from a BITMAP value with element value
 
 This function is mainly used for scenarios such as paginated queries. It is supported from v3.1.
 
+This function is similar to [sub_bitmap](./sub_bitmap.md). The difference is that this function intercepts elements starting from an element value (`start_range`) whereas sub_bitmap intercepts elements starting from an offset.
+
 ## Syntax
 
 ```Haskell
@@ -16,7 +18,7 @@ BITMAP bitmap_subset_limit(BITMAP src, BIGINT start_range, BIGINT limit)
 
 - `src`: the BITMAP value from which to obtain elements.
 - `start_range`: the start range to intercept elements. It must be a BIGINT value. If the specified start range exceeds the maximum element of the BITMAP value and `limit` is positive, NULL is returned. See Example 4.
-- `limit`: the number of elements to obtain starting from `start_range`. Negative limits are counted from right to left.
+- `limit`: the number of elements to obtain starting from `start_range`. Negative limits are counted from right to left. If the number of matching elements is less than the value of `limit`, all the matching elements are returned.
 
 ## Return value
 

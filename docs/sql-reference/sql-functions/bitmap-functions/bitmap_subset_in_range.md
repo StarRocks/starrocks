@@ -84,3 +84,7 @@ select bitmap_to_string(bitmap_subset_in_range(bitmap_from_string('1,1,3,1,5,4,5
 | 1     |
 +-------+
 ```
+
+## References
+
+[bitmap_subset_limit](./bitmap_subset_limit.md)
