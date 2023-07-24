@@ -15,6 +15,8 @@
 
 package com.starrocks.lake;
 
+import com.google.common.collect.ImmutableCollection;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardGroupInfo;
@@ -32,6 +34,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -47,9 +50,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ShardDeleterTest {
+public class StarMgrMetaSyncerTest {
 
-    private ShardDeleter shardDeleter = new ShardDeleter();
+    private StarMgrMetaSyncer starMgrMetaSyncer = new StarMgrMetaSyncer();
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -59,10 +62,6 @@ public class ShardDeleterTest {
 
     @Mocked
     private StarOSAgent starOSAgent;
-
-
-    @Mocked
-    private Backend be;
 
     @Before
     public void setUp() throws Exception {
@@ -118,7 +117,7 @@ public class ShardDeleterTest {
 
                 systemInfoService.getBackend(1);
                 minTimes = 0;
-                result = be;
+                result = new Backend(10001, "host1", 1001);
             }
         };
 
@@ -154,7 +153,46 @@ public class ShardDeleterTest {
             }
         };
 
-        shardDeleter.runAfterCatalogReady();
+        starMgrMetaSyncer.runAfterCatalogReady();
         Assert.assertEquals(1, starOSAgent.listShardGroup().size());
+    }
+
+    @Test
+    public void testDeleteUnusedWorker() throws Exception {
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Backend> getBackends() {
+                List<Backend> backends = new ArrayList<>();
+                Backend be1 = new Backend(10001, "host1", 1001);
+                be1.setStarletPort(888);
+                backends.add(be1);
+                Backend be2 = new Backend(10002, "host2", 1002);
+                backends.add(be2);
+                return backends;
+            }
+            @Mock
+            public ImmutableCollection<ComputeNode> getComputeNodes(boolean needAlive) {
+                List<ComputeNode> computeNodes = new ArrayList<>();
+                ComputeNode cn1 = new ComputeNode(10003, "host3", 1003);
+                cn1.setStarletPort(999);
+                computeNodes.add(cn1);
+                ComputeNode cn2 = new ComputeNode(10004, "host4", 1004);
+                computeNodes.add(cn2);
+                return ImmutableList.copyOf(computeNodes);
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<String> listDefaultWorkerGroupIpPort() {
+                List<String> addresses = new ArrayList<>();
+                addresses.add("host0:777");
+                addresses.add("host1:888");
+                addresses.add("host3:999");
+                addresses.add("host5:1000");
+                return addresses;
+            }
+        };
+
+        Assert.assertEquals(2, starMgrMetaSyncer.deleteUnusedWorker());
     }
 }
