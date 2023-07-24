@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -28,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -334,6 +336,50 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 visitChild(optExpression, i, childContexts.get(i));
             }
             return optExpression;
+        }
+
+        @Override
+        public OptExpression visitLogicalWindow(OptExpression optExpression, Context context) {
+            if (context.pushDownExprRefs.isEmpty()) {
+                return visit(optExpression, context);
+            }
+
+            LogicalWindowOperator window = optExpression.getOp().cast();
+
+            ColumnRefSet windowUseColumns = new ColumnRefSet();
+            window.getOrderByElements().stream().map(Ordering::getColumnRef).forEach(windowUseColumns::union);
+            window.getPartitionExpressions().forEach(p -> windowUseColumns.union(p.getUsedColumns()));
+            window.getWindowCall().keySet().forEach(windowUseColumns::union);
+            window.getWindowCall().values().forEach(p -> windowUseColumns.union(p.getUsedColumns()));
+
+            Context localContext = new Context();
+            Context childContext = new Context();
+
+            for (Map.Entry<ScalarOperator, ColumnRefSet> entry : context.pushDownExprUseColumns.entrySet()) {
+                ScalarOperator expr = entry.getKey();
+                ColumnRefSet useColumns = entry.getValue();
+
+                if (windowUseColumns.isIntersect(useColumns)) {
+                    localContext.put(context.pushDownExprRefsIndex.get(expr), expr);
+                } else {
+                    childContext.put(context.pushDownExprRefsIndex.get(expr), expr);
+                }
+            }
+
+            if (!localContext.pushDownExprRefs.isEmpty()) {
+                optExpression = generatePushDownProject(optExpression, localContext);
+            }
+
+            Optional<ScalarOperator> predicate = pushDownPredicate(optExpression, context, windowUseColumns);
+
+            if (predicate.isPresent()) {
+                window = LogicalWindowOperator.builder().withOperator(window)
+                        .setPredicate(predicate.get())
+                        .build();
+                optExpression = OptExpression.create(window, optExpression.getInputs());
+            }
+
+            return visitChildren(optExpression, childContext);
         }
 
         @Override

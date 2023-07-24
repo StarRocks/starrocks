@@ -488,8 +488,8 @@ public class Optimizer {
         if (pushDownRule.hasRewrite()) {
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-            ruleRewriteOnlyOnce(tree, rootTaskContext, new PruneSubfieldRule());
         }
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PruneSubfieldRule());
 
         return tree;
     }
