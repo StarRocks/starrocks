@@ -31,7 +31,7 @@ The main difference between List partitioning and Expression partitioning (recom
 
 ### Syntax
 
-```SQL
+```bnf
 PARTITION BY LIST (partition_columns)（
     PARTITION <partition_name> VALUES IN (value_list)
     [, ...]

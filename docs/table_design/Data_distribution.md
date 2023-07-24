@@ -26,7 +26,7 @@ To achieve more flexible data distribution, you can combine the preceding distri
 
 StarRocks supports both seperate and composite use of data distribution methods.
 
-> NOTE
+> **NOTE**
 >
 > In addition to the general distribution methods, StarRocks also supports Random distribution to simplify bucketing configuration.
 
@@ -505,7 +505,7 @@ DUPLICATE KEY(event_day,site_id,city_code,pv)
 DISTRIBUTED BY RANDOM BUCKETS 8; -- manually set the number of buckets to 8
 ```
 
-#### **Determine the number of buckets**
+### Determine the number of buckets
 
 Buckets reflect how data files are organized in StarRocks.
 

@@ -12,7 +12,7 @@ However, in some special scenarios, such as partitioning historical data into pa
 
 ### Syntax
 
-```Assembly
+```bnf
 PARTITION BY expression
 ...
 [ PROPERTIES( 'partition_live_number' = 'xxx' ) ]
@@ -59,9 +59,9 @@ For example, when the following two data rows are loaded, StarRocks will automat
 
 ```SQL
 -- insert two data rows
-INSERT INTO site_access1 VALUES 
-("2023-02-26 20:12:04",002,"New York","Sam Smith",1),
-("2023-02-27 21:06:54",001,"Los Angeles","Taylor Swift",1);
+INSERT INTO site_access1  
+    VALUES ("2023-02-26 20:12:04",002,"New York","Sam Smith",1),
+           ("2023-02-27 21:06:54",001,"Los Angeles","Taylor Swift",1);
 
 -- view partitions
 mysql > SHOW PARTITIONS FROM site_access1;
@@ -115,7 +115,7 @@ However, in some special scenarios, such as  when the table contains a column `c
 
 ### Syntax
 
-```SQL
+```bnf
 PARTITION BY expression
 ...
 [ PROPERTIES("partition_live_number" = "xxx") ]
@@ -165,8 +165,8 @@ DISTRIBUTED BY HASH(`id`);
 Insert a single data row into the table.
 
 ```SQL
-insert into t_recharge_detail1 
-    values(1, 1, 1, 'Houston', '2022-04-01');
+INSERT INTO t_recharge_detail1 
+    VALUES (1, 1, 1, 'Houston', '2022-04-01');
 ```
 
 View the partitions. The result shows that StarRocks automatically creates a partition `p20220401_Houston1` based on the loaded data. During subsequent loading, data with the values `2022-04-01` and `Houston` in the partition columns `dt` and `city` are stored in this partition.
@@ -176,7 +176,7 @@ View the partitions. The result shows that StarRocks automatically creates a par
 > Each partition can only contain data with the specified one value for the partition column. To specify multiple values for a partition column in a partition, see [List partitions](./list_partitioning.md).
 
 ```SQL
-MySQL > show partitions from t_recharge_detail1\G
+MySQL > SHOW PARTITIONS from t_recharge_detail1\G
 *************************** 1. row ***************************
              PartitionId: 16890
            PartitionName: p20220401_Houston
@@ -228,14 +228,14 @@ If you use a time function expression at table creation and want to overwrite da
 
 ```SQL
 INSERT OVERWRITE site_access1 PARTITION(event_day='2022-06-08 20:12:04')
-    select * FROM site_access2 PARTITION(p20220608);
+    SELECT * FROM site_access2 PARTITION(p20220608);
 ```
 
 If you use column expression at table creation and want to overwrite data in a specific partition, you need to provide the partition column values that the partition contains. If the partition does not exist, it can be automatically created during data loading.
 
 ```SQL
 INSERT OVERWRITE t_recharge_detail1 PARTITION(dt='2022-04-02',city='texas')
-SELECT * FROM t_recharge_detail2 PARTITION(p20220402_texas);
+    SELECT * FROM t_recharge_detail2 PARTITION(p20220402_texas);
 ```
 
 ### View partitions
@@ -243,7 +243,7 @@ SELECT * FROM t_recharge_detail2 PARTITION(p20220402_texas);
 When you want to view specific information about automatically created partitions, you need to use the `SHOW PARTITIONS FROM <table_name>` statement. The `SHOW CREATE TABLE <table_name>` statement only returns the syntax for expression partitioning that is configured at table creation.
 
 ```SQL
-MySQL > show partitions from t_recharge_detail1;
+MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 +-------------+-------------------+----------------+---------------------+--------------------+--------+--------------+-----------------------------+-----------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
 | PartitionId | PartitionName     | VisibleVersion | VisibleVersionTime  | VisibleVersionHash | State  | PartitionKey | List                        | DistributionKey | Buckets | ReplicationNum | StorageMedium | CooldownTime        | LastConsistencyCheckTime | DataSize | IsInMemory | RowCount |
 +-------------+-------------------+----------------+---------------------+--------------------+--------+--------------+-----------------------------+-----------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
