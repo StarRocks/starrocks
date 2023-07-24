@@ -24,14 +24,12 @@
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
-#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_mapping.h"
 #include "formats/orc/orc_memory_pool.h"
+#include "formats/orc/utils.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
@@ -55,7 +53,6 @@ OrcChunkReader::OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_
     if (_read_chunk_size == 0) {
         _read_chunk_size = 4096;
     }
-    _row_reader_options.useWriterTimezone();
 
     // some caller of `OrcChunkReader` may pass nullptr
     // This happens when there are extra fields in broker load specification
@@ -129,26 +126,6 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
     }
 }
 
-Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
-                                                const std::unordered_map<int, std::string>& column_id_to_orc_name,
-                                                std::string* orc_column_name) {
-    auto col_name = format_column_name(desc->col_name(), _case_sensitive);
-    auto it = _formatted_slot_name_to_column_id.find(col_name);
-    if (it == _formatted_slot_name_to_column_id.end()) {
-        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
-                                     desc->col_name(), _current_file_name);
-        return Status::NotFound(s);
-    }
-    auto it2 = column_id_to_orc_name.find(it->second);
-    if (it2 == column_id_to_orc_name.end()) {
-        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
-                                     desc->col_name(), _current_file_name);
-        return Status::NotFound(s);
-    }
-    *orc_column_name = it2->second;
-    return Status::OK();
-}
-
 Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& mapping) {
     // TODO(SmithCruise) delete _name_to_column_id, _hive_column_names when develop subfield lazy load.
     build_column_name_to_id_mapping(&_formatted_slot_name_to_column_id, _hive_column_names, _reader->getType(),
@@ -174,7 +151,7 @@ Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& 
         for (size_t pos : _lazy_load_ctx->lazy_load_indices) {
             SlotDescriptor* desc = _src_slot_descriptors[pos];
             if (desc == nullptr) continue;
-            RETURN_IF_ERROR(mapping->set_lazyload_column_id(pos, &lazy_load_column_id));
+            RETURN_IF_ERROR(mapping->set_lazy_load_column_id(pos, &lazy_load_column_id));
         }
 
         _row_reader_options.includeLazyLoadColumnIndexes(lazy_load_column_id);
@@ -213,10 +190,12 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
         _row_reader_options.searchArgument(builder->build());
     }
     // Build root_mapping, including all columns in orc.
+    _orc_mapping_options.filename = _current_file_name;
+    _orc_mapping_options.case_sensitive = _case_sensitive;
     std::unique_ptr<OrcMapping> root_mapping = nullptr;
     ASSIGN_OR_RETURN(root_mapping,
-                     OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _case_sensitive,
-                                                      _use_orc_column_names, _hive_column_names));
+                     OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _use_orc_column_names,
+                                                      _hive_column_names, _orc_mapping_options));
     DCHECK(root_mapping != nullptr);
     RETURN_IF_ERROR(_init_include_columns(root_mapping));
     RETURN_IF_ERROR(_init_src_types(root_mapping));
@@ -231,13 +210,13 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
     // Build selected column mapping, because after `include column operation`, all included column's column id
     // will re-assign.
     ASSIGN_OR_RETURN(_root_selected_mapping,
-                     OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _case_sensitive,
-                                                      _use_orc_column_names, _hive_column_names));
+                     OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _use_orc_column_names,
+                                                      _hive_column_names, _orc_mapping_options));
     DCHECK(_root_selected_mapping != nullptr);
     // TODO(SmithCruise) delete _init_position_in_orc() when develop subfield lazy load.
     RETURN_IF_ERROR(_init_position_in_orc());
     RETURN_IF_ERROR(_init_cast_exprs());
-    RETURN_IF_ERROR(_init_fill_functions());
+    RETURN_IF_ERROR(_init_column_readers());
     return Status::OK();
 }
 
@@ -321,7 +300,7 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
 
         TypeDescriptor& element_type = result->children.back();
         RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(0), orc_type->getSubtype(0),
-                                                       mapping->get_column_id_or_child_mapping(0).orc_mapping,
+                                                       mapping->get_orc_type_child_mapping(0).orc_mapping,
                                                        &element_type));
     } else if (kind == orc::MAP) {
         result->type = TYPE_MAP;
@@ -331,7 +310,7 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
             key_type.type = TYPE_UNKNOWN;
         } else {
             RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(0), orc_type->getSubtype(0),
-                                                           mapping->get_column_id_or_child_mapping(0).orc_mapping,
+                                                           mapping->get_orc_type_child_mapping(0).orc_mapping,
                                                            &key_type));
         }
 
@@ -340,7 +319,7 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
             value_type.type = TYPE_UNKNOWN;
         } else {
             RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(1), orc_type->getSubtype(1),
-                                                           mapping->get_column_id_or_child_mapping(1).orc_mapping,
+                                                           mapping->get_orc_type_child_mapping(1).orc_mapping,
                                                            &value_type));
         }
     } else if (kind == orc::STRUCT) {
@@ -354,10 +333,9 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         for (size_t index = 0; index < field_size; index++) {
             result->field_names.emplace_back(origin_type.field_names[index]);
             TypeDescriptor& sub_field_type = result->children.emplace_back();
-            size_t column_id = mapping->get_column_id_or_child_mapping(index).orc_column_id;
             RETURN_IF_ERROR(_create_type_descriptor_by_orc(
-                    origin_type.children.at(index), orc_type->getSubtypeByColumnId(column_id),
-                    mapping->get_column_id_or_child_mapping(index).orc_mapping, &sub_field_type));
+                    origin_type.children.at(index), mapping->get_orc_type_child_mapping(index).orc_type,
+                    mapping->get_orc_type_child_mapping(index).orc_mapping, &sub_field_type));
         }
     } else {
         auto precision = (int)orc_type->getPrecision();
@@ -429,9 +407,9 @@ Status OrcChunkReader::_init_src_types(const std::unique_ptr<OrcMapping>& mappin
             continue;
         }
         const orc::Type* orc_type =
-                _reader->getType().getSubtypeByColumnId(mapping->get_column_id_or_child_mapping(i).orc_column_id);
+                _reader->getType().getSubtypeByColumnId(mapping->get_orc_type_child_mapping(i).orc_type->getColumnId());
         RETURN_IF_ERROR(_create_type_descriptor_by_orc(
-                slot_desc->type(), orc_type, mapping->get_column_id_or_child_mapping(i).orc_mapping, &_src_types[i]));
+                slot_desc->type(), orc_type, mapping->get_orc_type_child_mapping(i).orc_mapping, &_src_types[i]));
         _try_implicit_cast(&_src_types[i], slot_desc->type());
     }
     return Status::OK();
@@ -476,19 +454,24 @@ Status OrcChunkReader::_init_cast_exprs() {
     return Status::OK();
 }
 
-Status OrcChunkReader::_init_fill_functions() {
+Status OrcChunkReader::_init_column_readers() {
     int column_size = _src_slot_descriptors.size();
-    _fill_functions.clear();
-    _fill_functions.resize(column_size);
+    _column_readers.clear();
 
     for (int column_pos = 0; column_pos < column_size; ++column_pos) {
         auto slot_desc = _src_slot_descriptors[column_pos];
         if (slot_desc == nullptr) {
             continue;
         }
-        LogicalType type = _src_types[column_pos].type;
-        _fill_functions[column_pos] = find_fill_func(type, slot_desc->is_nullable());
+        ASSIGN_OR_RETURN(
+                std::unique_ptr<ORCColumnReader> column_reader,
+                ORCColumnReader::create(
+                        _src_types[column_pos], _root_selected_mapping->get_orc_type_child_mapping(column_pos).orc_type,
+                        slot_desc->is_nullable(),
+                        _root_selected_mapping->get_orc_type_child_mapping(column_pos).orc_mapping, this));
+        _column_readers.emplace_back(std::move(column_reader));
     }
+    DCHECK_EQ(_column_readers.size(), column_size);
     return Status::OK();
 }
 
@@ -500,7 +483,7 @@ OrcChunkReader::~OrcChunkReader() {
     _slot_id_to_desc.clear();
     _slot_id_to_position.clear();
     _cast_exprs.clear();
-    _fill_functions.clear();
+    _column_readers.clear();
 }
 
 Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
@@ -547,8 +530,8 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
         }
         set_current_slot(slot_desc);
         orc::ColumnVectorBatch* cvb =
-                batch_vec->fieldsColumnIdMap[_root_selected_mapping->get_column_id_or_child_mapping(src_index)
-                                                     .orc_column_id];
+                batch_vec->fieldsColumnIdMap[_root_selected_mapping->get_orc_type_child_mapping(src_index)
+                                                     .orc_type->getColumnId()];
         if (!slot_desc->is_nullable() && cvb->hasNulls) {
             if (_broker_load_mode) {
                 std::string error_msg =
@@ -567,8 +550,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        _fill_functions[src_index](cvb, col, 0, _batch->numElements, _src_types[src_index],
-                                   _root_selected_mapping->get_column_id_or_child_mapping(src_index).orc_mapping, this);
+        _column_readers[src_index]->get_next(cvb, col, 0, _batch->numElements);
     }
 
     if (_broker_load_mode) {

@@ -15,25 +15,14 @@
 #pragma once
 
 #include <boost/algorithm/string.hpp>
-#include <orc/OrcFile.hh>
-
-#include "column/column_helper.h"
-#include "common/object_pool.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
-#include "exprs/runtime_filter_bank.h"
-#include "formats/orc/orc_mapping.h"
-#include "gen_cpp/orc_proto.pb.h"
-#include "runtime/descriptors.h"
-#include "runtime/types.h"
+#include <string>
 
 namespace starrocks {
-
-class OrcMinMaxDecoder {
+class Utils {
 public:
-    // to decode min and max value from column stats.
-    static Status decode(SlotDescriptor* slot, const orc::proto::ColumnStatistics& stats, ColumnPtr min_col,
-                         ColumnPtr max_col, int64_t tz_offset_in_seconds);
+    static std::string format_name(const std::string& col_name, bool case_sensitive) {
+        return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
+    }
 };
 
 } // namespace starrocks
