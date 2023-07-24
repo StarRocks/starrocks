@@ -309,25 +309,33 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    protected Set<Long> getTableBindingsOfBuiltinStorageVolume() {
-        Set<Long> tableIds = new HashSet<>();
+    protected List<List<Long>> getBindingsOfBuiltinStorageVolume() {
+        List<List<Long>> bindings = new ArrayList<>();
+        List<Long> tableBindings = new ArrayList<>();
+        List<Long> dbBindings = new ArrayList<>();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
             db.readLock();
+            if (dbToStorageVolume.containsKey(dbId)) {
+                continue;
+            }
+            dbBindings.add(dbId);
             try {
                 List<Table> tables = GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db);
                 for (Table table : tables) {
                     Long tableId = table.getId();
                     if (!tableToStorageVolume.containsKey(tableId) && table.isCloudNativeTableOrMaterializedView()) {
-                        tableIds.add(tableId);
+                        tableBindings.add(tableId);
                     }
                 }
             } finally {
                 db.readUnlock();
             }
         }
-        return tableIds;
+        bindings.add(dbBindings);
+        bindings.add(tableBindings);
+        return bindings;
     }
 
     private String[] getBucketAndPrefix() {

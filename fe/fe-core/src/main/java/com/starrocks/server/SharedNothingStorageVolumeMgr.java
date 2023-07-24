@@ -24,12 +24,11 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -159,7 +158,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    protected Set<Long> getTableBindingsOfBuiltinStorageVolume() {
-        return new HashSet<>();
+    protected List<List<Long>> getBindingsOfBuiltinStorageVolume() {
+        return new ArrayList<>();
     }
 }
