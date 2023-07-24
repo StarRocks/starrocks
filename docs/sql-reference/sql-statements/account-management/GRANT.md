@@ -13,21 +13,21 @@ Grants roles to users or other roles.
 ```SQL
 # System
 
-GRANT  
+GRANT
     { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
     ON SYSTEM
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 # Resource group
 
-GRANT  
+GRANT
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resource_name> [, < resource_name >,...] ｜ ALL RESOURCE GROUPS} 
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 # Resource
 
-GRANT 
+GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
@@ -42,21 +42,21 @@ GRANT
 
 # Internal catalog
 
-GRANT 
+GRANT
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 # External catalog
 
-GRANT  
+GRANT
    { USAGE | DROP | ALL [PRIVILEGES] } 
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 # Database
 
-GRANT 
+GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
     ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
@@ -65,11 +65,11 @@ GRANT
 
 # Table
 
-GRANT  
+GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
        | ALL TABLES} IN 
-           { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
+           { DATABASE <database_name> | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 
 * You must first run SET CATALOG before you run this command. 
@@ -82,7 +82,7 @@ GRANT
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+           {  DATABASE <database_name> | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
@@ -95,7 +95,7 @@ GRANT
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+           { DATABASE <database_name> | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
@@ -108,7 +108,7 @@ GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
        ｜ ALL FUNCTIONS} IN 
-           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+           {  DATABASE <database_name>  | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
     
 * You must first run SET CATALOG before you run this command. 
