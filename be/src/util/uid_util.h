@@ -97,21 +97,10 @@ struct UniqueId {
     }
 
     // std::map std::set needs this operator
-    bool operator<(const UniqueId& right) const {
-        if (hi != right.hi) {
-            return hi < right.hi;
-        } else {
-            return lo < right.lo;
-        }
-    }
+    auto operator<=>(const UniqueId& right) const = default;
 
     // std::unordered_map need this api
     size_t hash(size_t seed = 0) const { return starrocks::HashUtil::hash(this, sizeof(*this), seed); }
-
-    // std::unordered_map need this api
-    bool operator==(const UniqueId& rhs) const { return hi == rhs.hi && lo == rhs.lo; }
-
-    bool operator!=(const UniqueId& rhs) const { return hi != rhs.hi || lo != rhs.lo; }
 
     TUniqueId to_thrift() const {
         TUniqueId tid;

@@ -94,12 +94,7 @@ public:
 
     char operator[](size_t pos) const { return _data[pos]; }
 
-    bool operator==(const CString& rhs) const { return std::strcmp(_data, rhs._data) == 0; }
-    bool operator!=(const CString& rhs) const { return std::strcmp(_data, rhs._data) != 0; }
-    bool operator<(const CString& rhs) const { return std::strcmp(_data, rhs._data) < 0; }
-    bool operator<=(const CString& rhs) const { return std::strcmp(_data, rhs._data) <= 0; }
-    bool operator>(const CString& rhs) const { return std::strcmp(_data, rhs._data) > 0; }
-    bool operator>=(const CString& rhs) const { return std::strcmp(_data, rhs._data) >= 0; }
+    auto operator<=>(const CString& rhs) const = default;
 
 private:
     constexpr static char kStaticStorage = 0;
