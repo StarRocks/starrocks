@@ -532,6 +532,13 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
     }
 }
 
+void FragmentMgr::clear() {
+    std::lock_guard<std::mutex> lock(_lock);
+    for (auto& it : _fragment_map) {
+        cancel(it.second->fragment_instance_id(), PPlanFragmentCancelReason::USER_CANCEL);
+    }
+}
+
 void FragmentMgr::cancel_worker() {
     LOG(INFO) << "FragmentMgr cancel worker start working.";
     while (!_stop) {

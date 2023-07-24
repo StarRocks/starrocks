@@ -80,6 +80,7 @@ public:
     void open_fragment_instance(const TUniqueId& query_id);
     void close_fragment_instance(const TUniqueId& query_id);
     PassThroughChunkBuffer* get(const TUniqueId& query_id);
+    void clear();
 
 private:
     std::mutex _mutex;
