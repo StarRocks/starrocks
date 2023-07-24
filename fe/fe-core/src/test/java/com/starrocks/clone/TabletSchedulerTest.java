@@ -105,6 +105,51 @@ public class TabletSchedulerTest {
         Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(3), recycleBin, expireTime));
     }
 
+    @Test
+    public void testPendingAddTabletCtx() throws InterruptedException {
+        int oldVal = Config.tablet_sched_max_scheduling_tablets;
+        Config.tablet_sched_max_scheduling_tablets = 8;
+
+        TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr,
+                systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
+        Database goodDB = new Database(2, "bueno");
+        Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
+        Partition goodPartition = new Partition(6, "bueno", null, null);
+
+        List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            TabletSchedCtx ctx = new TabletSchedCtx(
+                    TabletSchedCtx.Type.REPAIR,
+                    goodDB.getId(),
+                    goodTable.getId(),
+                    goodPartition.getId(),
+                    1,
+                    i,
+                    System.currentTimeMillis(),
+                    systemInfoService);
+            tabletSchedCtxList.add(ctx);
+        }
+
+        new Thread(() -> {
+            for (int i = 0; i < 10; i++) {
+                tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
+                try {
+                    goodDB.readLock();
+                    tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
+                } finally {
+                    goodDB.readUnlock();
+                }
+            }
+        }, "testAddCtx").start();
+
+        Thread.sleep(2000);
+        tabletScheduler.removeOneFromPendingQ();
+        Thread.sleep(1000);
+        Assert.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
+
+        Config.tablet_sched_max_scheduling_tablets = oldVal;
+    }
+
     private void updateSlotWithNewConfig(int newSlotPerPath, Method updateWorkingSlotsMethod,
                                          TabletScheduler tabletScheduler)
             throws InvocationTargetException, IllegalAccessException {
