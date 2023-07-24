@@ -2,19 +2,19 @@
 
 ## Description
 
-Returns the difference between two DATETIME values in the specified unit. This function returns the value of `datetime1 - datetime2` expressed in terms of `unit`.
+Returns the difference between two DATETIME values in the specified unit. This function returns the value of `expr1 - expr2` expressed in terms of `unit`.
 
 This function is supported from v3.1.
 
 ## Syntax
 
 ```Haskell
-BIGINT DATE_DIFF(DATETIME datetime1, DATETIME datetime2, VARCHAR unit)
+BIGINT DATE_DIFF(DATETIME expr1, DATETIME expr2, VARCHAR unit)
 ```
 
 ## Parameters
 
-- `datetime1` and `datetime2`: the two datetime values you want to compare, required. Supported data types are DATETIME and DATE.
+- `expr1` and `expr2`: the two datetime values you want to compare, required. Supported data types are DATETIME and DATE.
 
 - `unit`: the unit used to express the time difference, required. The following `unit` values are supported: day, hour, minute, second, millisecond.
 
@@ -24,10 +24,10 @@ Returns a BIGINT value.
 
 ## Usage notes
 
-- If `datetime1` is earlier than `datetime2`, a negative value is returned.
+- If `expr1` is earlier than `expr2`, a negative value is returned.
 - If `unit` is invalid, an error is returned.
 - If any input value is NULL, NULL is returned.
-- If the specified date does not exist, for example, `11-31`, NULL is returned.
+- If the specified date does not exist, for example, `2022-11-31`, NULL is returned.
 
 ## Examples
 

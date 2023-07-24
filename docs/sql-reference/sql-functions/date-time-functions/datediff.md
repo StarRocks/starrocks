@@ -8,8 +8,6 @@ Calculates the difference between two DATETIME values (`expr1 - expr2`) and retu
 
 Note: Only the date parts of the values are used in the calculation.
 
-
-
 ## Syntax
 
 ```Haskell
