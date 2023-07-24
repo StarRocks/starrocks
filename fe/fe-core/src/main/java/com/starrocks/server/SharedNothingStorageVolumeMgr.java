@@ -25,6 +25,7 @@ import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -159,6 +160,6 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
 
     @Override
     protected List<List<Long>> getBindingsOfBuiltinStorageVolume() {
-        return new ArrayList<>();
+        return new ArrayList<>(Arrays.asList(new ArrayList<Long>(), new ArrayList<Long>()));
     }
 }
