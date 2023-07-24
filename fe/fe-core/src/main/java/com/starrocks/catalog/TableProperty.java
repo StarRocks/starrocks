@@ -382,9 +382,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
-    public TableProperty buildForceExternalTableQueryRewrite() {
+    public TableProperty buildQueryRewrite() {
         // NOTE: keep compatible with previous version
         String value = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+        forceExternalTableQueryRewrite = QueryRewriteConsistencyMode.defaultForExternalTable();
         if (value != null) {
             try {
                 forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
@@ -393,6 +394,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
             }
         }
 
+        olapTableQueryRewrite = QueryRewriteConsistencyMode.defaultForOlapTable();
         value = properties.get(PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE);
         if (value != null) {
             try {
@@ -648,7 +650,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionRefreshNumber();
         buildExcludedTriggerTables();
         buildReplicatedStorage();
-        buildForceExternalTableQueryRewrite();
+        buildQueryRewrite();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
         buildConstraint();
