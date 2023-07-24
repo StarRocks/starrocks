@@ -90,7 +90,7 @@ void start_be() {
         sleep(1);
     }
 
-    wait_for_fragments_finish(exec_env, config::loop_count_wait_fragments_finish);
+    exec_env->wait_for_finish();
 
     http_service->stop();
     brpc_server->Stop(0);
