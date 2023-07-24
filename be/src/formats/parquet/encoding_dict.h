@@ -165,8 +165,6 @@ public:
     ~DictDecoder() override = default;
 
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
-        _indexes.resize(chunk_size);
-        _slices.resize(chunk_size);
         std::vector<Slice> slices(num_values);
         RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)&slices[0]));
 
@@ -176,7 +174,6 @@ public:
         }
 
         _dict.resize(num_values);
-        _dict_code_by_value.reserve(num_values);
 
         // reserve enough memory to use append_strings_overflow
         _dict_data.resize(total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
@@ -187,7 +184,6 @@ public:
             _dict[i].data = reinterpret_cast<char*>(&_dict_data[offset]);
             _dict[i].size = slices[i].size;
             offset += slices[i].size;
-            _dict_code_by_value[_dict[i]] = i;
 
             if (slices[i].size > _max_value_length) {
                 _max_value_length = slices[i].size;
@@ -246,38 +242,6 @@ public:
 
         if (UNLIKELY(!ret)) {
             return Status::InternalError("DictDecoder append strings to column failed");
-        }
-        return Status::OK();
-    }
-
-    Status get_dict_codes(const std::vector<Slice>& dict_values, const NullableColumn& nulls,
-                          std::vector<int32_t>* dict_codes) override {
-        const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
-        bool has_null = nulls.has_null();
-        bool all_null = false;
-
-        // dict values size and dict codes size don't need to be matched.
-        // if nulls[i], then there is no need to get code of dict_values[i]
-
-        if (has_null) {
-            size_t count = SIMD::count_nonzero(null_data);
-            all_null = (count == null_data.size());
-        }
-        if (all_null) {
-            return Status::OK();
-        }
-
-        if (!has_null) {
-            dict_codes->reserve(dict_values.size());
-            for (size_t i = 0; i < dict_values.size(); i++) {
-                dict_codes->emplace_back(_dict_code_by_value[dict_values[i]]);
-            }
-        } else {
-            for (size_t i = 0; i < dict_values.size(); i++) {
-                if (!null_data[i]) {
-                    dict_codes->emplace_back(_dict_code_by_value[dict_values[i]]);
-                }
-            }
         }
         return Status::OK();
     }

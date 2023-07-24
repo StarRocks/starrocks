@@ -316,6 +316,7 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
+        ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
