@@ -2,12 +2,13 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
 import com.clearspring.analytics.util.Lists;
+=======
+>>>>>>> e1ee806fa8 ([BugFix] Revert invalid date partition prune (#27780))
 import com.starrocks.common.FeConstants;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.List;
 
 import static org.junit.Assert.assertTrue;
 
@@ -100,6 +101,7 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testInvalidDatePrune() throws Exception {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
         List<String> sqls = Lists.newArrayList();
@@ -137,6 +139,27 @@ public class PartitionPruneTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "partitions=4/4");
         }
+=======
+    public void testInClauseCombineOr_1() throws Exception {
+        String plan = getFragmentPlan("select * from ptest where (d2 > '1000-01-01') or (d2 in (null, '2020-01-01'));");
+        assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: ptest\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: (2: d2 > '1000-01-01') OR (2: d2 IN (NULL, '2020-01-01')), 2: d2 > '1000-01-01'\n" +
+                "     partitions=4/4\n" +
+                "     rollup: ptest"));
+    }
+
+    @Test
+    public void testInClauseCombineOr_2() throws Exception {
+        String plan = getFragmentPlan("select * from ptest where (d2 > '1000-01-01') or (d2 in (null, null));");
+        assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: ptest\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: (2: d2 > '1000-01-01') OR (2: d2 IN (NULL, NULL)), 2: d2 > '1000-01-01'\n" +
+                "     partitions=4/4\n" +
+                "     rollup: ptest"));
+>>>>>>> e1ee806fa8 ([BugFix] Revert invalid date partition prune (#27780))
     }
 
     @Test
