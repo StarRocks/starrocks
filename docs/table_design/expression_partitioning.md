@@ -8,7 +8,7 @@ You only need to specify a simple partition expression (either a time function e
 
 If you frequently query and manage data based on continuous time ranges, you only need to specify a column of a date type (DATE or DATETIME) as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set partitions' start and end dates or datetimes based on the loaded data and partition expression.
 
-However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [Range Partition](./Data_distribution.md#range-partitioning) to create partitions.
+However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](./Data_distribution.md#range-partitioning) to create partitions.
 
 ### Syntax
 
@@ -111,7 +111,7 @@ DISTRIBUTED BY HASH(event_day, site_id)
 
 If you frequently query and manage clearly categorized data based on specific types, you only need tospecify the column representing the type as the partition column. StarRocks will automatically create partitions based on the partition column values of the loaded data.
 
-However, in some special scenarios, such as  when the table contains a column `city`, and you frequently query and manage data based on countries and cities. You must use [List Partitioning](./list_partitioning.md) to store data of multiple cities within the same country in one partition.
+However, in some special scenarios, such as  when the table contains a column `city`, and you frequently query and manage data based on countries and cities. You must use [list partitioning](./list_partitioning.md) to store data of multiple cities within the same country in one partition.
 
 ### Syntax
 

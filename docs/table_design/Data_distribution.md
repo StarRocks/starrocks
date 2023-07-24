@@ -46,104 +46,104 @@ Also, StarRocks distributes data by implementing the two level partitioning + bu
 
 - **Random distribution**
 
-If you do not configure partitioning and bucketing methods at table creation, random distribution is used by default.
+  If you do not configure partitioning and bucketing methods at table creation, random distribution is used by default.
 
-```SQL
-CREATE TABLE site_access1 (
-    event_day DATE,
-    site_id INT DEFAULT '10', 
-    pv BIGINT DEFAULT '0' ,
-    city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT ''
-)
-DUPLICATE KEY (event_day,site_id,pv);
--- Because the partitioning and bucketing methods are not configured, Random distribution is used by default (currently only support Deplicate Key tables).
-```
+  ```SQL
+  CREATE TABLE site_access1 (
+      event_day DATE,
+      site_id INT DEFAULT '10', 
+      pv BIGINT DEFAULT '0' ,
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT ''
+  )
+  DUPLICATE KEY (event_day,site_id,pv);
+  -- Because the partitioning and bucketing methods are not configured, Random distribution is used by default (currently only support Deplicate Key tables).
+  ```
 
 - **Hash distribution**
 
-```SQL
-CREATE TABLE site_access2 (
-    event_day DATE,
-    site_id INT DEFAULT '10',
-    city_code SMALLINT,
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
-)
-AGGREGATE KEY (event_day, site_id, city_code, user_name)
--- Use hash bucketing as the bucketing method and must specify the bucketing key.
-DISTRIBUTED BY HASH(event_day,site_id); 
-```
+  ```SQL
+  CREATE TABLE site_access2 (
+      event_day DATE,
+      site_id INT DEFAULT '10',
+      city_code SMALLINT,
+      user_name VARCHAR(32) DEFAULT '',
+      pv BIGINT SUM DEFAULT '0'
+  )
+  AGGREGATE KEY (event_day, site_id, city_code, user_name)
+  -- Use hash bucketing as the bucketing method and must specify the bucketing key.
+  DISTRIBUTED BY HASH(event_day,site_id); 
+  ```
 
 - **Range+Random distribution**
 
-```SQL
-CREATE TABLE site_access3 (
-    event_day DATE,
-    site_id INT DEFAULT '10', 
-    pv BIGINT DEFAULT '0' ,
-    city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT ''
-)
-DUPLICATE KEY(event_day,site_id,pv)
--- Use expression partitioning as the partitioning method and configure a time function expression.
--- You can also use range partitioning.
-PARTITION BY date_trunc('day', event_day);
--- Because the bucketing method is not configured, Random bucketing is used by default (currently only support Deplicate Key tables).
-```
+  ```SQL
+  CREATE TABLE site_access3 (
+      event_day DATE,
+      site_id INT DEFAULT '10', 
+      pv BIGINT DEFAULT '0' ,
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT ''
+  )
+  DUPLICATE KEY(event_day,site_id,pv)
+  -- Use expression partitioning as the partitioning method and configure a time function expression.
+  -- You can also use range partitioning.
+  PARTITION BY date_trunc('day', event_day);
+  -- Because the bucketing method is not configured, Random bucketing is used by default (currently only support Deplicate Key tables).
+  ```
 
 - **Range+Hash distribution**
 
-```SQL
-CREATE TABLE site_access4 (
-    event_day DATE,
-    site_id INT DEFAULT '10',
-    city_code VARCHAR(100),
-    user_name VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
-)
-AGGREGATE KEY(event_day, site_id, city_code, user_name)
--- Use expression partitioning as the partitioning method and configure a time function expression.
--- You can also use range partitioning.
-PARTITION BY date_trunc('day', event_day)
--- Use hash bucketing as the bucketing method and must specify the bucketing key.
-DISTRIBUTED BY HASH(event_day, site_id);
-```
+  ```SQL
+  CREATE TABLE site_access4 (
+      event_day DATE,
+      site_id INT DEFAULT '10',
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT '',
+      pv BIGINT SUM DEFAULT '0'
+  )
+  AGGREGATE KEY(event_day, site_id, city_code, user_name)
+  -- Use expression partitioning as the partitioning method and configure a time function expression.
+  -- You can also use range partitioning.
+  PARTITION BY date_trunc('day', event_day)
+  -- Use hash bucketing as the bucketing method and must specify the bucketing key.
+  DISTRIBUTED BY HASH(event_day, site_id);
+  ```
 
 - **List+Random distribution**
 
-```SQL
-CREATE TABLE t_recharge_detail1 (
-    id bigint,
-    user_id bigint,
-    recharge_money decimal(32,2), 
-    city varchar(20) not null,
-    dt date not null
-)
-DUPLICATE KEY(id)
--- Use expression partitioning as the partitioning method and specify the partition column.
--- You can also use list partitioning.
-PARTITION BY (city);
--- Because the bucketing method is not configured, Random bucketing is used by default (currently only support Deplicate Key tables).
-```
+  ```SQL
+  CREATE TABLE t_recharge_detail1 (
+      id bigint,
+      user_id bigint,
+      recharge_money decimal(32,2), 
+      city varchar(20) not null,
+      dt date not null
+  )
+  DUPLICATE KEY(id)
+  -- Use expression partitioning as the partitioning method and specify the partition column.
+  -- You can also use list partitioning.
+  PARTITION BY (city);
+  -- Because the bucketing method is not configured, Random bucketing is used by default (currently only support Deplicate Key tables).
+  ```
 
 - **List+Hash distribution**
 
-```SQL
-CREATE TABLE t_recharge_detail2 (
-    id bigint,
-    user_id bigint,
-    recharge_money decimal(32,2), 
-    city varchar(20) not null,
-    dt date not null
-)
-DUPLICATE KEY(id)
--- Use expression partitioning as the partitioning method and specify the partition column.
--- You can also use list partitioning.
-PARTITION BY (city)
--- Use hash bucketing as the bucketing method and must specify the bucketing key.
-DISTRIBUTED BY HASH(city,id); 
-```
+  ```SQL
+  CREATE TABLE t_recharge_detail2 (
+      id bigint,
+      user_id bigint,
+      recharge_money decimal(32,2), 
+      city varchar(20) not null,
+      dt date not null
+  )
+  DUPLICATE KEY(id)
+  -- Use expression partitioning as the partitioning method and specify the partition column.
+  -- You can also use list partitioning.
+  PARTITION BY (city)
+  -- Use hash bucketing as the bucketing method and must specify the bucketing key.
+  DISTRIBUTED BY HASH(city,id); 
+  ```
 
 #### Partitioning
 
