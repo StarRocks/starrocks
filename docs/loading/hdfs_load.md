@@ -245,7 +245,7 @@ After you confirm that the load job is successful, you can use [SELECT](../sql-r
 2. Query `table2`:
 
    ```SQL
-   SELECT * FROM table1;
+   SELECT * FROM table2;
    +------+-------+-------+
    | id   | name  | score |
    +------+-------+-------+
@@ -276,19 +276,20 @@ curl --location-trusted -u <username>:<password> \
 
 > **NOTE**
 >
-> If you use an account for which no password is set, you need to input only `<username>:`.
+> - If you use an account for which no password is set, you need to input only `<username>:`.
+> - You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
-For example, you can run the following command to view the information about a load job, whose label is `label1`, in the `test_db` database:
+For example, you can run the following command to view the information about one of the preceding load jobs, whose label is `label_brokerload_multiplefile_multipletable`, in the `test_db` database:
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
-    'http://<fe_host>:<fe_http_port>/api/test_db/_load_info?label=label1'
+    'http://<fe_host>:<fe_http_port>/api/test_db/_load_info?label=label_brokerload_multiplefile_multipletable'
 ```
 
 The `curl` command returns the information about the load job as a JSON object `jobInfo`:
 
 ```JSON
-{"jobInfo":{"dbName":"default_cluster:test_db","tblNames":["table1_simple"],"label":"label1","state":"FINISHED","failMsg":"","trackingUrl":""},"status":"OK","msg":"Success"}%
+{"jobInfo":{"dbName":"test_db","tblNames":["table1","table2"],"label":"label_brokerload_multiplefile_multipletable","state":"FINISHED","failMsg":"","trackingUrl":""},"status":"OK","msg":"Success"}
 ```
 
 The following table describes the parameters in `jobInfo`.
@@ -313,7 +314,7 @@ For example, you can execute the following statement to cancel a load job, whose
 ```SQL
 CANCEL LOAD
 FROM test_db
-WHERE LABEL = "label";
+WHERE LABEL = "label1";
 ```
 
 ## Job splitting and concurrent running
