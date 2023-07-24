@@ -41,6 +41,6 @@ order by
 [result]
 TOP-N (order by [[71: count DESC NULLS LAST, 2: s_name ASC NULLS FIRST]])
     TOP-N (order by [[71: count DESC NULLS LAST, 2: s_name ASC NULLS FIRST]])
-        SCAN (mv[query21_mv] columns[150: s_name, 151: o_orderstatus, 152: n_name, 153: cnt_star] predicate[151: o_orderstatus = F AND 152: n_name = CANADA])
+        SCAN (mv[query21_mv] columns[135: s_name, 136: o_orderstatus, 137: n_name, 138: cnt_star] predicate[136: o_orderstatus = F AND 137: n_name = CANADA])
 [end]
 

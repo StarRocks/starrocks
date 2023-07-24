@@ -1,0 +1,181 @@
+
+CREATE TABLE IF NOT EXISTS `lineorder` (
+  `lo_orderkey` int(11) NULL,
+  `lo_linenumber` int(11) NOT NULL COMMENT "",
+  `lo_custkey` int(11) NULL COMMENT "",
+  `lo_quantity` int(11) NOT NULL,
+  `lo_revenue` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into lineorder values(10001, 1, 1, 10, 1000), (10002, 2, 2, 20, 2000), (10003, 1, 3, 30, 3000), (10004, 1, null, 40, 4000), (10005, 1, 5, 50, 5000), (10006, 3, 6, 60, 6000);
+
+
+create materialized view mv_lineorder_1
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10003 or lo_orderkey < 10002;
+
+refresh materialized view mv_lineorder_1 with sync mode;
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10004;
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10004
+order by lo_orderkey;
+
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey < 10002;
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey < 10002
+order by lo_orderkey;
+
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey = 10004;
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey = 10004
+order by lo_orderkey;
+
+drop materialized view mv_lineorder_1;
+
+
+create materialized view mv_lineorder_2
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10003 or lo_linenumber < 2;
+
+refresh materialized view mv_lineorder_2 with sync mode;
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_linenumber < 2;
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_linenumber < 2 order by lo_orderkey;
+
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10003 or lo_linenumber < 2;
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10003 or lo_linenumber < 2
+order by lo_orderkey;
+
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey = 10004;
+
+drop materialized view mv_lineorder_2;
+
+
+create materialized view mv_lineorder_3
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where (lo_orderkey > 10003 and lo_linenumber > 2) or (lo_orderkey < 10002 and lo_linenumber < 2);
+
+refresh materialized view mv_lineorder_3 with sync mode;
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10003 and lo_linenumber > 2;
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10003 and lo_linenumber > 2
+order by lo_orderkey;
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey < 10002 and lo_linenumber < 2;
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey < 10002 and lo_linenumber < 2
+order by lo_orderkey;
+
+explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10004 and lo_linenumber > 3;
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10004 and lo_linenumber > 3;
+
+drop materialized view mv_lineorder_3;
+
+
+create materialized view mv_lineorder_4
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where (lo_orderkey > 10003 or lo_linenumber > 2) and (lo_orderkey < 10002 or lo_linenumber < 2);
+
+refresh materialized view mv_lineorder_4 with sync mode;
+
+explain
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10003 and lo_linenumber < 2;
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10003 and lo_linenumber < 2
+order by lo_orderkey;
+
+
+drop materialized view mv_lineorder_4;
+
+
+create materialized view mv_lineorder_5
+distributed by hash(`lo_orderkey`) buckets 10
+refresh manual
+as
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where (lo_orderkey > 10003 or lo_orderkey < 10002) and (lo_linenumber < 2 or lo_linenumber > 2);
+
+refresh materialized view mv_lineorder_5 with sync mode;
+
+explain
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10003 and lo_linenumber < 2;
+
+
+select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
+from lineorder
+where lo_orderkey > 10003 and lo_linenumber < 2
+order by lo_orderkey;
+
+drop materialized view mv_lineorder_5;
