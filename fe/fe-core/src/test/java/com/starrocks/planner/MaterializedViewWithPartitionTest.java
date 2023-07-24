@@ -77,7 +77,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=8/8")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: (10: c3 > 1999) OR (10: c3 IS NULL)\n" +
+                        "     PREDICATES: (10: c3 >= 2000) OR (10: c3 IS NULL)\n" +
                         "     partitions=2/5");
 
         // test union all
@@ -171,7 +171,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=5/5")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 9: c2 > 1999\n" +
+                        "     PREDICATES: 9: c2 >= 2000\n" +
                         "     partitions=5/5");
 
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
@@ -504,7 +504,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         sql("select c1, c3, c2 from test_base_part")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 9: c2 < 11\n" +
+                        "     PREDICATES: 9: c2 <= 10\n" +
                         "     partitions=5/5");
 
         starRocksAssert.dropMaterializedView("partial_mv_8");
@@ -529,7 +529,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
             String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "partial_mv_9", "PREDICATES: (10: c3 > 999) OR (10: c3 IS NULL)");
+            PlanTestBase.assertContains(plan, "partial_mv_9", "PREDICATES: (10: c3 >= 1000) OR (10: c3 IS NULL)");
             starRocksAssert.dropMaterializedView("partial_mv_9");
         }
 
