@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.DiscreteDomain;
 
 import java.io.Serializable;
@@ -24,19 +23,17 @@ public class PartitionKeyDiscreteDomain extends DiscreteDomain<PartitionKey> imp
     private static final PartitionKeyDiscreteDomain INSTANCE = new PartitionKeyDiscreteDomain();
     private static final long serialVersionUID = 0L;
 
+    @Override
     public PartitionKey next(PartitionKey value) {
         return value.successor();
     }
 
+    @Override
     public PartitionKey previous(PartitionKey value) {
         return value.predecessor();
     }
 
-    PartitionKey offset(PartitionKey origin, long distance) {
-        Preconditions.checkState(distance >= 0);
-        throw new UnsupportedOperationException("offset");
-    }
-
+    @Override
     public long distance(PartitionKey start, PartitionKey end) {
         throw new UnsupportedOperationException("distance");
     }
@@ -45,6 +42,7 @@ public class PartitionKeyDiscreteDomain extends DiscreteDomain<PartitionKey> imp
         return INSTANCE;
     }
 
+    @Override
     public String toString() {
         return "PartitionKeyDiscreteDomain()";
     }
