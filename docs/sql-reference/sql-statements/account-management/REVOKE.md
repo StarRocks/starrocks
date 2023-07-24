@@ -15,21 +15,21 @@ The privileges that can be revoked are object-specific. The following part descr
 ```SQL
 # System
 
-REVOKE  
+REVOKE
     { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
     ON SYSTEM
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 
 # Resource group
 
-REVOKE  
+REVOKE
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resourcegroup_name> [, <resourcegroup_name>,...] ｜ ALL RESOURCE GROUPS} 
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 
 # Resource
 
-REVOKE 
+REVOKE
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, <resource_name>,...] ｜ ALL RESOURCES} 
     FROM { ROLE | USER} {<role_name>|<user_identity>}
@@ -74,8 +74,13 @@ REVOKE
 REVOKE  
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
+<<<<<<< HEAD
        | ALL TABLES IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
+=======
+       | ALL TABLES} IN 
+           {  DATABASE <database_name>  | ALL DATABASES }
+>>>>>>> 9d2fab7583 ([Doc] grant/revoke does not support multiple dbs (#27836))
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 
 * You must first run SET CATALOG before you run this command. 
@@ -87,8 +92,13 @@ REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
 REVOKE  
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
+<<<<<<< HEAD
        ｜ ALL VIEWS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+=======
+       ｜ ALL VIEWS} IN 
+           {  DATABASE <database_name> | ALL DATABASES }
+>>>>>>> 9d2fab7583 ([Doc] grant/revoke does not support multiple dbs (#27836))
     FROM { ROLE | USER} {<role_name>|<user_identity>}
     
 * You must first run SET CATALOG before you run this command. 
@@ -100,8 +110,13 @@ REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
 REVOKE { 
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
+<<<<<<< HEAD
        ｜ ALL MATERIALIZED VIEWS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL [DATABASES] }
+=======
+       ｜ ALL MATERIALIZED VIEWS} IN 
+           {  DATABASE <database_name> | ALL [DATABASES] }
+>>>>>>> 9d2fab7583 ([Doc] grant/revoke does not support multiple dbs (#27836))
     FROM { ROLE | USER} {<role_name>|<user_identity>}
     
 * You must first run SET CATALOG before you run this command. 
@@ -113,13 +128,33 @@ REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_ide
 REVOKE { 
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
+<<<<<<< HEAD
        ｜ ALL FUNCTIONS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+=======
+       ｜ ALL FUNCTIONS} IN 
+           {  DATABASE <database_name> | ALL DATABASES }
+>>>>>>> 9d2fab7583 ([Doc] grant/revoke does not support multiple dbs (#27836))
     FROM { ROLE | USER} {<role_name>|<user_identity>}
     
 * You must first run SET CATALOG before you run this command. 
 * You can also use db.function to represent a function.
 REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
+<<<<<<< HEAD
+=======
+
+# Storage volume
+
+REVOKE
+    CREATE STORAGE VOLUME 
+    ON SYSTEM
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+REVOKE
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUME} 
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+>>>>>>> 9d2fab7583 ([Doc] grant/revoke does not support multiple dbs (#27836))
 ```
 
 ### Revoke roles
