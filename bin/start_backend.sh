@@ -89,7 +89,8 @@ if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
 fi
 
 if [ "$JAVA_HOME" = "" ]; then
-    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jvm/$jvm_arch/server:$STARROCKS_HOME/lib/jvm/$jvm_arch:$LD_LIBRARY_PATH
+    echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 else
     java_version=$(jdk_version)
     if [[ $java_version -gt 8 ]]; then
