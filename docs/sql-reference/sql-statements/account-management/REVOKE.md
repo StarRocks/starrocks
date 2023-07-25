@@ -120,6 +120,7 @@ REVOKE {
 * You must first run SET CATALOG before you run this command. 
 * You can also use db.function to represent a function.
 REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
+```
 
 ### Revoke roles
 
