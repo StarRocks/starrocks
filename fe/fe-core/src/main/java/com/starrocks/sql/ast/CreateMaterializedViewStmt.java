@@ -432,8 +432,47 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     beginIndexOfAggregation = i;
                 }
                 meetAggregate = true;
+<<<<<<< HEAD
                 mvColumnItemList.add(buildMVColumnItem(functionCallExpr, statement.isReplay()));
                 joiner.add(functionCallExpr.toSqlImpl());
+=======
+
+                mvColumnItem = buildAggColumnItem(selectListItem, slots);
+                if (!mvColumnNameSet.add(mvColumnItem.getName())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, mvColumnItem.getName());
+                }
+                mvColumnItemList.add(mvColumnItem);
+            } else {
+                if (meetAggregate) {
+                    throw new UnsupportedMVException("Any single column should be before agg column. " +
+                            "Column %s at wrong location", selectListItemExpr.toMySql());
+                }
+                // NOTE: If `selectListItemExpr` contains aggregate function, we can not support it.
+                if (selectListItemExpr.containsAggregate()) {
+                    throw new UnsupportedMVException("Aggregate function with function expr is not supported yet",
+                            selectListItemExpr.toMySql());
+                }
+
+                mvColumnItem = buildNonAggColumnItem(selectListItem, slots);
+                if (!mvColumnNameSet.add(mvColumnItem.getName())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, mvColumnItem.getName());
+                }
+
+                mvColumnItemList.add(mvColumnItem);
+                joiner.add(selectListItemExpr.toSql());
+            }
+            Set<String> fullSchemaColNames = table.getFullSchema().stream().map(Column::getName).collect(Collectors.toSet());
+            if (fullSchemaColNames.contains(mvColumnItem.getName())) {
+                Expr existedDefinedExpr = table.getColumn(mvColumnItem.getName()).getDefineExpr();
+                if (existedDefinedExpr != null && !existedDefinedExpr.toSqlWithoutTbl()
+                        .equalsIgnoreCase(mvColumnItem.getDefineExpr().toSqlWithoutTbl())) {
+                    throw new UnsupportedMVException(
+                            String.format("The mv column %s has already existed in the table's full " +
+                                            "schema, old expr: %s, new expr: %s", selectListItem.getAlias(),
+                                    existedDefinedExpr.toSqlWithoutTbl(),
+                                    mvColumnItem.getDefineExpr().toSqlWithoutTbl()));
+                }
+>>>>>>> 1f503fe8fc ([BugFix] Support count(1)/count(*)/count(col) rewrite when col is not nullable (#27728))
             }
         }
         if (beginIndexOfAggregation == 0) {

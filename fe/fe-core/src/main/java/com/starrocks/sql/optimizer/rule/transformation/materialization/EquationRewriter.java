@@ -62,8 +62,39 @@ public class EquationRewriter {
 
             @Override
             public ScalarOperator visitCall(CallOperator predicate, Void context) {
+                // 1. rewrite query's predicate
                 ScalarOperator tmp = replace(predicate);
+<<<<<<< HEAD
                 return tmp != null ? tmp : super.visitCall(predicate, context);
+=======
+                if (tmp != null) {
+                    return tmp;
+                }
+
+                // 2. normalize predicate to better match mv
+                // TODO: merge into aggregateFunctionRewriter later.
+                predicate = normalizeCallOperator(predicate);
+                tmp = replace(predicate);
+                if (tmp != null) {
+                    return tmp;
+                }
+
+                // 3. retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
+                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(predicate) &&
+                        !isUnderAggFunctionRewriteContext()) {
+                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(predicate);
+                    if (newChooseScalarOp != null) {
+                        setUnderAggFunctionRewriteContext(true);
+                        // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
+                        // `underAggFunctionRewriteContext` to mark it's under agg function rewriter and no need rewrite again.
+                        ScalarOperator rewritten = newChooseScalarOp.accept(this, null);
+                        setUnderAggFunctionRewriteContext(false);
+                        return rewritten;
+                    }
+                }
+
+                return super.visitCall(predicate, context);
+>>>>>>> 1f503fe8fc ([BugFix] Support count(1)/count(*)/count(col) rewrite when col is not nullable (#27728))
             }
 
             @Override
@@ -125,16 +156,51 @@ public class EquationRewriter {
         return expr.accept(shuttle, null);
     }
 
+    private static CallOperator normalizeCallOperator(CallOperator aggFunc) {
+        String aggFuncName = aggFunc.getFnName();
+        if (!aggFuncName.equals(FunctionSet.COUNT) || aggFunc.isDistinct()) {
+            return aggFunc;
+        }
+
+        // unify count(*) or count(non-nullable column) to count(1) to be better for rewrite.
+        if (aggFunc.getChildren().size() == 0 || !aggFunc.getChild(0).isNullable()) {
+            return new CallOperator(FunctionSet.COUNT, aggFunc.getType(),
+                    Lists.newArrayList(ConstantOperator.createTinyInt((byte) 1)));
+        }
+        return aggFunc;
+    }
+
     public boolean containsKey(ScalarOperator scalarOperator) {
         return equationMap.containsKey(scalarOperator);
     }
 
     public void addMapping(ScalarOperator expr, ColumnRefOperator col) {
         equationMap.put(expr, Pair.create(col, null));
+
+        // Convert a + 1 -> col_f => a => col_f - 1
         Pair<ScalarOperator, ScalarOperator> extendedEntry = new EquationTransformer(expr, col).getMapping();
         if (extendedEntry.second != col) {
             equationMap.put(extendedEntry.first, Pair.create(col, extendedEntry.second));
         }
+<<<<<<< HEAD
+=======
+
+        if (expr instanceof CallOperator) {
+            CallOperator aggFunc = (CallOperator) expr;
+            if (aggFunc.getFnName().equals(FunctionSet.TIME_SLICE)) {
+                // mv:    SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table
+                // query: SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table WHERE dt > '2023-06-01'
+                // if '2023-06-01'=time_slice('2023-06-01', INTERVAL 5 MINUTE), can replace predicate dt => t
+                ScalarOperator first = expr.getChild(0);
+                predicateProbMap.put(first, Pair.create(col, new TimeSliceReplaceChecker(((CallOperator) expr))));
+            } else if (aggFunc.getFnName().equals(FunctionSet.COUNT) && !aggFunc.isDistinct()) {
+                CallOperator newAggFunc = normalizeCallOperator(aggFunc);
+                if (newAggFunc != null && newAggFunc != aggFunc) {
+                    equationMap.put(newAggFunc,  Pair.create(col, null));
+                }
+            }
+        }
+>>>>>>> 1f503fe8fc ([BugFix] Support count(1)/count(*)/count(col) rewrite when col is not nullable (#27728))
     }
 
     private static class EquationTransformer extends ScalarOperatorVisitor<Void, Void> {
