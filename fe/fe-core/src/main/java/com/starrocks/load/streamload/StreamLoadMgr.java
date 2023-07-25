@@ -35,6 +35,8 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -61,6 +63,10 @@ public class StreamLoadMgr {
     private Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
 
     private Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
+
+    private final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+            new WarehouseLoadInfoBuilder();
+
     private ReentrantReadWriteLock lock;
 
     private void writeLock() {
@@ -404,6 +410,8 @@ public class StreamLoadMgr {
         if (dbToLabelToStreamLoadTask.get(dbId).isEmpty()) {
             dbToLabelToStreamLoadTask.remove(dbId);
         }
+
+        warehouseLoadStatusInfoBuilder.withRemovedJob(streamLoadTask);
     }
 
     /*
@@ -455,6 +463,15 @@ public class StreamLoadMgr {
                         .collect(Collectors.toList());
             }
             return result;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public Map<String, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadStatusInfoBuilder.buildFromJobs(idToStreamLoadTask.values());
         } finally {
             readUnlock();
         }

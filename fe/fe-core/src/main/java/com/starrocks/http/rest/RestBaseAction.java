@@ -66,13 +66,14 @@ public class RestBaseAction extends BaseAction {
     }
 
     @Override
-    public void handleRequest(BaseRequest request) throws Exception {
+    public void handleRequest(BaseRequest request) {
         LOG.info("receive http request. url={}", request.getRequest().uri());
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);
         } catch (DdlException e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
+<<<<<<< HEAD
             if (e instanceof UnauthorizedException) {
                 response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
                 response.appendContent(new RestBaseResult(e.getMessage()).toJson());
@@ -80,6 +81,17 @@ public class RestBaseAction extends BaseAction {
             } else {
                 sendResult(request, response, new RestBaseResult(e.getMessage()));
             }
+=======
+            sendResult(request, response, new RestBaseResult(e.getMessage()));
+        } catch (Exception e) {
+            LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
+            String msg = e.getMessage();
+            if (msg == null) {
+                msg = e.toString();
+            }
+            response.appendContent(new RestBaseResult(msg).toJson());
+            writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+>>>>>>> 1f5c50a57 ([Feature] add HTTP API /api/v2/warehouses (#27567))
         }
     }
 
