@@ -27,6 +27,7 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.s3a.S3AFileStatus;
 import org.apache.logging.log4j.util.Strings;
 
 import java.nio.ByteBuffer;
@@ -59,8 +60,12 @@ public class PipeFileRecord {
         PipeFileRecord record = new PipeFileRecord();
         record.fileName = file.getPath().toString();
         record.fileSize = file.getLen();
-        // TODO: use md5/etag as version
-        record.fileVersion = String.valueOf(file.getModificationTime());
+        if (file instanceof S3AFileStatus) {
+            S3AFileStatus s3File = (S3AFileStatus) file;
+            record.fileVersion = s3File.getEtag();
+        } else {
+            record.fileVersion = String.valueOf(file.getModificationTime());
+        }
         record.lastModified = DateUtils.fromEpochMillis(file.getModificationTime());
         record.stagedTime = LocalDateTime.now();
         record.loadState = FileListRepo.PipeFileState.UNLOADED;
