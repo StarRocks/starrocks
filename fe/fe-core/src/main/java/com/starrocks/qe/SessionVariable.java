@@ -1042,7 +1042,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String queryExcludingMVNames = "";
 
     @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
-    private String queryincludingMVNames = "";
+    private String queryIncludingMVNames = "";
 
     @VarAttr(name = ANALYZE_FOR_MV)
     private String analyzeTypeForMV = "sample";
@@ -1982,12 +1982,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.queryExcludingMVNames = queryExcludingMVNames;
     }
 
-    public String getQueryincludingMVNames() {
-        return queryincludingMVNames;
+    public String getQueryIncludingMVNames() {
+        return queryIncludingMVNames;
     }
 
-    public void setQueryincludingMVNames(String queryincludingMVNames) {
-        this.queryincludingMVNames = queryincludingMVNames;
+    public void setQueryIncludingMVNames(String queryIncludingMVNames) {
+        this.queryIncludingMVNames = queryIncludingMVNames;
     }
 
     public String getAnalyzeForMV() {

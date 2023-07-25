@@ -87,7 +87,7 @@ public class MvRewritePreprocessor {
 
     private void prepareRelatedMVs(Set<Table> queryTables, Set<MaterializedView> relatedMvs) {
         String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
-        String queryIncludingMVNames = connectContext.getSessionVariable().getQueryincludingMVNames();
+        String queryIncludingMVNames = connectContext.getSessionVariable().getQueryIncludingMVNames();
         if (!Strings.isNullOrEmpty(queryExcludingMVNames) || !Strings.isNullOrEmpty(queryIncludingMVNames)) {
             Set<String> queryExcludingMVNamesSet = Sets.newHashSet(queryExcludingMVNames.split(","));
             Set<String> queryIncludingMVNamesSet = Sets.newHashSet(queryIncludingMVNames.split(","));
