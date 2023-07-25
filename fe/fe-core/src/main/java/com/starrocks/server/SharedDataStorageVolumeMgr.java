@@ -22,9 +22,12 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,6 +39,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
+    private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
+
     @Override
     public StorageVolume getStorageVolumeByName(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
@@ -174,7 +179,16 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             } else {
                 sv = getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
                 if (sv == null) {
-                    throw new DdlException("Builtin storage volume not exists, please check the params in config");
+                    if (Config.enable_load_volume_from_conf) {
+                        LOG.error("Failed to get builtin storage volume, svName: {}, dbId: {}, current stack trace: {}",
+                                svName, dbId, LogUtil.getCurrentStackTrace());
+                        throw new DdlException(String.format("Failed to get builtin storage volume, svName: %s, dbId: %d",
+                                svName, dbId));
+                    } else {
+                        throw new DdlException("Cannot find a suitable storage volume. " +
+                                "Try setting 'enable_load_volume_from_conf' to true " +
+                                "and ensure the related storage volume settings are correct");
+                    }
                 }
             }
         } else if (svName.equals(StorageVolumeMgr.DEFAULT)) {
