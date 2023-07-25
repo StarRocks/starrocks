@@ -14,12 +14,11 @@ Supports abstraction of storage volumes, which makes it easier for users to conf
 
 - Upgraded automatic partitioning to expression partitioning. Users only need to specify a simple partition expression (either a time function expression or a column expression) at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is more flexible and user-friendly.
 - Supports list partitioning. Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.
-- Supports using the files() function in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3.
 
 #### SQL reference
 
 - Added the following storage volume-related statements: [CREATE STORAGE VOLUME](/sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md), [ALTER STORAGE VOLUME](/sql-reference/sql-statements/Administration/ALTER%20STORAGE%20VOLUME.md), [DROP STORAGE VOLUME](/sql-reference/sql-statements/Administration/DROP%20STORAGE%20VOLUME.md), [SET DEFAULT STORAGE VOLUME](/sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md), [DESC STORAGE VOLUME](/sql-reference/sql-statements/Administration/DESC%20STORAGE%20VOLUME.md), [SHOW STORAGE VOLUMES](/sql-reference/sql-statements/Administration/SHOW%20STORAGE%20VOLUMES.md).
-- Added the following table function: [files](../sql-reference/sql-functions/table-functions/files.md).
+- The table function TABLE() is renamed as [FILES()](../sql-reference/sql-functions/table-functions/files.md), which can be used to read files in an external data source for loading or direct query.
 
 #### Privileges and security
 
