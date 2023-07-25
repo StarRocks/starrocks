@@ -317,6 +317,15 @@ select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by us
 1	1
 2	5
 3	6
+<<<<<<< HEAD
+=======
+-- !result
+select user_id, time, round(percentile_approx(tag_id, 0)) from user_tags group by user_id, time order by user_id;
+-- result:
+1	2023-04-13	1
+2	2023-04-13	5
+3	2023-04-13	6
+>>>>>>> 09b9fe338f ([BugFix] Rewritten aggregate projection should not refer other column references in  the same projection mapping (#27900))
 -- !result
 drop materialized view user_tags_percential_mv2;
 -- result:
@@ -540,16 +549,188 @@ from emps right semi join depts using (deptno);
 select deptno 
 from emps right semi join depts using (deptno) order by deptno;
 -- result:
+<<<<<<< HEAD
 1
 
 drop materialized view mv_right_semi;
 
+=======
+1	15
+2	5
+3	6
+-- !result
+-- name: test_all_join_type_rewrite
+CREATE TABLE emps (
+    empid INT NOT NULL,
+    deptno INT NOT NULL,
+    locationid INT NOT NULL,
+    commission INT NOT NULL,
+    name VARCHAR(20) NOT NULL,
+    salary DECIMAL(18, 2)
+) ENGINE=OLAP
+DUPLICATE KEY(`empid`)
+DISTRIBUTED BY HASH(`empid`) BUCKETS 12
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE depts(
+    deptno INT NOT NULL,
+    name VARCHAR(20)
+) ENGINE=OLAP
+DUPLICATE KEY(`deptno`)
+DISTRIBUTED BY HASH(`deptno`) BUCKETS 12
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE dependents(
+    empid INT NOT NULL,
+    name VARCHAR(20)
+) ENGINE=OLAP
+DUPLICATE KEY(`empid`)
+DISTRIBUTED BY HASH(`empid`) BUCKETS 12
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into emps values(1, 1, 1, 10, "emp_name1", 1000);
+-- result:
+-- !result
+insert into emps values(2, 1, 1, 10, "emp_name1", 1000);
+-- result:
+-- !result
+insert into emps values(3, 1, 1, 10, "emp_name1", 1000);
+-- result:
+-- !result
+insert into depts values(1, "dept_name1");
+-- result:
+-- !result
+insert into depts values(2, "dept_name2");
+-- result:
+-- !result
+insert into dependents values(1, "dependents_name1");
+-- result:
+-- !result
+insert into dependents values(2, "dependents_name2");
+-- result:
+-- !result
+insert into dependents values(3, "dependents_name3");
+-- result:
+-- !result
+create materialized view mv_right_outer
+distributed by hash(`empid`) buckets 10
+refresh manual
+as
+select empid, depts.deptno
+from emps right outer join depts using (deptno);
+-- result:
+-- !result
+refresh materialized view mv_right_outer with sync mode;
+explain logical select empid, depts.deptno
+from emps right outer join depts using (deptno);
+select empid, depts.deptno
+from emps right outer join depts using (deptno) order by empid;
+-- result:
+None	2
+1	1
+2	1
+3	1
+-- !result
+drop materialized view mv_right_outer;
+-- result:
+-- !result
+create materialized view mv_full_outer
+distributed by hash(`empid`) buckets 10
+refresh manual
+as
+select empid, depts.deptno 
+from emps full outer join depts using (deptno);
+-- result:
+-- !result
+refresh materialized view mv_full_outer with sync mode;
+explain logical select empid, depts.deptno 
+from emps full outer join depts using (deptno);
+select empid, depts.deptno 
+from emps full outer join depts using (deptno) order by empid;
+-- result:
+None	2
+1	1
+2	1
+3	1
+-- !result
+drop materialized view mv_full_outer;
+-- result:
+-- !result
+create materialized view mv_left_semi
+distributed by hash(`empid`) buckets 10
+refresh manual
+as
+select empid 
+from emps left semi join depts using (deptno);
+-- result:
+-- !result
+refresh materialized view mv_left_semi with sync mode;
+explain logical select empid 
+from emps left semi join depts using (deptno);
+select empid 
+from emps left semi join depts using (deptno) order by empid;
+-- result:
+1
+2
+3
+-- !result
+drop materialized view mv_left_semi;
+-- result:
+-- !result
+create materialized view mv_left_anti
+distributed by hash(`empid`) buckets 10
+refresh manual
+as
+select empid 
+from emps left anti join depts using (deptno);
+-- result:
+-- !result
+refresh materialized view mv_left_anti with sync mode;
+explain logical select empid 
+from emps left anti join depts using (deptno);
+select empid 
+from emps left anti join depts using (deptno) order by empid;
+-- result:
+-- !result
+drop materialized view mv_left_anti;
+-- result:
+-- !result
+create materialized view mv_right_semi
+distributed by hash(`deptno`) buckets 10
+refresh manual
+as
+select deptno 
+from emps right semi join depts using (deptno);
+-- result:
+-- !result
+refresh materialized view mv_right_semi with sync mode;
+explain select deptno 
+from emps right semi join depts using (deptno);
+select deptno 
+from emps right semi join depts using (deptno) order by deptno;
+-- result:
+1
+-- !result
+drop materialized view mv_right_semi;
+-- result:
+-- !result
+>>>>>>> 09b9fe338f ([BugFix] Rewritten aggregate projection should not refer other column references in  the same projection mapping (#27900))
 create materialized view mv_right_anti
 distributed by hash(`deptno`) buckets 10
 refresh manual
 as
 select deptno 
 from emps right anti join depts using (deptno);
+<<<<<<< HEAD
 
 refresh materialized view mv_right_anti with sync mode;
 
@@ -562,3 +743,15 @@ select depts.deptno
 from emps right anti join depts using (deptno);
 -- result:
 2
+=======
+-- result:
+-- !result
+refresh materialized view mv_right_anti with sync mode;
+explain select depts.deptno
+from emps right anti join depts using (deptno);
+select depts.deptno 
+from emps right anti join depts using (deptno);
+-- result:
+2
+-- !result
+>>>>>>> 09b9fe338f ([BugFix] Rewritten aggregate projection should not refer other column references in  the same projection mapping (#27900))
