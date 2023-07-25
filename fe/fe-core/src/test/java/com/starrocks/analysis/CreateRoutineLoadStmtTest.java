@@ -47,6 +47,7 @@ import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.CreateRoutineLoadAnalyzer;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryStatement;
@@ -125,6 +126,50 @@ public class CreateRoutineLoadStmtTest {
         Assert.assertEquals("Asia/Shanghai", createRoutineLoadStmt.getTimezone());
         Assert.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
         Assert.assertEquals(0.12, createRoutineLoadStmt.getMaxFilterRatio(), 0.01);
+    }
+
+    @Test
+    public void testWhereStmt() throws Exception {
+        {
+            String sql = "CREATE ROUTINE LOAD job ON tbl " +
+            "COLUMNS TERMINATED BY ';', " +
+            "ROWS TERMINATED BY '\n', " +
+            "COLUMNS(`a`, `b`, `c`=1), " +
+            "TEMPORARY PARTITION(`p1`, `p2`), " +
+            "WHERE a = 1 " +
+            "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+            "FROM KAFKA\n"
+            + "(\n"
+            + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+            + "\"kafka_topic\" = \"topictest\"\n"
+            + ");";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+            CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            ImportWhereStmt whereStmt = createRoutineLoadStmt.getRoutineLoadDesc().getWherePredicate();
+            Assert.assertEquals(false, whereStmt.isContainSubquery());
+        }
+        
+
+        {
+            String sql = "CREATE ROUTINE LOAD job ON tbl " +
+            "COLUMNS TERMINATED BY ';', " +
+            "ROWS TERMINATED BY '\n', " +
+            "COLUMNS(`a`, `b`, `c`=1), " +
+            "TEMPORARY PARTITION(`p1`, `p2`), " +
+            "WHERE a in (SELECT 1) " +
+            "PROPERTIES (\"desired_concurrent_number\"=\"3\") " +
+            "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+            try {
+                CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            } catch (Exception e) {
+                Assert.assertEquals(true, e.getMessage().contains("the predicate cannot contain subqueries"));
+                return;
+            }
+            Assert.assertEquals(true, false);
+        }
     }
 
     @Test
