@@ -282,6 +282,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     List<Column> shadowSchema = indexSchemaMap.get(shadowIdxId);
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     KeysType originKeysType = table.getKeysTypeByIndexId(originIndexId);
+                    List<Column> originSchema = table.getSchemaByIndexId(originIndexId);
 
                     // copy for generate some const default value
                     List<Column> copiedShadowSchema = Lists.newArrayList();
@@ -296,6 +297,41 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         }
                     }
 
+                    List<Integer> copiedSortKeyIdxes = indexMeta.getSortKeyIdxes();
+                    if (indexMeta.getSortKeyIdxes() != null) {
+                        if (originSchema.size() > shadowSchema.size()) {
+                            List<Column> differences = originSchema.stream().filter(element ->
+                                    !shadowSchema.contains(element)).collect(Collectors.toList());
+                            // can just drop one column one time, so just one element in differences
+                            Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                            for (int i = 0; i < copiedSortKeyIdxes.size(); ++i) {
+                                Integer sortKeyIdx = copiedSortKeyIdxes.get(i);
+                                if (dropIdx < sortKeyIdx) {
+                                    copiedSortKeyIdxes.set(i, sortKeyIdx - 1);
+                                }
+                            }
+                        } else if (originSchema.size() < shadowSchema.size()) {
+                            List<Column> differences = shadowSchema.stream().filter(element ->
+                                    !originSchema.contains(element)).collect(Collectors.toList());
+                            for (Column difference : differences) {
+                                int addColumnIdx = shadowSchema.indexOf(difference);
+                                for (int i = 0; i < copiedSortKeyIdxes.size(); ++i) {
+                                    Integer sortKeyIdx = copiedSortKeyIdxes.get(i);
+                                    int shadowSortKeyIdx = shadowSchema.indexOf(originSchema.get(
+                                            indexMeta.getSortKeyIdxes().get(i)));
+                                    if (addColumnIdx < shadowSortKeyIdx) {
+                                        copiedSortKeyIdxes.set(i, sortKeyIdx + 1);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (sortKeyIdxes != null) {
+                        copiedSortKeyIdxes = sortKeyIdxes;
+                    } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
+                        sortKeyIdxes = copiedSortKeyIdxes;
+                    }
+
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
@@ -308,7 +344,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
                                 countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
-                                TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), indexMeta.getSortKeyIdxes());
+                                TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), copiedSortKeyIdxes);
 
                         Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         assert baseTabletId != null;
