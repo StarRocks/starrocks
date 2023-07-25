@@ -90,6 +90,8 @@ public:
     S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration);
     S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
 
+    void close();
+
     static ClientConfiguration& getClientConfig() {
         // We cached config here and make a deep copy each time.Since aws sdk has changed the
         // Aws::Client::ClientConfiguration default constructor to search for the region
@@ -156,6 +158,13 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
         }
     }
     return credential_provider;
+}
+
+void S3ClientFactory::close() {
+    std::lock_guard l(_lock);
+    for (auto& item : _clients) {
+        item.reset();
+    }
 }
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {
@@ -814,6 +823,10 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
 
 std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options) {
     return std::make_unique<S3FileSystem>(options);
+}
+
+void close_s3_clients() {
+    S3ClientFactory::instance().close();
 }
 
 } // namespace starrocks

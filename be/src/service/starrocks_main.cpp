@@ -369,8 +369,6 @@ int main(int argc, char** argv) {
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
 
-    exec_env->agent_server()->stop();
-
     exec_env->stop();
     engine->stop();
     delete engine;
