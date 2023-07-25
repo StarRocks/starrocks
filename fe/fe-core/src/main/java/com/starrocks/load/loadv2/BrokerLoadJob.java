@@ -123,15 +123,14 @@ public class BrokerLoadJob extends BulkLoadJob {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         String warehouse = sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE);
         Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
-        long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
-        if (currentWh != null) {
-            workerGroupId = currentWh.getAnyAvailableCluster().getWorkerGroupId();
+        if (currentWh == null) {
+            throw new BeginTransactionException("warehouse " + warehouse + " not exist.");
         }
         transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                        timeoutSecond, workerGroupId);
+                        timeoutSecond, currentWh.getAnyAvailableCluster().getWorkerGroupId());
     }
 
     @Override
