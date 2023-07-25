@@ -138,7 +138,7 @@ public class FileListTableRepo extends FileListRepo {
      */
     public static class RepoAccessor {
 
-        private final static RepoAccessor INSTANCE = new RepoAccessor();
+        private static final RepoAccessor INSTANCE = new RepoAccessor();
 
         public static RepoAccessor getInstance() {
             return INSTANCE;

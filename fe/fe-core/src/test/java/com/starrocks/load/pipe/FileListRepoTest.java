@@ -226,13 +226,15 @@ public class FileListRepoTest {
         repo.setPipeId(new PipeId(1, 1));
         FileListTableRepo.RepoAccessor accessor = FileListTableRepo.RepoAccessor.getInstance();
         FileListTableRepo.RepoExecutor executor = FileListTableRepo.RepoExecutor.getInstance();
-        new Expectations(executor) {{
-            executor.executeDQL(anyString);
-            result = Lists.newArrayList();
+        new Expectations(executor) {
+            {
+                executor.executeDQL(anyString);
+                result = Lists.newArrayList();
 
-            executor.executeDML(anyString);
-            result = Lists.newArrayList();
-        }};
+                executor.executeDML(anyString);
+                result = Lists.newArrayList();
+            }
+        };
         // listAllFiles
         Assert.assertTrue(accessor.listAllFiles().isEmpty());
 
@@ -249,39 +251,49 @@ public class FileListRepoTest {
         Assert.assertTrue(accessor.selectStagedFiles(Lists.newArrayList(record)).isEmpty());
 
         // addFiles
-        new Expectations(executor) {{
-            executor.executeDML(
-                    "INSERT INTO _statistics_.pipe_file_list VALUES (1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, NULL, NULL)");
-            result = Lists.newArrayList();
-        }};
+        new Expectations(executor) {
+            {
+                executor.executeDML(
+                        "INSERT INTO _statistics_.pipe_file_list VALUES (1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, NULL, NULL)");
+                result = Lists.newArrayList();
+            }
+        };
         repo.addFiles(Lists.newArrayList(record));
 
         // updateFileState
-        new Expectations(executor) {{
-            executor.executeDML(
-                    "UPDATE _statistics_.pipe_file_list SET state = 'LOADING', start_load = now() WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
-            result = Lists.newArrayList();
-        }};
+        new Expectations(executor) {
+            {
+                executor.executeDML(
+                        "UPDATE _statistics_.pipe_file_list SET state = 'LOADING', start_load = now() WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
+                result = Lists.newArrayList();
+            }
+        };
         repo.updateFileState(Lists.newArrayList(record), FileListRepo.PipeFileState.LOADING);
-        new Expectations(executor) {{
-            executor.executeDML(
-                    "UPDATE _statistics_.pipe_file_list SET state = 'LOADED', finish_load = now() WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
-            result = Lists.newArrayList();
-        }};
+        new Expectations(executor) {
+            {
+                executor.executeDML(
+                        "UPDATE _statistics_.pipe_file_list SET state = 'LOADED', finish_load = now() WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
+                result = Lists.newArrayList();
+            }
+        };
         repo.updateFileState(Lists.newArrayList(record), FileListRepo.PipeFileState.LOADED);
-        new Expectations(executor) {{
-            executor.executeDML(
-                    "UPDATE _statistics_.pipe_file_list SET state = 'ERROR' WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
-            result = Lists.newArrayList();
-        }};
+        new Expectations(executor) {
+            {
+                executor.executeDML(
+                        "UPDATE _statistics_.pipe_file_list SET state = 'ERROR' WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '1')");
+                result = Lists.newArrayList();
+            }
+        };
         accessor.updateFilesState(Lists.newArrayList(record), FileListRepo.PipeFileState.ERROR);
         repo.updateFileState(Lists.newArrayList(record), FileListRepo.PipeFileState.ERROR);
 
         // delete by pipe
-        new Expectations(executor) {{
-            executor.executeDML("DELETE FROM _statistics_.pipe_file_list WHERE pipe_id = 1");
-            result = Lists.newArrayList();
-        }};
+        new Expectations(executor) {
+            {
+                executor.executeDML("DELETE FROM _statistics_.pipe_file_list WHERE pipe_id = 1");
+                result = Lists.newArrayList();
+            }
+        };
         repo.destroy();
     }
 
