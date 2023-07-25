@@ -979,6 +979,11 @@ public:
     ~GzipBlockCompressionV2() override = default;
 
     Status decompress(const Slice& input, Slice* output) const override {
+        if (input.empty()) {
+            output->size = 0;
+            return Status::OK();
+        }
+
         thread_local libdeflate_decompressor* decompressor = libdeflate_alloc_decompressor();
         if (!decompressor) {
             return Status::InternalError("libdeflate_alloc_decompressor failed");
