@@ -43,7 +43,7 @@ The name of the materialized view. The naming requirements are as follows:
 
 **COMMENT** (optional)
 
-Comment on the materialized view.
+Comment on the materialized view. Note that `COMMENT` must be placed after `mv_name`. Otherwise, the materialized view cannot be created.
 
 **query_statement** (required)
 
@@ -162,7 +162,7 @@ The name of the materialized view. The naming requirements are as follows:
 
 **COMMENT** (optional)
 
-Comment on the materialized view.
+Comment on the materialized view. Note that `COMMENT` must be placed after `mv_name`. Otherwise, the materialized view cannot be created.
 
 **distribution_desc** (optional)
 
