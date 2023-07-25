@@ -99,41 +99,6 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::find_recvr(const TUniqueId& frag
     return {};
 }
 
-Status DataStreamMgr::transmit_data(const PTransmitDataParams* request, ::google::protobuf::Closure** done) {
-    const PUniqueId& finst_id = request->finst_id();
-    TUniqueId t_finst_id;
-    t_finst_id.hi = finst_id.hi();
-    t_finst_id.lo = finst_id.lo();
-    std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request->node_id());
-    if (recvr == nullptr) {
-        // The receiver may remove itself from the receiver map via deregister_recvr()
-        // at any time without considering the remaining number of senders.
-        // As a consequence, find_recvr() may return an innocuous NULL if a thread
-        // calling deregister_recvr() beat the thread calling find_recvr()
-        // in acquiring _lock.
-        // TODO: Rethink the lifecycle of DataStreamRecvr to distinguish
-        // errors from receiver-initiated teardowns.
-        return Status::OK();
-    }
-
-    // Request can only be used before calling recvr's add_batch or when request
-    // is the last for the sender, because request maybe released after it's batch
-    // is consumed by ExchangeNode.
-    if (request->has_query_statistics()) {
-        recvr->add_sub_plan_statistics(request->query_statistics(), request->sender_id());
-    }
-
-    bool eos = request->eos();
-    if (request->has_row_batch()) {
-        return Status::InternalError("Non-vectorized execute engine is not supported");
-    }
-
-    if (eos) {
-        recvr->remove_sender(request->sender_id(), request->be_number());
-    }
-    return Status::OK();
-}
-
 Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
     const PUniqueId& finst_id = request.finst_id();
     // TODO(zc): Use PUniqueId directly
