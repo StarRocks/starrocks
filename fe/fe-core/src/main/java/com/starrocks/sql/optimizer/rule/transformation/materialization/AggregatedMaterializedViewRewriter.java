@@ -203,9 +203,18 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     private ScalarOperator rewriteScalarOperator(ScalarOperator scalarOp,
                                                  EquationRewriter queryExprToMvExprRewriter,
                                                  Map<ColumnRefOperator, ColumnRefOperator> columnMapping,
+<<<<<<< HEAD
                                                  ColumnRefSet originalColumnSet) {
         ScalarOperator rewritten = replaceExprWithTarget(scalarOp, queryExprToMvExprRewriter, columnMapping);
         if (rewritten == null) {
+=======
+                                                 ColumnRefSet originalColumnSet,
+                                                 AggregateFunctionRewriter aggregateFunctionRewriter) {
+        equationRewriter.setAggregateFunctionRewriter(aggregateFunctionRewriter);
+        equationRewriter.setOutputMapping(columnMapping);
+        ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(scalarOp);
+        if (rewritten == null || scalarOp == rewritten) {
+>>>>>>> 1f503fe8fc ([BugFix] Support count(1)/count(*)/count(col) rewrite when col is not nullable (#27728))
             return null;
         }
         if (!isAllExprReplaced(rewritten, originalColumnSet)) {

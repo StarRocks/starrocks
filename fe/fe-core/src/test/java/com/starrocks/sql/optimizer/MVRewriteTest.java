@@ -445,10 +445,22 @@ public class MVRewriteTest {
     public void testAggregateMVAggregateFuncs6() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid, count(salary) "
                 + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
+<<<<<<< HEAD
         String query = "select deptno, sum(if(empid=0,0,1)) from " + EMPS_TABLE_NAME + " group by deptno";
         System.out.println(starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainQuery());
-    }
+=======
+        starRocksAssert.withMaterializedView(createEmpsMVSQL);
 
+        String query = "select deptno, empid, count(salary) "
+                + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
+        starRocksAssert.query(query).explainContains(EMPS_MV_NAME);
+
+        // TODO: support this later.
+        query = "select deptno, sum(if(empid=0,0,1)) from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainWithout(EMPS_MV_NAME);
+>>>>>>> 1f503fe8fc ([BugFix] Support count(1)/count(*)/count(col) rewrite when col is not nullable (#27728))
+    }
+    
     @Test
     public void testAggregateMVCalcGroupByQuery1() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid, sum(salary) "

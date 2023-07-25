@@ -1,5 +1,4 @@
 -- query1
--- query9?
 create materialized view lineitem_agg_mv1
 distributed by hash(l_orderkey,
                l_shipdate,
@@ -16,15 +15,12 @@ as select  /*+ SET_VAR(query_timeout = 7200) */
               l_shipdate,
               l_returnflag,
               l_linestatus,
+              count(1) as total_cnt,
               sum(l_quantity) as sum_qty,
-              count(l_quantity) as count_qty,
               sum(l_extendedprice) as sum_base_price,
-              count(l_extendedprice) as count_base_price,
               sum(l_discount) as sum_discount,
-              count(l_discount) as count_discount,
               sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
-              sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
-              count(*) as count_order
+              sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge
    from
               lineitem
    group by
@@ -46,11 +42,8 @@ properties (
 as select  /*+ SET_VAR(query_timeout = 7200) */
               l_suppkey, l_shipdate, l_partkey,
               sum(l_quantity) as sum_qty,
-              count(l_quantity) as count_qty,
               sum(l_extendedprice) as sum_base_price,
-              count(l_extendedprice) as count_base_price,
               sum(l_discount) as sum_discount,
-              count(l_discount) as count_discount,
               sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
               sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge
    from
