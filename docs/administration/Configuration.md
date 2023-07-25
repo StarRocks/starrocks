@@ -288,7 +288,7 @@ This section provides an overview of the static parameters that you can configur
 | ----------------------------------- | --------------- | ------------------------------------------------------------ |
 | run_mode                            | shared_nothing  | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
 | cloud_native_meta_port              | 6090            | The cloud-native meta service RPC port. Default: `6090`.     |
-| cloud_native_storage_type           | S3              | The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (Preview feature, supported from v3.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default) and `AZBLOB`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. |
+| cloud_native_storage_type           | S3              | The type of object storage you use. In shared-data mode, StarRocks supports storing data in <!--Azure Blob (Preview feature, supported from v3.2 onwards), and -->object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default)<!-- and `AZBLOB`-->. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. <!--If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`.--> |
 | aws_s3_path                         | N/A             | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`. |
 | aws_s3_endpoint                     | N/A             | The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. |
 | aws_s3_region                       | N/A             | The region in which your S3 bucket resides, for example, `us-west-2`. |
@@ -298,10 +298,10 @@ This section provides an overview of the static parameters that you can configur
 | aws_s3_secret_key                   | N/A             | The Secret Access Key used to access your S3 bucket.         |
 | aws_s3_iam_role_arn                 | N/A             | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
 | aws_s3_external_id                  | N/A             | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
-| azure_blob_path                     | N/A             | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
+<!--| azure_blob_path                     | N/A             | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
 | azure_blob_endpoint                 | N/A             | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
 | azure_blob_shared_key               | N/A             | The Shared Key used to authorize requests for your Azure Blob Storage.                     |
-| azure_blob_sas_token                | N/A             | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.                |
+| azure_blob_sas_token                | N/A             | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.                |-->
 
 #### Other FE static parameters
 
