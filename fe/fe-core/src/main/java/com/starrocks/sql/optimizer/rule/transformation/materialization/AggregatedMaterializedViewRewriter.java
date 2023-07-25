@@ -695,9 +695,11 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // Copy group by keys as projection
         aggregationOperator.getGroupingKeys().forEach(c -> defaultProjection.put(c, c));
         // Make a new logical agg with new projections.
-        LogicalAggregationOperator newAggOp =
-                new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(),
-                        newColumnRefToAggFuncMap);
+        LogicalAggregationOperator newAggOp = LogicalAggregationOperator.builder()
+                        .setType(AggType.GLOBAL)
+                        .setGroupingKeys(aggregationOperator.getGroupingKeys())
+                        .setAggregations(newColumnRefToAggFuncMap)
+                        .build();
 
         // Copy original projection mappings.
         if (aggregationOperator.getProjection() != null) {
