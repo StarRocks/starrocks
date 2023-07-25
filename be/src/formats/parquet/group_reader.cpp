@@ -584,39 +584,28 @@ Status GroupReader::DictFilterContext::rewrite_conjunct_ctxs_to_predicates(
 
         // ---------
         // get dict codes according to dict values.
-        size_t count_zero = SIMD::count_zero(filter, filter.size() - 1);
         std::vector<int32_t> dict_codes;
-        dict_codes.resize(filter.size() - 1 - count_zero);
-        size_t dict_codes_index = 0;
-        if (count_zero == filter.size() - 1) {
-            // dict values all filtered, do nothing
-        } else if (count_zero == 0) {
-            // dict values all reserved
-            for (int32_t i = 0; i < filter.size() - 1; i++) {
-                dict_codes[dict_codes_index++] = i;
-            }
-        } else {
-            BatchRunCounter count(filter.data(), 0, filter.size() - 1, count_zero);
-            BatchCount batch = count.next_batch();
-            int index = 0;
-            while (batch.length > 0) {
-                if (batch.AllSet()) {
-                    for (int32_t i = 0; i < batch.length; i++) {
-                        dict_codes[dict_codes_index++] = index + i;
-                    }
-                } else if (batch.NoneSet()) {
-                    // do nothing
-                } else {
-                    for (int32_t i = 0; i < batch.length; i++) {
-                        if (filter[index + i]) {
-                            dict_codes[dict_codes_index++] = index + i;
-                        }
+        BatchRunCounter<32> batch_run(filter.data(), 0, filter.size() - 1);
+        BatchCount batch = batch_run.next_batch();
+        int index = 0;
+        while (batch.length > 0) {
+            if (batch.AllSet()) {
+                for (int32_t i = 0; i < batch.length; i++) {
+                    dict_codes.emplace_back(index + i);
+                }
+            } else if (batch.NoneSet()) {
+                // do nothing
+            } else {
+                for (int32_t i = 0; i < batch.length; i++) {
+                    if (filter[index + i]) {
+                        dict_codes.emplace_back(index + i);
                     }
                 }
-                index += batch.length;
-                batch = count.next_batch();
             }
+            index += batch.length;
+            batch = batch_run.next_batch();
         }
+
         bool null_is_ok = filter[filter.size() - 1] == 1;
 
         // eq predicate is faster than in predicate

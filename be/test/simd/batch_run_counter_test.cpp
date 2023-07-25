@@ -39,14 +39,10 @@ TEST_F(BatchRunCounterTest, batch_size_32) {
     }
 
     size_t zero_count = SIMD::count_zero(filter.data(), test_size);
-    BatchRunCounter counter(filter.data(), 0, test_size, zero_count);
+    BatchRunCounter<32> counter(filter.data(), 0, test_size);
     BatchCount batch = counter.next_batch();
 #if defined(__AVX2__)
-    double ratio = zero_count * 1.0 / test_size;
-    if (ratio < 0.005 || ratio > 0.995) {
-        EXPECT_EQ(batch.length, 32);
-        std::cout << "batch size: " << batch.length << std::endl;
-    }
+    EXPECT_EQ(batch.length, 32);
 #endif
     size_t count = 0;
     size_t index = 0;
@@ -78,14 +74,10 @@ TEST_F(BatchRunCounterTest, batch_size_16) {
     }
 
     size_t zero_count = SIMD::count_zero(filter.data(), test_size);
-    BatchRunCounter counter(filter.data(), 0, test_size, zero_count);
+    BatchRunCounter<16> counter(filter.data(), 0, test_size);
     BatchCount batch = counter.next_batch();
 #if defined(__SSE2__)
-    double ratio = zero_count * 1.0 / test_size;
-    if ((ratio > 0.005 && ratio < 0.995) && (ratio < 0.01 || ratio > 0.99)) {
-        EXPECT_EQ(batch.length, 16);
-        std::cout << "batch size: " << batch.length << std::endl;
-    }
+    EXPECT_EQ(batch.length, 16);
 #endif
     size_t count = 0;
     size_t index = 0;
@@ -117,13 +109,9 @@ TEST_F(BatchRunCounterTest, batch_size_8) {
     }
 
     size_t zero_count = SIMD::count_zero(filter.data(), test_size);
-    BatchRunCounter counter(filter.data(), 0, test_size, zero_count);
+    BatchRunCounter<8> counter(filter.data(), 0, test_size);
     BatchCount batch = counter.next_batch();
-    double ratio = zero_count * 1.0 / test_size;
-    if (ratio > 0.01 && ratio < 0.99) {
-        EXPECT_EQ(batch.length, 8);
-        std::cout << "batch size: " << batch.length << std::endl;
-    }
+    EXPECT_EQ(batch.length, 8);
     size_t count = 0;
     size_t index = 0;
     while (batch.length > 0) {

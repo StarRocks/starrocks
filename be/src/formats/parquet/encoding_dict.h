@@ -28,10 +28,6 @@
 
 namespace starrocks::parquet {
 
-struct SliceHasher {
-    uint32_t operator()(const Slice& s) const { return HashUtil::hash(s.data, s.size, 397); }
-};
-
 template <typename T>
 class DictEncoder final : public Encoder {
 public:

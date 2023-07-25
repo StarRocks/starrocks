@@ -45,23 +45,11 @@ public:
     bool valid_count = false;
 };
 
+template <int batch_size>
 class BatchRunCounter {
 public:
-    BatchRunCounter(const uint8_t* filter, size_t start_offset, size_t length, int zero_num)
-            : _filter(filter), _offset(start_offset), _left(length) {
-        if (zero_num < 0) {
-            size_t count = SIMD::count_zero(filter + start_offset, length);
-            zero_num = static_cast<size_t>(count);
-        }
-        double ratio = zero_num * 1.0 / length;
-        if (ratio < 0.005 || ratio > 0.995) {
-            _batch_size = 32;
-        } else if (ratio < 0.01 || ratio > 0.99) {
-            _batch_size = 16;
-        } else {
-            _batch_size = 8;
-        }
-    }
+    BatchRunCounter(const uint8_t* filter, size_t start_offset, size_t length)
+            : _filter(filter), _offset(start_offset), _left(length) {}
 
     BatchCount next_batch() {
         if (_left == 0) {
@@ -70,7 +58,7 @@ public:
 #if defined(__AVX2__)
         const __m256i all0 = _mm256_setzero_si256();
 
-        if (_batch_size == 32 && _left >= 32) {
+        if (batch_size >= 32 && _left >= 32) {
             __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(_filter + _offset));
             uint32_t mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
             _offset += 32;
@@ -91,7 +79,7 @@ public:
 #if defined(__SSE2__)
         const __m128i zero16 = _mm_setzero_si128();
 
-        if (_batch_size >= 16 && _left >= 16) {
+        if (batch_size >= 16 && _left >= 16) {
             const auto f = _mm_loadu_si128(reinterpret_cast<const __m128i*>(_filter + _offset));
             const auto mask = _mm_movemask_epi8(_mm_cmpgt_epi8(f, zero16));
             _offset += 16;
@@ -133,7 +121,6 @@ private:
     const uint8_t* _filter = nullptr;
     size_t _offset = 0;
     size_t _left = 0;
-    size_t _batch_size = 0; // adaptive batch_size based on sparse
 };
 
 } // namespace starrocks
