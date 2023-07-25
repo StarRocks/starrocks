@@ -37,8 +37,6 @@ package com.starrocks.analysis;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 
@@ -47,8 +45,6 @@ import java.util.ArrayList;
  * tuple descriptors as well as their smaps for evaluating aggregate functions.
  */
 public abstract class AggregateInfoBase {
-    private static final Logger LOG =
-            LoggerFactory.getLogger(AggregateInfoBase.class);
 
     // For aggregations: All unique grouping expressions from a select block.
     // For analytics: Empty.

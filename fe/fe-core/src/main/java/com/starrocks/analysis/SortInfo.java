@@ -36,8 +36,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -49,7 +47,6 @@ import java.util.List;
  * particular input row (materialize all row slots)
  */
 public class SortInfo {
-    private static final Logger LOG = LogManager.getLogger(SortInfo.class);
     // All ordering exprs with cost greater than this will be materialized. Since we don't
     // currently have any information about actual function costs, this value is intended to
     // ensure that all expensive functions will be materialized while still leaving simple
