@@ -52,6 +52,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
@@ -63,6 +64,7 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
@@ -121,11 +123,15 @@ public class BrokerLoadJob extends BulkLoadJob {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         String warehouse = sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE);
         Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+        long workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
+        if (currentWh != null) {
+            workerGroupId = currentWh.getAnyAvailableCluster().getWorkerGroupId();
+        }
         transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                        timeoutSecond, currentWh.getAnyAvailableCluster().getWorkerGroupId());
+                        timeoutSecond, workerGroupId);
     }
 
     @Override

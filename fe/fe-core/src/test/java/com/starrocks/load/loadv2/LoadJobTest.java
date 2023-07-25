@@ -44,10 +44,12 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -55,6 +57,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Cluster;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -134,7 +137,7 @@ public class LoadJobTest {
             {
                 globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
                         (TransactionState.TxnCoordinator) any,
-                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong);
+                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong);
                 minTimes = 0;
                 result = 1;
                 leaderTaskExecutor.submit((LeaderTask) any);
@@ -144,6 +147,7 @@ public class LoadJobTest {
         };
 
         GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+
         new MockUp<EditLog>() {
             @Mock
             public void logSaveNextId(long nextId) {
