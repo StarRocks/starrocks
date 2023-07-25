@@ -41,7 +41,7 @@ AS
 
 **COMMENT**（选填）
 
-物化视图的注释。
+物化视图的注释。注意建立物化视图时 `COMMENT` 必须在 `mv_name` 之后，否则创建失败。
 
 **query_statement**（必填）
 
@@ -121,6 +121,7 @@ SELECT * FROM <mv_name> [_SYNC_MV_];
 
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
+[COMMENT ""]
 -- distribution_desc
 [DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]]
 -- refresh_desc
@@ -136,7 +137,6 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 ]
 -- order_by_expression
 [ORDER BY (<sort_key>)]
-[COMMENT ""]
 [PROPERTIES ("key"="value", ...)]
 AS 
 <query_statement>
@@ -155,6 +155,10 @@ AS
 > **注意**
 >
 > 同一张基表可以创建多个异步物化视图，但同一数据库内的异步物化视图名称不可重复。
+
+**COMMENT**（选填）
+
+物化视图的注释。注意建立物化视图时 `COMMENT` 必须在 `mv_name` 之后，否则创建失败。
 
 **distribution_desc**（选填）
 
@@ -216,10 +220,6 @@ AS
 **order_by_expression**（选填）
 
 异步物化视图的排序键。如不指定该参数，StarRocks 从 SELECT 列中选择部分前缀作为排序键，例如：`select a, b, c, d` 中, 排序列可能为 `a` 和 `b`。此参数自 StarRocks 3.0 起支持。
-
-**COMMENT**（选填）
-
-物化视图的注释。
 
 **PROPERTIES**（选填）
 
