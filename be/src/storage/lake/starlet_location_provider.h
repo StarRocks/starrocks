@@ -30,11 +30,7 @@ public:
 
     DISALLOW_COPY_AND_MOVE(StarletLocationProvider);
 
-    std::set<int64_t> owned_tablets() const override;
-
     std::string root_location(int64_t tablet_id) const override;
-
-    Status list_root_locations(std::set<std::string>* roots) const override;
 };
 
 } // namespace starrocks::lake
