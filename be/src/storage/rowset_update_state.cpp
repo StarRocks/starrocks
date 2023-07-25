@@ -507,9 +507,10 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         if (_partial_update_states[segment_id].write_columns[col_idx] != nullptr) {
             _memory_usage -= _partial_update_states[segment_id].write_columns[col_idx]->memory_usage();
         }
-        *append_column_size += _partial_update_states[segment_id].byte_size;
-        _partial_update_states[segment_id].release();
+        
     }
+    *append_column_size += _partial_update_states[segment_id].byte_size;
+    _partial_update_states[segment_id].release();
     return Status::OK();
 }
 
