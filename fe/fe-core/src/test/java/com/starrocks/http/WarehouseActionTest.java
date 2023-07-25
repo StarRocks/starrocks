@@ -235,8 +235,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
             loadMgr.removeOldLoadJob();
             routineLoadMgr.cleanOldRoutineLoadJobs();
-            streamLoadMgr.cleanOldStreamLoadTasks(true);
-            streamLoadMgr.cleanSyncStreamLoadTasks();
+            streamLoadMgr.cleanOldStreamLoadTasks();
 
             whToWhInfo = fetchWarehouseInfos();
             assertThat(whToWhInfo).containsExactlyInAnyOrderEntriesOf(expectedWhToWhInfo);
