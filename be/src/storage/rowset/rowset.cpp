@@ -209,6 +209,16 @@ Status Rowset::reload_segment(int32_t segment_id) {
     return Status::OK();
 }
 
+int64_t Rowset::total_segment_data_size() {
+    int64_t res = 0;
+    for (auto& seg : _segments) {
+        if (seg != nullptr) {
+            res += seg->get_data_size();
+        }
+    }
+    return res;
+}
+
 StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
     if (num_segments() == 0) {
         return 0;
