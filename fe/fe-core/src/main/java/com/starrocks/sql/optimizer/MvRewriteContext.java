@@ -21,7 +21,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
 import java.util.List;
@@ -36,10 +35,6 @@ public class MvRewriteContext {
     private final OptExpression queryExpression;
     private final ReplaceColumnRefRewriter queryColumnRefRewriter;
     private final PredicateSplit queryPredicateSplit;
-
-    private List<ScalarOperator> queryJoinOnPredicates;
-
-    private List<ScalarOperator> mvJoinOnPredicates;
 
     // mv's partition and distribution related conjunct predicate,
     // used to prune partitions and buckets of scan mv operator after rewrite
@@ -88,21 +83,6 @@ public class MvRewriteContext {
 
     public ScalarOperator getMvPruneConjunct() {
         return mvPruneConjunct;
-    }
-
-    public List<ScalarOperator> getQueryJoinOnPredicates() {
-        if (queryJoinOnPredicates == null) {
-            queryJoinOnPredicates = MvUtils.getJoinOnPredicates(queryExpression);
-        }
-        return queryJoinOnPredicates;
-    }
-
-    public List<ScalarOperator> getMvJoinOnPredicates() {
-        if (mvJoinOnPredicates == null) {
-            mvJoinOnPredicates = MvUtils.getJoinOnPredicates(materializationContext.getMvExpression());
-
-        }
-        return mvJoinOnPredicates;
     }
 
     public void setMvPruneConjunct(ScalarOperator mvPruneConjunct) {

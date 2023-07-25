@@ -121,7 +121,7 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(originCostPlan, replayCostPlan);
     }
 
-    private String getDumpInfoFromFile(String fileName) throws Exception {
+    protected String getDumpInfoFromFile(String fileName) throws Exception {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + fileName + ".json");
         StringBuilder sb = new StringBuilder();
@@ -142,13 +142,13 @@ public class ReplayFromDumpTest {
         return getCostPlanFragment(dumpJonStr, null);
     }
 
-    private Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
+    protected Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
             throws Exception {
         return getPlanFragment(dumpJsonStr, sessionVariable, TExplainLevel.COSTS);
     }
 
-    private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
-                                                        TExplainLevel level) throws Exception {
+    protected Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
+                                                          TExplainLevel level) throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
@@ -756,6 +756,7 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testHiveTPCH02UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_resource"), null, TExplainLevel.COSTS);
@@ -791,5 +792,29 @@ public class ReplayFromDumpTest {
                 "  |  - filter_id = 3, build_expr = (58: r_regionkey), remote = false\n" +
                 "  |  output columns: 50\n" +
                 "  |  cardinality: 5"));
+=======
+    public void testTPCH11() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
+            Assert.assertTrue(replayPair.second, replayPair.second.contains(
+                    "n_name,[<place-holder> = 'GERMANY'])\n" +
+                            "     dict_col=n_name"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
+
+    @Test
+    public void testPruneCTEProperty() throws Exception {
+        String jsonStr = getDumpInfoFromFile("query_dump/cte_reuse");
+        connectContext.getSessionVariable().disableJoinReorder();
+        Pair<String, ExecPlan> result = UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext,
+                getDumpInfoFromJson(jsonStr));
+        OptExpression expression = result.second.getPhysicalPlan().inputAt(1);
+        Assert.assertEquals(new CTEProperty(1), expression.getLogicalProperty().getUsedCTEs());
+        Assert.assertEquals(4, result.second.getCteProduceFragments().size());
+>>>>>>> bdcabb9837 ([BugFix] Fix mv rewrite bug for aggregat with having expr (#27557))
     }
 }
