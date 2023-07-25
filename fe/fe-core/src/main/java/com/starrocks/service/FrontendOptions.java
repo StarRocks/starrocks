@@ -309,7 +309,11 @@ public class FrontendOptions {
 
     public static String getLocalHostAddress() {
         if (useFqdn) {
-            return localAddr.getCanonicalHostName();
+            if (Config.enable_emr_product_restrictions) {
+                return localAddr.getCanonicalHostName() + Config.emr_serverless_full_domain;
+            } else {
+                return localAddr.getCanonicalHostName();
+            }
         }
         return InetAddresses.toAddrString(localAddr);
     }

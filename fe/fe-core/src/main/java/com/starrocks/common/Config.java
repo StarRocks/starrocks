@@ -3235,7 +3235,7 @@ public class Config extends ConfigBase {
     public static boolean enable_emr_product_restrictions = false;
 
     @ConfField(mutable = true)
-    public static boolean profile_enable = false;
+    public static String emr_serverless_full_domain = "";
 
     /**
      * Enable auto create tablet when creating table and add partition
