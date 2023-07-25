@@ -354,6 +354,8 @@ int main(int argc, char** argv) {
         cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
         cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
         cache_options.engine = starrocks::config::block_cache_engine;
+        cache_options.enable_cache_adaptor = starrocks::config::block_cache_adaptor_enable;
+        cache_options.enable_page_cache = starrocks::config::block_cache_page_cache_enable;
         EXIT_IF_ERROR(cache->init(cache_options));
     }
 

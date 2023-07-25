@@ -898,7 +898,7 @@ CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
 CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "262144");   // 256K
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
-CONF_Bool(block_cache_checksum_enable, "true");
+CONF_Bool(block_cache_checksum_enable, "false");
 // Maximum number of concurrent inserts we allow globally for block cache.
 // 0 means unlimited.
 CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
@@ -914,6 +914,10 @@ CONF_Int64(block_cache_lru_insertion_point, "1");
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
 CONF_String(block_cache_engine, "");
+
+CONF_Bool(block_cache_page_cache_enable, "true");
+CONF_Bool(block_cache_adaptor_enable, "true");
+CONF_Int64(block_cache_skip_read_factor, "1");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB

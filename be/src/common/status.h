@@ -162,6 +162,7 @@ public:
     bool is_already_exist() const { return code() == TStatusCode::ALREADY_EXIST; }
     bool is_io_error() const { return code() == TStatusCode::IO_ERROR; }
     bool is_not_supported() const { return code() == TStatusCode::NOT_IMPLEMENTED_ERROR; }
+    bool is_resource_busy() const { return code() == TStatusCode::RESOURCE_BUSY; }
 
     /// @return @c true if the status indicates Uninitialized.
     bool is_uninitialized() const { return code() == TStatusCode::UNINITIALIZED; }

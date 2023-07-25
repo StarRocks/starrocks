@@ -291,10 +291,18 @@ void HdfsScanner::update_counter() {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
         COUNTER_UPDATE(profile->block_cache_read_counter, stats.read_cache_count);
         COUNTER_UPDATE(profile->block_cache_read_bytes, stats.read_cache_bytes);
+        COUNTER_UPDATE(profile->block_cache_read_mem_bytes, stats.read_mem_cache_bytes);
+        COUNTER_UPDATE(profile->block_cache_read_disk_bytes, stats.read_disk_cache_bytes);
         COUNTER_UPDATE(profile->block_cache_read_timer, stats.read_cache_ns);
+        COUNTER_UPDATE(profile->block_cache_skip_read_counter, stats.skip_read_cache_count);
+        COUNTER_UPDATE(profile->block_cache_skip_read_bytes, stats.skip_read_cache_bytes);
         COUNTER_UPDATE(profile->block_cache_write_counter, stats.write_cache_count);
         COUNTER_UPDATE(profile->block_cache_write_bytes, stats.write_cache_bytes);
+        COUNTER_UPDATE(profile->block_cache_write_mem_bytes, stats.write_mem_cache_bytes);
+        COUNTER_UPDATE(profile->block_cache_write_disk_bytes, stats.write_disk_cache_bytes);
         COUNTER_UPDATE(profile->block_cache_write_timer, stats.write_cache_ns);
+        COUNTER_UPDATE(profile->block_cache_skip_write_counter, stats.skip_write_cache_count);
+        COUNTER_UPDATE(profile->block_cache_skip_write_bytes, stats.skip_write_cache_bytes);
         COUNTER_UPDATE(profile->block_cache_write_fail_counter, stats.write_cache_fail_count);
         COUNTER_UPDATE(profile->block_cache_write_fail_bytes, stats.write_cache_fail_bytes);
         COUNTER_UPDATE(profile->block_cache_read_block_buffer_counter, stats.read_block_buffer_count);
