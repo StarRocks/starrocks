@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -32,6 +33,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         MaterializedViewTestBase.setUp();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+        Config.default_replication_num = 1;
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_unique` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -671,6 +673,54 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                         " sum(salary) as total, count(salary) + 1 as cnt" +
                         " from emps group by empid, deptno ",
                 "select sum(salary), count(salary) + 1 from emps");
+    }
+
+    @Test
+    public void testAggregate10() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno ";
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 10");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid having sum(salary) > 10");
+    }
+
+    @Test
+    public void testAggregate11() throws Exception {
+        String sql = "CREATE TABLE test_agg_with_having_tbl (\n" +
+                "dt date NULL,\n" +
+                "col1 varchar(240) NULL,\n" +
+                "col2 varchar(30) NULL,\n" +
+                "col3 varchar(60) NULL,\n" +
+                "col4 decimal128(22, 2) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(dt, col1)\n" +
+                "DISTRIBUTED BY HASH(dt, col1) BUCKETS 1 " +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";;
+        String mv = "CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1\n" +
+                "DISTRIBUTED BY HASH(col1) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select " +
+                " col1,col2, col3,\n" +
+                "      sum(col4) as sum_amt\n" +
+                "    from\n" +
+                "      test_agg_with_having_tbl p1\n" +
+                "    group by\n" +
+                "      1, 2, 3";
+        starRocksAssert.withTable(sql);
+        starRocksAssert.withMaterializedView(mv);
+        sql("select col1 from test_agg_with_having_tbl p1\n" +
+                "    where p1.col2 = '02' and p1.col3 = \"2023-03-31\"\n" +
+                "    group by 1\n" +
+                "    having sum(p1.col4) >= 500000\n")
+                .contains("test_mv1");
     }
 
     @Test
@@ -1972,7 +2022,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"foreign_key_constraints\" = \"emps(empid) references dependents(empid)\" ";
         testRewriteOK(mv, query, constraint).
                 contains("0:OlapScanNode\n" +
-                "     TABLE: mv0");
+                        "     TABLE: mv0");
     }
 
     @Test
@@ -3424,6 +3474,36 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                             + "left semi join dependents on (depts.name = dependents.name)\n"
                             + "right anti join emps on (emps.deptno = depts.deptno)\n"
                             + "where emps.empid > 10");
+        }
+    }
+    @Test
+    public void testNestedAggregateBelowJoin2() throws Exception {
+        {
+            String mv1 = "create materialized view mv1 \n" +
+                    "distributed by random \n" +
+                    "refresh async\n" +
+                    "as select empid, deptno, locationid, \n" +
+                    " sum(salary) as total, count(salary)  as cnt\n" +
+                    " from emps group by empid, deptno, locationid ";
+            String mv2 = "create materialized view mv2 \n" +
+                    "distributed by random \n" +
+                    "refresh async\n" +
+                    "as select sum(total) as sum, t2.locationid, t2.empid, t2.deptno  from \n" +
+                    "(select empid, deptno, t.locationid, total, cnt from mv1 t join locations \n" +
+                    "on t.locationid = locations.locationid) t2\n" +
+                    "group by t2.locationid, t2.empid, t2.deptno";
+            starRocksAssert.withMaterializedView(mv1);
+            starRocksAssert.withMaterializedView(mv2);
+
+            sql("select sum(total) as sum, t.locationid  from \n" +
+                    "(select locationid, \n" +
+                    " sum(salary) as total, count(salary)  as cnt\n" +
+                    " from emps where empid = 2 and deptno = 10 group by locationid) t join locations \n" +
+                    "on t.locationid = locations.locationid\n" +
+                    "group by t.locationid")
+                    .match("mv2");
+            starRocksAssert.dropMaterializedView("mv1");
+            starRocksAssert.dropMaterializedView("mv2");
         }
     }
 }

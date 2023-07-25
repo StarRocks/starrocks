@@ -106,7 +106,6 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             results.add(candidate);
             mvContext.updateMVUsedCount();
         }
-        logMVRewrite(context, this, "Generate %d candidate plans after this rule rewrite", results.size());
 
         return results;
     }

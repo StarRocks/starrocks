@@ -36,12 +36,8 @@ create materialized view tvb distributed by hash(k) buckets 10 REFRESH ASYNC as 
 -- !result
 show create materialized view tvb;
 -- result:
-<<<<<<< HEAD
-tvb	CREATE MATERIALIZED VIEW `tvb`
-COMMENT "MATERIALIZED_VIEW"
-=======
 tvb	CREATE MATERIALIZED VIEW `tvb` (`k`, `sum(v)`)
->>>>>>> 09fee95a8a ([Enhancement] Support query dump for materialized view  for v3.1 (#26431) (#27154))
+COMMENT "MATERIALIZED_VIEW"
 DISTRIBUTED BY HASH(`k`) BUCKETS 10 
 REFRESH ASYNC
 PROPERTIES (
