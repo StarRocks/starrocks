@@ -44,6 +44,7 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -88,10 +89,12 @@ public class FileListTableRepo extends FileListRepo {
     private static final String CORRECT_FILE_LIST_REPLICATION_NUM =
             "ALTER TABLE %s SET ('replication_num'='3')";
 
+    private static final String ALL_COLUMNS =
+            "pipe_id, file_name, file_version, file_size, state, last_modified, staged_time," +
+                    " start_load, finish_load";
+
     private static final String SELECT_FILES =
-            "SELECT pipe_id, file_name, file_version, file_size, state, last_modified, staged_time," +
-                    " start_load, finish_load" +
-                    " FROM " + FILE_LIST_FULL_NAME;
+            "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME;
 
     private static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE pipe_id = %d AND state = %s";
 
@@ -103,6 +106,9 @@ public class FileListTableRepo extends FileListRepo {
 
     private static final String INSERT_FILES =
             "INSERT INTO " + FILE_LIST_FULL_NAME + " VALUES ";
+
+    private static final String SELECTED_STAGED_FILES =
+            "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME + " WHERE ";
 
     private static final String FILE_RECORD_VALUES = "(%d, %s, %s, %d, %s, %s, %s, %s, %s)";
 
@@ -122,7 +128,13 @@ public class FileListTableRepo extends FileListRepo {
             record.pipeId = pipeId.getId();
             records.add(record);
         }
+        List<PipeFileRecord> stagedFiles = RepoAccessor.getInstance().selectStagedFiles(records);
+        List<PipeFileRecord> newFiles = ListUtils.subtract(records, stagedFiles);
+        if (CollectionUtils.isEmpty(newFiles)) {
+            return;
+        }
         RepoAccessor.getInstance().addFiles(records);
+        LOG.info("add files into file-list, pipe={}, alreadyStagedFile={}, newFiles={}", pipeId, stagedFiles, newFiles);
     }
 
     @Override
@@ -175,6 +187,18 @@ public class FileListTableRepo extends FileListRepo {
             record.stagedTime = LocalDateTime.now();
             record.loadState = PipeFileState.UNLOADED;
             return record;
+        }
+
+        public static List<PipeFileRecord> fromResultBatch(List<TResultBatch> batches) {
+            List<PipeFileRecord> res = new ArrayList<>();
+            for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+                for (ByteBuffer buffer : batch.getRows()) {
+                    ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                    String jsonString = copied.toString(Charset.defaultCharset());
+                    res.add(PipeFileRecord.fromJson(jsonString));
+                }
+            }
+            return res;
         }
 
         /**
@@ -293,36 +317,21 @@ public class FileListTableRepo extends FileListRepo {
         }
 
         public List<PipeFileRecord> listAllFiles() {
-            List<PipeFileRecord> res = new ArrayList<>();
             try {
                 List<TResultBatch> batch = RepoExecutor.executeDQL(SELECT_FILES);
-                for (TResultBatch rows : ListUtils.emptyIfNull(batch)) {
-                    for (ByteBuffer buffer : rows.getRows()) {
-                        ByteBuf copied = Unpooled.copiedBuffer(buffer);
-                        String jsonString = copied.toString(Charset.defaultCharset());
-                        res.add(PipeFileRecord.fromJson(jsonString));
-                    }
-                }
+                return PipeFileRecord.fromResultBatch(batch);
             } catch (Exception e) {
                 LOG.error("listAllFiles failed", e);
                 throw e;
             }
-            return res;
         }
 
         public List<PipeFileRecord> listUnloadedFiles(long pipeId) {
-            List<PipeFileRecord> res = new ArrayList<>();
+            List<PipeFileRecord> res = null;
             try {
-                String sql = String.format(SELECT_FILES_BY_STATE,
-                        pipeId, Strings.quote(PipeFileState.UNLOADED.toString()));
+                String sql = buildListUnloadedFile(pipeId);
                 List<TResultBatch> batch = RepoExecutor.executeDQL(sql);
-                for (TResultBatch rows : ListUtils.emptyIfNull(batch)) {
-                    for (ByteBuffer buffer : rows.getRows()) {
-                        ByteBuf copied = Unpooled.copiedBuffer(buffer);
-                        String jsonString = copied.toString(Charset.defaultCharset());
-                        res.add(PipeFileRecord.fromJson(jsonString));
-                    }
-                }
+                res = PipeFileRecord.fromResultBatch(batch);
             } catch (Exception e) {
                 LOG.error("listUnloadedFiles failed", e);
                 throw e;
@@ -330,12 +339,21 @@ public class FileListTableRepo extends FileListRepo {
             return res;
         }
 
+        public List<PipeFileRecord> selectStagedFiles(List<PipeFileRecord> records) {
+            try {
+                String sql = buildSelectStagedFiles(records);
+                List<TResultBatch> batch = RepoExecutor.executeDQL(sql);
+                return PipeFileRecord.fromResultBatch(batch);
+            } catch (Exception e) {
+                LOG.error("selectStagedFiles failed", e);
+                throw e;
+            }
+        }
+
         public void addFiles(List<PipeFileRecord> records) {
             try {
-                StringBuilder sb = new StringBuilder();
-                sb.append(INSERT_FILES);
-                sb.append(records.stream().map(PipeFileRecord::toValueList).collect(Collectors.joining(",")));
-                RepoExecutor.executeDML(sb.toString());
+                String sql = buildSqlAddFiles(records);
+                RepoExecutor.executeDML(sql);
                 LOG.info("addFiles into repo: {}", records);
             } catch (Exception e) {
                 LOG.error("addFiles {} failed", records, e);
@@ -366,6 +384,11 @@ public class FileListTableRepo extends FileListRepo {
                 LOG.error("delete file of pipe {} failed", pipeId, e);
                 throw e;
             }
+        }
+
+        protected String buildSelectStagedFiles(List<PipeFileRecord> files) {
+            String where = files.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR "));
+            return SELECTED_STAGED_FILES + where;
         }
 
         protected String buildListUnloadedFile(long pipeId) {

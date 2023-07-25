@@ -66,7 +66,9 @@ public class FilePipeSource implements GsonPostProcessable {
     }
 
     public void poll() {
-        // TODO: poll it seriously
+        if (eos) {
+            return;
+        }
         if (CollectionUtils.isEmpty(fileListRepo.listUnloadedFiles())) {
             BrokerDesc brokerDesc = new BrokerDesc(tableProperties);
             List<TBrokerFileStatus> fileList = Lists.newArrayList();
@@ -88,6 +90,10 @@ public class FilePipeSource implements GsonPostProcessable {
         }
     }
 
+    /**
+     * For one-shot pipe, it will reach the eos state, which mean no more data from source
+     * For continuous pipe, it will never reach the eos state
+     */
     public boolean eos() {
         return eos;
     }

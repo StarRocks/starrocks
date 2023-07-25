@@ -96,5 +96,13 @@ public class FileListRepoTest {
         Assert.assertEquals("SELECT pipe_id, file_name, file_version, file_size, state, last_modified, " +
                 "staged_time, start_load, finish_load FROM _statistics_.pipe_file_list " +
                 "WHERE pipe_id = 1 AND state = 'UNLOADED'", sql);
+
+        // select staged
+        sql = FileListTableRepo.RepoAccessor.getInstance().buildSelectStagedFiles(records);
+        Assert.assertEquals("SELECT pipe_id, file_name, file_version, file_size, state, last_modified, " +
+                        "staged_time, start_load, finish_load FROM _statistics_.pipe_file_list " +
+                        "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
+                        "OR (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf')",
+                sql);
     }
 }

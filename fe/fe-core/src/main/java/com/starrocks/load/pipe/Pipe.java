@@ -139,6 +139,9 @@ public class Pipe implements GsonPostProcessable {
         if (System.currentTimeMillis() / 1000 < nextPollTime) {
             return;
         }
+        if (pipeSource.eos()) {
+            return;
+        }
 
         try {
             lock.writeLock().lock();

@@ -41,6 +41,7 @@ public abstract class FileListRepo {
 
     /**
      * Add files into the list, as unloaded state
+     * If some files have already been loaded, they will not been added
      */
     public abstract void addFiles(List<TBrokerFileStatus> files);
 
