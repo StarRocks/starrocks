@@ -14,12 +14,11 @@
 
 - 自动创建分区功能升级为表达式分区，建表时只需要使用简单的分区表达式（时间函数表达式或列表达式），数据导入时 StarRocks 会根据数据和分区表达式的定义规则自动创建分区。这种创建分区的方式，更加灵活易用，能满足大部分场景。
 - 支持 LIST 分区方式。数据按照分区列枚举值列表进行分区，可以加速查询和高效管理分类明确的数据。
-- 支持在 [INSERT INTO](../loading/InsertInto.md) 语句中使用 files() 函数，从 AWS S3 或 HDFS 直接导入 Parquet 或 ORC 格式文件的数据，简化导入过程。
 
 #### SQL 语句和函数
 
 - 增加 Storage Volume 相关 SQL 语句：[CREATE STORAGE VOLUME](/sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md)、[ALTER STORAGE VOLUME](/sql-reference/sql-statements/Administration/ALTER%20STORAGE%20VOLUME.md)、[DROP STORAGE VOLUME](/sql-reference/sql-statements/Administration/DROP%20STORAGE%20VOLUME.md)、[SET DEFAULT STORAGE VOLUME](/sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md)、[DESC STORAGE VOLUME](/sql-reference/sql-statements/Administration/DESC%20STORAGE%20VOLUME.md)、[SHOW STORAGE VOLUMES](/sql-reference/sql-statements/Administration/SHOW%20STORAGE%20VOLUMES.md)。
-- 增加如下表格函数 (Table function)：[files](/sql-reference/sql-functions/table-functions/files.md)。
+- 原表函数（Table function）TABLE() 更名为 [FILES()](/sql-reference/sql-functions/table-functions/files.md)，用以读取外部数据源文件以供查询或导入。
 
 #### 权限与安全
 
@@ -67,7 +66,7 @@
   - Array 函数：[array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) 支持 `ORDER BY`、[array_generate](../sql-reference/sql-functions/array-functions/array_generate.md)、[element_at](../sql-reference/sql-functions/array-functions/element_at.md)、[cardinality](../sql-reference/sql-functions/array-functions/cardinality.md)
   - Array 高阶函数：[all_match](../sql-reference/sql-functions/array-functions/all_match.md)、[any_match](../sql-reference/sql-functions/array-functions/any_match.md)
   - 聚合函数：[min_by](../sql-reference/sql-functions/aggregate-functions/min_by.md)、[percentile_disc](../sql-reference/sql-functions/aggregate-functions/percentile_disc.md)
-  - 表格函数 (Table function)：[generate_series](../sql-reference/sql-functions/table-functions/generate_series.md)
+  - 表函数 (Table function)：[generate_series](../sql-reference/sql-functions/table-functions/generate_series.md)
   - 日期函数：[next_day](../sql-reference/sql-functions/date-time-functions/next_day.md)、[previous_day](../sql-reference/sql-functions/date-time-functions/previous_day.md)、[last_day](../sql-reference/sql-functions/date-time-functions/last_day.md)、[makedate](../sql-reference/sql-functions/date-time-functions/makedate.md)、[date_diff](../sql-reference/sql-functions/date-time-functions/date_diff.md)
   - Bitmap 函数：[bitmap_subset_limit](../sql-reference/sql-functions/bitmap-functions/bitmap_subset_limit.md)、[bitmap_subset_in_range](../sql-reference/sql-functions/bitmap-functions/bitmap_subset_in_range.md)
 
