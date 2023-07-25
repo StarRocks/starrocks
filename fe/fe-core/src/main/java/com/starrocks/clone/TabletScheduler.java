@@ -590,6 +590,7 @@ public class TabletScheduler extends FrontendDaemon {
                                 tabletCtx.releaseResource(this);
                                 // adjust priority to avoid some higher priority always be the first in pendingTablets
                                 stat.counterTabletScheduledFailed.incrementAndGet();
+                                addBackToPendingTablets(tabletCtx);
                             }
                         }
                     } else {
@@ -597,6 +598,7 @@ public class TabletScheduler extends FrontendDaemon {
                         tabletCtx.releaseResource(this);
                         // adjust priority to avoid some higher priority always be the first in pendingTablets
                         stat.counterTabletScheduledFailed.incrementAndGet();
+                        addBackToPendingTablets(tabletCtx);
                     }
                 } else if (e.getStatus() == Status.FINISHED) {
                     // schedule redundant tablet will throw this exception
@@ -639,6 +641,15 @@ public class TabletScheduler extends FrontendDaemon {
 
     private synchronized void addToRunningTablets(TabletSchedCtx tabletCtx) {
         runningTablets.put(tabletCtx.getTabletId(), tabletCtx);
+    }
+
+    /**
+     * Only for test.
+     *
+     * @param tabletCtx tablet schedule context
+     */
+    private synchronized void addToPendingTablets(TabletSchedCtx tabletCtx) {
+        pendingTablets.add(tabletCtx);
     }
 
     /**
@@ -1450,6 +1461,21 @@ public class TabletScheduler extends FrontendDaemon {
         } else {
             throw new SchedException(Status.SCHEDULE_RETRY, "path busy, wait for next round");
         }
+    }
+
+    /**
+     * For some reason, a tablet info failed to be scheduled this time,
+     * Add back to queue, waiting for next round.
+     */
+    private synchronized void addBackToPendingTablets(TabletSchedCtx tabletCtx) {
+        Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.PENDING);
+        // Since we know it's add back, corresponding tablet id is still recorded in `allTabletIds`,
+        // so we explicitly remove the id from `allTabletIds`, otherwise `addTablet()` may fail.
+        // And when adding back, we don't want it to be failed because of exceeding limit of
+        // `Config.max_scheduling_tablets` since it's already got scheduled before, we just adjusted
+        // its priority and want it to be scheduled again, so we set force to be true here.
+        allTabletIds.remove(tabletCtx.getTabletId());
+        addTablet(tabletCtx, true /* force */);
     }
 
     private void finalizeTabletCtx(TabletSchedCtx tabletCtx, TabletSchedCtx.State state, String reason) {
