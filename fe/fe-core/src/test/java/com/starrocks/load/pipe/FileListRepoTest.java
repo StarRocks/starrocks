@@ -71,9 +71,18 @@ public class FileListRepoTest {
         List<PipeFileRecord> records =
                 Arrays.asList(PipeFileRecord.fromJson(json), PipeFileRecord.fromJson(json));
         FileListRepo.PipeFileState state = FileListRepo.PipeFileState.LOADING;
-        String sql = FileListTableRepo.RepoAccessor.getInstance().buildSqlUpdateFilesState(records, state);
+        String sql = FileListTableRepo.RepoAccessor.getInstance().buildSqlStartLoad(records, state);
         Assert.assertEquals("UPDATE _statistics_.pipe_file_list " +
-                "SET state = 'LOADING' WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
+                "SET state = 'LOADING', start_load = now() " +
+                "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
+                "OR (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf')", sql);
+
+        // finish load
+        state = FileListRepo.PipeFileState.LOADED;
+        sql = FileListTableRepo.RepoAccessor.getInstance().buildSqlFinishLoad(records, state);
+        Assert.assertEquals("UPDATE _statistics_.pipe_file_list " +
+                "SET state = 'LOADED', finish_load = now() " +
+                "WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
                 "OR (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf')", sql);
 
         // add files

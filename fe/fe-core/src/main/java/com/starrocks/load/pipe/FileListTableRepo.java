@@ -83,17 +83,17 @@ public class FileListTableRepo extends FileListRepo {
 
     private static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE pipe_id = %d AND state = %s";
 
-    private static final String UPDATE_FILES_STATE =
-            "UPDATE " + FILE_LIST_FULL_NAME +
-                    " SET state = %s WHERE ";
+    private static final String UPDATE_FILE_STATE_START_LOAD =
+            "UPDATE " + FILE_LIST_FULL_NAME + " SET state = %s, start_load = now() WHERE ";
 
+    private static final String UPDATE_FILE_STATE_FINISH_LOAD =
+            "UPDATE " + FILE_LIST_FULL_NAME + " SET state = %s, finish_load = now() WHERE ";
 
     private static final String INSERT_FILES =
             "INSERT INTO " + FILE_LIST_FULL_NAME + " VALUES ";
 
     private static final String SELECTED_STAGED_FILES =
             "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME + " WHERE ";
-
 
     private static final String DELETE_BY_PIPE = "DELETE FROM " + FILE_LIST_FULL_NAME + " WHERE pipe_id = %d";
 
@@ -191,7 +191,27 @@ public class FileListTableRepo extends FileListRepo {
          */
         public void updateFilesState(List<PipeFileRecord> records, PipeFileState state) {
             try {
-                String sql = buildSqlUpdateFilesState(records, state);
+                String sql = null;
+                switch (state) {
+                    case UNLOADED:
+                        Preconditions.checkState(false, "not supported");
+                        break;
+                    case LOADING:
+                        sql = buildSqlStartLoad(records, state);
+                        break;
+                    case LOADED:
+                        sql = buildSqlFinishLoad(records, state);
+                        break;
+                    case SKIPPED:
+                        Preconditions.checkState(false, "not supported");
+                        break;
+                    case ERROR:
+                        Preconditions.checkState(false, "not supported");
+                        break;
+                    default:
+                        Preconditions.checkState(false, "not supported");
+                        break;
+                }
                 RepoExecutor.executeDML(sql);
                 LOG.info("update files state to {}: {}", state, records);
             } catch (Exception e) {
@@ -233,9 +253,16 @@ public class FileListTableRepo extends FileListRepo {
             return sb.toString();
         }
 
-        protected String buildSqlUpdateFilesState(List<PipeFileRecord> records, PipeFileState state) {
+        protected String buildSqlStartLoad(List<PipeFileRecord> records, PipeFileState state) {
             StringBuilder sb = new StringBuilder();
-            sb.append(String.format(UPDATE_FILES_STATE, Strings.quote(state.toString())));
+            sb.append(String.format(UPDATE_FILE_STATE_START_LOAD, Strings.quote(state.toString())));
+            sb.append(records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR ")));
+            return sb.toString();
+        }
+
+        protected String buildSqlFinishLoad(List<PipeFileRecord> records, PipeFileState state) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format(UPDATE_FILE_STATE_FINISH_LOAD, Strings.quote(state.toString())));
             sb.append(records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR ")));
             return sb.toString();
         }
