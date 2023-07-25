@@ -596,11 +596,8 @@ public class Optimizer {
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
+        result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
 
-        SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
-        if (sessionVariable.isEnableCboTablePrune() || sessionVariable.isEnableRboTablePrune()) {
-            result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
-        }
         result.setPlanCount(planCount);
         return result;
     }
