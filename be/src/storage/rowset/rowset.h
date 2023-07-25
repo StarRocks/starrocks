@@ -141,6 +141,7 @@ public:
     // reload this rowset after the underlying segment file is changed
     Status reload();
     Status reload_segment(int32_t segment_id);
+    int64_t total_segment_data_size();
 
     const TabletSchema& schema() const { return *_schema; }
     void set_schema(const TabletSchema* schema) { _schema = schema; }
