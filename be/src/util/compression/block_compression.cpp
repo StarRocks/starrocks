@@ -981,7 +981,6 @@ public:
     Status decompress(const Slice& input, Slice* output) const override {
         thread_local libdeflate_decompressor* decompressor = libdeflate_alloc_decompressor();
         if (!decompressor) {
-            std::cout<< "libdeflate_alloc_decompressor failed"<<std::endl;
             return Status::InternalError("libdeflate_alloc_decompressor failed");
         }
 
@@ -989,7 +988,6 @@ public:
         auto result =
                 libdeflate_gzip_decompress(decompressor, input.data, input.size, output->data, output->size, &out_len);
         if (result != LIBDEFLATE_SUCCESS) {
-            std::cout<< result <<std::endl;
             return Status::InvalidArgument("libdeflate_gzip_decompress failed");
         }
 
