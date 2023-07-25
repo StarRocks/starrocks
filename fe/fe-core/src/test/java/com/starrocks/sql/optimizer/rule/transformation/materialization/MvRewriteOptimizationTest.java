@@ -41,6 +41,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.SQLException;
@@ -2656,5 +2657,133 @@ public class MvRewriteOptimizationTest {
             PlanTestBase.assertNotContains(plan, "partial_mv_13");
             starRocksAssert.dropMaterializedView("partial_mv_13");
         }
+    }
+
+    @Test
+    public void testJoinPredicatePushdown() throws Exception {
+        cluster.runSql("test", "CREATE TABLE pushdown_t1 (\n" +
+                "    `c0` string,\n" +
+                "    `c1` string,\n" +
+                "    `c2` string,\n" +
+                "    `c3` string,\n" +
+                "    `c4` string,\n" +
+                "    `c5` string ,\n" +
+                "    `c6` string,\n" +
+                "    `c7`  date\n" +
+                ") \n" +
+                "DUPLICATE KEY (c0)\n" +
+                "DISTRIBUTED BY HASH(c0)\n" +
+                "properties('replication_num' = '1');");
+        cluster.runSql("test", "CREATE TABLE `pushdown_t2` (\n" +
+                "  `c0` varchar(65533) NULL ,\n" +
+                "  `c1` varchar(65533) NULL ,\n" +
+                "  `c2` varchar(65533) NULL ,\n" +
+                "  `c3` varchar(65533) NULL ,\n" +
+                "  `c4` varchar(65533) NULL ,\n" +
+                "  `c5` varchar(65533) NULL ,\n" +
+                "  `c6` varchar(65533) NULL ,\n" +
+                "  `c7` varchar(65533) NULL ,\n" +
+                "  `c8` varchar(65533) NULL ,\n" +
+                "  `c9` varchar(65533) NULL ,\n" +
+                "  `c10` varchar(65533) NULL ,\n" +
+                "  `c11` date NULL ,\n" +
+                "  `c12` datetime NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY (c0)\n" +
+                "DISTRIBUTED BY HASH(c0)\n" +
+                "PROPERTIES ( \"replication_num\" = \"1\");");
+
+        // With null-rejecting predicate
+        createAndRefreshMv("test", "_pushdown_predicate_join_mv1",
+                "CREATE MATERIALIZED VIEW `_pushdown_predicate_join_mv1`  \n" +
+                        "DISTRIBUTED BY HASH(c12) BUCKETS 18 \n" +
+                        "REFRESH MANUAL \n" +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"storage_medium\" = \"HDD\") \n" +
+                        "AS\n" +
+                        "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
+                        "FROM\n" +
+                        "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
+                        "    LEFT OUTER JOIN \n" +
+                        "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
+                        "    ON `t2`.`c0` = `t1`.`c0`\n" +
+                        "    AND t2.c0 IS NOT NULL " +
+                        "    AND date(t2.`c12`) = `t1`.`c7`\n" +
+                        "   ;");
+
+        String query = "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
+                "FROM\n" +
+                "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
+                "    LEFT OUTER JOIN \n" +
+                "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
+                "    ON `t2`.`c0` = `t1`.`c0`\n" +
+                "    AND t2.c0 IS NOT NULL " +
+                "    AND date(t2.`c12`) = `t1`.`c7`\n" +
+                "   ;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv1");
+    }
+
+    @Ignore("outer join and pushdown predicate does not work")
+    @Test
+    public void testJoinPredicatePushdown1() throws Exception {
+        cluster.runSql("test", "CREATE TABLE pushdown_t1 (\n" +
+                "    `c0` string,\n" +
+                "    `c1` string,\n" +
+                "    `c2` string,\n" +
+                "    `c3` string,\n" +
+                "    `c4` string,\n" +
+                "    `c5` string ,\n" +
+                "    `c6` string,\n" +
+                "    `c7`  date\n" +
+                ") \n" +
+                "DUPLICATE KEY (c0)\n" +
+                "DISTRIBUTED BY HASH(c0)\n" +
+                "properties('replication_num' = '1');");
+        cluster.runSql("test", "CREATE TABLE `pushdown_t2` (\n" +
+                "  `c0` varchar(65533) NULL ,\n" +
+                "  `c1` varchar(65533) NULL ,\n" +
+                "  `c2` varchar(65533) NULL ,\n" +
+                "  `c3` varchar(65533) NULL ,\n" +
+                "  `c4` varchar(65533) NULL ,\n" +
+                "  `c5` varchar(65533) NULL ,\n" +
+                "  `c6` varchar(65533) NULL ,\n" +
+                "  `c7` varchar(65533) NULL ,\n" +
+                "  `c8` varchar(65533) NULL ,\n" +
+                "  `c9` varchar(65533) NULL ,\n" +
+                "  `c10` varchar(65533) NULL ,\n" +
+                "  `c11` date NULL ,\n" +
+                "  `c12` datetime NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY (c0)\n" +
+                "DISTRIBUTED BY HASH(c0)\n" +
+                "PROPERTIES ( \"replication_num\" = \"1\");");
+
+        // Without null-rejecting predicate
+        createAndRefreshMv("test", "_pushdown_predicate_join_mv2",
+                "CREATE MATERIALIZED VIEW `_pushdown_predicate_join_mv2`  \n" +
+                        "DISTRIBUTED BY HASH(c12) BUCKETS 18 \n" +
+                        "REFRESH MANUAL \n" +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"storage_medium\" = \"HDD\") \n" +
+                        "AS\n" +
+                        "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
+                        "FROM\n" +
+                        "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
+                        "    LEFT OUTER JOIN \n" +
+                        "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
+                        "    ON `t2`.`c0` = `t1`.`c0`\n" +
+                        "    AND date(t2.`c12`) = `t1`.`c7`\n" +
+                        "   ;");
+
+        String query = "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
+                "FROM\n" +
+                "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
+                "    LEFT OUTER JOIN \n" +
+                "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
+                "    ON `t2`.`c0` = `t1`.`c0`\n" +
+                "    AND date(t2.`c12`) = `t1`.`c7`\n" +
+                "   ;";
+
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv2");
     }
 }

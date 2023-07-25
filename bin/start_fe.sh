@@ -115,6 +115,10 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
     final_java_opt=$JAVA_OPTS_FOR_JDK_9
 fi
 
+if [[ "$JAVA_VERSION" -lt 11 ]]; then
+    echo "Tips: current JDK version is $JAVA_VERSION, JDK 11 or 17 is highly recommended for better GC performance(lower version JDK may not be supported in the future)"
+fi
+
 if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
     # Allow attaching debuggers to the FE process:
     # https://www.jetbrains.com/help/idea/attaching-to-local-process.html

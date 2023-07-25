@@ -30,7 +30,7 @@ Explanation:
 | load_process_max_memory_limit_bytes | 107374182400 | The total import memory limit `min(mem_limit * load_process_max_memory_limit_bytes, load_process_max_memory_limit_bytes)`. It is the actual available import memory threshold, reaching which a disk swipe will be triggered.  |
 | load_process_max_memory_limit_percent | 30 | The total import memory limit `min(mem_limit * load_process_max_memory_limit_percent, load_process_max_memory_limit_bytes)`. It is the actual available import memory threshold, reaching which the swipe will be triggered. |
 | default_load_mem_limit | 2147483648 | If the memory limit on the receiving side is reached for a single import instance, a disk swipe will be triggered. This needs to be modified with the Session variable `load_mem_limit` to take effect. |
-| max_compaction_concurrency | 10 | Disable the compaction|
+| max_compaction_concurrency | -1 | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | cumulative_compaction_check_interval_seconds | 1 | Interval of compaction check|
 
 * **Session variables**

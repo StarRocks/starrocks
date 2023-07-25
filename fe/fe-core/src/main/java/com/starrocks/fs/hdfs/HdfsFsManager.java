@@ -415,7 +415,7 @@ public class HdfsFsManager {
                     "for load without broker. For broker load with broker, you can set namenode HA in the load_properties");
         }
 
-        if (!authentication.equals("")) {
+        if (!authentication.equals("") && !authentication.equals("simple")) {
             LOG.warn("Invalid load_properties, kerberos should be set in hdfs/core-site.xml for broker " +
                     "load without broker. For broker load with broker, you can set namenode HA in the load_properties");
             throw new UserException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " + 
