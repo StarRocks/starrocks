@@ -4,7 +4,7 @@
 
 Returns the day difference between two date expressions (`expr1` − `expr2`), accurate to the day.
 
-Difference between days_diff and [datediff](../sql-refernce/sql-functions/date-time-functions/datediff.md):
+Difference between days_diff and [datediff](./datediff.md):
 
 |Function|Behavior|Example|
 |---|---|---|
