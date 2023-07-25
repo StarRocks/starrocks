@@ -715,6 +715,110 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testAggregate12() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary) as cnt \n" +
+                " from emps group by empid, deptno ";
+        // count(salary): salary is nullable
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid");
+        testRewriteFail(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteFail(mv, "select empid,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid");
+    }
+
+    @Test
+    public void testAggregate13() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(empid) as cnt \n" +
+                " from emps group by empid, deptno ";
+        // count(empid): empid is not nullable
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid");
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(1) as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid");
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(*) as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(*)  as cnt\n" +
+                " from emps group by empid");
+    }
+
+    @Test
+    public void testAggregate14() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid, deptno ";
+        // count(salary): salary is nullable
+        testRewriteFail(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteFail(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid");
+
+        // count(empid): empid is not nullable
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid");
+
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid");
+    }
+
+    @Test
+    public void testAggregate15() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(*)  as cnt\n" +
+                " from emps group by empid, deptno ";
+        // count(salary): salary is nullable
+        testRewriteFail(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteFail(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid");
+
+        // count(empid): empid is not nullable
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(empid)  as cnt\n" +
+                " from emps group by empid");
+
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid, deptno");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(1)  as cnt\n" +
+                " from emps group by empid");
+    }
+
+    @Test
     public void testAggregateWithAggExpr() {
         // support agg expr: empid -> abs(empid)
         testRewriteOK("select empid, deptno," +
