@@ -1,6 +1,8 @@
 # 函数列表
 
-StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时使用。您可以按照以下分类来查找目标函数。
+StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时使用。除了常见的函数分类，StarRocks 也支持 ARRAY、JSON、MAP、STRUCT 等半结构化函数，支持 [Lambda 高阶函数](Lambda_expression.md)。如果以上函数都不符合您的需求，您还可以自行编写 [Java UDF](JAVA_UDF.md) 来满足业务需求。
+
+您可以按照以下分类来查找目标函数。
 
 - [日期函数](#日期函数)
 - [字符串函数](#字符串函数)
@@ -302,8 +304,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
-|  [JSON 函数概述](/sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)|支持的 JSON 函数、运算符以及 JSON path。|
-|  [JSON 运算符](/sql-reference/sql-functions/json-functions/json-operators.md) | JSON 运算符。|
 |  [json_array](/sql-reference/sql-functions/json-functions/json-constructor-functions/json_array.md)| 接收 SQL 数组并返回一个 JSON 类型的数组。|
 |  [json_object](/sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md)| 接收键值集合，返回一个包含这些键值对的 JSON 类型的对象。|
 |  [parse_json](/sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md)|将字符串类型的数据构造为 JSON 类型的数据。|
