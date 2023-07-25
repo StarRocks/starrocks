@@ -35,7 +35,13 @@ struct HdfsScannerContext;
 
 namespace starrocks::parquet {
 
+<<<<<<< HEAD
 constexpr static const uint64_t FOOTER_BUFFER_SIZE = 16 * 1024;
+=======
+// contains magic number (4 bytes) and footer length (4 bytes)
+constexpr static const uint32_t PARQUET_FOOTER_SIZE = 8;
+constexpr static const uint64_t DEFAULT_FOOTER_BUFFER_SIZE = 64 * 1024;
+>>>>>>> 398ddc90d1 ([Enhancement] Enlarge parquet footer init read size (#27870))
 constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
 
 class FileMetaData;
