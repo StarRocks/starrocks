@@ -79,6 +79,7 @@ select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id o
 select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
 select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id order by user_id;
 select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id order by user_id;
+select user_id, time, round(percentile_approx(tag_id, 0)) from user_tags group by user_id, time order by user_id;
 drop materialized view user_tags_percential_mv2;
 
 -- TEST BITMAP : UNOION
