@@ -499,11 +499,31 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
 }
 
 void ExecEnv::stop() {
-    // Clear load channel should be executed before stopping the storage engine,
-    // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
-    // so when the ThreadPool is destroyed, it will crash.
+    if (_stream_mgr != nullptr) {
+        _stream_mgr->close();
+    }
+
     if (_load_channel_mgr) {
-        _load_channel_mgr->clear();
+        // Clear load channel should be executed before stopping the storage engine,
+        // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
+        // so when the ThreadPool is destroyed, it will crash.
+        _load_channel_mgr->close();
+    }
+
+    if (_load_stream_mgr) {
+        _load_stream_mgr->close();
+    }
+
+    if (_fragment_mgr) {
+        _fragment_mgr->close();
+    }
+
+    if (_pipeline_sink_io_pool) {
+        _pipeline_sink_io_pool->shutdown();
+    }
+
+    if (_wg_driver_executor) {
+        _wg_driver_executor->close();
     }
 
     if (_automatic_partition_pool) {

@@ -210,6 +210,18 @@ Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, Pl
     }
 }
 
+void DataStreamMgr::close() {
+    for (size_t i = 0; i < _receiver_map->size(); i++) {
+        std::lock_guard<Mutex> l(_lock[i]);
+        for (auto& iter : _receiver_map[i]) {
+            for (auto& sub_iter : *iter.second) {
+                sub_iter.second->cancel_stream();
+            }
+        }
+    }
+    _pass_through_chunk_buffer_manager.close();
+}
+
 void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
     VLOG_QUERY << "cancelling all streams for fragment=" << fragment_instance_id;
     std::vector<std::shared_ptr<DataStreamRecvr>> recvrs;
