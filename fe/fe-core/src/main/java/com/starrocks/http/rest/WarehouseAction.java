@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Map;
 
 public class WarehouseAction extends RestBaseAction {
-    public static final String URI = "/api/v2/warehouses";
+    public static final String URI = "/api/v1/warehouses";
 
     public WarehouseAction(ActionController controller) {
         super(controller);
