@@ -1317,6 +1317,11 @@ public class GlobalStateMgr {
         createBuiltinStorageVolume();
     }
 
+    public void setFrontendNodeType(FrontendNodeType newType) {
+        // just for test, don't call it directly
+        feType = newType;
+    }
+
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
         if (RunMode.allowCreateLakeTable()) {

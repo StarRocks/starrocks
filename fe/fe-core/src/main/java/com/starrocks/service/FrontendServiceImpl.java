@@ -1226,7 +1226,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         result.setTimeout(timeoutSecond);
-        LOG.info("load txn timeout second is {}", timeoutSecond);
         try {
             result.setTxnId(loadTxnBeginImpl(request, clientAddr));
         } catch (DuplicatedRequestException e) {
@@ -1361,7 +1360,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 TabletFailInfo.fromThrift(request.getFailInfos()),
                 timeoutMs, attachment);
-        LOG.info("txn {} publish timeout is {}", request.getTxnId(), timeoutMs);
         if (!ret) {
             // committed success but not visible
             status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
@@ -1459,6 +1457,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         try {
             TTransactionStatus status = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTxnStatus(db, request.getTxnId());
+            LOG.debug("txn {} status is {}", request.getTxnId(), status);
             result.setStatus(status);
         } catch (Throwable e) {
             result.setStatus(TTransactionStatus.UNKNOWN);

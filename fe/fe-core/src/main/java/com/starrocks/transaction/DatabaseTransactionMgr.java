@@ -1731,7 +1731,7 @@ public class DatabaseTransactionMgr {
                 return TTransactionStatus.VISIBLE;
             //ABORTED
             case 4:
-                return TTransactionStatus.VISIBLE;
+                return TTransactionStatus.ABORTED;
             //PREPARED
             case 5:
                 return TTransactionStatus.PREPARED;
