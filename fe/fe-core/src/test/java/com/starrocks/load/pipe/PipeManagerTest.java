@@ -149,7 +149,7 @@ public class PipeManagerTest {
         pm2.getRepo().loadImage(image2.getDataInputStream(), 123);
         Assert.assertEquals(pm.getPipesUnlock(), pm2.getPipesUnlock());
         Pipe p1 = pm2.mayGetPipe(new PipeName(PIPE_TEST_DB, "p1")).get();
-        Assert.assertEquals(Pipe.State.PAUSED, p1.getState());
+        Assert.assertEquals(Pipe.State.SUSPEND, p1.getState());
 
         // replay journal at follower
         PipeManager follower = new PipeManager();
@@ -167,7 +167,7 @@ public class PipeManagerTest {
         p2.poll();
         p2.schedule();
         p1 = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, "p1")).get();
-        Assert.assertEquals(Pipe.State.PAUSED, p1.getState());
+        Assert.assertEquals(Pipe.State.SUSPEND, p1.getState());
     }
 
     private void mockTaskExecution(Constants.TaskRunState executionState) {
@@ -374,7 +374,7 @@ public class PipeManagerTest {
         pm.alterPipe(pauseStmt);
         pm.alterPipe(pauseStmt);
         pm.alterPipe(pauseStmt);
-        Assert.assertEquals(Pipe.State.PAUSED, pipe.getState());
+        Assert.assertEquals(Pipe.State.SUSPEND, pipe.getState());
 
         // resume
         sql = "alter pipe p_crud resume";

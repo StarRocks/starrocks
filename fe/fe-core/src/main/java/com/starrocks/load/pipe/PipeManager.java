@@ -93,7 +93,7 @@ public class PipeManager {
             }
             pipe = pipeMap.get(nameToId.get(dbAndName));
 
-            pipe.pause();
+            pipe.suspend();
             pipe.destroy();
             removePipe(pipe);
 
@@ -118,7 +118,7 @@ public class PipeManager {
             for (PipeId id : removed) {
                 Pipe pipe = pipeMap.get(id);
                 if (pipe != null) {
-                    pipe.pause();
+                    pipe.suspend();
                     pipe.destroy();
                     pipeMap.remove(id);
                 }
@@ -140,8 +140,8 @@ public class PipeManager {
             PipeId pipeId = nameToId.get(dbAndName);
             DdlException.requireNotNull("pipe-" + dbAndName.second, pipeId);
             Pipe pipe = pipeMap.get(pipeId);
-            if (alterClause.isPause()) {
-                pipe.pause();
+            if (alterClause.isSuspend()) {
+                pipe.suspend();
             } else if (alterClause.isResume()) {
                 pipe.resume();
             }

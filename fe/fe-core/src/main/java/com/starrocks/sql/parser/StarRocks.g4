@@ -1743,7 +1743,7 @@ dropPipeStatement
     ;
 
 alterPipeClause
-    : PAUSE | RESUME
+    : SUSPEND | RESUME
     ;
 
 alterPipeStatement

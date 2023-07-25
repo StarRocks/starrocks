@@ -371,21 +371,21 @@ public class Pipe implements GsonPostProcessable {
         }
     }
 
-    public void pause() {
+    public void suspend() {
         try {
             lock.writeLock().lock();
 
             if (this.state == State.RUNNING) {
-                this.state = State.PAUSED;
+                this.state = State.SUSPEND;
 
                 for (PipeTaskDesc task : runningTasks.values()) {
                     task.interrupt();
                 }
-                LOG.info("Pause pipe " + this);
+                LOG.info("suspend pipe " + this);
 
                 if (!runningTasks.isEmpty()) {
                     runningTasks.clear();
-                    LOG.info("pause pipe {} and clear running tasks {}", this, runningTasks);
+                    LOG.info("suspend pipe {} and clear running tasks {}", this, runningTasks);
                 }
             }
         } finally {
@@ -397,7 +397,7 @@ public class Pipe implements GsonPostProcessable {
         try {
             lock.writeLock().lock();
 
-            if (this.state == State.PAUSED || this.state == State.ERROR) {
+            if (this.state == State.SUSPEND || this.state == State.ERROR) {
                 this.state = State.RUNNING;
                 this.failedTaskExecutionCount = 0;
                 LOG.info("Resume pipe " + this);
@@ -539,7 +539,7 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public enum State {
-        PAUSED,
+        SUSPEND,
         RUNNING,
         FINISHED,
         ERROR,

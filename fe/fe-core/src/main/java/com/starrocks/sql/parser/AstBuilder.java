@@ -3886,7 +3886,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAlterPipeClause(StarRocksParser.AlterPipeClauseContext context) {
-        if (context.PAUSE() != null) {
+        if (context.SUSPEND() != null) {
             return new AlterPipePauseResume(createPos(context), true);
         } else if (context.RESUME() != null) {
             return new AlterPipePauseResume(createPos(context), false);
