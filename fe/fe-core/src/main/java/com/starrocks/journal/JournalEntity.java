@@ -152,6 +152,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateBatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -606,6 +607,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), TransactionState.class);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), TransactionStateBatch.class);
                 isRead = true;
                 break;
             }

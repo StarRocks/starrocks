@@ -227,12 +227,12 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
         cntl->SetFailed("missing tablet_ids");
         return;
     }
-    if (!request->has_txn_id()) {
-        cntl->SetFailed("missing txn_id");
+    if (request->txn_ids_size() == 0) {
+        cntl->SetFailed("missing txn_ids");
         return;
     }
-    if (!request->has_version()) {
-        cntl->SetFailed("missing version");
+    if (request->versions_size() == 0) {
+        cntl->SetFailed("missing versions");
         return;
     }
 
@@ -240,12 +240,13 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
 
+    auto txn_ids = request->txn_ids().data();
+    auto versions = request->versions().data();
+    auto txn_size = request->txn_ids().size();
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
             DeferOp defer([&] { latch.count_down(); });
-            auto txn_id = request->txn_id();
-            auto version = request->version();
-            auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_id, version);
+            auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_ids, versions, txn_size);
             if (!st.ok()) {
                 g_publish_version_failed_tasks << 1;
                 LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
@@ -258,7 +259,8 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
         auto st = thread_pool->submit_func(task);
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
-            LOG(WARNING) << "Fail to submit publish log version task: " << st;
+            LOG(WARNING) << "Fail to submit publish log version task, tablet_id: " << tablet_id
+                         << ", txn_ids: " << txn_ids << ", versions: " << versions << ", error" << st;
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             latch.count_down();

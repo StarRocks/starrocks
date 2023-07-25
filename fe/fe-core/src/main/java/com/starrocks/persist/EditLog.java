@@ -113,6 +113,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateBatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -616,6 +617,12 @@ public class EditLog {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
+                    break;
+                }
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
+                    final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
+                    LOG.debug("opcode: {}, tids: {}", opCode, stateBatch.getTxnIds());
                     break;
                 }
                 case OperationType.OP_DELETE_TRANSACTION_STATE: {
@@ -1180,7 +1187,9 @@ public class EditLog {
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
                                  GlobalStateMgr.getCurrentState().isLeader(),
-                "Current node is not leader, submit log is not allowed");
+                "Current node is not leader, submit log is not allowed" +
+                        GlobalStateMgr.getCurrentState() +
+                GlobalStateMgr.getCurrentState().getFeType());
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1662,6 +1671,10 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_UPSERT_TRANSACTION_STATE, transactionState);
         }
+    }
+
+    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, stateBatch);
     }
 
     public void logBackupJob(BackupJob job) {

@@ -36,6 +36,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -103,7 +104,7 @@ public class Utils {
         publishVersion(tablets, txnId, baseVersion, newVersion, commitTimeInSecond, null);
     }
 
-    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+    public static void publishVersion(@NotNull List<Tablet> tablets, List<Long> txnIds, long baseVersion, long newVersion,
                                       long commitTimeInSecond, Map<Long, Double> compactionScores)
             throws NoAliveBackendException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
@@ -115,7 +116,7 @@ public class Utils {
             }
             beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
         }
-        List<Long> txnIds = Lists.newArrayList(txnId);
+
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
         List<ComputeNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
@@ -154,7 +155,24 @@ public class Utils {
         }
     }
 
+
+    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                      long commitTimeInSecond, Map<Long, Double> compactionScores)
+            throws NoAliveBackendException, RpcException {
+        List<Long> txnIds = Lists.newArrayList(txnId);
+        publishVersion(tablets, txnIds, baseVersion, newVersion, commitTimeInSecond, compactionScores);
+    }
+
     public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version)
+            throws NoAliveBackendException, RpcException {
+        List<Long> txnIds = new ArrayList<>();
+        txnIds.add(txnId);
+        List<Long> versions = new ArrayList<>();
+        versions.add(version);
+        publishLogVersionBatch(tablets, txnIds, versions);
+    }
+
+    public static void publishLogVersionBatch(@NotNull List<Tablet> tablets, List<Long> txnIds, List<Long> versions)
             throws NoAliveBackendException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
@@ -176,8 +194,8 @@ public class Utils {
             }
             PublishLogVersionRequest request = new PublishLogVersionRequest();
             request.tabletIds = entry.getValue();
-            request.txnId = txnId;
-            request.version = version;
+            request.txnIds = txnIds;
+            request.versions = versions;
 
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishLogVersionResponse> future = lakeService.publishLogVersion(request);

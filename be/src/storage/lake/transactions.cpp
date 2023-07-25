@@ -28,9 +28,9 @@ namespace starrocks::lake {
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const int64_t> txn_ids,
                                             int64_t commit_time) {
-    if (txn_ids.size() != 1) {
-        return Status::NotSupported("does not support publish multiple txns yet");
-    }
+    VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns_size: " << txn_ids.size()
+            << ", base_version: " << base_version << ", new_version: " << new_version;
+
 
     auto new_version_metadata_or_error = [=](Status error) -> StatusOr<TabletMetadataPtr> {
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, new_version);
@@ -50,7 +50,38 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         return base_metadata_or.status();
     }
 
+    int base_version_index = 0;
+    // check whether all txn log exists, for versions may be published repeatedly and txn log has been deleted when converting from single publish to batch,
+    // there we find the latest txnLog as base_version to skip repeated version.
+
+    // for example:
+    // the mode of publish is single,
+    // txn2 has been published successfully and visible version in FE is updated to 2,
+    // then txn3 is published successfully in BE and the txn_log of txn3 has been deleted, but FE do not get the response for some reason,
+    // turn the mode of publish to batch,
+    // txn3 ,txn4, txn5 will be published in one publish batch task, so txn3 should be skipped, just apply txn_log of txn4 and txn5.
+    for (int i = 0; i < txn_ids.size(); i++) {
+        auto txn_id = txn_ids[i];
+        auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
+        auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);
+
+        if (txn_log_st.status().is_not_found()) {
+            auto missig_txn_log_meta = tablet_mgr->get_tablet_metadata(tablet_id, base_version + i + 1);
+            if (missig_txn_log_meta.status().is_not_found()) {
+                return tablet_mgr->get_tablet_metadata(tablet_id, new_version);
+            } else {
+                base_version_index = i;
+                break;
+            }
+        }
+    }
+
     auto base_metadata = std::move(base_metadata_or).value();
+    if (UNLIKELY(base_version_index != 0)) {
+        auto latest_published_metadata = tablet_mgr->get_tablet_metadata(tablet_id, base_version + base_version_index);
+        base_metadata = std::move(latest_published_metadata).value();
+    }
+
     auto new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
     auto log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_id), new_metadata, new_version);
 
@@ -81,7 +112,20 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
     // Apply txn logs
     int64_t alter_version = -1;
-    for (auto txn_id : txn_ids) {
+    // Do not delete txn logs if txns_size != 1, let gc do the work
+    // If the txn logs are deleted, it will be tricky to handle the situation of batch publish switching to single.
+
+    // for example:
+    // 1. the mode of publish is batch,
+    // 2. txn2 and txn3 have been published successfully and visible version in FE is updated to 3,
+    // 3. then txn4 and txn5 are published successfully in BE and the txn_log of txn4 and txn5 have been deleted,
+    // but FE do not get the response for some reason,
+    // 4. turn the mode of publish to single,
+    // 5. txn4 will be published in later publish task, but we can't judge what's the latest_version in BE and we can not reapply txn_log if
+    // txn logs have been deleted.
+    bool delete_txn_log = (txn_ids.size() == 1);
+    for (int i = base_version_index; i < txn_ids.size(); i++) {
+        auto txn_id = txn_ids[i];
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
         auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);
 
@@ -105,7 +149,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
             return st;
         }
 
-        files_to_delete.emplace_back(log_path);
+        if (delete_txn_log) {
+            files_to_delete.emplace_back(log_path);
+        }
 
         tablet_mgr->metacache()->erase(log_path);
     }
@@ -153,28 +199,35 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     return new_metadata;
 }
 
-Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id, int64_t log_version) {
-    auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
-    auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
-    // TODO: use rename() API if supported by the underlying filesystem.
-    auto st = fs::copy_file(txn_log_path, txn_vlog_path);
-    if (st.is_not_found()) {
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
-        auto check_st = fs->path_exists(txn_vlog_path);
-        if (check_st.ok()) {
-            return Status::OK();
-        } else {
-            LOG_IF(WARNING, !check_st.is_not_found())
-                    << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
+Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids,
+                           const int64* log_versions, int txns_size) {
+    std::vector<std::string> files_to_delete;
+    for (int i = 0; i < txns_size; i++) {
+        auto txn_id = txn_ids[i];
+        auto log_version = log_versions[i];
+        auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
+        auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
+        // TODO: use rename() API if supported by the underlying filesystem.
+        auto st = fs::copy_file(txn_log_path, txn_vlog_path);
+        if (st.is_not_found()) {
+            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
+            auto check_st = fs->path_exists(txn_vlog_path);
+            if (check_st.ok()) {
+                continue;
+            } else {
+                LOG_IF(WARNING, !check_st.is_not_found())
+                        << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
+                return st;
+            }
+        } else if (!st.ok()) {
             return st;
+        } else {
+            files_to_delete.emplace_back(txn_log_path);
+            tablet_mgr->metacache()->erase(txn_log_path);
         }
-    } else if (!st.ok()) {
-        return st;
-    } else {
-        delete_files_async({txn_log_path});
-        tablet_mgr->metacache()->erase(txn_log_path);
-        return Status::OK();
     }
+    delete_files_async(std::move(files_to_delete));
+    return Status::OK();
 }
 
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids) {

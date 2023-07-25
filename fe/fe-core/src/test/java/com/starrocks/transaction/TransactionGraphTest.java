@@ -131,4 +131,40 @@ public class TransactionGraphTest {
         assertEquals(nTxn, txnPolled);
         assertEquals(0, graph.size());
     }
+
+    @Test
+    public void testGetTxnsWithTxnDependencyBatch() {
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(2L));
+        graph.add(3, Lists.newArrayList(3L));
+        graph.add(4, Lists.newArrayList(1L));
+        graph.add(5, Lists.newArrayList(2L));
+        graph.add(6, Lists.newArrayList(3L));
+        graph.add(7, Lists.newArrayList(1L));
+
+        List<Long> txnIds = graph.getTxnsWithoutDependency();
+        assertEquals(txnIds.size(), 3);
+
+        assertEquals(3, graph.getTxnsWithTxnDependencyBatch(5, txnIds.get(0)).size());
+    }
+
+    @Test
+    public void testPrintGraph() {
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(2L));
+        graph.add(3, Lists.newArrayList(3L));
+        graph.add(4, Lists.newArrayList(1L));
+        graph.add(5, Lists.newArrayList(2L));
+        graph.add(6, Lists.newArrayList(3L));
+        graph.add(7, Lists.newArrayList(1L));
+        graph.add(8, Lists.newArrayList(4L));
+
+        String graphPrint = "1->4->7\n" +
+                "2->5\n" +
+                "3->6\n" +
+                "8\n";
+        assertEquals(graphPrint, graph.debug());
+    }
 }

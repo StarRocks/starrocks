@@ -43,6 +43,7 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.system.Backend;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateBatch;
 import mockit.Mock;
 import mockit.MockUp;
 
@@ -60,6 +61,14 @@ public class FakeEditLog extends MockUp<EditLog> {
     @Mock
     public void logInsertTransactionState(TransactionState transactionState) {
         allTransactionState.put(transactionState.getTransactionId(), transactionState);
+    }
+
+    @Mock
+    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
+        for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+            allTransactionState.put(transactionState.getTransactionId(), transactionState);
+        }
+
     }
 
     @Mock

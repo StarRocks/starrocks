@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -149,5 +150,65 @@ public class TransactionGraph {
 
     public List<Long> getTxnsWithoutDependency() {
         return nodesWithoutIns.stream().map(n -> n.txnId).collect(Collectors.toList());
+    }
+
+    public List<Long> getTxnsWithTxnDependencyBatch(int batchSize, long txnId) {
+        List<Long> txns = new ArrayList<>();
+        if (nodes.containsKey(txnId)) {
+            Node node = nodes.get(txnId);
+            int count = 0;
+            while (count < batchSize && node != null) {
+                if ((node.ins == null || node.ins.size() <= 1) && (node.outs == null || node.outs.size() <= 1)) {
+                    count++;
+                    txns.add(node.txnId);
+                    // todo
+                    // for we must get the min version of outs
+                    if (node.outs != null) {
+                        node = node.outs.stream().findAny().orElse(null);
+                    } else {
+                        node = null;
+                    }
+
+                }
+            }
+        }
+        return txns;
+    }
+
+    // print the graph for debug
+    public String debug() {
+        StringBuilder builder = new StringBuilder();
+        for (Node node : nodesWithoutIns) {
+            List<Long> path = new ArrayList<>();
+            travelGraph(node, path, builder);
+        }
+        return builder.toString();
+    }
+
+    // depth-first search
+    public void travelGraph(Node node, List<Long> path, StringBuilder builder) {
+        if (node == null) {
+            return;
+        }
+        path.add(node.txnId);
+        if (node.outs == null) {
+            print(path, builder);
+            return;
+        }
+
+        for (Node out :  node.outs) {
+            travelGraph(out, path, builder);
+            path.remove(path.size() - 1);
+        }
+    }
+
+    public void print(List<Long> path, StringBuilder builder) {
+        for (int i = 0; i < path.size(); i++) {
+            builder.append(path.get(i));
+            if (i != path.size() - 1) {
+                builder.append("->");
+            }
+        }
+        builder.append("\n");
     }
 }
