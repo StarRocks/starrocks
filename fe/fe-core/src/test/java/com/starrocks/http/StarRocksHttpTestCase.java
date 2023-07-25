@@ -108,10 +108,10 @@ public abstract class StarRocksHttpTestCase {
     private static long testReplicaId2 = 2001;
     private static long testReplicaId3 = 2002;
 
-    private static long testDbId = 100L;
-    private static long testTableId = 200L;
+    protected static final long TEST_DB_ID = 100L;
+    protected static final long TEST_TABLE_ID = 200L;
     private static long testPartitionId = 201L;
-    public static long testIndexId = testTableId; // the base indexid == tableid
+    public static long testIndexId = TEST_TABLE_ID; // the base indexid == tableid
     private static long tabletId = 400L;
 
     public static long testStartVersion = 12;
@@ -153,7 +153,8 @@ public abstract class StarRocksHttpTestCase {
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta =
-                new TabletMeta(testDbId, testTableId, testPartitionId, testIndexId, testSchemaHash, TStorageMedium.HDD);
+                new TabletMeta(TEST_DB_ID, TEST_TABLE_ID, testPartitionId, testIndexId, testSchemaHash,
+                        TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(replica1);
@@ -171,7 +172,7 @@ public abstract class StarRocksHttpTestCase {
         partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(testPartitionId, (short) 3);
         partitionInfo.setIsInMemory(testPartitionId, false);
-        OlapTable table = new OlapTable(testTableId, name, columns, KeysType.AGG_KEYS, partitionInfo,
+        OlapTable table = new OlapTable(TEST_TABLE_ID, name, columns, KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
         table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
@@ -197,7 +198,7 @@ public abstract class StarRocksHttpTestCase {
         props.put(EsTable.KEY_INDEX, "test");
         props.put(EsTable.KEY_TYPE, "doc");
         try {
-            table = new EsTable(testTableId + 1, name, columns, props, partitionInfo);
+            table = new EsTable(TEST_TABLE_ID + 1, name, columns, props, partitionInfo);
         } catch (DdlException e) {
             e.printStackTrace();
         }
@@ -209,7 +210,7 @@ public abstract class StarRocksHttpTestCase {
             GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
             Auth auth = new Auth();
             //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
-            Database db = new Database(testDbId, "testDb");
+            Database db = new Database(TEST_DB_ID, "testDb");
             OlapTable table = newTable(TABLE_NAME);
             db.registerTableUnlocked(table);
             OlapTable table1 = newTable(TABLE_NAME + 1);
@@ -276,7 +277,7 @@ public abstract class StarRocksHttpTestCase {
             GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
             Auth auth = new Auth();
             //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
-            Database db = new Database(testDbId, "testDb");
+            Database db = new Database(TEST_DB_ID, "testDb");
             OlapTable table = newTable(TABLE_NAME);
             db.registerTableUnlocked(table);
             OlapTable table1 = newTable(TABLE_NAME + 1);
@@ -415,6 +416,11 @@ public abstract class StarRocksHttpTestCase {
             @Mock
             TabletInvertedIndex getCurrentInvertedIndex() {
                 return tabletInvertedIndex;
+            }
+
+            @Mock
+            public EditLog getEditLog() {
+                return new EditLog(null);
             }
         };
         assignBackends();
