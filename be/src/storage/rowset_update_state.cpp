@@ -453,12 +453,8 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 }
 
 Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
-<<<<<<< HEAD
-                                EditVersion latest_applied_version, const PrimaryIndex& index) {
-=======
                                 EditVersion latest_applied_version, const PrimaryIndex& index,
-                                std::unique_ptr<Column>& delete_pks, int64_t* append_column_size) {
->>>>>>> 43c8f130e2 ([BugFix] Fix incorrect estimation of average row size when doing partial update (#27485))
+                                int64_t* append_column_size) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0 ||
         rowset_meta_pb.txn_meta().has_merge_condition()) {
