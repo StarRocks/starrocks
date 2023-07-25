@@ -23,9 +23,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 public class SqlUtil {
-    private SqlUtil() {
-    }
-
     public static Connection createJDBCConnection(JsonNode config) throws ClassNotFoundException, SQLException {
         String dbUrl = String.format(StarRocksConstants.PATTERN_JDBC_URL,
                 config.get(StarRocksConstants.KEY_FE_HOST).asText(),
