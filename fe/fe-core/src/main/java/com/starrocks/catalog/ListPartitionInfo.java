@@ -374,6 +374,7 @@ public class ListPartitionInfo extends PartitionInfo {
                                 "add list partition only support single item or multi item list partition now");
                     }
                     this.idToIsTempPartition.put(partitionId, isTempPartition);
+                    this.idToStorageCacheInfo.put(partitionId, partitionDesc.getDataCacheInfo());
                 }
             }
         } catch (Exception e) {
@@ -389,6 +390,7 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToReplicationNum.put(partitionId, partitionPersistInfo.getReplicationNum());
         this.idToInMemory.put(partitionId, partitionPersistInfo.isInMemory());
         this.idToIsTempPartition.put(partitionId, partitionPersistInfo.isTempPartition());
+        this.idToStorageCacheInfo.put(partitionId, partitionPersistInfo.getDataCacheInfo());
 
         List<List<String>> multiValues = partitionPersistInfo.getMultiValues();
         if (multiValues != null && multiValues.size() > 0) {
@@ -411,6 +413,7 @@ public class ListPartitionInfo extends PartitionInfo {
         idToMultiValues.remove(partitionId);
         idToMultiLiteralExprValues.remove(partitionId);
         idToIsTempPartition.remove(partitionId);
+        idToStorageCacheInfo.remove(partitionId);
     }
 
     @Override
@@ -431,6 +434,7 @@ public class ListPartitionInfo extends PartitionInfo {
             this.idToValues.put(partitionId, values);
             this.setLiteralExprValues(partitionId, values);
         }
+        this.idToStorageCacheInfo.put(partitionId, dataCacheInfo);
     }
 
     @Override
@@ -454,5 +458,9 @@ public class ListPartitionInfo extends PartitionInfo {
             }
         }
         return 0;
+    }
+
+    public void setStorageToCacheInfo(long partitionId, DataCacheInfo dataCacheInfo) {
+        idToStorageCacheInfo.put(partitionId, dataCacheInfo);
     }
 }
