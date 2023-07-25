@@ -384,6 +384,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
         String txnLabel = txnState.getLabel();
+        long workerGroupId = txnState.getWorkerGroupId();
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
 
@@ -424,11 +425,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
-                Utils.publishLogVersion(shadowTablets, txnId, txnVersion);
+                Utils.publishLogVersion(shadowTablets, txnId, txnVersion, workerGroupId);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, compactionScores);
+                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, compactionScores, workerGroupId);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);

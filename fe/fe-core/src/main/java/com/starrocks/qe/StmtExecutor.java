@@ -176,6 +176,7 @@ import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1601,6 +1602,9 @@ public class StmtExecutor {
         } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
             // schema table and iceberg table does not need txn
         } else {
+            String currentWarehouse = context.getCurrentWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(currentWarehouse);
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
                     Lists.newArrayList(targetTable.getId()),
@@ -1608,7 +1612,8 @@ public class StmtExecutor {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
-                    context.getSessionVariable().getQueryTimeoutS());
+                    context.getSessionVariable().getQueryTimeoutS(),
+                    workerGroupId);
 
             // add table indexes to transaction state
             txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()

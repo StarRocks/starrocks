@@ -87,14 +87,17 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangePartitionPruner;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -261,19 +264,30 @@ public class DeleteMgr implements Writable {
         String label = "delete_" + UUID.randomUUID();
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         stmt.setJobId(jobId);
+
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (ConnectContext.get() != null) {
+            warehouseName = ConnectContext.get().getCurrentWarehouse();
+        }
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+
         // begin txn here and generate txn id
         long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                 Lists.newArrayList(olapTable.getId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second);
+                TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second,
+                workerGroupId);
 
         MultiDeleteInfo deleteInfo =
                 new MultiDeleteInfo(db.getId(), olapTable.getId(), olapTable.getName(), deleteConditions);
         deleteInfo.setPartitions(noPartitionSpecified,
                 partitions.stream().map(Partition::getId).collect(Collectors.toList()), partitionNames);
         DeleteJob deleteJob = null;
+
+
         if (olapTable.isCloudNativeTable()) {
-            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo);
+            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo, workerGroupId);
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);
         }

@@ -30,9 +30,9 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,10 +51,8 @@ public class Utils {
     }
 
     // Returns null if no backend available.
-    public static Long chooseBackend(LakeTablet tablet) {
+    public static Long chooseBackend(LakeTablet tablet, long workerGroupId) {
         try {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             return tablet.getPrimaryComputeNodeId(workerGroupId);
         } catch (UserException ex) {
             LOG.info("Ignored error {}", ex.getMessage());
@@ -64,6 +62,10 @@ public class Utils {
             return null;
         }
         return backendIds.get(0);
+    }
+
+    public static Long chooseBackend(LakeTablet tablet) {
+        return chooseBackend(tablet, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
     }
 
     public static ComputeNode chooseNode(LakeTablet tablet) {
@@ -76,22 +78,24 @@ public class Utils {
 
     // Preconditions: Has required the database's reader lock.
     // Returns a map from backend ID to a list of tablet IDs.
-    public static Map<Long, List<Long>> groupTabletID(OlapTable table) throws NoAliveBackendException {
-        return groupTabletID(table.getPartitions(), MaterializedIndex.IndexExtState.ALL);
+    public static Map<Long, List<Long>> groupTabletID(OlapTable table, long workerGroupId)
+            throws NoAliveBackendException {
+        return groupTabletID(table.getPartitions(), MaterializedIndex.IndexExtState.ALL, workerGroupId);
     }
 
     public static Map<Long, List<Long>> groupTabletID(Collection<Partition> partitions,
-                                                      MaterializedIndex.IndexExtState indexState)
+                                                      MaterializedIndex.IndexExtState indexState,
+                                                      long workerGroupId)
             throws NoAliveBackendException {
         Map<Long, List<Long>> groupMap = new HashMap<>();
         for (Partition partition : partitions) {
             for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
                 for (Tablet tablet : index.getTablets()) {
-                    Long beId = chooseBackend((LakeTablet) tablet);
-                    if (beId == null) {
-                        throw new NoAliveBackendException("no alive backend");
+                    Long nodeId = chooseBackend((LakeTablet) tablet, workerGroupId);
+                    if (nodeId == null) {
+                        throw new NoAliveBackendException("no alive nodes");
                     }
-                    groupMap.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+                    groupMap.computeIfAbsent(nodeId, k -> Lists.newArrayList()).add(tablet.getId());
                 }
             }
         }
@@ -100,20 +104,20 @@ public class Utils {
 
     public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion)
             throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnId, baseVersion, newVersion, null);
+        publishVersion(tablets, txnId, baseVersion, newVersion, null, WarehouseManager.DEFAULT_CLUSTER_ID);
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion, Map<Long,
-            Double> compactionScores)
+            Double> compactionScores, long workerGroupId)
             throws NoAliveBackendException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
-            Long beId = Utils.chooseBackend((LakeTablet) tablet);
-            if (beId == null) {
+            Long nodeId = Utils.chooseBackend((LakeTablet) tablet, workerGroupId);
+            if (nodeId == null) {
                 throw new NoAliveBackendException("No alive backend or computeNode for " +
                         "handle publish version request");
             }
-            beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+            beToTablets.computeIfAbsent(nodeId, k -> Lists.newArrayList()).add(tablet.getId());
         }
         List<Long> txnIds = Lists.newArrayList(txnId);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
@@ -153,16 +157,16 @@ public class Utils {
         }
     }
 
-    public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version)
+    public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version, long workerGroupId)
             throws NoAliveBackendException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
-            Long beId = Utils.chooseBackend((LakeTablet) tablet);
-            if (beId == null) {
+            Long nodeId = Utils.chooseBackend((LakeTablet) tablet, workerGroupId);
+            if (nodeId == null) {
                 throw new NoAliveBackendException("No alive backend or computeNode " +
                         "for handle publish version request");
             }
-            beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+            beToTablets.computeIfAbsent(nodeId, k -> Lists.newArrayList()).add(tablet.getId());
         }
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishLogVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());

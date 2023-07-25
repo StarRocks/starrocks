@@ -113,7 +113,8 @@ public class UpdatePlanner {
                 OlapTable olapTable = (OlapTable) table;
                 DataSink dataSink =
                         new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
-                                olapTable.enableReplicatedStorage(), false, olapTable.supportedAutomaticPartition());
+                                olapTable.enableReplicatedStorage(), false,
+                                olapTable.supportedAutomaticPartition(), session.getCurrentWarehouse());
                 if (updateStmt.usePartialUpdate()) {
                     // using column mode partial update in UPDATE stmt
                     ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_MODE);

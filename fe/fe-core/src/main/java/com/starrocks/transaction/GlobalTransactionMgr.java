@@ -51,6 +51,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAuthenticateParams;
@@ -278,6 +279,16 @@ public class GlobalTransactionMgr implements Writable {
         return beginTransaction(dbId, tableIdList, label, null, coordinator, sourceType, -1, timeoutSecond);
     }
 
+    public long beginTransaction(long dbId, List<Long> tableIdList, String label, TxnCoordinator coordinator,
+                                 LoadJobSourceType sourceType,
+                                 long timeoutSecond,
+                                 long workerGroupId)
+            throws AnalysisException, LabelAlreadyUsedException, BeginTransactionException, DuplicatedRequestException {
+        return beginTransaction(dbId, tableIdList, label, null, coordinator, sourceType, -1, timeoutSecond, workerGroupId);
+    }
+
+
+
     /**
      * the app could specify the transaction id
      * <p>
@@ -291,9 +302,20 @@ public class GlobalTransactionMgr implements Writable {
      * @throws DuplicatedRequestException
      * @throws IllegalTransactionParameterException
      */
+
+
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TUniqueId requestId,
                                  TxnCoordinator coordinator, LoadJobSourceType sourceType, long listenerId,
                                  long timeoutSecond)
+            throws AnalysisException, LabelAlreadyUsedException, BeginTransactionException, DuplicatedRequestException {
+        return beginTransaction(dbId, tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond,
+                WarehouseManager.DEFAULT_CLUSTER_ID);
+    }
+
+    public long beginTransaction(long dbId, List<Long> tableIdList, String label, TUniqueId requestId,
+                                 TxnCoordinator coordinator, LoadJobSourceType sourceType, long listenerId,
+                                 long timeoutSecond,
+                                 long workerGroupId)
             throws AnalysisException, LabelAlreadyUsedException, BeginTransactionException, DuplicatedRequestException {
 
         if (Config.disable_load_job) {
@@ -315,8 +337,8 @@ public class GlobalTransactionMgr implements Writable {
         }
 
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        return dbTransactionMgr
-                .beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond);
+        return dbTransactionMgr.beginTransaction(tableIdList, label, requestId, coordinator,
+                sourceType, listenerId, timeoutSecond, workerGroupId);
     }
 
     private void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)
