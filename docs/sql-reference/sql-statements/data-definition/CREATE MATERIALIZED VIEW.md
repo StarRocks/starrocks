@@ -123,6 +123,7 @@ The following table shows the correspondence between the aggregate function in t
 
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
+[COMMENT ""]
 -- distribution_desc
 [DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]]
 -- refresh_desc
@@ -138,7 +139,6 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 ]
 -- order_by_expression
 [ORDER BY (<sort_key>)]
-[COMMENT ""]
 [PROPERTIES ("key"="value", ...)]
 AS 
 <query_statement>
@@ -159,6 +159,10 @@ The name of the materialized view. The naming requirements are as follows:
 > **CAUTION**
 >
 > Multiple materialized views can be created on the same base table, but the names of the materialized views in the same database cannot be duplicated.
+
+**COMMENT** (optional)
+
+Comment on the materialized view.
 
 **distribution_desc** (optional)
 
@@ -220,10 +224,6 @@ If this parameter is not specified, no partitioning strategy is adopted by defau
 **order_by_expression** (optional)
 
 The sort key of the asynchronous materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT columns as the sort keys. For example, in `select a, b, c, d`, sort keys can be `a` and `b`. This parameter is supported from StarRocks v3.0 onwards.
-
-**COMMENT** (optional)
-
-Comment on the materialized view.
 
 **PROPERTIES** (optional)
 
