@@ -28,7 +28,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 | run_mode                            | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
 | cloud_native_meta_port              | The cloud-native meta service RPC port. Default: `6090`.     |
 | enable_load_volume_from_conf        | Whether to allow StarRocks to create the default storage volume by using the object storage-related properties specified in the FE configuration file. Valid values: `true` (Default) and `false`. Supported from v3.1.0.<ul><li>If you specify this item as `true` when creating a new shared-data cluster, StarRocks creates a built-in storage volume `builtin_storage_volume` using the object storage-related properties in the FE configuration file, and sets it as the default storage volume. However, if you have not specified the object storage-related properties, StarRocks fails to start.</li><li>If you specify this item as `false` when creating a new shared-data cluster, StarRocks starts directly without creating the built-in storage volume. You must manually create a storage volume and set it as the default storage volume before creating any object in StarRocks. For more information, see [Create the default storage volume](#create-default-storage-volume).</li></ul>**CAUTION**<br />We strongly recommend you leave this item as `true` while you are upgrading an existing shared-data cluster from v3.0. If you specify this item as `false`, the databases and tables you created before the upgrade become read-only, and you cannot load data into them.     |
-| cloud_native_storage_type           | The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (Preview feature, supported from v3.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default) and `AZBLOB`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. |
+| cloud_native_storage_type           | The type of object storage you use. In shared-data mode, StarRocks supports storing data in <!--Azure Blob (Preview feature, supported from v3.2 onwards), and -->object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default)<!-- and `AZBLOB`-->. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. <!--If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`.--> |
 | aws_s3_path                         | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`. |
 | aws_s3_endpoint                     | The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. |
 | aws_s3_region                       | The region in which your S3 bucket resides, for example, `us-west-2`. |
@@ -38,10 +38,10 @@ Before starting FEs, add the following configuration items in the FE configurati
 | aws_s3_secret_key                   | The Secret Access Key used to access your S3 bucket.         |
 | aws_s3_iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
 | aws_s3_external_id                  | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
-| azure_blob_path                     | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
+<!--| azure_blob_path                     | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
 | azure_blob_endpoint                 | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
 | azure_blob_shared_key               | The Shared Key used to authorize requests for your Azure Blob Storage.                     |
-| azure_blob_sas_token                | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.                |
+| azure_blob_sas_token                | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.                |-->
 
 > **CAUTION**
 >
@@ -158,7 +158,7 @@ If you want to specify the properties of your object storage in the FE configura
     aws_s3_external_id = <external_id>
     ```
 
-- If you use Azure Blob Storage (Preview feature, supported from v3.1 onwards):
+<!--- If you use Azure Blob Storage (Preview feature, supported from v3.1 onwards):
 
   - If you use Shared Key to access Azure Blob Storage, add the following configuration items:
 
@@ -194,7 +194,7 @@ If you want to specify the properties of your object storage in the FE configura
 
   > **CAUTION**
   >
-  >The hierarchical namespace must be disabled when you create the Azure Blob Storage Account.
+  >The hierarchical namespace must be disabled when you create the Azure Blob Storage Account.-->
 
 - If you use GCP Cloud Storage:
 

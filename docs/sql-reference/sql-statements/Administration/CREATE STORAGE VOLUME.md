@@ -14,8 +14,8 @@ A storage volume consists of the properties and credential information of the re
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = { S3 | AZBLOB }
-LOCATIONS = ('{ <s3_path> | <azblob_path> }')
+TYPE = S3
+LOCATIONS = ('<s3_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
 ("key" = "value",...)
@@ -26,8 +26,8 @@ PROPERTIES
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
 | storage_volume_name | The name of the storage volume. Please note that you cannot create a storage volume named `builtin_storage_volume` because it is used to create the builtin storage volume. |
-| TYPE                | The type of the remote storage system. Valid values: `S3` and `AZBLOB`. `S3` indicates AWS S3 or S3-compatible storage systems. `AZBLOB` indicates Azure Blob Storage. |
-| LOCATIONS           | The storage locations. The format is as follows:For AWS S3 or S3 protocol-compatible storage systems: `s3://<s3_path>`. `<s3_path>` must be an absolute path, for example, `s3://testbucket/subpath`.For Azure Blob Storage: `azblob://<azblob_path>`. `<azblob_path>` must be an absolute path, for example, `azblob://testcontainer/subpath`. |
+| TYPE                | The type of the remote storage system. Valid values: `S3`<!-- and `AZBLOB`-->. `S3` indicates AWS S3 or S3-compatible storage systems.<!-- `AZBLOB` indicates Azure Blob Storage.--> |
+| LOCATIONS           | The storage locations. The format is as follows:For AWS S3 or S3 protocol-compatible storage systems: `s3://<s3_path>`. `<s3_path>` must be an absolute path, for example, `s3://testbucket/subpath`.<!-- For Azure Blob Storage: `azblob://<azblob_path>`. `<azblob_path>` must be an absolute path, for example, `azblob://testcontainer/subpath`.--> |
 | COMMENT             | The comment on the storage volume.                           |
 | PROPERTIES          | Parameters in the `"key" = "value"` pairs used to specify the properties and credential information to access the remote storage system. For detailed information, see [PROPERTIES](#properties). |
 
@@ -131,7 +131,7 @@ PROPERTIES
   | aws.s3.iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
   | aws.s3.external_id                  | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
 
-- If you use Azure Blob Storage:
+<!--- If you use Azure Blob Storage:
 
   - If you use Shared Key to access Azure Blob Storage, set the following properties:
 
@@ -158,7 +158,7 @@ PROPERTIES
   | enabled               | Whether to enable this storage volume. Default: `false`. Disabled storage volume cannot be referenced. |
   | azure.blob.endpoint   | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
   | azure.blob.shared_key | The Shared Key used to authorize requests for your Azure Blob Storage. |
-  | azure.blob.sas_token  | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage. |
+  | azure.blob.sas_token  | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage. |-->
 
 ## Examples
 
