@@ -20,7 +20,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -44,6 +43,7 @@ public class PipeFileRecord {
 
     private static final String FILE_LOCATOR = "(pipe_id = %s AND file_name = %s AND file_version = %s)";
     private static final String FILE_RECORD_VALUES = "(%d, %s, %s, %d, %s, %s, %s, %s, %s)";
+
     public long pipeId;
     public String fileName;
     public String fileVersion;
@@ -54,15 +54,6 @@ public class PipeFileRecord {
     public LocalDateTime stagedTime;
     public LocalDateTime startLoadTime;
     public LocalDateTime finishLoadTime;
-
-    public static PipeFileRecord fromRawFile(TBrokerFileStatus file) {
-        PipeFileRecord record = new PipeFileRecord();
-        record.fileName = file.getPath();
-        record.fileSize = file.getSize();
-        record.stagedTime = LocalDateTime.now();
-        record.loadState = FileListRepo.PipeFileState.UNLOADED;
-        return record;
-    }
 
     public static PipeFileRecord fromHdfsFile(FileStatus file) {
         PipeFileRecord record = new PipeFileRecord();

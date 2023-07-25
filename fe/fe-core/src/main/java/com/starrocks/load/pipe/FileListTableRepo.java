@@ -83,6 +83,9 @@ public class FileListTableRepo extends FileListRepo {
 
     private static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE pipe_id = %d AND state = %s";
 
+    private static final String UPDATE_FILE_STATE =
+            "UPDATE " + FILE_LIST_FULL_NAME + " SET state = %s WHERE ";
+
     private static final String UPDATE_FILE_STATE_START_LOAD =
             "UPDATE " + FILE_LIST_FULL_NAME + " SET state = %s, start_load = now() WHERE ";
 
@@ -143,7 +146,7 @@ public class FileListTableRepo extends FileListRepo {
 
         public List<PipeFileRecord> listAllFiles() {
             try {
-                List<TResultBatch> batch = RepoExecutor.executeDQL(SELECT_FILES);
+                List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(SELECT_FILES);
                 return PipeFileRecord.fromResultBatch(batch);
             } catch (Exception e) {
                 LOG.error("listAllFiles failed", e);
@@ -155,7 +158,7 @@ public class FileListTableRepo extends FileListRepo {
             List<PipeFileRecord> res = null;
             try {
                 String sql = buildListUnloadedFile(pipeId);
-                List<TResultBatch> batch = RepoExecutor.executeDQL(sql);
+                List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
                 res = PipeFileRecord.fromResultBatch(batch);
             } catch (Exception e) {
                 LOG.error("listUnloadedFiles failed", e);
@@ -167,7 +170,7 @@ public class FileListTableRepo extends FileListRepo {
         public List<PipeFileRecord> selectStagedFiles(List<PipeFileRecord> records) {
             try {
                 String sql = buildSelectStagedFiles(records);
-                List<TResultBatch> batch = RepoExecutor.executeDQL(sql);
+                List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
                 return PipeFileRecord.fromResultBatch(batch);
             } catch (Exception e) {
                 LOG.error("selectStagedFiles failed", e);
@@ -178,7 +181,7 @@ public class FileListTableRepo extends FileListRepo {
         public void addFiles(List<PipeFileRecord> records) {
             try {
                 String sql = buildSqlAddFiles(records);
-                RepoExecutor.executeDML(sql);
+                RepoExecutor.getInstance().executeDML(sql);
                 LOG.info("addFiles into repo: {}", records);
             } catch (Exception e) {
                 LOG.error("addFiles {} failed", records, e);
@@ -194,7 +197,9 @@ public class FileListTableRepo extends FileListRepo {
                 String sql = null;
                 switch (state) {
                     case UNLOADED:
-                        Preconditions.checkState(false, "not supported");
+                    case ERROR:
+                    case SKIPPED:
+                        sql = buildSqlUpdateState(records, state);
                         break;
                     case LOADING:
                         sql = buildSqlStartLoad(records, state);
@@ -202,17 +207,11 @@ public class FileListTableRepo extends FileListRepo {
                     case LOADED:
                         sql = buildSqlFinishLoad(records, state);
                         break;
-                    case SKIPPED:
-                        Preconditions.checkState(false, "not supported");
-                        break;
-                    case ERROR:
-                        Preconditions.checkState(false, "not supported");
-                        break;
                     default:
                         Preconditions.checkState(false, "not supported");
                         break;
                 }
-                RepoExecutor.executeDML(sql);
+                RepoExecutor.getInstance().executeDML(sql);
                 LOG.info("update files state to {}: {}", state, records);
             } catch (Exception e) {
                 LOG.error("update files state failed: {}", records, e);
@@ -223,7 +222,7 @@ public class FileListTableRepo extends FileListRepo {
         public void deleteByPipe(long pipeId) {
             try {
                 String sql = String.format(DELETE_BY_PIPE, pipeId);
-                RepoExecutor.executeDML(sql);
+                RepoExecutor.getInstance().executeDML(sql);
                 LOG.info("delete pipe files {}", pipeId);
             } catch (Exception e) {
                 LOG.error("delete file of pipe {} failed", pipeId, e);
@@ -253,6 +252,13 @@ public class FileListTableRepo extends FileListRepo {
             return sb.toString();
         }
 
+        protected String buildSqlUpdateState(List<PipeFileRecord> records, PipeFileState state) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format(UPDATE_FILE_STATE, Strings.quote(state.toString())));
+            sb.append(records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR ")));
+            return sb.toString();
+        }
+
         protected String buildSqlStartLoad(List<PipeFileRecord> records, PipeFileState state) {
             StringBuilder sb = new StringBuilder();
             sb.append(String.format(UPDATE_FILE_STATE_START_LOAD, Strings.quote(state.toString())));
@@ -273,11 +279,16 @@ public class FileListTableRepo extends FileListRepo {
      */
     static class RepoExecutor {
 
-        public static void executeDML(String sql) {
+        private static final RepoExecutor INSTANCE = new RepoExecutor();
+
+        public static RepoExecutor getInstance() {
+            return INSTANCE;
+        }
+
+        public void executeDML(String sql) {
             try {
                 ConnectContext context = StatisticUtils.buildConnectContext();
                 context.setThreadLocalInfo();
-
                 StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
                 Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
                 DmlStmt dmlStmt = (DmlStmt) parsedStmt;
@@ -294,7 +305,7 @@ public class FileListTableRepo extends FileListRepo {
             }
         }
 
-        public static List<TResultBatch> executeDQL(String sql) {
+        public List<TResultBatch> executeDQL(String sql) {
             try {
                 ConnectContext context = StatisticUtils.buildConnectContext();
                 context.setThreadLocalInfo();
@@ -312,20 +323,25 @@ public class FileListTableRepo extends FileListRepo {
                 return sqlResult.first;
             } catch (Exception e) {
                 LOG.error("Repo execute SQL failed {}", sql, e);
-                throw new SemanticException("execute sql failed with exception", e);
+                throw new SemanticException("execute sql failed: " + sql, e);
             } finally {
                 ConnectContext.remove();
             }
         }
 
-        public static void executeDDL(ConnectContext context, String sql) {
+        public void executeDDL(String sql) {
             try {
+                ConnectContext context = StatisticUtils.buildConnectContext();
+                context.setThreadLocalInfo();
+
                 StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
                 Analyzer.analyze(parsedStmt, context);
                 DDLStmtExecutor.execute(parsedStmt, context);
             } catch (Exception e) {
                 LOG.error("execute DDL error: {}", sql, e);
                 throw new RuntimeException(e);
+            } finally {
+                ConnectContext.remove();
             }
         }
 
@@ -376,8 +392,7 @@ public class FileListTableRepo extends FileListRepo {
 
         public static void createTable() {
             String sql = SQLBuilder.buildCreateTableSql();
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            RepoExecutor.executeDDL(context, sql);
+            RepoExecutor.getInstance().executeDDL(sql);
         }
 
         public static void correctTable() {
@@ -389,14 +404,24 @@ public class FileListTableRepo extends FileListRepo {
                     .orElse((short) 1);
             if (numBackends >= 3 && replica < 3) {
                 String sql = SQLBuilder.buildAlterTableSql();
-                ConnectContext context = StatisticUtils.buildConnectContext();
-                RepoExecutor.executeDDL(context, sql);
+                RepoExecutor.getInstance().executeDDL(sql);
             } else {
                 LOG.info("table {} already has {} replicas, no need to alter replication_num",
                         FILE_LIST_FULL_NAME, replica);
             }
         }
 
+        public boolean isDatabaseExists() {
+            return databaseExists;
+        }
+
+        public boolean isTableExists() {
+            return tableExists;
+        }
+
+        public boolean isTableCorrected() {
+            return tableCorrected;
+        }
     }
 
     /**
