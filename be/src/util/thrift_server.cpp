@@ -134,7 +134,7 @@ Status ThriftServer::ThriftServerEventProcessor::start_and_wait_for_server() {
 
     // _started == true only if preServe was called. May be false if there was an exception
     // after preServe that was caught by Supervise, causing it to reset the error condition.
-    if (_thrift_server->_started == false) {
+    if (!_thrift_server->_started) {
         std::stringstream ss;
         ss << "ThriftServer '" << _thrift_server->_name << "' (on port: " << _thrift_server->_port
            << ") did not start correctly ";
@@ -398,7 +398,6 @@ void ThriftServer::stop() {
 
 void ThriftServer::join() {
     DCHECK(_server_thread != nullptr);
-    DCHECK(_started);
     _server_thread->join();
 }
 

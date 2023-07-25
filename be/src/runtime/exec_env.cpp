@@ -49,6 +49,7 @@
 #include "exec/spill/dir_manager.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/join.h"
@@ -526,6 +527,10 @@ void ExecEnv::stop() {
         _wg_driver_executor->close();
     }
 
+    if (_agent_server) {
+        _agent_server->stop();
+    }
+
     if (_automatic_partition_pool) {
         _automatic_partition_pool->shutdown();
     }
@@ -533,6 +538,8 @@ void ExecEnv::stop() {
     if (_load_rpc_pool) {
         _load_rpc_pool->shutdown();
     }
+
+    close_s3_clients();
 }
 
 void ExecEnv::destroy() {
@@ -545,14 +552,14 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_context_mgr);
     SAFE_DELETE(_routine_load_task_executor);
     SAFE_DELETE(_stream_load_executor);
-    SAFE_DELETE(_brpc_stub_cache);
+    SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
     SAFE_DELETE(_bfd_parser);
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_wg_driver_executor);
-    SAFE_DELETE(_fragment_mgr);
+    SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
