@@ -18,6 +18,15 @@ struct PartialUpdateState {
     std::vector<std::unique_ptr<vectorized::Column>> write_columns;
     bool inited = false;
     EditVersion read_version;
+    int64_t byte_size = 0;
+
+    void update_byte_size() {
+        for (size_t i = 0; i < write_columns.size(); i++) {
+            if (write_columns[i] != nullptr) {
+                byte_size += write_columns[i]->byte_size();
+            }
+        }
+    }
 
     void release() {
         src_rss_rowids.clear();
@@ -41,7 +50,7 @@ public:
     Status load(Tablet* tablet, Rowset* rowset);
 
     Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
-                 EditVersion latest_applied_version, const PrimaryIndex& index);
+                 EditVersion latest_applied_version, const PrimaryIndex& index, int64_t* append_column_size);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
