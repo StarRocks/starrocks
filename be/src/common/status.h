@@ -252,6 +252,11 @@ public:
         return code() == TStatusCode::CORRUPTION;
     }
 
+    bool is_resource_busy() const {
+        mark_checked();
+        return code() == TStatusCode::RESOURCE_BUSY;
+    }
+
     /// @return @c true if the status indicates Uninitialized.
     bool is_uninitialized() const {
         mark_checked();
