@@ -101,13 +101,21 @@ public class EquationRewriter {
 
             @Override
             public ScalarOperator visitCall(CallOperator predicate, Void context) {
-                predicate = normalizeCallOperator(predicate);
+                // 1. rewrite query's predicate
                 ScalarOperator tmp = replace(predicate);
-                if (tmp != null && tmp != predicate) {
+                if (tmp != null) {
                     return tmp;
                 }
 
-                // Retry by using aggregateFunctionRewriter when predicate cannot be rewritten.
+                // 2. normalize predicate to better match mv
+                // TODO: merge into aggregateFunctionRewriter later.
+                predicate = normalizeCallOperator(predicate);
+                tmp = replace(predicate);
+                if (tmp != null) {
+                    return tmp;
+                }
+
+                // 3. retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
                 if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(predicate) &&
                         !isUnderAggFunctionRewriteContext()) {
                     ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(predicate);
@@ -186,6 +194,7 @@ public class EquationRewriter {
             return aggFunc;
         }
 
+        // unify count(*) or count(non-nullable column) to count(1) to be better for rewrite.
         if (aggFunc.getChildren().size() == 0 || !aggFunc.getChild(0).isNullable()) {
             return new CallOperator(FunctionSet.COUNT, aggFunc.getType(),
                     Lists.newArrayList(ConstantOperator.createTinyInt((byte) 1)));
