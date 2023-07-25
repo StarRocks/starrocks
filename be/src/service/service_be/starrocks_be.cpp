@@ -91,7 +91,7 @@ void init_block_cache() {
 StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn) {
     // Init and open storage engine.
     EngineOptions options;
-    options.store_paths = paths;
+    options.store_paths = std::move(paths);
     options.backend_uid = UniqueId::gen_uid();
     options.compaction_mem_tracker = global_env->compaction_mem_tracker();
     options.update_mem_tracker = global_env->update_mem_tracker();
