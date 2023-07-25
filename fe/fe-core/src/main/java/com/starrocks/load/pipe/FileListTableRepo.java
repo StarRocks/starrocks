@@ -16,15 +16,10 @@
 package com.starrocks.load.pipe;
 
 import com.google.common.base.Preconditions;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -39,23 +34,14 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
-import org.apache.commons.lang3.EnumUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -71,7 +57,6 @@ public class FileListTableRepo extends FileListRepo {
     private static final String FILE_LIST_FULL_NAME = FILE_LIST_DB_NAME + "." + FILE_LIST_TABLE_NAME;
 
     private static final String FILE_LIST_TABLE_CREATE =
-            // TODO: add md5/etag into the file list
             "CREATE TABLE IF NOT EXISTS %s (" +
                     "pipe_id bigint, " +
                     "file_name string, " +
@@ -102,7 +87,6 @@ public class FileListTableRepo extends FileListRepo {
             "UPDATE " + FILE_LIST_FULL_NAME +
                     " SET state = %s WHERE ";
 
-    private static final String FILE_LOCATOR = "(pipe_id = %s AND file_name = %s AND file_version = %s)";
 
     private static final String INSERT_FILES =
             "INSERT INTO " + FILE_LIST_FULL_NAME + " VALUES ";
@@ -110,24 +94,17 @@ public class FileListTableRepo extends FileListRepo {
     private static final String SELECTED_STAGED_FILES =
             "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME + " WHERE ";
 
-    private static final String FILE_RECORD_VALUES = "(%d, %s, %s, %d, %s, %s, %s, %s, %s)";
 
     private static final String DELETE_BY_PIPE = "DELETE FROM " + FILE_LIST_FULL_NAME + " WHERE pipe_id = %d";
 
     @Override
-    public List<PipeFile> listUnloadedFiles() {
-        List<PipeFileRecord> records = RepoAccessor.getInstance().listUnloadedFiles(pipeId.getId());
-        return records.stream().map(PipeFileRecord::toPipeFile).collect(Collectors.toList());
+    public List<PipeFileRecord> listUnloadedFiles() {
+        return RepoAccessor.getInstance().listUnloadedFiles(pipeId.getId());
     }
 
     @Override
-    public void addFiles(List<TBrokerFileStatus> files) {
-        List<PipeFileRecord> records = new ArrayList<>();
-        for (TBrokerFileStatus file : files) {
-            PipeFileRecord record = PipeFileRecord.fromRawFile(file);
-            record.pipeId = pipeId.getId();
-            records.add(record);
-        }
+    public void addFiles(List<PipeFileRecord> records) {
+        records.forEach(file -> file.pipeId = pipeId.getId());
         List<PipeFileRecord> stagedFiles = RepoAccessor.getInstance().selectStagedFiles(records);
         List<PipeFileRecord> newFiles = ListUtils.subtract(records, stagedFiles);
         if (CollectionUtils.isEmpty(newFiles)) {
@@ -138,14 +115,9 @@ public class FileListTableRepo extends FileListRepo {
     }
 
     @Override
-    public void updateFileState(List<PipeFile> files, PipeFileState state) {
-        List<PipeFileRecord> records = new ArrayList<>();
-        for (PipeFile file : files) {
-            PipeFileRecord record = PipeFileRecord.fromFile(file);
-            record.pipeId = pipeId.getId();
-            records.add(record);
-        }
-        RepoAccessor.getInstance().updateFilesState(records, state);
+    public void updateFileState(List<PipeFileRecord> files, PipeFileState state) {
+        files.forEach(x -> x.pipeId = pipeId.getId());
+        RepoAccessor.getInstance().updateFilesState(files, state);
     }
 
     @Override
@@ -156,153 +128,6 @@ public class FileListTableRepo extends FileListRepo {
     @Override
     public void destroy() {
         RepoAccessor.getInstance().deleteByPipe(pipeId.getId());
-    }
-
-    /**
-     * Record stored in the pipe_files table
-     */
-    public static class PipeFileRecord {
-        public long pipeId;
-        public String fileName;
-        public String fileVersion;
-        public long fileSize;
-
-        public PipeFileState loadState;
-        public LocalDateTime lastModified;
-        public LocalDateTime stagedTime;
-        public LocalDateTime startLoadTime;
-        public LocalDateTime finishLoadTime;
-
-        public static PipeFileRecord fromFile(PipeFile file) {
-            PipeFileRecord record = new PipeFileRecord();
-            record.fileName = file.path;
-            record.fileVersion = "";
-            return record;
-        }
-
-        public static PipeFileRecord fromRawFile(TBrokerFileStatus file) {
-            PipeFileRecord record = new PipeFileRecord();
-            record.fileName = file.getPath();
-            record.fileSize = file.getSize();
-            record.stagedTime = LocalDateTime.now();
-            record.loadState = PipeFileState.UNLOADED;
-            return record;
-        }
-
-        public static List<PipeFileRecord> fromResultBatch(List<TResultBatch> batches) {
-            List<PipeFileRecord> res = new ArrayList<>();
-            for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
-                for (ByteBuffer buffer : batch.getRows()) {
-                    ByteBuf copied = Unpooled.copiedBuffer(buffer);
-                    String jsonString = copied.toString(Charset.defaultCharset());
-                    res.add(PipeFileRecord.fromJson(jsonString));
-                }
-            }
-            return res;
-        }
-
-        /**
-         * The json should come from the HTTP/JSON protocol, which looks like {"data": [col1, col2, col3]}
-         */
-        public static PipeFileRecord fromJson(String json) {
-            try {
-                JsonElement object = JsonParser.parseString(json);
-                JsonArray dataArray = object.getAsJsonObject().get("data").getAsJsonArray();
-
-                PipeFileRecord file = new PipeFileRecord();
-                file.pipeId = dataArray.get(0).getAsLong();
-                file.fileName = dataArray.get(1).getAsString();
-                file.fileVersion = dataArray.get(2).getAsString();
-                file.fileSize = dataArray.get(3).getAsLong();
-                file.loadState = EnumUtils.getEnumIgnoreCase(PipeFileState.class, dataArray.get(4).getAsString());
-                file.lastModified = parseJsonDateTime(dataArray.get(5));
-                file.stagedTime = parseJsonDateTime(dataArray.get(6));
-                file.startLoadTime = parseJsonDateTime(dataArray.get(7));
-                file.finishLoadTime = parseJsonDateTime(dataArray.get(8));
-                return file;
-            } catch (Exception e) {
-                throw new RuntimeException("convert json to PipeFile failed due to malformed json data: " + json, e);
-            }
-        }
-
-        /**
-         * Usually datetime in JSON should be string. but null datetime is a JSON null instead of empty string
-         */
-        public static LocalDateTime parseJsonDateTime(JsonElement json) throws AnalysisException {
-            if (json.isJsonNull()) {
-                return null;
-            }
-            String str = json.getAsString();
-            if (StringUtils.isEmpty(str)) {
-                return null;
-            }
-            return DateUtils.parseDatTimeString(str);
-        }
-
-        public static String toSQLString(LocalDateTime dt) {
-            if (dt == null) {
-                return "NULL";
-            }
-            return Strings.quote(DateUtils.formatDateTimeUnix(dt));
-        }
-
-        public static String toSQLString(String str) {
-            if (str == null) {
-                return "NULL";
-            } else {
-                return Strings.quote(str);
-            }
-        }
-
-        public static String toSQLStringNonnull(String str) {
-            if (str == null) {
-                return "''";
-            } else {
-                return Strings.quote(str);
-            }
-        }
-
-        public String toValueList() {
-            return String.format(FILE_RECORD_VALUES,
-                    pipeId,
-                    toSQLString(fileName),
-                    toSQLStringNonnull(fileVersion),
-                    fileSize,
-                    toSQLString(loadState.toString()),
-                    toSQLString(lastModified),
-                    toSQLString(stagedTime),
-                    toSQLString(startLoadTime),
-                    toSQLString(finishLoadTime)
-            );
-        }
-
-        public String toUniqueLocator() {
-            return String.format(FILE_LOCATOR,
-                    pipeId, Strings.quote(fileName), Strings.quote(fileVersion));
-        }
-
-        public PipeFile toPipeFile() {
-            PipeFile file = new PipeFile();
-            file.path = fileName;
-            file.state = loadState;
-            file.size = fileSize;
-            return file;
-        }
-
-        @Override
-        public String toString() {
-            return "PipeFileRecord{" +
-                    "pipeId=" + pipeId +
-                    ", fileName='" + fileName + '\'' +
-                    ", fileVersion='" + fileVersion + '\'' +
-                    ", fileSize=" + fileSize +
-                    ", loadState=" + loadState +
-                    ", lastModified=" + lastModified +
-                    ", stagedTime=" + stagedTime +
-                    ", startLoadTime=" + startLoadTime +
-                    ", finishLoadTime=" + finishLoadTime +
-                    '}';
-        }
     }
 
     /**

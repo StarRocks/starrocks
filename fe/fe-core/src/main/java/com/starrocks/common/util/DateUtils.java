@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
@@ -92,6 +93,10 @@ public class DateUtils {
             return null;
         }
         return dateTime.format(DATE_TIME_FORMATTER_UNIX);
+    }
+
+    public static LocalDateTime fromEpochMillis(long epochMilli) {
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), ZoneOffset.UTC);
     }
 
     public static LocalDateTime parseUnixDateTime(String str) {

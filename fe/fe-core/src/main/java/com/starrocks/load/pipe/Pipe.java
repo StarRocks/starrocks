@@ -307,7 +307,8 @@ public class Pipe implements GsonPostProcessable {
             isFirst = false;
             if (entry.getKey().equalsIgnoreCase(TableFunctionTable.PROPERTY_PATH)) {
                 // TODO: it's not supported right now
-                String files = piece.getFiles().stream().map(PipeFile::getPath).collect(Collectors.joining(","));
+                String files =
+                        piece.getFiles().stream().map(PipeFileRecord::getFileName).collect(Collectors.joining(","));
                 sb.append("'").append(TableFunctionTable.PROPERTY_PATH).append("'='").append(files).append("'");
             } else {
                 sb.append("'").append(entry.getKey()).append("'='");

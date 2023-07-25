@@ -29,7 +29,7 @@ public class FileListRepoTest {
                 "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\", " +
                 "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\" " +
                 "]}";
-        FileListTableRepo.PipeFileRecord record = FileListTableRepo.PipeFileRecord.fromJson(json);
+        PipeFileRecord record = PipeFileRecord.fromJson(json);
         String valueList = record.toValueList();
         Assert.assertEquals("(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', " +
@@ -41,7 +41,7 @@ public class FileListRepoTest {
                 "\"\", \"2023-07-01 01:01:01\", " +
                 "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\" " +
                 "]}";
-        record = FileListTableRepo.PipeFileRecord.fromJson(json);
+        record = PipeFileRecord.fromJson(json);
         valueList = record.toValueList();
         Assert.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
                         "NULL, '2023-07-01 01:01:01', " +
@@ -53,7 +53,7 @@ public class FileListRepoTest {
                 "null, \"2023-07-01 01:01:01\", " +
                 "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\" " +
                 "]}";
-        record = FileListTableRepo.PipeFileRecord.fromJson(json);
+        record = PipeFileRecord.fromJson(json);
         valueList = record.toValueList();
         Assert.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
                         "NULL, '2023-07-01 01:01:01', " +
@@ -68,11 +68,8 @@ public class FileListRepoTest {
                 "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\", " +
                 "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\" " +
                 "]}";
-        List<FileListTableRepo.PipeFileRecord> records =
-                Arrays.asList(
-                        FileListTableRepo.PipeFileRecord.fromJson(json),
-                        FileListTableRepo.PipeFileRecord.fromJson(json)
-                );
+        List<PipeFileRecord> records =
+                Arrays.asList(PipeFileRecord.fromJson(json), PipeFileRecord.fromJson(json));
         FileListRepo.PipeFileState state = FileListRepo.PipeFileState.LOADING;
         String sql = FileListTableRepo.RepoAccessor.getInstance().buildSqlUpdateFilesState(records, state);
         Assert.assertEquals("UPDATE _statistics_.pipe_file_list " +

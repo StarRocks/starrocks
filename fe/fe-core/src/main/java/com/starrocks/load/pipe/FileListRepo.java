@@ -15,8 +15,6 @@
 
 package com.starrocks.load.pipe;
 
-import com.starrocks.thrift.TBrokerFileStatus;
-
 import java.util.List;
 
 /**
@@ -37,13 +35,13 @@ public abstract class FileListRepo {
     /**
      * List unloaded files, then put them into loading
      */
-    public abstract List<PipeFile> listUnloadedFiles();
+    public abstract List<PipeFileRecord> listUnloadedFiles();
 
     /**
      * Add files into the list, as unloaded state
      * If some files have already been loaded, they will not been added
      */
-    public abstract void addFiles(List<TBrokerFileStatus> files);
+    public abstract void addFiles(List<PipeFileRecord> files);
 
     /**
      * Update state in different scenarios
@@ -52,7 +50,7 @@ public abstract class FileListRepo {
      * 2. ERROR: load failed
      * 3. SKIPPED: manually skip the file
      */
-    public abstract void updateFileState(List<PipeFile> files, PipeFileState state);
+    public abstract void updateFileState(List<PipeFileRecord> files, PipeFileState state);
 
     /**
      * Cleanup expired file records

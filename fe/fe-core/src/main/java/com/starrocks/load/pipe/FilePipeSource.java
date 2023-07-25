@@ -16,21 +16,21 @@
 package com.starrocks.load.pipe;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class FilePipeSource implements GsonPostProcessable {
 
@@ -71,9 +71,18 @@ public class FilePipeSource implements GsonPostProcessable {
         }
         if (CollectionUtils.isEmpty(fileListRepo.listUnloadedFiles())) {
             BrokerDesc brokerDesc = new BrokerDesc(tableProperties);
-            List<TBrokerFileStatus> fileList = Lists.newArrayList();
             try {
-                HdfsUtil.parseFile(path, brokerDesc, fileList);
+                List<FileStatus> files = HdfsUtil.listFileMeta(path, brokerDesc);
+                List<PipeFileRecord> records =
+                        ListUtils.emptyIfNull(files).stream()
+                                .map(PipeFileRecord::fromHdfsFile)
+                                .collect(Collectors.toList());
+                fileListRepo.addFiles(records);
+
+                if (!autoIngest) {
+                    // TODO: persist state
+                    eos = true;
+                }
             } catch (UserException e) {
                 LOG.error("Failed to poll the source: ", e);
                 throw new RuntimeException(e);
@@ -81,12 +90,6 @@ public class FilePipeSource implements GsonPostProcessable {
                 LOG.error("Failed to poll the source", e);
                 throw e;
             }
-
-            fileListRepo.addFiles(fileList);
-        }
-        if (!autoIngest) {
-            // TODO: persist state
-            eos = true;
         }
     }
 
@@ -101,14 +104,14 @@ public class FilePipeSource implements GsonPostProcessable {
     public FilePipePiece pullPiece() {
         Preconditions.checkArgument(batchSize > 0, "not support batch_size=0");
 
-        List<PipeFile> unloadFiles = fileListRepo.listUnloadedFiles();
+        List<PipeFileRecord> unloadFiles = fileListRepo.listUnloadedFiles();
         if (CollectionUtils.isEmpty(unloadFiles)) {
             return null;
         }
         FilePipePiece piece = new FilePipePiece();
         long totalBytes = 0;
-        for (PipeFile file : ListUtils.emptyIfNull(unloadFiles)) {
-            totalBytes += file.getSize();
+        for (PipeFileRecord file : ListUtils.emptyIfNull(unloadFiles)) {
+            totalBytes += file.getFileSize();
             piece.addFile(file);
             if (totalBytes >= batchSize) {
                 break;
@@ -165,6 +168,7 @@ public class FilePipeSource implements GsonPostProcessable {
     @Override
     public void gsonPostProcess() throws IOException {
         this.fileListRepo = FileListRepo.createTableBasedRepo();
+        this.fileListRepo.setPipeId(pipeId);
     }
 
     @Override
