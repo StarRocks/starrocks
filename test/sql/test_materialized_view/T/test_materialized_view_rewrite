@@ -33,7 +33,7 @@ select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags g
 drop materialized view user_tags_mv2;
 
 -- TEST HLL: NO ROLLUP
-create materialized view user_tags_hll_mv1  distributed by hash(user_id) as select user_id, time, hll_union(hll_hash(tag_id)) a  from user_tags group by user_id;
+create materialized view user_tags_hll_mv1  distributed by hash(user_id) as select user_id, time, hll_union(hll_hash(tag_id)) a  from user_tags group by user_id, time;
 refresh materialized view user_tags_hll_mv1 with sync mode;
 set enable_materialized_view_rewrite = off;
 select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
@@ -96,6 +96,28 @@ select user_id, hll_union_agg(hll_hash(tag_id)) x from user_tags group by user_i
 select user_id, hll_cardinality(hll_union(hll_hash(tag_id))) x from user_tags group by user_id order by user_id;
 drop materialized view user_tags_mv3;
 
+create materialized view agg_mv1 
+distributed by hash(user_id) 
+as 
+select user_id, time, sum(tag_id) as total
+from user_tags 
+group by user_id, time;
+
+refresh materialized view agg_mv1 with sync mode;
+
+function: check_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
+select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time;
+
+function: check_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
+select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id;
+
+set enable_materialized_view_rewrite = off;
+
+function: check_no_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
+select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time;
+
+function: check_no_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
+select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id;
 
 -- name: test_all_join_type_rewrite
 CREATE TABLE emps (
