@@ -53,6 +53,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -61,6 +62,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -98,9 +100,12 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.storagevolume.StorageVolume;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -1139,6 +1144,54 @@ public class AstToStringBuilder {
             } else {
                 return "(" + visit(node) + ")";
             }
+        }
+
+        // --------------------------------------------Storage volume Statement ----------------------------------------
+
+        @Override
+        public String visitCreateStorageVolumeStatement(CreateStorageVolumeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE STORAGE VOLUME ");
+            if (stmt.isSetIfNotExists()) {
+                sb.append("IF NOT EXISTS ");
+            }
+            sb.append(stmt.getName());
+            sb.append(" TYPE = ").append(stmt.getStorageVolumeType());
+            sb.append(" LOCATIONS = (");
+            List<String> locations = stmt.getStorageLocations();
+            for (int i = 0; i < locations.size(); ++i) {
+                if (i == 0) {
+                    sb.append("'").append(locations.get(i)).append("'");
+                } else {
+                    sb.append(", '").append(locations.get(i)).append("'");
+                }
+            }
+            sb.append(")");
+            if (!stmt.getComment().isEmpty()) {
+                sb.append(" COMMENT '").append(stmt.getComment()).append("'");
+            }
+            Map<String, String> properties = new HashMap<>(stmt.getProperties());
+            StorageVolume.addMaskForCredential(properties);
+            sb.append(" PROPERTIES (").
+                    append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitAlterStorageVolumeStatement(AlterStorageVolumeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER STORAGE VOLUME ").append(stmt.getName());
+            if (!stmt.getComment().isEmpty()) {
+                sb.append(" COMMENT = '").append(stmt.getComment()).append("'");
+            }
+            Map<String, String> properties = new HashMap<>(stmt.getProperties());
+            StorageVolume.addMaskForCredential(properties);
+            if (!properties.isEmpty()) {
+                sb.append(" SET (").
+                        append(new PrintableMap<>(properties, "=", true, false))
+                        .append(")");
+            }
+            return sb.toString();
         }
     }
 }
