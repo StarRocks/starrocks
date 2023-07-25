@@ -38,8 +38,12 @@ struct ColumnReaderOptions {
     int chunk_size = 0;
     HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
+<<<<<<< HEAD
     io::SharedBufferedInputStream* sb_stream = nullptr;
     tparquet::RowGroup* row_group_meta = nullptr;
+=======
+    const tparquet::RowGroup* row_group_meta = nullptr;
+>>>>>>> 71ca94a03d ([Enhancement] use pointer instead copy group metadata (#27821))
     ColumnReaderContext* context = nullptr;
 };
 

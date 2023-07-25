@@ -34,9 +34,16 @@ namespace starrocks::parquet {
 constexpr static const LogicalType kDictCodePrimitiveType = TYPE_INT;
 constexpr static const LogicalType kDictCodeFieldType = TYPE_INT;
 
+<<<<<<< HEAD
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number) : _param(param) {
     _row_group_metadata =
             std::make_shared<tparquet::RowGroup>(param.file_metadata->t_metadata().row_groups[row_group_number]);
+=======
+GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
+                         int64_t row_group_first_row)
+        : _row_group_first_row(row_group_first_row), _need_skip_rowids(need_skip_rowids), _param(param) {
+    _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
+>>>>>>> 71ca94a03d ([Enhancement] use pointer instead copy group metadata (#27821))
 }
 
 Status GroupReader::init() {
@@ -162,7 +169,7 @@ Status GroupReader::_init_column_readers() {
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;
-    opts.row_group_meta = _row_group_metadata.get();
+    opts.row_group_meta = _row_group_metadata;
     opts.context = _obj_pool.add(new ColumnReaderContext);
     opts.sb_stream = _param.sb_stream;
     for (const auto& column : _param.read_cols) {
