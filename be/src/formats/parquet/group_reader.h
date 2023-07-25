@@ -146,7 +146,7 @@ private:
                                  std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
 
     // row group meta
-    std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
+    const tparquet::RowGroup* _row_group_metadata = nullptr;
     int64_t _row_group_first_row = 0;
     const std::set<int64_t>* _need_skip_rowids;
     int64_t _raw_rows_read = 0;
