@@ -686,4 +686,21 @@ public class StarOSAgent {
             throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
         }
     }
+
+    public List<String> listDefaultWorkerGroupIpPort() throws UserException {
+        List<String> addresses = new ArrayList<>();
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
+                    listWorkerGroup(serviceId, Collections.singletonList(DEFAULT_WORKER_GROUP_ID), true);
+            Preconditions.checkState(1 == workerGroupDetailInfos.size());
+            WorkerGroupDetailInfo workerGroupInfo = workerGroupDetailInfos.get(0);
+            for (WorkerInfo workerInfo : workerGroupInfo.getWorkersInfoList()) {
+                addresses.add(workerInfo.getIpPort());
+            }
+            return addresses;
+        } catch (StarClientException e) {
+            throw new UserException("Fail to get workers by default group id, error: " + e.getMessage());
+        }
+    }
 }

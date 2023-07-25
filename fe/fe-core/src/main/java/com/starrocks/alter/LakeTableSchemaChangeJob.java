@@ -47,7 +47,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.ShardDeleter;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -498,7 +498,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             unusedShards.addAll(shards);
         }
         // TODO: what if unusedShards deletion is partially successful?
-        ShardDeleter.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
+        StarMgrMetaSyncer.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
 
         if (span != null) {
             span.end();
