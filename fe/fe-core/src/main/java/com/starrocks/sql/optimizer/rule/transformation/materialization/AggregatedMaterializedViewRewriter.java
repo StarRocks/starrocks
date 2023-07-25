@@ -681,38 +681,34 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             return aggregationOperator;
         }
 
-        final Map<ColumnRefOperator, ScalarOperator> defaultProjection = new HashMap<>();
+        final Map<ColumnRefOperator, ScalarOperator> newProjection = new HashMap<>();
         for (Map.Entry<ColumnRefOperator, CallOperator> aggEntry : oldAggregations.entrySet()) {
             CallOperator aggFunc = aggEntry.getValue();
             if (aggFuncRewriter.canRewriteAggFunction(aggFunc)) {
                 CallOperator newAggFunc = (CallOperator) aggFuncRewriter.rewriteAggFunction(aggFunc);
-                defaultProjection.put(aggEntry.getKey(), newAggFunc);
+                newProjection.put(aggEntry.getKey(), newAggFunc);
             } else {
-                defaultProjection.put(aggEntry.getKey(), aggEntry.getKey());
+                newProjection.put(aggEntry.getKey(), aggEntry.getKey());
                 newColumnRefToAggFuncMap.put(aggEntry.getKey(), aggEntry.getValue());
             }
         }
         // Copy group by keys as projection
-        aggregationOperator.getGroupingKeys().forEach(c -> defaultProjection.put(c, c));
+        aggregationOperator.getGroupingKeys().forEach(c -> newProjection.put(c, c));
+        // Copy original projection mappings.
+        if (aggregationOperator.getProjection() != null) {
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newProjection);
+            aggregationOperator.getProjection().getColumnRefMap().forEach((k, v) ->
+                    newProjection.put(k, rewriter.rewrite(v)));
+        }
+
         // Make a new logical agg with new projections.
         LogicalAggregationOperator newAggOp = LogicalAggregationOperator.builder()
                 .withOperator(aggregationOperator)
                 .setType(AggType.GLOBAL)
                 .setGroupingKeys(aggregationOperator.getGroupingKeys())
                 .setAggregations(newColumnRefToAggFuncMap)
+                .setProjection(new Projection(newProjection))
                 .build();
-
-        // Copy original projection mappings.
-        if (aggregationOperator.getProjection() != null) {
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(defaultProjection);
-            final Map<ColumnRefOperator, ScalarOperator> newProjection = new HashMap<>();
-            aggregationOperator.getProjection().getColumnRefMap().forEach((k, v) ->
-                    newProjection.put(k, rewriter.rewrite(v)));
-            newAggOp.setProjection(new Projection(newProjection));
-        } else {
-            // Ensure agg operator has a projection
-            newAggOp.setProjection(new Projection(defaultProjection));
-        }
 
         return newAggOp;
     }
