@@ -912,8 +912,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             auto& upserts = state.upserts();
             if (upserts[i] != nullptr) {
                 // apply partial rowset segment
-                st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index,
-                                 &full_row_size);
+                st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index, &full_row_size);
                 if (!st.ok()) {
                     manager->update_state_cache().remove(state_entry);
                     std::string msg =
