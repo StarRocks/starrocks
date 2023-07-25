@@ -660,6 +660,7 @@
       + [like](./sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](./sql-reference/sql-functions/like_predicate-functions/regexp.md)
       + [regexp_extract](./sql-reference/sql-functions/string-functions/regexp_extract.md)
+      + [regexp_extract_all](./sql-reference/sql-functions/like_predicate-functions/regexp_extract_all.md)
       + [regexp_replace](./sql-reference/sql-functions/string-functions/regexp_replace.md)
     + Percentile Functions
       + [percentile_approx_raw](./sql-reference/sql-functions/percentile-functions/percentile_approx_raw.md)
