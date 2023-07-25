@@ -430,8 +430,10 @@ public final class MetricRepo {
                 AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
                 if (jobI instanceof BackupJob && !((BackupJob) jobI).isDone()) {
                     COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
+                    WarehouseMetricMgr.increaseUnfinishedBackupJobs(((BackupJob) jobI).getCurrentWarehouse(), 1L);
                 } else if (jobI instanceof RestoreJob && !((RestoreJob) jobI).isDone()) {
                     COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
+                    WarehouseMetricMgr.increaseUnfinishedRestoreJobs(((RestoreJob) jobI).getCurrentWarehouse(), 1L);
                 }
 
             }

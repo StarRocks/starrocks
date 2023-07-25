@@ -66,6 +66,8 @@ import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -95,6 +97,9 @@ public class RoutineLoadMgr implements Writable {
     // routine load job meta
     private Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();
     private Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
+
+    private final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+            new WarehouseLoadInfoBuilder();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
@@ -237,7 +242,7 @@ public class RoutineLoadMgr implements Writable {
             }
             long allSlotNum = beNum * Config.max_routine_load_task_num_per_be;
             List<RoutineLoadJob> jobs = getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
-                        RoutineLoadJob.JobState.RUNNING, RoutineLoadJob.JobState.PAUSED));
+                    RoutineLoadJob.JobState.RUNNING, RoutineLoadJob.JobState.PAUSED));
             long curSlotNum = 0;
             for (RoutineLoadJob job : jobs) {
                 curSlotNum += job.calculateCurrentConcurrentTaskNum();
@@ -578,6 +583,8 @@ public class RoutineLoadMgr implements Writable {
         if (dbToNameToRoutineLoadJob.get(routineLoadJob.getDbId()).isEmpty()) {
             dbToNameToRoutineLoadJob.remove(routineLoadJob.getDbId());
         }
+
+        warehouseLoadStatusInfoBuilder.withRemovedJob(routineLoadJob);
     }
 
     public void updateRoutineLoadJob() throws UserException {
@@ -709,6 +716,15 @@ public class RoutineLoadMgr implements Writable {
             }
 
             putJob(routineLoadJob);
+        }
+    }
+
+    public Map<String, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadStatusInfoBuilder.buildFromJobs(idToRoutineLoadJob.values());
+        } finally {
+            readUnlock();
         }
     }
 }

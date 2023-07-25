@@ -70,6 +70,8 @@ import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TGetWarehousesRequest;
+import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
@@ -78,6 +80,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
+import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -170,10 +173,14 @@ public class NodeMgr {
         GlobalStateMgr.getCurrentState().unlock();
     }
 
+    public List<Frontend> getAllFrontends() {
+        return Lists.newArrayList(frontends.values());
+    }
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
-            return Lists.newArrayList(frontends.values());
+            return getAllFrontends();
         }
 
         List<Frontend> result = Lists.newArrayList();
@@ -422,7 +429,6 @@ public class NodeMgr {
             LOG.error("cluster id is not equal with config item cluster_id. will exit.");
             System.exit(-1);
         }
-
 
         if (Strings.isNullOrEmpty(runMode)) {
             if (isFirstTimeStartUp) {
@@ -1110,6 +1116,37 @@ public class NodeMgr {
                 LOG.warn("UpdateResourceUsage to remote fe: {} failed", fe.getHost(), e);
             }
         }
+    }
+
+    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
+        List<WarehouseInfo> warehouseInfos = Lists.newArrayList();
+        TGetWarehousesRequest request = new TGetWarehousesRequest();
+
+        List<Frontend> allFrontends = getAllFrontends();
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(getSelfNode().first)) {
+                continue;
+            }
+
+            try {
+                TGetWarehousesResponse response = FrontendServiceProxy
+                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                                Config.thrift_rpc_timeout_ms,
+                                Config.thrift_rpc_retry_times,
+                                client -> client.getWarehouses(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("getWarehouseInfos to remote fe: {} failed", fe.getHost());
+                } else if (response.isSetWarehouse_infos()) {
+                    response.getWarehouse_infos().stream()
+                            .map(WarehouseInfo::fromThrift)
+                            .forEach(warehouseInfos::add);
+                }
+            } catch (Exception e) {
+                LOG.warn("getWarehouseInfos to remote fe: {} failed", fe.getHost(), e);
+            }
+        }
+
+        return warehouseInfos;
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
