@@ -305,7 +305,6 @@ public:
 
 private:
     enum { SIZE_OF_DICT_CODE_TYPE = sizeof(int32_t) };
-    std::unordered_map<Slice, int32_t, SliceHasher> _dict_code_by_value;
 
     RleBatchDecoder<uint32_t> _index_batch_decoder;
     std::vector<uint8_t> _dict_data;
