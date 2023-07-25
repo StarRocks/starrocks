@@ -125,6 +125,7 @@ GRANT <priv> ON FUNCTION db.function TO {ROLE <rolename> | USER <username>}
 # User 相关
 
 GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity> [ WITH GRANT OPTION ]
+```
 
 ### 授予角色给用户或者其他角色
 

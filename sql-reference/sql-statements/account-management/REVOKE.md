@@ -123,6 +123,7 @@ REVOKE
 * 注意：需要执行 set catalog 之后才能使用。 
 * function 还可以用 db.function 的方式来表示。
 REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
+```
 
 ### 撤销指定角色
 
