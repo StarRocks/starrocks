@@ -1216,6 +1216,12 @@ public class HdfsFsManager {
         } catch (FileNotFoundException e) {
             LOG.info("file not found: " + path, e);
             throw new UserException("file not found: " + path, e);
+        } catch (IllegalArgumentException e) {
+            LOG.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
+                      "the arguments like region, IAM, instance profile and so on.");
+            throw new UserException("The arguments of blob store(S3/Azure) may be wrong. " +
+                                    "You can check the arguments like region, IAM, " +
+                                    "instance profile and so on.", e);
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
             throw new UserException("listPath failed", e);
