@@ -771,4 +771,30 @@ public class TablePruningTest extends TablePruningTestBase {
             checkHashJoinCountWithBothRBOAndCBO(sql, cboNumHashJoins);
         }
     }
+
+    @Test
+    public void testExplainLogicalCloneOperator() throws Exception {
+        String tabAA = "CREATE TABLE `AA` (\n" +
+                "    `id` int(11) NOT NULL,\n" +
+                "    `b_id` int(11) NOT NULL,\n" +
+                "    `name` varchar(25) NOT NULL\n" +
+                "    ) ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10 PROPERTIES (\"replication_num\" = \"1\");\n";
+        String tabBB = "CREATE TABLE `BB` (\n" +
+                "      `id` int(11) NOT NULL,\n" +
+                "      `name` varchar(25) NOT NULL,\n" +
+                "      `age` varchar(25)\n" +
+                "      ) ENGINE=OLAP\n" +
+                "UNIQUE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10  PROPERTIES (\"replication_num\" = \"1\");";
+        starRocksAssert.withTable(tabAA);
+        starRocksAssert.withTable(tabBB);
+        starRocksAssert.alterTableProperties(
+                "alter table AA set(\"foreign_key_constraints\" = \"(b_id) REFERENCES BB(id)\");");
+        String sql = "select AA.b_id, BB.id from AA inner join BB on AA.b_id = BB.id";
+        ctx.getSessionVariable().setEnableCboTablePrune(true);
+        String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+        Assert.assertTrue(plan, plan.contains("CLONE"));
+    }
 }
