@@ -67,7 +67,6 @@ public class ReplayFromDumpTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
-        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
         FeConstants.showLocalShuffleColumnsInExplain = false;
@@ -136,7 +135,7 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(originCostPlan, replayCostPlan);
     }
 
-    private String getDumpInfoFromFile(String fileName) throws Exception {
+    protected String getDumpInfoFromFile(String fileName) throws Exception {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + fileName + ".json");
         StringBuilder sb = new StringBuilder();
@@ -157,13 +156,13 @@ public class ReplayFromDumpTest {
         return getCostPlanFragment(dumpJonStr, null);
     }
 
-    private Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
+    protected Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
             throws Exception {
         return getPlanFragment(dumpJsonStr, sessionVariable, TExplainLevel.COSTS);
     }
 
-    private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
-                                                        TExplainLevel level) throws Exception {
+    protected Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
+                                                          TExplainLevel level) throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
@@ -857,58 +856,4 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(new CTEProperty(1), expression.getLogicalProperty().getUsedCTEs());
         Assert.assertEquals(4, result.second.getCteProduceFragments().size());
     }
-
-    @Test
-    public void testMV_JoinAgg1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg1");
-        // Table and mv have no stats, mv rewrite is ok.
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg2() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Assert.assertFalse(replayPair.second.contains("table: mv1, rollup: mv1"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg3() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // Table and mv have no stats, mv rewrite is ok.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg3"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg4() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg4"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertFalse(replayPair.second.contains("line_order_flat_mv"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_MVOnMV1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv1"),
-                        null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("mv2"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
 }
