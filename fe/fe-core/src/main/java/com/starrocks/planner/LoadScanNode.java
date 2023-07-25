@@ -72,8 +72,9 @@ public abstract class LoadScanNode extends ScanNode {
         for (SlotRef slot : slots) {
             SlotDescriptor slotDesc = dstDescMap.get(slot.getColumnName());
             if (slotDesc == null) {
-                throw new UserException("unknown column reference in where statement, reference="
-                        + slot.getColumnName());
+                throw new UserException("unknown column in where statement, column="
+                        + slot.getColumnName() + ". "
+                        + "the column '" + slot.getColumnName() + "' in where clause must be in the target table.");
             }
             smap.getLhs().add(slot);
             SlotRef slotRef = new SlotRef(slotDesc);
