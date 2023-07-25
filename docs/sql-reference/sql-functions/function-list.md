@@ -1,6 +1,8 @@
 # All functions
 
-StarRocks offers a rich set of functions to facilitate data queries and analysis. You can find a function based on the following categories:
+StarRocks offers a rich set of functions to facilitate data queries and analysis. In addition to commonly used functions, StarRocks supports semi-structured functions such as ARRAY, JSON, MAP, and STRUCT functions. It also supports higher-order [Lambda functions](Lambda_expression.md). If these functions cannot meet your business requirements, you can use [Java UDF](JAVA_UDF.md) to compile functions.
+
+You can find a function based on the following categories:
 
 - [Aggregate functions](#aggregate-functions)
 - [Array functions](#array-functions)
@@ -249,8 +251,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 ## JSON functions
 
-- [Overview of JSON functions and operators](../sql-functions/json-functions/overview-of-json-functions-and-operators.md)
-- [JSON operators](../sql-functions/json-functions/json-operators.md)
 - [json_array](../sql-functions/json-functions/json-constructor-functions/json_array.md)
 - [json_object](../sql-functions/json-functions/json-constructor-functions/json_object.md)
 - [parse_json](../sql-functions/json-functions/json-constructor-functions/parse_json.md)
