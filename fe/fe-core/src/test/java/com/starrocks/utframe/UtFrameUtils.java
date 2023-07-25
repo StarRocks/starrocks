@@ -472,6 +472,11 @@ public class UtFrameUtils {
         return Explain.toString(plan.getPhysicalPlan(), plan.getOutputColumns());
     }
 
+    public static String explainLogicalPlan(ConnectContext ctx, String sql) throws Exception {
+        Pair<String, ExecPlan> planAndExplain = getPlanAndFragment(ctx, sql);
+        return printPlan(planAndExplain.second);
+    }
+
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
