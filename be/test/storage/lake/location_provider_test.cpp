@@ -49,12 +49,6 @@ public:
 TEST_F(StarletLocationProviderTest, test_location) {
     auto location = _provider->root_location(12345);
     EXPECT_EQ(build_starlet_uri(12345, "/"), location);
-
-    std::set<std::string> roots;
-    auto st = _provider->list_root_locations(&roots);
-    EXPECT_TRUE(st.ok());
-    // TODO: mock g_worker to inject shard info
-    EXPECT_TRUE(roots.empty());
 }
 
 } // namespace starrocks::lake

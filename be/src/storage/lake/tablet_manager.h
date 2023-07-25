@@ -145,9 +145,6 @@ public:
 
     const LocationProvider* location_provider() const { return _location_provider; }
 
-    // Return a set of tablet that owned by this TabletManager.
-    std::set<int64_t> owned_tablets();
-
     UpdateManager* update_mgr();
 
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
