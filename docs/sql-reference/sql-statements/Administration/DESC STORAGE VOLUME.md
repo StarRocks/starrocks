@@ -25,7 +25,7 @@ DESC[RIBE] STORAGE VOLUME <storage_volume_name>
 | **Return** | **Description**                                              |
 | ---------- | ------------------------------------------------------------ |
 | Name       | The name of the storage volume.                              |
-| Type       | The type of the remote storage system. Valid values: `S3` and `AZBLOB`. |
+| Type       | The type of the remote storage system. Valid values: `S3`<!-- and `AZBLOB`-->. |
 | IsDefault  | Whether the storage volume is the default storage volume.    |
 | Location   | The location of the remote storage system.                   |
 | Params     | The credential information used to access the remote storage system. |
