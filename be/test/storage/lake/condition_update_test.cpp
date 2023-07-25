@@ -49,14 +49,7 @@ class TestLocationProvider : public LocationProvider {
 public:
     explicit TestLocationProvider(std::string dir) : _dir(dir) {}
 
-    std::set<int64_t> owned_tablets() const override { return _owned_shards; }
-
     std::string root_location(int64_t tablet_id) const override { return _dir; }
-
-    Status list_root_locations(std::set<std::string>* roots) const override {
-        roots->insert(_dir);
-        return Status::OK();
-    }
 
     void set_failed(bool f) { _set_failed = f; }
 

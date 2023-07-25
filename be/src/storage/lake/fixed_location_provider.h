@@ -34,14 +34,7 @@ public:
     // No usage now.
     DISALLOW_COPY_AND_MOVE(FixedLocationProvider);
 
-    std::set<int64_t> owned_tablets() const override { return {}; }
-
     std::string root_location(int64_t tablet_id) const override { return _root; }
-
-    Status list_root_locations(std::set<std::string>* roots) const override {
-        roots->insert(_root);
-        return Status::OK();
-    }
 
 private:
     std::string _root;

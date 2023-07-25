@@ -940,10 +940,6 @@ StatusOr<TabletSchemaPtr> TabletManager::load_and_parse_schema_file(const std::s
     return std::move(schema);
 }
 
-std::set<int64_t> TabletManager::owned_tablets() {
-    return _location_provider->owned_tablets();
-}
-
 void TabletManager::update_metacache_limit(size_t new_capacity) {
     size_t old_capacity = _metacache->get_capacity();
     int64_t delta = (int64_t)new_capacity - (int64_t)old_capacity;
