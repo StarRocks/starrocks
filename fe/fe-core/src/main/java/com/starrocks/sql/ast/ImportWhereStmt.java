@@ -17,7 +17,10 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.Subquery;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.ArrayList;
 
 public class ImportWhereStmt extends StatementBase {
     private final Expr expr;
@@ -33,6 +36,16 @@ public class ImportWhereStmt extends StatementBase {
 
     public Expr getExpr() {
         return expr;
+    }
+
+    public boolean isContainSubquery() {
+        ArrayList<Expr> matched = new ArrayList<>();
+        expr.collect(Subquery.class, matched);
+        if (matched.size() != 0) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override
