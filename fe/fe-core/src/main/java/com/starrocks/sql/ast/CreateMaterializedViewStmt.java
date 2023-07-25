@@ -405,7 +405,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 }
                 // NOTE: If `selectListItemExpr` contains aggregate function, we can not support it.
                 if (selectListItemExpr.containsAggregate()) {
-                    throw new UnsupportedMVException("Aggregate function with function expr is not supported yet",
+                    throw new SemanticException("Aggregate function with function expr is not supported yet",
                             selectListItemExpr.toMySql());
                 }
 
