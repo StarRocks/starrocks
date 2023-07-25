@@ -63,9 +63,9 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -670,7 +670,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testGetTableBindingsOfBuiltinStorageVolume() {
+    public void testGetTableBindingsOfBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public List<Long> getDbIdsIncludeRecycleBin() {
@@ -720,6 +720,14 @@ public class SharedDataStorageVolumeMgrTest {
         };
 
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
-        Assert.assertEquals(new HashSet<>(Arrays.asList(2L)), sdsvm.getTableBindingsOfBuiltinStorageVolume());
+        Assert.assertEquals(Arrays.asList(Arrays.asList(1L), Arrays.asList(2L)), sdsvm.getBindingsOfBuiltinStorageVolume());
+
+        sdsvm.createBuiltinStorageVolume();
+        sdsvm.bindDbToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 1L);
+        Assert.assertEquals(Arrays.asList(new ArrayList(), new ArrayList()), sdsvm.getBindingsOfBuiltinStorageVolume());
+
+        sdsvm.unbindDbToStorageVolume(1L);
+        sdsvm.bindTableToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 1L, 2L);
+        Assert.assertEquals(Arrays.asList(Arrays.asList(1L), new ArrayList()), sdsvm.getBindingsOfBuiltinStorageVolume());
     }
 }

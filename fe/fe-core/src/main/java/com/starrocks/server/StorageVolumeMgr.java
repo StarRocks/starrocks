@@ -123,7 +123,9 @@ public abstract class StorageVolumeMgr {
             Set<Long> dbs = storageVolumeToDbs.getOrDefault(sv.getId(), new HashSet<>());
             Set<Long> tables = storageVolumeToTables.getOrDefault(sv.getId(), new HashSet<>());
             if (name.equals(BUILTIN_STORAGE_VOLUME)) {
-                tables.addAll(getTableBindingsOfBuiltinStorageVolume());
+                List<List<Long>> bindings = getBindingsOfBuiltinStorageVolume();
+                dbs.addAll(bindings.get(0));
+                tables.addAll(bindings.get(1));
             }
             Preconditions.checkState(dbs.isEmpty() && tables.isEmpty(),
                     "Storage volume '%s' is referenced by dbs or tables, dbs: %s, tables: %s",
@@ -309,5 +311,5 @@ public abstract class StorageVolumeMgr {
 
     public abstract void validateStorageVolumeConfig() throws InvalidConfException;
 
-    protected abstract Set<Long> getTableBindingsOfBuiltinStorageVolume();
+    protected abstract List<List<Long>> getBindingsOfBuiltinStorageVolume();
 }
