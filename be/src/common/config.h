@@ -937,6 +937,10 @@ CONF_Int64(block_cache_lru_insertion_point, "1");
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
 CONF_String(block_cache_engine, "");
 
+CONF_Bool(block_cache_page_cache_enable, "true");
+CONF_Bool(block_cache_adaptor_enable, "true");
+CONF_Int64(block_cache_skip_read_factor, "1");
+
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB

@@ -732,7 +732,10 @@ endif()
 if (${WITH_STARCACHE} STREQUAL "ON")
     set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
+        ${WL_START_GROUP}
+        brpc
         starcachelib
+        ${WL_END_GROUP}
     )
 endif()
 

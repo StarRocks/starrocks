@@ -1601,7 +1601,7 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
         param->use_block_cache = true;
 #endif
-        build_hive_column_names(param, tuple_desc, true);
+        build_hive_column_names(param, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);

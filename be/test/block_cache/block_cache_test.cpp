@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "block_cache/block_cache.h"
+#include "block_cache/time_based_cache_admission.h"
 
 #include <gtest/gtest.h>
 
@@ -28,13 +29,8 @@ static const size_t block_size = 1024 * 1024;
 
 class BlockCacheTest : public ::testing::Test {
 protected:
-    static void SetUpTestCase() {
-        ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok());
-    }
-
-    static void TearDownTestCase() {
-        ASSERT_TRUE(fs::remove_all("./ut_dir").ok());
-    }
+    static void SetUpTestCase() {ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok()); }
+    static void TearDownTestCase() { ASSERT_TRUE(fs::remove_all("./ut_dir").ok()); }
 
     void SetUp() override {}
     void TearDown() override {}
@@ -162,8 +158,9 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     Status st = cache->write_cache(cache_key, 0, cache_size, value.c_str());
     ASSERT_TRUE(st.ok());
 
+    WriteCacheOptions write_options;
     std::string value2(cache_size, 'b');
-    st = cache->write_cache(cache_key, 0, cache_size, value2.c_str(), 0, true);
+    st = cache->write_cache(cache_key, 0, cache_size, value2.c_str(), &write_options);
     ASSERT_TRUE(st.ok());
 
     char rvalue[cache_size] = {0};
@@ -172,12 +169,14 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     std::string expect_value(cache_size, 'b');
     ASSERT_EQ(memcmp(rvalue, expect_value.c_str(), cache_size), 0);
 
+    write_options.overwrite = false;
     std::string value3(cache_size, 'c');
-    st = cache->write_cache(cache_key, 0, cache_size, value3.c_str(), 0, false);
+    st = cache->write_cache(cache_key, 0, cache_size, value3.c_str(), &write_options);
     ASSERT_TRUE(st.is_already_exist());
 
     cache->shutdown();
 }
+
 #endif
 
 #ifdef WITH_CACHELIB
