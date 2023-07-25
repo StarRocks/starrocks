@@ -491,6 +491,7 @@ public class Pipe implements GsonPostProcessable {
     public void gsonPostProcess() throws IOException {
         this.runningTasks = new HashMap<>();
         this.lock = new ReentrantReadWriteLock();
+        pipeSource.initPipeId(id);
         processProperties();
     }
 

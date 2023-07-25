@@ -97,8 +97,7 @@ public class FileListTableRepo extends FileListRepo {
 
     private static final String UPDATE_FILES_STATE =
             "UPDATE " + FILE_LIST_FULL_NAME +
-                    " SET state = %s " +
-                    " WHERE %s";
+                    " SET state = %s WHERE ";
 
     private static final String FILE_LOCATOR = "(pipe_id = %s AND file_name = %s AND file_version = %s)";
 
@@ -192,17 +191,24 @@ public class FileListTableRepo extends FileListRepo {
                 file.fileVersion = dataArray.get(2).getAsString();
                 file.fileSize = dataArray.get(3).getAsLong();
                 file.loadState = EnumUtils.getEnumIgnoreCase(PipeFileState.class, dataArray.get(4).getAsString());
-                file.lastModified = parseDataTime(dataArray.get(5).getAsString());
-                file.stagedTime = parseDataTime(dataArray.get(6).getAsString());
-                file.startLoadTime = parseDataTime(dataArray.get(7).getAsString());
-                file.finishLoadTime = parseDataTime(dataArray.get(8).getAsString());
+                file.lastModified = parseJsonDateTime(dataArray.get(5));
+                file.stagedTime = parseJsonDateTime(dataArray.get(6));
+                file.startLoadTime = parseJsonDateTime(dataArray.get(7));
+                file.finishLoadTime = parseJsonDateTime(dataArray.get(8));
                 return file;
             } catch (Exception e) {
                 throw new RuntimeException("convert json to PipeFile failed due to malformed json data: " + json, e);
             }
         }
 
-        public static LocalDateTime parseDataTime(String str) throws AnalysisException {
+        /**
+         * Usually datetime in JSON should be string. but null datetime is a JSON null instead of empty string
+         */
+        public static LocalDateTime parseJsonDateTime(JsonElement json) throws AnalysisException {
+            if (json.isJsonNull()) {
+                return null;
+            }
+            String str = json.getAsString();
             if (StringUtils.isEmpty(str)) {
                 return null;
             }
@@ -211,7 +217,7 @@ public class FileListTableRepo extends FileListRepo {
 
         public static String toSQLString(LocalDateTime dt) {
             if (dt == null) {
-                return "''";
+                return "NULL";
             }
             return Strings.quote(DateUtils.formatDateTimeUnix(dt));
         }
@@ -224,11 +230,19 @@ public class FileListTableRepo extends FileListRepo {
             }
         }
 
+        public static String toSQLStringNonnull(String str) {
+            if (str == null) {
+                return "''";
+            } else {
+                return Strings.quote(str);
+            }
+        }
+
         public String toValueList() {
             return String.format(FILE_RECORD_VALUES,
                     pipeId,
                     toSQLString(fileName),
-                    toSQLString(fileVersion),
+                    toSQLStringNonnull(fileVersion),
                     fileSize,
                     toSQLString(loadState.toString()),
                     toSQLString(lastModified),
@@ -334,8 +348,7 @@ public class FileListTableRepo extends FileListRepo {
          */
         public void updateFilesState(List<PipeFileRecord> records, PipeFileState state) {
             try {
-                String sql = UPDATE_FILES_STATE +
-                        records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR "));
+                String sql = buildSqlUpdateFilesState(records, state);
                 RepoExecutor.executeDML(sql);
                 LOG.info("update files state to {}: {}", state, records);
             } catch (Exception e) {
@@ -355,6 +368,29 @@ public class FileListTableRepo extends FileListRepo {
             }
         }
 
+        protected String buildListUnloadedFile(long pipeId) {
+            String sql = String.format(SELECT_FILES_BY_STATE,
+                    pipeId, Strings.quote(PipeFileState.UNLOADED.toString()));
+            return sql;
+        }
+
+        protected String buildDeleteByPipe(long pipeId) {
+            return String.format(DELETE_BY_PIPE, pipeId);
+        }
+
+        protected String buildSqlAddFiles(List<PipeFileRecord> records) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(INSERT_FILES);
+            sb.append(records.stream().map(PipeFileRecord::toValueList).collect(Collectors.joining(",")));
+            return sb.toString();
+        }
+
+        protected String buildSqlUpdateFilesState(List<PipeFileRecord> records, PipeFileState state) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format(UPDATE_FILES_STATE, Strings.quote(state.toString())));
+            sb.append(records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR ")));
+            return sb.toString();
+        }
     }
 
     /**
@@ -368,7 +404,7 @@ public class FileListTableRepo extends FileListRepo {
                 context.setThreadLocalInfo();
 
                 StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-                Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement shoulod be dml");
+                Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
                 DmlStmt dmlStmt = (DmlStmt) parsedStmt;
                 ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.HTTP_PROTOCAL);
                 StmtExecutor executor = new StmtExecutor(context, parsedStmt);
@@ -502,25 +538,6 @@ public class FileListTableRepo extends FileListRepo {
         public static String buildAlterTableSql() {
             return String.format(CORRECT_FILE_LIST_REPLICATION_NUM,
                     CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME));
-        }
-
-        public static String buildInsertSql(List<PipeFile> files) {
-            String tableName = CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME);
-            StringBuilder sb = new StringBuilder();
-            sb.append(String.format("INSERT INTO %s VALUES ", tableName));
-            for (PipeFile file : files) {
-                // FIXME
-                sb.append(String.format("(%d,'%s',%d,%d,'%s', '%s','%s','%s','%s' )", null));
-            }
-            return sb.toString();
-        }
-
-        public static String buildUpdateStateSql(List<PipeFile> files, FileListRepo.PipeFileState state) {
-            return "";
-        }
-
-        public static String buildDeleteFileSql(List<PipeFile> files) {
-            return "";
         }
     }
 

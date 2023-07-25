@@ -18,6 +18,9 @@ package com.starrocks.load.pipe;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.List;
+
 public class FileListRepoTest {
 
     @Test
@@ -33,7 +36,7 @@ public class FileListRepoTest {
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01')",
                 valueList);
 
-        // contains null value
+        // contains empty value
         json = "{\"data\": [1, \"a.parquet\", \"\", 1024, \"UNLOADED\", " +
                 "\"\", \"2023-07-01 01:01:01\", " +
                 "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\" " +
@@ -41,8 +44,57 @@ public class FileListRepoTest {
         record = FileListTableRepo.PipeFileRecord.fromJson(json);
         valueList = record.toValueList();
         Assert.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
-                        "'', '2023-07-01 01:01:01', " +
+                        "NULL, '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01')",
                 valueList);
+
+        // contains null value
+        json = "{\"data\": [1, \"a.parquet\", \"\", 1024, \"UNLOADED\", " +
+                "null, \"2023-07-01 01:01:01\", " +
+                "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\" " +
+                "]}";
+        record = FileListTableRepo.PipeFileRecord.fromJson(json);
+        valueList = record.toValueList();
+        Assert.assertEquals("(1, 'a.parquet', '', 1024, 'UNLOADED', " +
+                        "NULL, '2023-07-01 01:01:01', " +
+                        "'2023-07-01 01:01:01', '2023-07-01 01:01:01')",
+                valueList);
+    }
+
+    @Test
+    public void testSqlBuilder() {
+        // update state
+        String json = "{\"data\": [1, \"a.parquet\", \"123asdf\", 1024, \"UNLOADED\", " +
+                "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\", " +
+                "\"2023-07-01 01:01:01\", \"2023-07-01 01:01:01\" " +
+                "]}";
+        List<FileListTableRepo.PipeFileRecord> records =
+                Arrays.asList(
+                        FileListTableRepo.PipeFileRecord.fromJson(json),
+                        FileListTableRepo.PipeFileRecord.fromJson(json)
+                );
+        FileListRepo.PipeFileState state = FileListRepo.PipeFileState.LOADING;
+        String sql = FileListTableRepo.RepoAccessor.getInstance().buildSqlUpdateFilesState(records, state);
+        Assert.assertEquals("UPDATE _statistics_.pipe_file_list " +
+                "SET state = 'LOADING' WHERE (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf') " +
+                "OR (pipe_id = 1 AND file_name = 'a.parquet' AND file_version = '123asdf')", sql);
+
+        // add files
+        sql = FileListTableRepo.RepoAccessor.getInstance().buildSqlAddFiles(records);
+        Assert.assertEquals("INSERT INTO _statistics_.pipe_file_list VALUES " +
+                "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
+                "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01')," +
+                "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
+                "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01')", sql);
+
+        // delete pipe
+        sql = FileListTableRepo.RepoAccessor.getInstance().buildDeleteByPipe(1);
+        Assert.assertEquals("DELETE FROM _statistics_.pipe_file_list WHERE pipe_id = 1", sql);
+
+        // list unloaded files
+        sql = FileListTableRepo.RepoAccessor.getInstance().buildListUnloadedFile(1);
+        Assert.assertEquals("SELECT pipe_id, file_name, file_version, file_size, state, last_modified, " +
+                "staged_time, start_load, finish_load FROM _statistics_.pipe_file_list " +
+                "WHERE pipe_id = 1 AND state = 'UNLOADED'", sql);
     }
 }
