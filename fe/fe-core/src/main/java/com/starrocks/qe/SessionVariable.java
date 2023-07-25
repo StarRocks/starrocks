@@ -495,6 +495,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // binary, json, compact
     public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
 
+    public static final String EXPERIMENTAL_INTERLEAVING = "experimental_interleaving";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1030,6 +1032,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = false;
+
+    @VariableMgr.VarAttr(name = EXPERIMENTAL_INTERLEAVING)
+    private int experimentalInterleaving = 10;
 
     // support auto|row|column
     @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
@@ -2496,6 +2501,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
+        tResult.setExperimental_interleaving(experimentalInterleaving);
 
         TCompressionType loadCompressionType =
                 CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
