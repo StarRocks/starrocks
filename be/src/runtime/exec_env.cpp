@@ -539,7 +539,9 @@ void ExecEnv::stop() {
         _load_rpc_pool->shutdown();
     }
 
+#ifndef BE_TEST
     close_s3_clients();
+#endif
 }
 
 void ExecEnv::destroy() {
