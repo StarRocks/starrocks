@@ -653,12 +653,20 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         aggregationOperator.getGroupingKeys().forEach(c -> newProjection.put(c, c));
         // Copy original projection mappings.
         if (aggregationOperator.getProjection() != null) {
-            aggregationOperator.getProjection().getColumnRefMap().forEach((k, v) -> newProjection.put(k, v));
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newProjection);
+            aggregationOperator.getProjection().getColumnRefMap().forEach((k, v) ->
+                    newProjection.put(k, rewriter.rewrite(v)));
         }
+
         // Make a new logical agg with new projections.
-        LogicalAggregationOperator newAggOp =
-                new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(), newColumnRefToAggFuncMap);
-        newAggOp.setProjection(new Projection(newProjection));
+        LogicalAggregationOperator newAggOp = LogicalAggregationOperator.builder()
+                .withOperator(aggregationOperator)
+                .setType(AggType.GLOBAL)
+                .setGroupingKeys(aggregationOperator.getGroupingKeys())
+                .setAggregations(newColumnRefToAggFuncMap)
+                .setProjection(new Projection(newProjection))
+                .build();
+
         return newAggOp;
     }
 }
