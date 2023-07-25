@@ -121,8 +121,6 @@ public class BrokerLoadJob extends BulkLoadJob {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         String warehouse = sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE);
         Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
-        // for debug
-        LOG.info("current wh is {}", warehouse);
         transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
