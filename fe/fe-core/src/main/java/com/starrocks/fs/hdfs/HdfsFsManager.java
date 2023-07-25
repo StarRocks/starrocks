@@ -1110,8 +1110,19 @@ public class HdfsFsManager {
                 resultFileStatus.add(brokerFileStatus);
             }
         } catch (FileNotFoundException e) {
+<<<<<<< HEAD
             LOG.info("file not found: " + e.getMessage());
             throw new UserException("file not found: " + e.getMessage());
+=======
+            LOG.info("file not found: " + path, e);
+            throw new UserException("file not found: " + path, e);
+        } catch (IllegalArgumentException e) {
+            LOG.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
+                      "the arguments like region, IAM, instance profile and so on.");
+            throw new UserException("The arguments of blob store(S3/Azure) may be wrong. " +
+                                    "You can check the arguments like region, IAM, " +
+                                    "instance profile and so on.", e);
+>>>>>>> 54d0f54a52 ([Enhancement] User friendly error message when AWS parseRegion gets error (#27498))
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
             throw new UserException("unknown error when get file status: " + e.getMessage());
