@@ -79,9 +79,20 @@ public:
 
     int64_t total_row_size() { return _rowset_meta_pb->total_row_size(); }
 
+<<<<<<< HEAD
+=======
+    void set_total_row_size(int64_t total_size) { _rowset_meta_pb->set_total_row_size(total_size); }
+
+    int64_t total_update_row_size() { return _rowset_meta_pb->total_update_row_size(); }
+
+>>>>>>> 43c8f130e2 ([BugFix] Fix incorrect estimation of average row size when doing partial update (#27485))
     size_t total_disk_size() const { return _rowset_meta_pb->total_disk_size(); }
 
+    void set_total_disk_size(size_t disk_size) { _rowset_meta_pb->set_total_disk_size(disk_size); }
+
     size_t data_disk_size() const { return _rowset_meta_pb->data_disk_size(); }
+
+    void set_data_disk_size(size_t data_size) { _rowset_meta_pb->set_data_disk_size(data_size); }
 
     size_t index_disk_size() const { return _rowset_meta_pb->index_disk_size(); }
 

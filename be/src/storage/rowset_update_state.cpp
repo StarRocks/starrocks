@@ -356,6 +356,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
         _memory_usage += _partial_update_states[idx].write_columns[col_idx]->memory_usage();
     }
     int64_t t_end = MonotonicMillis();
+    _partial_update_states[idx].update_byte_size();
     _partial_update_states[idx].inited = true;
 
     LOG(INFO) << strings::Substitute(
@@ -452,7 +453,12 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 }
 
 Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
+<<<<<<< HEAD
                                 EditVersion latest_applied_version, const PrimaryIndex& index) {
+=======
+                                EditVersion latest_applied_version, const PrimaryIndex& index,
+                                std::unique_ptr<Column>& delete_pks, int64_t* append_column_size) {
+>>>>>>> 43c8f130e2 ([BugFix] Fix incorrect estimation of average row size when doing partial update (#27485))
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0 ||
         rowset_meta_pb.txn_meta().has_merge_condition()) {
@@ -505,6 +511,17 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         if (_partial_update_states[segment_id].write_columns[col_idx] != nullptr) {
             _memory_usage -= _partial_update_states[segment_id].write_columns[col_idx]->memory_usage();
         }
+<<<<<<< HEAD
+=======
+        *append_column_size += _partial_update_states[segment_id].byte_size;
+        _partial_update_states[segment_id].release();
+    }
+    if (txn_meta.has_auto_increment_partial_update_column_id()) {
+        if (_auto_increment_partial_update_states[segment_id].delete_pks->size() != 0) {
+            delete_pks.swap(_auto_increment_partial_update_states[segment_id].delete_pks);
+        }
+        _auto_increment_partial_update_states[segment_id].release();
+>>>>>>> 43c8f130e2 ([BugFix] Fix incorrect estimation of average row size when doing partial update (#27485))
     }
     _partial_update_states[segment_id].release();
     return Status::OK();
