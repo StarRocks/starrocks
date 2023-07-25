@@ -205,7 +205,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         equationRewriter.setAggregateFunctionRewriter(aggregateFunctionRewriter);
         equationRewriter.setOutputMapping(columnMapping);
         ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(scalarOp);
-        if (rewritten == null) {
+        if (rewritten == null || scalarOp == rewritten) {
             return null;
         }
         if (!isAllExprReplaced(rewritten, originalColumnSet)) {

@@ -403,6 +403,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     throw new SemanticException("Any single column should be before agg column. " +
                             "Column %s at wrong location", selectListItemExpr.toMySql());
                 }
+                // NOTE: If `selectListItemExpr` contains aggregate function, we can not support it.
+                if (selectListItemExpr.containsAggregate()) {
+                    throw new UnsupportedMVException("Aggregate function with function expr is not supported yet",
+                            selectListItemExpr.toMySql());
+                }
 
                 mvColumnItem = buildNonAggColumnItem(selectListItem, slots);
                 if (!mvColumnNameSet.add(mvColumnItem.getName())) {
